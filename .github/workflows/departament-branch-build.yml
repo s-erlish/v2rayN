@@ -1,0 +1,59 @@
+name: departament desktop (branch build)
+
+# Builds a ready-to-run, self-contained Windows x64 build of the departament VPN
+# desktop app and bundles the Xray core + geo assets, then uploads it as a
+# downloadable artifact. Trigger: push to the dev branch, or run manually.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/dp-desktop-incy
+
+permissions:
+  contents: read
+
+jobs:
+  win-x64:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish (self-contained win-x64)
+        working-directory: ./v2rayN
+        run: dotnet publish ./v2rayN.Desktop/v2rayN.Desktop.csproj -c Release -r win-x64 -p:SelfContained=true -p:EnableWindowsTargeting=true -o "${{ github.workspace }}/dist"
+
+      - name: Strip debug symbols
+        shell: pwsh
+        run: Get-ChildItem "${{ github.workspace }}/dist" -Filter *.pdb -Recurse | Remove-Item -Force -ErrorAction SilentlyContinue
+
+      - name: Bundle Xray core + geo assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ 'User-Agent' = 'gh-actions'; 'Authorization' = "Bearer $env:GH_TOKEN" }
+          $rel = Invoke-RestMethod -Uri 'https://api.github.com/repos/XTLS/Xray-core/releases/latest' -Headers $headers
+          $asset = $rel.assets | Where-Object { $_.name -eq 'Xray-windows-64.zip' } | Select-Object -First 1
+          if (-not $asset) { throw 'Xray-windows-64.zip not found in latest release' }
+          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile xray.zip
+          Expand-Archive xray.zip -DestinationPath xray -Force
+          New-Item -ItemType Directory -Force -Path "${{ github.workspace }}/dist/bin/Xray" | Out-Null
+          Copy-Item xray/xray.exe "${{ github.workspace }}/dist/bin/Xray/xray.exe" -Force
+          Copy-Item xray/geoip.dat "${{ github.workspace }}/dist/bin/geoip.dat" -Force
+          Copy-Item xray/geosite.dat "${{ github.workspace }}/dist/bin/geosite.dat" -Force
+          Write-Host 'Bundled Xray core:' (Get-Item "${{ github.workspace }}/dist/bin/Xray/xray.exe").Length 'bytes'
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: departament-vpn-win-x64
+          path: dist
+          if-no-files-found: error
