@@ -164,7 +164,7 @@ public class CoreTypeItem
 [Serializable]
 public class TunModeItem
 {
-    public bool EnableTun { get; set; }
+    public bool EnableTun { get; set; } = true;
     public bool AutoRoute { get; set; } = true;
     public bool StrictRoute { get; set; } = true;
     public string Stack { get; set; }

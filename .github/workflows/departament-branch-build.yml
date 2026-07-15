@@ -53,6 +53,28 @@ jobs:
           Copy-Item xray/geosite.dat "${{ github.workspace }}/dist/bin/geosite.dat" -Force
           Write-Host 'Bundled Xray core:' (Get-Item "${{ github.workspace }}/dist/bin/Xray/xray.exe").Length 'bytes'
 
+      - name: Bundle sing-box core (TUN pre-service, embeds wintun)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ 'User-Agent' = 'gh-actions'; 'Authorization' = "Bearer $env:GH_TOKEN" }
+          $rel = Invoke-RestMethod -Uri 'https://api.github.com/repos/SagerNet/sing-box/releases/latest' -Headers $headers
+          # Prefer the plain windows-amd64 zip (not the -legacy / -installer variants).
+          $asset = $rel.assets | Where-Object { $_.name -match '^sing-box-.*-windows-amd64\.zip$' } | Select-Object -First 1
+          if (-not $asset) { throw 'sing-box windows-amd64 zip not found in latest release' }
+          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile singbox.zip
+          Expand-Archive singbox.zip -DestinationPath singbox -Force
+          $exe = Get-ChildItem singbox -Recurse -Filter 'sing-box.exe' | Select-Object -First 1
+          if (-not $exe) { throw 'sing-box.exe not found in the downloaded archive' }
+          New-Item -ItemType Directory -Force -Path "${{ github.workspace }}/dist/bin/sing_box" | Out-Null
+          Copy-Item $exe.FullName "${{ github.workspace }}/dist/bin/sing_box/sing-box.exe" -Force
+          # sing-box embeds wintun; also copy a wintun.dll if the archive ships one, just in case.
+          $wintun = Get-ChildItem singbox -Recurse -Filter 'wintun.dll' | Select-Object -First 1
+          if ($wintun) { Copy-Item $wintun.FullName "${{ github.workspace }}/dist/bin/wintun.dll" -Force }
+          Write-Host 'Bundled sing-box core:' (Get-Item "${{ github.workspace }}/dist/bin/sing_box/sing-box.exe").Length 'bytes'
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:

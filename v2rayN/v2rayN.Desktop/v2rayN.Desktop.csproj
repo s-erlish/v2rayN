@@ -8,6 +8,8 @@
 		<AssemblyName>v2rayN</AssemblyName>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<CETCompat>false</CETCompat>
+		<!-- Elevate on Windows so TUN mode can create the wintun adapter (full-tunnel VPN). -->
+		<ApplicationManifest>app.manifest</ApplicationManifest>
 	</PropertyGroup>
 
 	<ItemGroup>
