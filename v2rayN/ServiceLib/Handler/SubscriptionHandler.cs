@@ -91,6 +91,23 @@ public static class SubscriptionHandler
         return downloadHandle;
     }
 
+    /// <summary>
+    /// Remnawave / 3x-ui panels (departament) key the subscription response format — the managed
+    /// server list vs a generic "app not supported" placeholder — off a recognised v2rayNG-family
+    /// client User-Agent. A blank or branding UA yields the wrong content. Force a v2rayNG-family UA
+    /// when the item's own value is missing or not v2rayNG-family. 1:1 with the Android client
+    /// (HttpUtil.getUrlContentWithUserAgentEx).
+    /// </summary>
+    private static string ResolveSubUserAgent(string? userAgent)
+    {
+        var ua = userAgent?.Trim();
+        if (ua.IsNotEmpty() && ua!.Contains("v2rayng", StringComparison.OrdinalIgnoreCase))
+        {
+            return ua;
+        }
+        return "v2rayNG/1.10.6";
+    }
+
     private static async Task<string> DownloadSubscriptionContent(DownloadService downloadHandle, string url, bool blProxy, string userAgent)
     {
         var result = await downloadHandle.TryDownloadString(url, blProxy, userAgent);
@@ -168,11 +185,11 @@ public static class SubscriptionHandler
             }
 
             // A sub-convert service response carries no subscription-userinfo header; body only.
-            return new SubContentResult { Body = await DownloadSubscriptionContent(downloadHandle, url, blProxy, item.UserAgent) };
+            return new SubContentResult { Body = await DownloadSubscriptionContent(downloadHandle, url, blProxy, ResolveSubUserAgent(item.UserAgent)) };
         }
 
         // Direct subscription: fetch body together with the userinfo/directive response headers.
-        return await DownloadSubscriptionContentWithHeaders(downloadHandle, url, blProxy, item.UserAgent);
+        return await DownloadSubscriptionContentWithHeaders(downloadHandle, url, blProxy, ResolveSubUserAgent(item.UserAgent));
     }
 
     private static async Task<string> DownloadAdditionalSubscriptions(SubItem item, string mainResult, bool blProxy, DownloadService downloadHandle)
@@ -195,7 +212,7 @@ public static class SubscriptionHandler
                 continue;
             }
 
-            var additionalResult = await DownloadSubscriptionContent(downloadHandle, url2, blProxy, item.UserAgent);
+            var additionalResult = await DownloadSubscriptionContent(downloadHandle, url2, blProxy, ResolveSubUserAgent(item.UserAgent));
 
             if (additionalResult.IsNotEmpty())
             {
