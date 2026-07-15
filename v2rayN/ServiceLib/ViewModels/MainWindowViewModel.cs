@@ -331,7 +331,11 @@ public class MainWindowViewModel : MyReactiveObject
         }
         await RefreshServersDispatcherAsync();
 
-        await Reload();
+        // Consumer-VPN (Happ) model: the app starts DISCONNECTED. Do NOT auto-connect the core on
+        // startup. The core is started only on an explicit user action — tapping the Home shield
+        // (HomeViewModel.ConnectToggle → Reload) or picking a server (SetDefaultServer → Reload).
+        // The connect/disconnect paths (Reload / CoreManager.CoreStop) remain fully intact.
+        SetReloadEnabled(true);
     }
 
     #endregion Init

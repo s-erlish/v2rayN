@@ -16,6 +16,9 @@ public static class DesignData
 
     public static MainWindowViewModel? MainWindow { get; } = SafeCreate(CreateMainWindow);
 
+    // Home aggregator — design-only sample groups (runtime is real and empty by default).
+    public static HomeViewModel? Home { get; } = SafeCreate(HomeViewModel.CreateDesign);
+
     public static ProfilesViewModel? Profiles { get; } = SafeCreate(() => new ProfilesViewModel());
 
     public static StatusBarViewModel? StatusBar { get; } = SafeCreate(CreateStatusBar);

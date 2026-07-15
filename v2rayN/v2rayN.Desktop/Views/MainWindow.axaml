@@ -169,7 +169,8 @@
                         BorderThickness="0,0,1,0">
                         <DockPanel LastChildFill="False">
 
-                            <!--  4 вкладки (Главная · Сервера · Настройки · Аккаунт)  -->
+                            <!--  3 вкладки (Главная · Настройки · Аккаунт). Список серверов живёт
+                                  в левой колонке «Главной», отдельной вкладки «Сервера» нет.  -->
                             <StackPanel DockPanel.Dock="Top" Margin="0,8,0,0">
                                 <Button x:Name="navHome" Classes="NavRailItem">
                                     <Grid>
@@ -183,21 +184,6 @@
                                                 HorizontalAlignment="Center"
                                                 Classes="Chip"
                                                 Text="Главная" />
-                                        </StackPanel>
-                                    </Grid>
-                                </Button>
-                                <Button x:Name="navServers" Classes="NavRailItem">
-                                    <Grid>
-                                        <Border Classes="NavPill" />
-                                        <StackPanel
-                                            HorizontalAlignment="Center"
-                                            VerticalAlignment="Center"
-                                            Spacing="4">
-                                            <PathIcon Data="{StaticResource Geo.Nav.Servers}" />
-                                            <TextBlock
-                                                HorizontalAlignment="Center"
-                                                Classes="Chip"
-                                                Text="Сервера" />
                                         </StackPanel>
                                     </Grid>
                                 </Button>

@@ -3,8 +3,12 @@
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:dd="clr-namespace:v2rayN.Desktop.DesignData"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:views="clr-namespace:v2rayN.Desktop.Views"
+    xmlns:vms="clr-namespace:v2rayN.Desktop.ViewModels"
+    x:DataType="vms:HomeViewModel"
+    Design.DataContext="{x:Static dd:DesignData.Home}"
     mc:Ignorable="d">
 
     <!--  Фон Главной — радиальный градиент (bg_home_gradient).  -->
@@ -13,10 +17,13 @@
         <!--  Двухпанельная раскладка: ЛЕВО (440, серверы) | 1px divider | ПРАВО (flex, подключение).  -->
         <Grid ColumnDefinitions="440,1,*">
 
-            <!--  ЛЕВАЯ колонка: мета-бар подписки + список серверов.  -->
+            <!--  ЛЕВАЯ колонка: мета-бар подписки (виден только при наличии подписки) + список серверов.  -->
             <Grid Grid.Column="0" RowDefinitions="Auto,*" MinWidth="380">
-                <views:SubscriptionMetaView Grid.Row="0" Margin="16,16,16,4" />
-                <views:ServerListView Grid.Row="1" />
+                <views:SubscriptionMetaView
+                    x:Name="SubMeta"
+                    Grid.Row="0"
+                    Margin="16,16,16,4" />
+                <views:ServerListView x:Name="ServerList" Grid.Row="1" />
             </Grid>
 
             <!--  Вертикальный разделитель 1px  -->
@@ -25,7 +32,8 @@
             <!--  ПРАВАЯ колонка: чип аккаунта (сверху) + connect-щит.  -->
             <Grid Grid.Column="2" RowDefinitions="Auto,*" Margin="16">
 
-                <!--  Чип аккаунта: аватар + @ник + «Управление аккаунтом» + chevron.  -->
+                <!--  Чип аккаунта: скрыт до подключения аккаунта departament (порт API — фаза D6).
+                      НЕ показываем фейковый логин/аватар: data-driven, пусто по умолчанию.  -->
                 <Border
                     Grid.Row="0"
                     Height="64"
@@ -33,6 +41,7 @@
                     BorderBrush="{DynamicResource Brush.OutlineVariant}"
                     BorderThickness="1"
                     CornerRadius="{DynamicResource Radius.Card}"
+                    IsVisible="False"
                     Padding="10,8,16,8">
                     <Grid ColumnDefinitions="Auto,*,Auto">
                         <Border
@@ -47,30 +56,31 @@
                                 FontSize="18"
                                 FontWeight="Bold"
                                 Foreground="{DynamicResource Brush.Accent}"
-                                Text="S" />
+                                Text="A" />
                         </Border>
                         <StackPanel
                             Grid.Column="1"
                             Margin="12,0,0,0"
                             VerticalAlignment="Center"
                             Spacing="1">
-                            <TextBlock Classes="Title" Text="@serumfx" />
+                            <TextBlock Classes="Title" Text="Аккаунт" />
                             <TextBlock Classes="Caption" Text="Управление аккаунтом" />
                         </StackPanel>
                         <Path
                             Grid.Column="2"
                             Width="9"
                             Height="16"
+                            VerticalAlignment="Center"
                             Data="M1 1 L8 8 L1 15"
                             Stroke="{DynamicResource Brush.OnSurfaceVariant}"
-                            StrokeThickness="1.6"
                             StrokeLineCap="Round"
-                            VerticalAlignment="Center" />
+                            StrokeThickness="1.6" />
                     </Grid>
                 </Border>
 
-                <!--  Connect-щит (стата-строка + кольца + диск + щит + подпись сервера + пустое состояние).  -->
-                <views:ConnectHeroView Grid.Row="1" />
+                <!--  Connect-щит (стата-строка + кольца + диск + щит + подпись сервера + пустое состояние).
+                      Управляется из code-behind по состоянию HomeViewModel (idle/connecting/connected/empty).  -->
+                <views:ConnectHeroView x:Name="ConnectHero" Grid.Row="1" />
             </Grid>
         </Grid>
     </Border>

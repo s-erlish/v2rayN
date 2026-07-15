@@ -3,6 +3,7 @@ using Avalonia.Controls.Notifications;
 using v2rayN.Desktop.Base;
 using v2rayN.Desktop.Common;
 using v2rayN.Desktop.Manager;
+using v2rayN.Desktop.ViewModels;
 
 namespace v2rayN.Desktop.Views;
 
@@ -12,12 +13,17 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     private readonly WindowNotificationManager? _manager;
     private bool _blCloseByUser = false;
 
-    // Заглушки-вкладки фазы 0. Реальный контент подставят агенты фазы 1.
+    // Вкладки. «Главная» подключена к реальному движку (HomeViewModel); список серверов живёт
+    // в её левой колонке — отдельной вкладки «Сервера» в рейле нет.
     private readonly Control _homeView = new HomeView();
-    private readonly Control _serversView = new ServersView();
     private readonly Control _settingsView = new SettingsView();
     private readonly Control _accountView = new AccountView();
     private readonly Button[] _navButtons;
+    private HomeViewModel? _homeViewModel;
+
+    // Индикатор подключения в рейле: серый (idle) ↔ синий (connected).
+    private static readonly IBrush _dotOff = new SolidColorBrush(Color.Parse("#9BA1AD"));
+    private static readonly IBrush _dotOn = new SolidColorBrush(Color.Parse("#4C8DFF"));
 
     public MainWindow()
     {
@@ -35,20 +41,26 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         btnClose.Click += (_, _) => Close();
         btnTray.Click += (_, _) => ShowHideWindow(false);
 
-        // Нав-рейл: переключение вкладок.
-        _navButtons = [navHome, navServers, navSettings, navAccount];
+        // Нав-рейл: переключение вкладок (Главная · Настройки · Аккаунт).
+        _navButtons = [navHome, navSettings, navAccount];
         navHome.Click += (_, _) => SelectTab(navHome, _homeView);
-        navServers.Click += (_, _) => SelectTab(navServers, _serversView);
         navSettings.Click += (_, _) => SelectTab(navSettings, _settingsView);
         navAccount.Click += (_, _) => SelectTab(navAccount, _accountView);
         SelectTab(navHome, _homeView);
-        // DEV screenshot hook: INITIAL_TAB=servers|settings|account opens that tab on launch.
+        // DEV screenshot hook: INITIAL_TAB=settings|account opens that tab on launch.
         switch (Environment.GetEnvironmentVariable("INITIAL_TAB"))
         {
-            case "servers": SelectTab(navServers, _serversView); break;
             case "settings": SelectTab(navSettings, _settingsView); break;
             case "account": SelectTab(navAccount, _accountView); break;
         }
+
+        // Питаем «Главную» реальным HomeViewModel, как только доступен корневой ViewModel
+        // (App присваивает его сразу после Build, до показа окна — DataContext успевает встать
+        // раньше активации HomeView). Здесь же биндим индикатор подключения в рейле.
+        this.WhenAnyValue(x => x.ViewModel)
+            .Where(vm => vm != null)
+            .Take(1)
+            .Subscribe(vm => SetupHome(vm!));
 
         this.WhenActivated(disposables =>
         {
@@ -123,6 +135,18 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         }
         active.Classes.Add("active");
         contentHost.Content = view;
+    }
+
+    // Создаёт HomeViewModel поверх реального движка (ProfilesViewModel + StatusBarViewModel из
+    // MainWindowViewModel) и отдаёт его «Главной». Индикатор рейла следует за IsConnected.
+    private void SetupHome(MainWindowViewModel vm)
+    {
+        _homeViewModel = new HomeViewModel(vm);
+        _homeView.DataContext = _homeViewModel;
+
+        _homeViewModel.WhenAnyValue(x => x.IsConnected)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .Subscribe(connected => railStatusDot.Fill = connected ? _dotOn : _dotOff);
     }
 
     private void TitleBar_PointerPressed(object? sender, PointerPressedEventArgs e)
