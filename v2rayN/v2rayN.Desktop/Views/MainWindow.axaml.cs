@@ -67,11 +67,9 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         _accountView.HistoryRequested += (_, _) => OpenHistory();
         _accountView.LoginRequested += (_, _) => OpenLogin();
 
-        // P1-3: вкладка «Аккаунт» в рейле видна только когда пользователь вошёл. Начальное
-        // значение приходит сразу (WhenAnyValue выдаёт текущее), далее следит за входом/выходом.
-        _accountVm.WhenAnyValue(x => x.IsLoggedIn)
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
-            .Subscribe(UpdateAccountTabVisibility);
+        // Вкладка «Аккаунт» ВСЕГДА видна в шелле (как нижняя навигация Android): пользователь
+        // с подпиской, но без входа, иначе не доберётся до логина. В logged-out AccountView сам
+        // показывает гейт входа («Войдите в аккаунт» + Telegram CTA + «Управление»). Гейтинга нет.
         // DEV screenshot hook: INITIAL_TAB=settings|account opens that tab on launch.
         switch (Environment.GetEnvironmentVariable("INITIAL_TAB"))
         {
@@ -207,17 +205,6 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
                 onboardingView.IsVisible = empty;
                 shellRoot.IsVisible = !empty;
             });
-    }
-
-    // P1-3: вкладка «Аккаунт» видна только для вошедших. Если её скрыли, пока она была активной
-    // (выход из аккаунта), возвращаемся на «Главную».
-    private void UpdateAccountTabVisibility(bool loggedIn)
-    {
-        navAccount.IsVisible = loggedIn;
-        if (!loggedIn && navAccount.Classes.Contains("active"))
-        {
-            SelectTab(navHome, _homeView);
-        }
     }
 
     #region Sub-page host (Buy / Login / Devices / History)

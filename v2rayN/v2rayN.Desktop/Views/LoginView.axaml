@@ -246,13 +246,15 @@
                             Text="Подключите аккаунт Telegram, чтобы войти в один тап."
                             TextWrapping="Wrap" />
 
-                        <!--  CTA. Команда VM сама держит кнопку disabled, пока идёт опрос подтверждения.  -->
+                        <!--  CTA. НЕ гейтится формой сайта: вход через Telegram не требует ввода и
+                              всегда активен. Диспетчеризуется из code-behind (Click), поэтому пустой
+                              email/пароль или null DataContext НЕ дизейблят кнопку; в «занятой»/ожидающей
+                              вид она переходит только на время опроса подтверждения (SetAwaiting).  -->
                         <Button
                             x:Name="TelegramButton"
                             Margin="0,16,0,0"
                             HorizontalAlignment="Stretch"
-                            Classes="Primary Tall"
-                            Command="{Binding LoginTelegramCmd}">
+                            Classes="Primary Tall">
                             <StackPanel
                                 VerticalAlignment="Center"
                                 Orientation="Horizontal"

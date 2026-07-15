@@ -59,6 +59,7 @@ public partial class LoginView : UserControl
         }
 
         BackButton.Click += (_, _) => BackRequested?.Invoke(this, EventArgs.Empty);
+        TelegramButton.Click += OnTelegramClick;
         RestartButton.Click += OnRestartClick;
         OpenTelegramButton.Click += OnOpenTelegramClick;
         RegisterButton.Click += (_, _) => ProcUtils.ProcessStart(RegisterUrl);
@@ -190,17 +191,20 @@ public partial class LoginView : UserControl
     {
         AwaitingBlock.IsVisible = awaiting;
         SetSpinning(AwaitingSpinner, awaiting);
-        // Сам CTA Telegram дизейблит его ReactiveCommand, пока идёт опрос подтверждения.
+        // CTA Telegram неактивен ТОЛЬКО пока идёт опрос подтверждения (паритет showAwaiting:
+        // btnTelegram.isEnabled = false). В любом другом состоянии он активен — вход через
+        // Telegram не зависит от валидности формы сайта и не блокируется входом через сайт.
+        TelegramButton.IsEnabled = !awaiting;
     }
 
     /// <summary>
     /// Занятость входа через сайт / 2FA: спиннер на инициировавшей кнопке, submit-кнопки
-    /// заблокированы, CTA Telegram тоже (паритет setSiteBusy).
+    /// заблокированы (паритет setSiteBusy). CTA Telegram НЕ трогаем — он не гейтится входом
+    /// через сайт (им владеет SetAwaiting: активен, кроме времени опроса Telegram).
     /// </summary>
     private void SetSiteBusy(bool busy)
     {
         _siteBusy = busy;
-        TelegramButton.IsEnabled = !busy;
 
         var onSite = busy && !_twoFaVisible;
         var on2Fa = busy && _twoFaVisible;
@@ -333,6 +337,18 @@ public partial class LoginView : UserControl
         {
             ProcUtils.ProcessStart(deepLink);
         }
+    }
+
+    /// <summary>
+    /// «Войти через Telegram»: запускает вход через Telegram. Всегда доступен (кроме времени опроса,
+    /// когда кнопка неактивна через SetAwaiting) — вход не требует ввода формы (паритет btnTelegram:
+    /// lastAttemptWasSite=false; hideError; startTelegramLogin).
+    /// </summary>
+    private void OnTelegramClick(object? sender, RoutedEventArgs e)
+    {
+        _openedDeepLink = null;
+        SetLoginError(string.Empty);
+        Execute(_vm?.LoginTelegramCmd);
     }
 
     /// <summary>«Начать заново»: новая попытка входа через Telegram со свежим deep link.</summary>
