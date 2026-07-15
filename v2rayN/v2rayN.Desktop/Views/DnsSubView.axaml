@@ -1,0 +1,161 @@
+<UserControl
+    x:Class="v2rayN.Desktop.Views.DnsSubView"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    d:DesignWidth="560"
+    d:DesignHeight="640"
+    Background="{DynamicResource Brush.Bg}"
+    mc:Ignorable="d">
+
+    <UserControl.Resources>
+        <StreamGeometry x:Key="Geo.Sub.Back">M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z</StreamGeometry>
+    </UserControl.Resources>
+
+    <UserControl.Styles>
+        <Style Selector="Button.IconButton">
+            <Setter Property="Transitions">
+                <Transitions>
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Button.IconButton:pressed">
+            <Setter Property="RenderTransform" Value="scale(0.92)" />
+        </Style>
+
+        <!--  Пресет-чип: SurfaceHigh в покое, синий акцент когда выбран. Press scale 0.96, без ripple.  -->
+        <Style Selector="Border.DnsChip">
+            <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
+            <Setter Property="CornerRadius" Value="{StaticResource Radius.Chip}" />
+            <Setter Property="Padding" Value="16,10" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" />
+                    <BrushTransition Property="Background" Duration="0:0:0.12" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Border.DnsChip:pointerover">
+            <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHighest}" />
+        </Style>
+        <Style Selector="Border.DnsChip.selected">
+            <Setter Property="Background" Value="{DynamicResource Brush.Accent}" />
+        </Style>
+        <Style Selector="Border.DnsChip.selected:pointerover">
+            <Setter Property="Background" Value="{DynamicResource Brush.Accent}" />
+        </Style>
+        <Style Selector="Border.DnsChip TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
+            <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style Selector="Border.DnsChip.selected TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource Brush.OnAccent}" />
+        </Style>
+    </UserControl.Styles>
+
+    <DockPanel MaxWidth="620">
+        <Grid
+            DockPanel.Dock="Top"
+            MinHeight="56"
+            Margin="16,8,16,0"
+            ColumnDefinitions="Auto,*">
+            <Button
+                x:Name="btnBack"
+                Grid.Column="0"
+                Width="40"
+                Height="40"
+                Padding="0"
+                VerticalAlignment="Center"
+                Classes="IconButton"
+                ToolTip.Tip="Назад">
+                <PathIcon
+                    Width="22"
+                    Height="22"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Data="{StaticResource Geo.Sub.Back}"
+                    Foreground="{DynamicResource Brush.OnSurface}" />
+            </Button>
+            <TextBlock
+                Grid.Column="1"
+                Margin="16,0,0,0"
+                VerticalAlignment="Center"
+                Classes="Headline"
+                Text="DNS"
+                TextTrimming="CharacterEllipsis" />
+        </Grid>
+
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="16,12,16,24" Spacing="8">
+
+                <TextBlock
+                    Classes="Subtitle"
+                    Text="DNS-сервер, через который приложение разрешает домены при подключении. По умолчанию используется встроенный резолвер."
+                    TextWrapping="Wrap" />
+
+                <TextBlock Margin="0,6,0,0" Classes="SectionHeader" Text="Провайдер" />
+                <Border Classes="Card" Padding="16,16">
+                    <WrapPanel x:Name="chipPanel">
+                        <Border x:Name="chipDefault" Classes="DnsChip" Margin="0,0,8,8">
+                            <TextBlock Text="По умолчанию" />
+                        </Border>
+                        <Border x:Name="chipCloudflare" Classes="DnsChip" Margin="0,0,8,8">
+                            <TextBlock Text="Cloudflare" />
+                        </Border>
+                        <Border x:Name="chipGoogle" Classes="DnsChip" Margin="0,0,8,8">
+                            <TextBlock Text="Google" />
+                        </Border>
+                        <Border x:Name="chipAdGuard" Classes="DnsChip" Margin="0,0,8,8">
+                            <TextBlock Text="AdGuard" />
+                        </Border>
+                        <Border x:Name="chipCustom" Classes="DnsChip" Margin="0,0,8,8">
+                            <TextBlock Text="Свой" />
+                        </Border>
+                    </WrapPanel>
+                </Border>
+
+                <!--  Раскрывается только для «Свой»: поле DoH-адреса.  -->
+                <StackPanel x:Name="customPanel" IsVisible="False" Spacing="8">
+                    <TextBlock Margin="0,6,0,0" Classes="SectionHeader" Text="Свой DNS-адрес" />
+                    <Border Classes="Card" Padding="16,12">
+                        <StackPanel Spacing="8">
+                            <TextBox
+                                x:Name="txtCustomDoh"
+                                VerticalContentAlignment="Center"
+                                Watermark="https://example.com/dns-query" />
+                            <TextBlock
+                                Classes="Subtitle"
+                                Text="DoH-адрес (https://…/dns-query), DoT или обычный IP: 1.1.1.1"
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <TextBlock Margin="0,6,0,0" Classes="SectionHeader" Text="Дополнительно" />
+                <Border Classes="Card" Padding="16,4">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="56">
+                        <StackPanel Grid.Column="0" Margin="0,0,8,0" VerticalAlignment="Center">
+                            <TextBlock Classes="Body" Text="FakeIP" />
+                            <TextBlock
+                                Margin="0,4,0,0"
+                                Classes="Subtitle"
+                                Text="Ускоряет соединение, отвечая на DNS-запросы локально (sing-box)"
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                        <ToggleSwitch
+                            x:Name="switchFakeIp"
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
+                            Theme="{DynamicResource ToggleSwitch.iOS}" />
+                    </Grid>
+                </Border>
+
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</UserControl>

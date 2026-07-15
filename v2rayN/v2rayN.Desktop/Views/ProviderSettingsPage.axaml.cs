@@ -4,19 +4,23 @@ using v2rayN.Desktop.Common;
 namespace v2rayN.Desktop.Views;
 
 /// <summary>
-/// «Настройки провайдеров». Real, persisted:
+/// «Настройки провайдеров» — in-app суб-страница (раньше отдельное окно). Real, persisted:
 ///   • Автообновление + интервал → <c>GuiItem.AutoUpdateInterval</c> (0 = off; drives the updater);
 ///   • User-Agent → <c>CoreBasicItem.DefUserAgent</c> (the UA the core sends on outbounds);
 ///   • HWID → shows the real device id (<c>AuthTokenStore.DeviceId()</c>) with copy-to-clipboard.
-/// No core start (settings-only); the interval feeds the background sub-updater on save.
+/// No core start (settings-only); the interval feeds the background sub-updater on save. Уход со
+/// страницы сохраняет и поднимает <see cref="BackRequested"/>.
 /// </summary>
-public partial class ProviderSettingsWindow : Window
+public partial class ProviderSettingsPage : UserControl, ISubPage
 {
     private static readonly int[] IntervalOptions = { 0, 6, 12, 24, 48 };
 
     private readonly Config _config;
+    private bool _saved;
 
-    public ProviderSettingsWindow()
+    public event EventHandler? BackRequested;
+
+    public ProviderSettingsPage()
     {
         InitializeComponent();
 
@@ -53,11 +57,17 @@ public partial class ProviderSettingsWindow : Window
             await AvaUtils.SetClipboardData(this, txtHwid.Text ?? string.Empty);
         };
 
-        btnDone.Click += async (_, _) => await SaveAndCloseAsync();
+        btnBack.Click += async (_, _) => await SaveAndBackAsync();
     }
 
-    private async Task SaveAndCloseAsync()
+    private async Task SaveAndBackAsync()
     {
+        if (_saved)
+        {
+            return;
+        }
+        _saved = true;
+
         var i = cmbInterval.SelectedIndex;
         _config.GuiItem.AutoUpdateInterval = i >= 0 && i < IntervalOptions.Length ? IntervalOptions[i] : 0;
 
@@ -65,7 +75,7 @@ public partial class ProviderSettingsWindow : Window
         _config.CoreBasicItem.DefUserAgent = ua;
 
         await ConfigHandler.SaveConfig(_config);
-        Close();
+        BackRequested?.Invoke(this, EventArgs.Empty);
     }
 
     private static string SafeDeviceId()

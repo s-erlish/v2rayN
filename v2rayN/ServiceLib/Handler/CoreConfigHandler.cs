@@ -156,21 +156,31 @@ public static class CoreConfigHandler
 
     /// <summary>
     /// Replace the template's own socks/http/mixed proxy inbounds with the app's standard local
-    /// inbound(s) (mixed on the system-proxy port, optional second/LAN ports, and the tun inbound
-    /// when TUN is on) and carry the app's stats/metrics/policy. Everything else in the template
-    /// (its own tun/dokodemo inbounds, outbounds, routing, dns) is preserved.
+    /// inbound (mixed on the system-proxy / pre-service socks port, plus optional second/LAN ports)
+    /// and carry the app's stats/metrics/policy. The Xray core for a custom node is deliberately
+    /// kept socks-only — it never gets a `tun` inbound; in TUN mode the sing-box pre-service owns
+    /// the tun device and forwards into this socks inbound. Everything else in the template
+    /// (its own outbounds, routing, dns) is preserved.
     /// </summary>
     private static void MergeAppInbounds(JsonObject root, ProfileItem node)
     {
         var config = AppManager.Instance.Config;
 
         // Generate the app inbounds + stats exactly as a normal connection would.
+        // IMPORTANT: the Xray (main) core for a CUSTOM node must NEVER carry a `tun` inbound.
+        // Xray cannot create the OS wintun/utun device in this app's architecture — in FULL TUN
+        // mode a separate sing-box PRE-SERVICE owns the tun adapter and forwards all captured
+        // traffic into this Xray config's SOCKS inbound (see CoreConfigContextBuilder's pre-socks
+        // synthesis). If we injected a `tun` inbound here the Xray core would either fail to build
+        // the device or fight the sing-box tun, leaving the app "connected" with zero traffic.
+        // So force IsTunEnabled=false: emit ONLY the local mixed/socks inbound the pre-service
+        // (and the OS system proxy) point at.
         var inboundContext = new CoreConfigContext
         {
             Node = node,
             RunCoreType = ECoreType.Xray,
             AppConfig = config,
-            IsTunEnabled = config.TunModeItem.EnableTun,
+            IsTunEnabled = false,
             IsWindows = Utils.IsWindows(),
             IsMacOS = Utils.IsMacOS(),
         };

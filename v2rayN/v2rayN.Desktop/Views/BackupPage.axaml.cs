@@ -3,20 +3,23 @@ using v2rayN.Desktop.Common;
 namespace v2rayN.Desktop.Views;
 
 /// <summary>
-/// «Резервное копирование». Real: exports the whole config directory to a .zip and restores from one,
-/// reusing the engine's <see cref="BackupAndRestoreViewModel"/> (LocalBackup / LocalRestore). Restore
-/// makes its own safety backup first, then relaunches the app. No core interaction.
+/// «Резервное копирование» — in-app суб-страница (раньше отдельное окно). Real: exports the whole config
+/// directory to a .zip and restores from one, reusing the engine's <see cref="BackupAndRestoreViewModel"/>
+/// (LocalBackup / LocalRestore). Restore makes its own safety backup first, then relaunches the app. No
+/// core interaction. Стрелка «назад» поднимает <see cref="BackRequested"/>.
 /// </summary>
-public partial class BackupSubWindow : Window
+public partial class BackupPage : UserControl, ISubPage
 {
     private readonly BackupAndRestoreViewModel _vm = new();
     private bool _busy;
 
-    public BackupSubWindow()
+    public event EventHandler? BackRequested;
+
+    public BackupPage()
     {
         InitializeComponent();
 
-        btnDone.Click += (_, _) => Close();
+        btnBack.Click += (_, _) => BackRequested?.Invoke(this, EventArgs.Empty);
         btnExport.Click += async (_, _) => await ExportAsync();
         btnImport.Click += async (_, _) => await ImportAsync();
     }

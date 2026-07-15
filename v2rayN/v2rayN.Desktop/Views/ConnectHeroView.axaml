@@ -268,11 +268,13 @@
 
                     <!--  (4) тонкая connecting-дуга Ø190 толщина 3 (акцент): одиночный сегмент
                           пунктиром, крутится тонким кольцом вплотную к диску (176). Видна только
-                          при connecting. Размер инлайн (~190) — тонкое кольцо в ~7px от диска.
-                          ЯВНЫЙ центрированный RotateTransform: анимация пишет RotateTransform.Angle,
-                          и без конкретного объекта аниматор крутил бы вокруг угла (0,0) → дуга
-                          «облетала» всё окно. RenderTransformOrigin=0.5,0.5 + этот трансформ =
-                          вращение строго вокруг собственного центра.  -->
+                          при connecting. Размер инлайн (190) — тонкое кольцо в ~7px от диска (r95 vs r88).
+                          КРИТИЧНО: keyframe-анимация пишет RotateTransform.Angle прямо в ЭТОТ явный
+                          RenderTransform, а голый RotateTransform крутит вокруг (CenterX,CenterY),
+                          по умолчанию (0,0) = левый-верх элемента → дуга «облетала» всё окно.
+                          RenderTransformOrigin на этот путь НЕ влияет. Поэтому центр вращения
+                          зашит ЯВНО: CenterX/CenterY = половина 190 = 95 → вращение строго вокруг
+                          собственного центра, «улететь» физически не может.  -->
                     <Ellipse
                         x:Name="ConnectingArc"
                         Width="190"
@@ -287,7 +289,10 @@
                         StrokeLineCap="Round"
                         StrokeThickness="3">
                         <Ellipse.RenderTransform>
-                            <RotateTransform Angle="0" />
+                            <RotateTransform
+                                Angle="0"
+                                CenterX="95"
+                                CenterY="95" />
                         </Ellipse.RenderTransform>
                     </Ellipse>
 

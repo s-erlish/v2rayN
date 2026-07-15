@@ -291,13 +291,35 @@ public sealed class StripLeadingFlagConverter : IValueConverter
 }
 
 /// <summary>
-/// True when the bound string is non-empty. Used to reveal a row's ping value only after a latency
-/// test has a result. Local to ServerListView (kept out of GlobalResources).
+/// True once a latency test produced a real result — the bound <c>DelayVal</c> is a numeric
+/// millisecond string (e.g. "123", "-1"). Empty (never tested) and the engine's non-numeric
+/// "Testing…" placeholder both read false, so the coloured ms value shows only for real results.
+/// Local to ServerListView (kept out of GlobalResources).
 /// </summary>
-public sealed class NotEmptyConverter : IValueConverter
+public sealed class DelayResultConverter : IValueConverter
 {
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
-        => !string.IsNullOrEmpty(value?.ToString());
+    {
+        var s = value?.ToString();
+        return !string.IsNullOrEmpty(s) && int.TryParse(s, out _);
+    }
+
+    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => null;
+}
+
+/// <summary>
+/// True while a latency test is in flight for the row: <c>DelayVal</c> is populated with the engine's
+/// non-numeric "Testing…" placeholder (never a parseable millisecond value). Drives the ping-slot
+/// spinner so a testing row shows a spinner instead of any "Testing…" / "тест" text. Local to
+/// ServerListView (kept out of GlobalResources).
+/// </summary>
+public sealed class DelayTestingConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        var s = value?.ToString();
+        return !string.IsNullOrEmpty(s) && !int.TryParse(s, out _);
+    }
 
     public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => null;
 }

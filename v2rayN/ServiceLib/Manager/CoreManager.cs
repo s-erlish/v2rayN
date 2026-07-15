@@ -95,20 +95,33 @@ public class CoreManager
         await WaitForProxyPort(preContext);
         await CoreStartPreService(preContext);
 
-        if (_processService != null)
+        // A pre-context means a pre-service is REQUIRED for traffic to flow:
+        //  - FULL TUN + custom/legacy node: the sing-box pre-service owns the OS tun adapter and
+        //    forwards captured traffic into the main core's socks inbound;
+        //  - pre-socks chaining: the pre-core is the actual ingress.
+        // In all cases the main (Xray) core alone is useless without it — its socks inbound binds
+        // fine so the process is "alive", but nothing routes OS traffic to it. Treating that as
+        // "connected" is exactly the reported false «Подключено» with no traffic anywhere. So when a
+        // pre-service was required but did not start, the connection has NOT succeeded.
+        var preServiceRequiredButFailed = preContext != null && _processPreService is null;
+
+        if (_processService != null && !preServiceRequiredButFailed)
         {
-            // Core process actually started — mark the app as running so IsRunningCore()/the connect
-            // shield/tray honestly read "connected".
+            // Both the main core and (if required) the pre-service actually started — mark the app as
+            // running so IsRunningCore()/the connect shield/tray honestly read "connected".
             AppManager.Instance.RunningCoreType = preContext?.RunCoreType ?? mainContext.RunCoreType;
             await UpdateFunc(true, $"{node.GetSummary()}");
         }
         else
         {
-            // Core failed to start (RunProcess returned null: wrong exe / blocked / crash). Do NOT
-            // leave RunningCoreType set, or IsRunningCore() would falsely report "connected" with no
-            // core behind it (blue shield + tray + false «Подключено» toast). Reset to the same
-            // sentinel CoreStop uses so connect state reads "idle". LoadCore re-assigns on next start.
-            AppManager.Instance.RunningCoreType = ECoreType.v2rayN;
+            // Either the main core failed to start (RunProcess returned null: wrong exe / blocked /
+            // crash) OR a required TUN/pre-socks pre-service failed. Tear down any half-started core
+            // so no orphan process lingers, and do NOT leave RunningCoreType set — otherwise
+            // IsRunningCore() would falsely report "connected" (blue shield + tray + false
+            // «Подключено» toast) with a dead tunnel behind it. CoreStop resets RunningCoreType to
+            // the idle sentinel; LoadCore re-assigns it on the next start.
+            await CoreStop();
+            await UpdateFunc(true, ResUI.FailedToRunCore);
         }
     }
 

@@ -17,7 +17,7 @@ namespace v2rayN.Desktop.ViewModels;
 ///   • sub auto-update → <c>GuiItem.AutoUpdateInterval</c>       (cycled on tap);
 ///   • language        → <c>UiItem.CurrentLanguage</c>          (cycled on tap, reboot to fully apply);
 ///   • lite mode       → <c>UiItem.LiteMode</c>                (shared persisted reduced-motion flag);
-///   • DNS / Routing   → open the existing modal sub-screens (DNSSettingViewModel / RoutingSettingViewModel).
+///   • DNS / Routing   → push Incy in-app sub-pages (DnsSubView / RoutingSubView) onto the shell stack.
 ///
 /// Every toggle/value shown reflects the current persisted config (never hardcoded); flipping a toggle
 /// writes back immediately and, when the core is already running, re-applies it live via the engine's
@@ -287,42 +287,9 @@ public class SettingsViewModel : MyReactiveObject
         }
     }
 
-    /// <summary>DNS row: open the real DNS settings sub-screen, then refresh the shown value / reload.</summary>
-    public async Task OpenDnsAsync()
-    {
-        if (_designMode)
-        {
-            return;
-        }
-        var vm = new DNSSettingViewModel();
-        if (await AppManager.Instance.WindowDialog.ShowDialogAsync(vm) == true)
-        {
-            DnsText = ResolveDnsText();
-            if (IsCoreRunning())
-            {
-                StatusBarViewModel.Instance.ReloadRequested.Publish();
-            }
-        }
-    }
-
-    /// <summary>Маршрутизация row: open the real routing sub-screen, then rebuild routings / reload.</summary>
-    public async Task OpenRoutingAsync()
-    {
-        if (_designMode)
-        {
-            return;
-        }
-        var vm = new RoutingSettingViewModel();
-        if (await AppManager.Instance.WindowDialog.ShowDialogAsync(vm) == true)
-        {
-            await ConfigHandler.InitBuiltinRouting(_config);
-            await StatusBarViewModel.Instance.RefreshRoutingsMenu();
-            if (IsCoreRunning())
-            {
-                StatusBarViewModel.Instance.ReloadRequested.Publish();
-            }
-        }
-    }
+    // DNS и Маршрутизация больше НЕ открывают отдельные окна. Их строки в SettingsView кладут Incy
+    // in-app суб-страницы (DnsSubView / RoutingSubView) на общий стек оболочки; те пишут в тот же
+    // реальный конфиг и по возврату освежают значения строк через RefreshDisplayValues (см. DnsText).
 
     /// <summary>Локальный прокси: commit the inline-edited port / SOCKS5 credentials to <c>Inbound[0]</c>.
     /// Invalid port → revert the field to the persisted value (never write a broken port). Reloads live
@@ -442,6 +409,7 @@ public class SettingsViewModel : MyReactiveObject
             return;
         }
         PerAppText = ResolvePerAppText();
+        DnsText = ResolveDnsText();
         SubAutoUpdateText = ResolveAutoUpdateText();
         AppearanceText = ResolveThemeText();
         LanguageText = ResolveLanguageText();

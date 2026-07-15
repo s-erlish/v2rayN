@@ -277,6 +277,19 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         PushSubPage(view);
     }
 
+    // Общий вход для суб-страниц НАСТРОЕК (DNS, Маршрутизация, Прокси по приложениям, Провайдеры,
+    // Файлы ресурсов, Пинг, О приложении, Резервное копирование, Схемы URL). Раньше это были
+    // отдельные OS-окна — теперь любая реализующая <see cref="ISubPage"/> вью кладётся на ТОТ ЖЕ стек
+    // «назад», что и Buy/Login/Devices/History. Никаких отдельных окон в приложении быть не должно.
+    public void OpenSubPage(Control view)
+    {
+        if (view is ISubPage sub)
+        {
+            sub.BackRequested += (_, _) => PopSubPage();
+        }
+        PushSubPage(view);
+    }
+
     #endregion Sub-page host
 
     private void TitleBar_PointerPressed(object? sender, PointerPressedEventArgs e)

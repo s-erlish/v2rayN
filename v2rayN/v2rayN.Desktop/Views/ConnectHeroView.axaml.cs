@@ -35,8 +35,13 @@ public partial class ConnectHeroView : UserControl
     //  Кэш-кисти повторяют токены Incy (Brush.OnSurfaceVariant / Brush.Accent / Brush.OnSurface),
     //  чтобы смена состояния не зависела от рантайм-поиска ресурсов. Тема одна (тёмная).
     private static readonly IBrush ShieldGray = new SolidColorBrush(Color.Parse("#9BA1AD"));
-    private static readonly IBrush AccentBlue = new SolidColorBrush(Color.Parse("#4C8DFF"));
+    private static readonly IBrush AccentFallback = new SolidColorBrush(Color.Parse("#4C8DFF"));
     private static readonly IBrush OnSurface = new SolidColorBrush(Color.Parse("#F2F4F8"));
+
+    //  Accent resolved from the live theme (Brush.Accent) so the monochrome («Чёрно-белая»)
+    //  overlay reaches the connected shield + status text — falls back to Incy blue.
+    private IBrush AccentBrush =>
+        this.TryFindResource("Brush.Accent", ActualThemeVariant, out var v) && v is IBrush b ? b : AccentFallback;
 
     //  Кривые зеркалят токены GlobalResources Ease.* 1:1 (ease_out_quart/_quint/_standard) —
     //  для императивных частей (press, перекл. длительностей). Декларативный XAML берёт токены.
@@ -148,11 +153,11 @@ public partial class ConnectHeroView : UserControl
         switch (state)
         {
             case ConnectVisualState.Connecting:
-                ShieldOutline.Fill = AccentBlue;
+                ShieldOutline.Fill = AccentBrush;
                 ShieldOutline.Opacity = 1;
                 ShieldFilled.Opacity = 0;
                 StatusText.Text = "Подключение…";
-                StatusText.Foreground = AccentBlue;
+                StatusText.Foreground = AccentBrush;
                 ServerInfo.IsVisible = true;
                 SetArc(true);
                 SetGlow(connecting: true, connected: false);
@@ -160,11 +165,11 @@ public partial class ConnectHeroView : UserControl
                 break;
 
             case ConnectVisualState.Connected:
-                ShieldOutline.Fill = AccentBlue;
+                ShieldOutline.Fill = AccentBrush;
                 ShieldOutline.Opacity = 0;
                 ShieldFilled.Opacity = 1;
                 StatusText.Text = "Подключено";
-                StatusText.Foreground = AccentBlue;
+                StatusText.Foreground = AccentBrush;
                 ServerInfo.IsVisible = true;
                 SetArc(false);
                 SetGlow(connecting: false, connected: true);

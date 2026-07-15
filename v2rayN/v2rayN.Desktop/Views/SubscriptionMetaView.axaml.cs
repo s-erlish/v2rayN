@@ -311,7 +311,11 @@ public partial class SubscriptionMetaView : UserControl
         }
 
         _refreshing = true;
-        ActionProgress.IsVisible = true;
+        // In-place busy indicator: swap the refresh glyph for a spinner in the SAME 40px slot so the
+        // action row never grows / shifts (no progress-bar animation). Nothing around it moves.
+        RefreshIcon.IsVisible = false;
+        RefreshSpinner.IsVisible = true;
+        RefreshSpinner.Classes.Add("spinning");
         try
         {
             // Refresh THIS subscription only, via the real MainWindowViewModel. Re-downloads the sub;
@@ -328,7 +332,9 @@ public partial class SubscriptionMetaView : UserControl
         }
         finally
         {
-            ActionProgress.IsVisible = false;
+            RefreshSpinner.Classes.Remove("spinning");
+            RefreshSpinner.IsVisible = false;
+            RefreshIcon.IsVisible = true;
             _refreshing = false;
         }
 

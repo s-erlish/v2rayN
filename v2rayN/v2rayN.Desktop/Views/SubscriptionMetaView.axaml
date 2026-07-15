@@ -121,7 +121,7 @@
                         TextTrimming="CharacterEllipsis" />
                 </StackPanel>
 
-                <!--  Действия: пинг → обновить → (спиннер) → пин → «+». Иконочные кнопки 40, глиф 20.  -->
+                <!--  Действия: пинг → обновить → пин → «+». Иконочные кнопки 40, глиф 20.  -->
                 <StackPanel
                     Grid.Column="2"
                     VerticalAlignment="Center"
@@ -135,24 +135,32 @@
                             VerticalAlignment="Center"
                             Data="{StaticResource Meta.Ping}" />
                     </Button>
+                    <!--  Обновить: во время обновления глиф В ТОМ ЖЕ 40-слоте заменяется компактным
+                          спиннером-дугой (никакого растущего прогресс-бара, ничего вокруг не сдвигается).  -->
                     <Button
                         x:Name="RefreshButton"
                         Classes="IconButton40 Row Accent"
                         ToolTip.Tip="Обновить подписку">
-                        <PathIcon
-                            HorizontalAlignment="Center"
-                            VerticalAlignment="Center"
-                            Data="{StaticResource Meta.Refresh}" />
+                        <Panel>
+                            <PathIcon
+                                x:Name="RefreshIcon"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Data="{StaticResource Meta.Refresh}" />
+                            <Ellipse
+                                x:Name="RefreshSpinner"
+                                Width="18"
+                                Height="18"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Classes="Spinner"
+                                IsVisible="False"
+                                Stroke="{DynamicResource Brush.Accent}"
+                                StrokeDashArray="7,21.2"
+                                StrokeLineCap="Round"
+                                StrokeThickness="2" />
+                        </Panel>
                     </Button>
-                    <!--  progress_action: спиннер во время обновления (скрыт по умолчанию).  -->
-                    <ProgressBar
-                        x:Name="ActionProgress"
-                        Width="16"
-                        Height="16"
-                        Margin="4,0"
-                        VerticalAlignment="Center"
-                        IsIndeterminate="True"
-                        IsVisible="False" />
                     <Button
                         x:Name="PinButton"
                         Classes="IconButton40 Row"

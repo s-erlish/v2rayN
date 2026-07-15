@@ -4,17 +4,20 @@ using v2rayN.Desktop.Common;
 namespace v2rayN.Desktop.Views;
 
 /// <summary>
-/// «Схемы URL-адресов». Real on Windows: registers/unregisters the <c>depv://</c> protocol under
-/// HKCU\Software\Classes (per-user, no admin) so the OS launches departament for those links, and
-/// shows live registration status. Each scheme row copies to the clipboard. No core interaction.
+/// «Схемы URL-адресов» — in-app суб-страница (раньше отдельное окно). Real on Windows: registers/unregisters
+/// the <c>depv://</c> protocol under HKCU\Software\Classes (per-user, no admin) so the OS launches
+/// departament for those links, and shows live registration status. Each scheme row copies to the clipboard.
+/// No core interaction. Стрелка «назад» поднимает <see cref="BackRequested"/>.
 /// NOTE: dispatching the launched command into the running app is handled by the app-startup layer
 /// (argument parsing) — this screen owns the OS-level protocol registration + discovery.
 /// </summary>
-public partial class UrlSchemesWindow : Window
+public partial class UrlSchemesPage : UserControl, ISubPage
 {
     private const string Scheme = "depv";
 
-    public UrlSchemesWindow()
+    public event EventHandler? BackRequested;
+
+    public UrlSchemesPage()
     {
         InitializeComponent();
 
@@ -29,7 +32,7 @@ public partial class UrlSchemesWindow : Window
             new("depv://add/{url}", "Добавить по URL"),
         };
 
-        btnDone.Click += (_, _) => Close();
+        btnBack.Click += (_, _) => BackRequested?.Invoke(this, EventArgs.Empty);
         btnRegister.Click += (_, _) => Register();
         btnUnregister.Click += (_, _) => Unregister();
 

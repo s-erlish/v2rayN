@@ -897,7 +897,10 @@
     <!--  Формы: SkelBar (полоса 16) и SkelCard (карта 76). Reduced-motion         -->
     <!--  снимает класс .SkeletonPulse на стороне потребителя (статичная alpha).   -->
     <!-- ==================================================================== -->
-    <Style Selector=":is(Control).SkeletonPulse">
+    <!--  Облегчённый режим: под lite-окном пульс НЕ навешивается (селектор не совпадает →
+          анимация не аттачится → статичная непрозрачность). Конкурирующий стиль в Avalonia
+          не может отменить уже запущенную анимацию, поэтому гасим на уровне СЕЛЕКТОРА.  -->
+    <Style Selector=":is(Window):not(.lite) :is(Control).SkeletonPulse">
         <Style.Animations>
             <Animation
                 Duration="0:0:0.9"
@@ -934,7 +937,9 @@
         <Setter Property="IsHitTestVisible" Value="False" />
         <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
     </Style>
-    <Style Selector="Ellipse.Spinner.spinning">
+    <!--  Под lite-окном вращение НЕ навешивается (см. SkeletonPulse: гасим на уровне селектора,
+          т.к. конкурирующий стиль не отменяет запущенную анимацию).  -->
+    <Style Selector=":is(Window):not(.lite) Ellipse.Spinner.spinning">
         <Style.Animations>
             <Animation
                 Duration="0:0:1.1"
@@ -964,13 +969,28 @@
     </Style>
 
     <!-- ==================================================================== -->
-    <!--  «Облегчённый режим» (lite / reduced-motion). Класс .lite ставит окно    -->
-    <!--  (MainWindow) по _config.UiItem.LiteMode; :is(Window) нужно, т.к. это     -->
-    <!--  подкласс Window. Обнуляем Transitions на интерактивных элементах, чтобы   -->
-    <!--  press/hover/reveal переключались МГНОВЕННО (без движения). Циклические     -->
-    <!--  анимации героя (spinning/breathing/sonar/assemble) гасит ConnectHeroView   -->
-    <!--  через ReducedMotion, а page-crossfade — MainWindow (PageTransition=null).  -->
+    <!--  «Облегчённый режим» (lite / reduced-motion) для слабых ПК: НОЛЬ            -->
+    <!--  декоративного движения. Класс .lite ставит окно (MainWindow) по           -->
+    <!--  _config.UiItem.LiteMode; :is(Window) нужно, т.к. это подкласс Window.      -->
+    <!--                                                                            -->
+    <!--  Два рычага (Avalonia не даёт конкурирующему стилю ОТМЕНИТЬ уже            -->
+    <!--  запущенную keyframe-анимацию — только не-совпадение селектора её           -->
+    <!--  снимает):                                                                 -->
+    <!--   1) Transitions → пусто на ВСЕХ интерактивных элементах: press/hover/     -->
+    <!--      reveal/nav-crossfade переключаются МГНОВЕННО, без движения.            -->
+    <!--   2) Циклические keyframe-анимации, ОПРЕДЕЛЁННЫЕ здесь (Ellipse.Spinner.   -->
+    <!--      spinning, :is(Control).SkeletonPulse), гасятся на уровне СЕЛЕКТОРА      -->
+    <!--      выше (:is(Window):not(.lite) …) — под lite не аттачатся.               -->
+    <!--                                                                            -->
+    <!--  Анимации героя (ConnectArc.spinning / Glow.breathing / Sonar.pulsing /     -->
+    <!--  Panel.assembling) гасит сам ConnectHeroView по ReducedMotion (LiteMode),   -->
+    <!--  page-crossfade — MainWindow (PageTransition=null). Локальные копии          -->
+    <!--  Ellipse.Spinner.spinning (LoginView) и StackPanel.SkeletonPulse (BuyView)  -->
+    <!--  живут в тех вью — их класс должен гаситься по LiteMode на стороне вью.      -->
     <!-- ==================================================================== -->
+
+    <!--  Все кнопки (Primary/Tonal/Outlined/Stepper/IconButton*/BackNav/LinkAction/ -->
+    <!--  Destructive/NavRailItem) — press-scale/hover-переходы мгновенны.            -->
     <Style Selector=":is(Window).lite Button">
         <Setter Property="Transitions">
             <Transitions />
@@ -987,6 +1007,12 @@
         </Setter>
     </Style>
     <Style Selector=":is(Window).lite Border.PriceOption">
+        <Setter Property="Transitions">
+            <Transitions />
+        </Setter>
+    </Style>
+    <!--  Диск connect-щита: press-scale 0.94 мгновенно (без пружины 160мс).  -->
+    <Style Selector=":is(Window).lite Border.ConnectDisc">
         <Setter Property="Transitions">
             <Transitions />
         </Setter>

@@ -1,38 +1,63 @@
-<Window
-    x:Class="v2rayN.Desktop.Views.PerAppProxyWindow"
+<UserControl
+    x:Class="v2rayN.Desktop.Views.PerAppProxyPage"
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    Title="Прокси по приложениям"
-    Width="560"
-    Height="720"
+    d:DesignWidth="560"
+    d:DesignHeight="760"
     Background="{DynamicResource Brush.Bg}"
-    ShowInTaskbar="False"
-    WindowStartupLocation="CenterOwner"
     mc:Ignorable="d">
 
-    <DockPanel Margin="0">
-        <!--  Seamless header: title + Готово (сохранить и закрыть)  -->
+    <UserControl.Resources>
+        <StreamGeometry x:Key="Geo.Sub.Back">M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z</StreamGeometry>
+    </UserControl.Resources>
+
+    <UserControl.Styles>
+        <Style Selector="Button.IconButton">
+            <Setter Property="Transitions">
+                <Transitions>
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Button.IconButton:pressed">
+            <Setter Property="RenderTransform" Value="scale(0.92)" />
+        </Style>
+    </UserControl.Styles>
+
+    <DockPanel MaxWidth="620">
+        <!--  Бесшовный тулбар: «← Прокси по приложениям». Уход со страницы сохраняет и применяет.  -->
         <Grid
-            Margin="16,14,16,10"
-            ColumnDefinitions="*,Auto"
-            DockPanel.Dock="Top">
-            <TextBlock
+            DockPanel.Dock="Top"
+            MinHeight="56"
+            Margin="16,8,16,0"
+            ColumnDefinitions="Auto,*">
+            <Button
+                x:Name="btnBack"
                 Grid.Column="0"
+                Width="40"
+                Height="40"
+                Padding="0"
+                VerticalAlignment="Center"
+                Classes="IconButton"
+                ToolTip.Tip="Назад">
+                <PathIcon
+                    Width="22"
+                    Height="22"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Data="{StaticResource Geo.Sub.Back}"
+                    Foreground="{DynamicResource Brush.OnSurface}" />
+            </Button>
+            <TextBlock
+                Grid.Column="1"
+                Margin="16,0,0,0"
                 VerticalAlignment="Center"
                 Classes="Headline"
-                Text="Прокси по приложениям" />
-            <Button
-                x:Name="btnDone"
-                Grid.Column="1"
-                Classes="Primary"
-                Content="Готово" />
+                Text="Прокси по приложениям"
+                TextTrimming="CharacterEllipsis" />
         </Grid>
-        <Border
-            Height="1"
-            Background="{DynamicResource Brush.OutlineVariant}"
-            DockPanel.Dock="Top" />
 
         <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
             <StackPanel Margin="16,12,16,24" Spacing="8">
@@ -134,4 +159,4 @@
             </StackPanel>
         </ScrollViewer>
     </DockPanel>
-</Window>
+</UserControl>

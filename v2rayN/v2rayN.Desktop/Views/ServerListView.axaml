@@ -32,8 +32,11 @@
 
         <!--  Server name: drop a leading flag emoji (the flag lives in its tile) — no duplication.  -->
         <local:StripLeadingFlagConverter x:Key="StripLeadingFlag" />
-        <!--  Ping value shows only once a latency test produced a result (non-empty DelayVal).  -->
-        <local:NotEmptyConverter x:Key="NotEmpty" />
+        <!--  Ping value shows only once a latency test produced a real (numeric ms) result.  -->
+        <local:DelayResultConverter x:Key="DelayResult" />
+        <!--  A test is in flight for this row: DelayVal holds the engine's non-numeric «Testing…»
+              placeholder → show a spinner in the ping slot, never the placeholder text.  -->
+        <local:DelayTestingConverter x:Key="DelayTesting" />
         <!--  Ping value color by latency: green (good) / red (timeout·bad) — Android signal, not grey.  -->
         <conv:DelayColorConverter x:Key="DelayColor" />
     </UserControl.Resources>
@@ -105,19 +108,23 @@
 
                                                 <Grid VerticalAlignment="Center" ColumnDefinitions="Auto,*,Auto">
 
-                                                    <!--  Flag: 36dp rounded-square tile (radius 12, unified server icon) — the
-                                                          denser list uses a slightly smaller tile than the 40 used elsewhere.
-                                                          RemarkToFlag resolves the country flag (globe fallback) from Remarks,
-                                                          clipped UniformToFill inside the neutral tile.  -->
+                                                    <!--  Flag: 36dp CIRCULAR tile (matches Android) — the country flag reads as a
+                                                          clean disc, not a rounded square. The flag PNGs are already circular with
+                                                          transparent corners, so a circular tile (radius = half = 18) removes the
+                                                          square corners that used to poke out behind the disc. A 1.5px inset lets the
+                                                          dark neutral tile show as a subtle ring around the flag (Android treatment).
+                                                          RemarkToFlag resolves the country flag from Remarks; non-country / aggregate
+                                                          rows fall back to the globe disc (xx.png) — a distinct, data-driven emblem.  -->
                                                     <Border
                                                         Grid.Column="0"
                                                         Width="36"
                                                         Height="36"
                                                         Margin="0,0,12,0"
+                                                        Padding="1.5"
                                                         VerticalAlignment="Center"
                                                         Background="{DynamicResource Brush.Tile.Neutral}"
                                                         ClipToBounds="True"
-                                                        CornerRadius="{StaticResource Radius.Tile}">
+                                                        CornerRadius="18">
                                                         <Image Source="{Binding Remarks, Converter={StaticResource RemarkToFlag}}" Stretch="UniformToFill" />
                                                     </Border>
 
@@ -146,18 +153,34 @@
                                                         </StackPanel>
                                                     </StackPanel>
 
-                                                    <!--  Ping value (tv_test_result): right-aligned, tabular Grotesk digits,
-                                                          shown once a latency test has a result. All values on one vertical.  -->
-                                                    <TextBlock
-                                                        Grid.Column="2"
-                                                        Margin="8,0,0,0"
-                                                        VerticalAlignment="Center"
-                                                        Classes="Numeric"
-                                                        FontWeight="Bold"
-                                                        Foreground="{Binding Delay, Converter={StaticResource DelayColor}}"
-                                                        IsVisible="{Binding DelayVal, Converter={StaticResource NotEmpty}}"
-                                                        Text="{Binding DelayVal}"
-                                                        TextAlignment="Right" />
+                                                    <!--  Ping slot (tv_test_result): while a test is in flight show a compact
+                                                          indeterminate spinner (NO «Testing…» text); when the result lands, show
+                                                          the coloured ms value (green good / red bad). The two states are mutually
+                                                          exclusive, share this Auto column, and are right-aligned on one vertical.  -->
+                                                    <Panel Grid.Column="2" Margin="8,0,0,0">
+                                                        <!--  In-flight: 15px arc spinner (reuses the global Ellipse.Spinner.spinning).  -->
+                                                        <Ellipse
+                                                            Width="15"
+                                                            Height="15"
+                                                            HorizontalAlignment="Right"
+                                                            VerticalAlignment="Center"
+                                                            Classes="Spinner"
+                                                            Classes.spinning="{Binding DelayVal, Converter={StaticResource DelayTesting}}"
+                                                            IsVisible="{Binding DelayVal, Converter={StaticResource DelayTesting}}"
+                                                            Stroke="{DynamicResource Brush.Accent}"
+                                                            StrokeDashArray="5.9,17.7"
+                                                            StrokeLineCap="Round"
+                                                            StrokeThickness="2" />
+                                                        <!--  Result: right-aligned, tabular Grotesk digits, coloured by latency.  -->
+                                                        <TextBlock
+                                                            VerticalAlignment="Center"
+                                                            Classes="Numeric"
+                                                            FontWeight="Bold"
+                                                            Foreground="{Binding Delay, Converter={StaticResource DelayColor}}"
+                                                            IsVisible="{Binding DelayVal, Converter={StaticResource DelayResult}}"
+                                                            Text="{Binding DelayVal}"
+                                                            TextAlignment="Right" />
+                                                    </Panel>
                                                 </Grid>
                                             </Border>
 

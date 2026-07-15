@@ -19,7 +19,7 @@ public class SimpleViewLocator : IDataTemplate
         RegisterViewFactory<CheckUpdateViewModel, CheckUpdateView>();
         RegisterViewFactory<ClashConnectionsViewModel, ClashConnectionsView>();
         RegisterViewFactory<ClashProxiesViewModel, ClashProxiesView>();
-        RegisterViewFactory<DNSSettingViewModel, DNSSettingWindow>();
+        // DNS больше не отдельное окно — заменено Incy in-app суб-страницей DnsSubView (см. SettingsView).
         RegisterViewFactory<FullConfigTemplateViewModel, FullConfigTemplateWindow>();
         RegisterViewFactory<GlobalHotkeySettingViewModel, GlobalHotkeySettingWindow>();
         RegisterViewFactory<MainWindowViewModel, MainWindow>();
@@ -29,7 +29,7 @@ public class SimpleViewLocator : IDataTemplate
         RegisterViewFactory<ProfilesViewModel, ProfilesView>();
         RegisterViewFactory<RoutingRuleDetailsViewModel, RoutingRuleDetailsWindow>();
         RegisterViewFactory<RoutingRuleSettingViewModel, RoutingRuleSettingWindow>();
-        RegisterViewFactory<RoutingSettingViewModel, RoutingSettingWindow>();
+        // Маршрутизация больше не отдельное окно — заменена Incy in-app суб-страницей RoutingSubView.
         RegisterViewFactory<StatusBarViewModel, StatusBarView>();
         RegisterViewFactory<SubEditViewModel, SubEditWindow>();
         RegisterViewFactory<SubSettingViewModel, SubSettingWindow>();

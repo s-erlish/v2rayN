@@ -715,11 +715,11 @@
                                 Grid.Column="1"
                                 Margin="16,0,8,0"
                                 VerticalAlignment="Center">
-                                <TextBlock Classes="Body" Text="Чёрная (AMOLED)" />
+                                <TextBlock Classes="Body" Text="Чёрно-белая" />
                                 <TextBlock
                                     Margin="0,4,0,0"
                                     Classes="Subtitle"
-                                    Text="Чистый чёрный фон для OLED-экранов"
+                                    Text="Монохромный режим поверх тёмной или светлой темы"
                                     TextWrapping="Wrap" />
                             </StackPanel>
                             <ToggleSwitch

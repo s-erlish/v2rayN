@@ -1,0 +1,180 @@
+<UserControl
+    x:Class="v2rayN.Desktop.Views.RoutingSubView"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    d:DesignWidth="560"
+    d:DesignHeight="680"
+    Background="{DynamicResource Brush.Bg}"
+    mc:Ignorable="d">
+
+    <UserControl.Resources>
+        <StreamGeometry x:Key="Geo.Sub.Back">M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z</StreamGeometry>
+        <StreamGeometry x:Key="Geo.Sub.Check">M9,16.17 4.83,12l-1.42,1.41L9,19 21,7l-1.41,-1.41z</StreamGeometry>
+    </UserControl.Resources>
+
+    <UserControl.Styles>
+        <Style Selector="Button.IconButton">
+            <Setter Property="Transitions">
+                <Transitions>
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Button.IconButton:pressed">
+            <Setter Property="RenderTransform" Value="scale(0.92)" />
+        </Style>
+
+        <!--  Строка профиля маршрутизации: тап = сделать активным. Press scale, hover-подсветка.  -->
+        <Style Selector="Border.RouteRow">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="CornerRadius" Value="{StaticResource Radius.Tile}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" />
+                    <BrushTransition Property="Background" Duration="0:0:0.12" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Border.RouteRow:pointerover">
+            <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
+        </Style>
+        <Style Selector="Border.RouteRow:pressed">
+            <Setter Property="RenderTransform" Value="scale(0.99)" />
+        </Style>
+    </UserControl.Styles>
+
+    <DockPanel MaxWidth="620">
+        <Grid
+            DockPanel.Dock="Top"
+            MinHeight="56"
+            Margin="16,8,16,0"
+            ColumnDefinitions="Auto,*">
+            <Button
+                x:Name="btnBack"
+                Grid.Column="0"
+                Width="40"
+                Height="40"
+                Padding="0"
+                VerticalAlignment="Center"
+                Classes="IconButton"
+                ToolTip.Tip="Назад">
+                <PathIcon
+                    Width="22"
+                    Height="22"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Data="{StaticResource Geo.Sub.Back}"
+                    Foreground="{DynamicResource Brush.OnSurface}" />
+            </Button>
+            <TextBlock
+                Grid.Column="1"
+                Margin="16,0,0,0"
+                VerticalAlignment="Center"
+                Classes="Headline"
+                Text="Маршрутизация"
+                TextTrimming="CharacterEllipsis" />
+        </Grid>
+
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="16,12,16,24" Spacing="8">
+
+                <TextBlock
+                    Classes="Subtitle"
+                    Text="Наборы правил определяют, какой трафик идёт через VPN, а какой — напрямую. Выберите активный набор."
+                    TextWrapping="Wrap" />
+
+                <TextBlock Margin="0,6,0,0" Classes="SectionHeader" Text="Наборы правил" />
+                <Border Classes="Card" Padding="8,6">
+                    <ItemsControl x:Name="listRoutings">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:CompileBindings="False">
+                                <Border
+                                    Classes="RouteRow"
+                                    Padding="12,10"
+                                    Tapped="OnRoutingRowTapped">
+                                    <Grid ColumnDefinitions="Auto,*,Auto" MinHeight="48">
+                                        <!--  Галочка активного набора (иначе прозрачная — сохраняет выравнивание).  -->
+                                        <PathIcon
+                                            Grid.Column="0"
+                                            Width="20"
+                                            Height="20"
+                                            Margin="4,0,12,0"
+                                            VerticalAlignment="Center"
+                                            Data="{StaticResource Geo.Sub.Check}"
+                                            Foreground="{DynamicResource Brush.Accent}"
+                                            IsVisible="{Binding IsActive}" />
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <TextBlock
+                                                Classes="Body"
+                                                Text="{Binding Remarks}"
+                                                TextTrimming="CharacterEllipsis" />
+                                            <TextBlock
+                                                Margin="0,3,0,0"
+                                                Classes="Subtitle"
+                                                Text="{Binding RuleNum, StringFormat='{}{0} правил'}" />
+                                        </StackPanel>
+                                        <Border
+                                            Grid.Column="2"
+                                            Margin="12,0,0,0"
+                                            Padding="10,4"
+                                            VerticalAlignment="Center"
+                                            Background="{DynamicResource Brush.SurfaceHigh}"
+                                            CornerRadius="{StaticResource Radius.Chip}"
+                                            IsVisible="{Binding IsActive}">
+                                            <TextBlock
+                                                Classes="Chip"
+                                                Foreground="{DynamicResource Brush.OnSurfaceVariant}"
+                                                Text="Активен" />
+                                        </Border>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Border>
+
+                <TextBlock Margin="0,6,0,0" Classes="SectionHeader" Text="Стратегия доменов" />
+                <Border Classes="Card" Padding="16,4">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="56">
+                        <StackPanel Grid.Column="0" Margin="0,0,8,0" VerticalAlignment="Center">
+                            <TextBlock Classes="Body" Text="Разрешение доменов" />
+                            <TextBlock
+                                Margin="0,4,0,0"
+                                Classes="Subtitle"
+                                Text="Как ядро сопоставляет домены с правилами"
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                        <ComboBox
+                            x:Name="cmbStrategy"
+                            Grid.Column="1"
+                            MinWidth="170"
+                            VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+
+                <TextBlock Margin="0,6,0,0" Classes="SectionHeader" Text="Обслуживание" />
+                <Border Classes="Card" Padding="16,4">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="56">
+                        <StackPanel Grid.Column="0" Margin="0,0,8,0" VerticalAlignment="Center">
+                            <TextBlock Classes="Body" Text="Стандартные правила" />
+                            <TextBlock
+                                Margin="0,4,0,0"
+                                Classes="Subtitle"
+                                Text="Пересоздать встроенные наборы правил"
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                        <Button
+                            x:Name="btnResetRules"
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
+                            Content="Сбросить" />
+                    </Grid>
+                </Border>
+
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</UserControl>

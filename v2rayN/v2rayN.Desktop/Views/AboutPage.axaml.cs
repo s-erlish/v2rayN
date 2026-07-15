@@ -4,19 +4,22 @@ using v2rayN.Desktop.Common;
 namespace v2rayN.Desktop.Views;
 
 /// <summary>
-/// «О приложении». Real: shows the actual assembly version + runtime info, and opens the real
-/// departament site / Telegram bot in the default browser. Nothing here touches the core.
+/// «О приложении» — in-app суб-страница (раньше отдельное окно). Real: shows the actual assembly version +
+/// runtime info, and opens the real departament site / Telegram bot in the default browser. Nothing here
+/// touches the core. Стрелка «назад» поднимает <see cref="BackRequested"/>.
 /// </summary>
-public partial class AboutSubWindow : Window
+public partial class AboutPage : UserControl, ISubPage
 {
-    public AboutSubWindow()
+    public event EventHandler? BackRequested;
+
+    public AboutPage()
     {
         InitializeComponent();
 
         txtVersion.Text = "Версия " + Utils.GetVersionInfo();
         txtRuntime.Text = BuildRuntimeInfo();
 
-        btnDone.Click += (_, _) => Close();
+        btnBack.Click += (_, _) => BackRequested?.Invoke(this, EventArgs.Empty);
         btnSite.Click += (_, _) => OpenUrl(SiteUrl());
         btnTelegram.Click += (_, _) => OpenUrl($"https://t.me/{BackendConfig.BotUsername}");
         btnCopy.Click += async (_, _) =>

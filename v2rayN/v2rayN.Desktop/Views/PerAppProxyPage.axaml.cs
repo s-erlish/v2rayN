@@ -6,16 +6,16 @@ using v2rayN.Desktop.Common;
 namespace v2rayN.Desktop.Views;
 
 /// <summary>
-/// «Прокси по приложениям» (split-tunnel). Real, working: picks Windows processes (by name) or an
-/// explicit .exe path, then persists them AND injects a managed routing rule into the ACTIVE
-/// RoutingItem.RuleSet using the sing-box <c>process_name</c>/<c>process_path</c> matchers the engine
-/// already builds (SingboxRoutingService.GenRoutingUserRule). Two modes:
+/// «Прокси по приложениям» (split-tunnel) — in-app суб-страница (раньше отдельное окно). Real, working:
+/// picks Windows processes (by name) or an explicit .exe path, then persists them AND injects a managed
+/// routing rule into the ACTIVE RoutingItem.RuleSet using the sing-box <c>process_name</c>/<c>process_path</c>
+/// matchers the engine already builds (SingboxRoutingService.GenRoutingUserRule). Two modes:
 ///   • bypass  → listed apps go DIRECT (skip the VPN), everything else stays on the tunnel;
 ///   • include → only listed apps go through the proxy, everything else goes DIRECT.
 /// OFF-model honored: a settings change never starts the core; it re-applies live only if running.
-/// Process routing requires TUN mode + sing-box.
+/// Уход со страницы (стрелка «назад») сохраняет и применяет, затем поднимает <see cref="BackRequested"/>.
 /// </summary>
-public partial class PerAppProxyWindow : Window
+public partial class PerAppProxyPage : UserControl, ISubPage
 {
     // Marker on the managed RulesItem so we can find/replace ours without touching the user's own rules.
     private const string PerAppMarkerBypass = "__departament_perapp_bypass";
@@ -24,14 +24,17 @@ public partial class PerAppProxyWindow : Window
 
     private readonly Config _config;
     private readonly ObservableCollection<AppItem> _all = new();
+    private bool _saved;
 
-    public PerAppProxyWindow()
+    public event EventHandler? BackRequested;
+
+    public PerAppProxyPage()
     {
         InitializeComponent();
 
         _config = AppManager.Instance.Config;
 
-        btnDone.Click += async (_, _) => await SaveAndCloseAsync();
+        btnBack.Click += async (_, _) => await SaveAndBackAsync();
         btnRefresh.Click += (_, _) => LoadProcesses();
         btnAddExe.Click += async (_, _) => await AddExeAsync();
         txtFilter.GetObservable(TextBox.TextProperty).Subscribe(_ => ApplyFilter());
@@ -138,8 +141,14 @@ public partial class PerAppProxyWindow : Window
         ApplyFilter();
     }
 
-    private async Task SaveAndCloseAsync()
+    private async Task SaveAndBackAsync()
     {
+        if (_saved)
+        {
+            return;
+        }
+        _saved = true;
+
         var enabled = switchEnabled.IsChecked == true;
         var bypass = rbBypass.IsChecked == true;
         var chosen = _all.Where(x => x.IsChecked && x.Identifier.IsNotEmpty())
@@ -158,7 +167,7 @@ public partial class PerAppProxyWindow : Window
         {
             StatusBarViewModel.Instance.ReloadRequested.Publish();
         }
-        Close();
+        BackRequested?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>Rewrite ONLY our managed rules in the active routing; user rules are untouched.</summary>

@@ -35,8 +35,10 @@ public partial class SettingsView : UserControl
 
         // --- Строки-с-действием (Border не имеет Command → тап из code-behind) ---
         RowMode.Tapped += (_, _) => _ = Vm?.ToggleTun();
-        RowDns.Tapped += (_, _) => _ = Vm?.OpenDnsAsync();
-        RowRouting.Tapped += (_, _) => _ = Vm?.OpenRoutingAsync();
+        // DNS и Маршрутизация раньше открывали ОТДЕЛЬНЫЕ (легаси, англоязычные/Semi) окна. Теперь это
+        // Incy in-app суб-страницы на общем стеке оболочки — никаких отдельных окон.
+        RowDns.Tapped += (_, _) => OpenPage(new DnsSubView(), refresh: true);
+        RowRouting.Tapped += (_, _) => OpenPage(new RoutingSubView());
 
         // Локальный прокси — раскрытие инлайн-панели с реальными полями Inbound[0].
         RowLocalProxy.Tapped += OnLocalProxyTapped;
@@ -50,14 +52,14 @@ public partial class SettingsView : UserControl
         RowSubAutoUpdate.Tapped += (_, _) => _ = Vm?.CycleAutoUpdateAsync();
         RowAppearance.Tapped += (_, _) => _ = Vm?.CycleAppearanceAsync();
 
-        // --- Строки, открывающие реальные суб-экраны (диалоговые окна Incy) ---
-        RowPerApp.Tapped += async (_, _) => await OpenDialogAsync(new PerAppProxyWindow(), refresh: true);
-        RowPingMethod.Tapped += async (_, _) => await OpenDialogAsync(new PingSettingsWindow());
-        RowAssets.Tapped += async (_, _) => await OpenDialogAsync(new GeoFilesWindow());
-        RowProvider.Tapped += async (_, _) => await OpenDialogAsync(new ProviderSettingsWindow(), refresh: true);
-        RowAbout.Tapped += async (_, _) => await OpenDialogAsync(new AboutSubWindow());
-        RowBackup.Tapped += async (_, _) => await OpenDialogAsync(new BackupSubWindow());
-        RowUrlScheme.Tapped += async (_, _) => await OpenDialogAsync(new UrlSchemesWindow());
+        // --- Строки, открывающие реальные Incy суб-СТРАНИЦЫ (in-app, БЕЗ отдельных окон) ---
+        RowPerApp.Tapped += (_, _) => OpenPage(new PerAppProxyPage(), refresh: true);
+        RowPingMethod.Tapped += (_, _) => OpenPage(new PingSettingsPage());
+        RowAssets.Tapped += (_, _) => OpenPage(new GeoFilesPage());
+        RowProvider.Tapped += (_, _) => OpenPage(new ProviderSettingsPage(), refresh: true);
+        RowAbout.Tapped += (_, _) => OpenPage(new AboutPage());
+        RowBackup.Tapped += (_, _) => OpenPage(new BackupPage());
+        RowUrlScheme.Tapped += (_, _) => OpenPage(new UrlSchemesPage());
 
         // --- Тумблер-строки: тап по всей строке переключает тумблер (кроме тапа по самому тумблеру,
         //     иначе двойное переключение = холостой ход) ---
@@ -90,21 +92,20 @@ public partial class SettingsView : UserControl
 
     private void OnProxyFieldCommit(object? sender, RoutedEventArgs e) => _ = Vm?.CommitLocalProxyAsync();
 
-    /// <summary>Open an Incy sub-screen as a modal dialog over the main window, then optionally re-read
-    /// row values it may have changed.</summary>
-    private async Task OpenDialogAsync(Window window, bool refresh = false)
+    /// <summary>Открывает Incy суб-страницу IN-APP, кладя её на общий стек «назад» оболочки
+    /// (MainWindow.OpenSubPage) — НИКАКИХ отдельных окон. При <paramref name="refresh"/> по возврате
+    /// перечитывает значения строк, которые страница могла изменить (DNS, прокси по приложениям и т.п.).</summary>
+    private void OpenPage(Control page, bool refresh = false)
     {
-        if (TopLevel.GetTopLevel(this) is Window owner)
+        // Подписку на обновление вешаем ДО OpenSubPage, чтобы значения строк освежились перед снятием
+        // страницы со стека (обе подписки на BackRequested отработают по возврату).
+        if (refresh && page is ISubPage sub)
         {
-            await window.ShowDialog(owner);
+            sub.BackRequested += (_, _) => Vm?.RefreshDisplayValues();
         }
-        else
+        if (TopLevel.GetTopLevel(this) is MainWindow main)
         {
-            window.Show();
-        }
-        if (refresh)
-        {
-            Vm?.RefreshDisplayValues();
+            main.OpenSubPage(page);
         }
     }
 

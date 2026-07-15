@@ -3,22 +3,25 @@ using ServiceLib.Services;
 namespace v2rayN.Desktop.Views;
 
 /// <summary>
-/// «Файлы ресурсов». Real: downloads geoip.dat + geosite.dat (and sing-box .srs rulesets) through the
-/// engine's <see cref="UpdateService"/>, streaming per-file progress into the status line and refreshing
-/// the on-disk file info. Pure asset update — never touches the core.
+/// «Файлы ресурсов» — in-app суб-страница (раньше отдельное окно). Real: downloads geoip.dat +
+/// geosite.dat (and sing-box .srs rulesets) through the engine's <see cref="UpdateService"/>, streaming
+/// per-file progress into the status line and refreshing the on-disk file info. Pure asset update —
+/// never touches the core. Стрелка «назад» поднимает <see cref="BackRequested"/>.
 /// </summary>
-public partial class GeoFilesWindow : Window
+public partial class GeoFilesPage : UserControl, ISubPage
 {
     private readonly Config _config;
     private bool _busy;
 
-    public GeoFilesWindow()
+    public event EventHandler? BackRequested;
+
+    public GeoFilesPage()
     {
         InitializeComponent();
 
         _config = AppManager.Instance.Config;
 
-        btnDone.Click += (_, _) => Close();
+        btnBack.Click += (_, _) => BackRequested?.Invoke(this, EventArgs.Empty);
         btnUpdate.Click += async (_, _) => await UpdateAsync();
 
         RefreshFileInfo();
