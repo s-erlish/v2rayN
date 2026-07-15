@@ -42,6 +42,47 @@ public static class AccountSession
 
     public static bool IsLoggedIn() => AuthTokenStore.IsLoggedIn();
 
+    #region chip identity (read by the Home account chip)
+
+    /// <summary>The current logged-in profile, or null when logged out. Seeded from the token store.</summary>
+    public static UserProfileDto? CurrentProfile => (State as AccountState.LoggedIn)?.Profile;
+
+    /// <summary>
+    /// The account's display name for the Home chip: Telegram username as «@handle», else the Telegram
+    /// display name, else the email. Blank when logged out. Identical precedence to the Account screen.
+    /// </summary>
+    public static string DisplayName => DisplayNameFor(CurrentProfile);
+
+    /// <summary>Single uppercase monogram for the chip avatar (first letter of <see cref="DisplayName"/>).</summary>
+    public static string AvatarInitial
+    {
+        get
+        {
+            var name = DisplayName.Trim().TrimStart('@');
+            return name.Length > 0 ? name.Substring(0, 1).ToUpperInvariant() : string.Empty;
+        }
+    }
+
+    /// <summary>Display-name precedence shared with the Account screen: @username → telegramName → email.</summary>
+    public static string DisplayNameFor(UserProfileDto? profile)
+    {
+        if (profile == null)
+        {
+            return string.Empty;
+        }
+        if (profile.TelegramUsername.IsNotEmpty())
+        {
+            return $"@{profile.TelegramUsername}";
+        }
+        if (profile.TelegramName.IsNotEmpty())
+        {
+            return profile.TelegramName!;
+        }
+        return profile.Email.IsNotEmpty() ? profile.Email : string.Empty;
+    }
+
+    #endregion chip identity
+
     /// <summary>Persist a freshly issued session and flip to LoggedIn.</summary>
     public static void OnAuthenticated(string jwt, UserProfileDto profile)
     {

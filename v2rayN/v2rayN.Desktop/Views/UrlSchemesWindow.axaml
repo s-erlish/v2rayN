@@ -1,0 +1,89 @@
+<Window
+    x:Class="v2rayN.Desktop.Views.UrlSchemesWindow"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Title="Схемы URL-адресов"
+    Width="560"
+    Height="640"
+    Background="{DynamicResource Brush.Bg}"
+    ShowInTaskbar="False"
+    WindowStartupLocation="CenterOwner"
+    mc:Ignorable="d">
+
+    <DockPanel>
+        <Grid
+            Margin="16,14,16,10"
+            ColumnDefinitions="*,Auto"
+            DockPanel.Dock="Top">
+            <TextBlock
+                Grid.Column="0"
+                VerticalAlignment="Center"
+                Classes="Headline"
+                Text="Схемы URL-адресов" />
+            <Button
+                x:Name="btnDone"
+                Grid.Column="1"
+                Classes="Primary"
+                Content="Готово" />
+        </Grid>
+        <Border
+            Height="1"
+            Background="{DynamicResource Brush.OutlineVariant}"
+            DockPanel.Dock="Top" />
+
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="16,12,16,24" Spacing="8">
+
+                <Border
+                    Background="{DynamicResource Brush.SurfaceHigh}"
+                    CornerRadius="{DynamicResource Radius.Card}"
+                    Padding="16,12">
+                    <StackPanel Spacing="4">
+                        <TextBlock Classes="Body" Text="Регистрация схемы depv://" />
+                        <TextBlock
+                            x:Name="txtStatus"
+                            Classes="Subtitle"
+                            Text="—"
+                            TextWrapping="Wrap" />
+                        <StackPanel Margin="0,8,0,0" Orientation="Horizontal" Spacing="8">
+                            <Button x:Name="btnRegister" Classes="Primary" Content="Зарегистрировать" />
+                            <Button x:Name="btnUnregister" Content="Убрать" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock
+                    Classes="Subtitle"
+                    Text="Нажмите на схему, чтобы скопировать. Используйте их в ярлыках, скриптах или других приложениях."
+                    TextWrapping="Wrap" />
+
+                <Border Classes="Card" Padding="8,4">
+                    <ItemsControl x:Name="listSchemes">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:CompileBindings="False">
+                                <Grid ColumnDefinitions="*,Auto" MinHeight="48">
+                                    <StackPanel Grid.Column="0" Margin="8,0,0,0" VerticalAlignment="Center">
+                                        <TextBlock
+                                            FontFamily="Consolas,monospace"
+                                            Foreground="{DynamicResource Brush.OnSurface}"
+                                            Text="{Binding Scheme}" />
+                                        <TextBlock Classes="Subtitle" Text="{Binding Hint}" />
+                                    </StackPanel>
+                                    <Button
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        Click="OnCopyClick"
+                                        Content="Копировать"
+                                        Tag="{Binding Scheme}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Border>
+
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

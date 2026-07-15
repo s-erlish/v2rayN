@@ -1,0 +1,70 @@
+<Window
+    x:Class="v2rayN.Desktop.Views.BackupSubWindow"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Title="Резервное копирование"
+    Width="520"
+    Height="440"
+    Background="{DynamicResource Brush.Bg}"
+    ShowInTaskbar="False"
+    WindowStartupLocation="CenterOwner"
+    mc:Ignorable="d">
+
+    <DockPanel>
+        <Grid
+            Margin="16,14,16,10"
+            ColumnDefinitions="*,Auto"
+            DockPanel.Dock="Top">
+            <TextBlock
+                Grid.Column="0"
+                VerticalAlignment="Center"
+                Classes="Headline"
+                Text="Резервное копирование" />
+            <Button
+                x:Name="btnDone"
+                Grid.Column="1"
+                Classes="Primary"
+                Content="Готово" />
+        </Grid>
+        <Border
+            Height="1"
+            Background="{DynamicResource Brush.OutlineVariant}"
+            DockPanel.Dock="Top" />
+
+        <StackPanel Margin="16,16,16,24" Spacing="8">
+            <TextBlock
+                Classes="Subtitle"
+                Text="Сохраните все настройки, подписки и серверы в один .zip-файл или восстановите их из ранее сохранённой копии."
+                TextWrapping="Wrap" />
+
+            <Border Classes="Card" Padding="16,4">
+                <StackPanel>
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="64">
+                        <StackPanel Grid.Column="0" Margin="0,0,8,0" VerticalAlignment="Center">
+                            <TextBlock Classes="Body" Text="Экспорт" />
+                            <TextBlock Margin="0,4,0,0" Classes="Subtitle" Text="Сохранить копию в файл" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <Button x:Name="btnExport" Grid.Column="1" VerticalAlignment="Center" Content="Сохранить…" />
+                    </Grid>
+                    <Border Height="1" Background="{DynamicResource Brush.OutlineVariant}" />
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="64">
+                        <StackPanel Grid.Column="0" Margin="0,0,8,0" VerticalAlignment="Center">
+                            <TextBlock Classes="Body" Text="Импорт" />
+                            <TextBlock Margin="0,4,0,0" Classes="Subtitle" Text="Восстановить из файла — приложение перезапустится" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <Button x:Name="btnImport" Grid.Column="1" VerticalAlignment="Center" Content="Восстановить…" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <TextBlock
+                x:Name="txtStatus"
+                Margin="4,4,4,0"
+                Classes="Subtitle"
+                Text=""
+                TextWrapping="Wrap" />
+        </StackPanel>
+    </DockPanel>
+</Window>

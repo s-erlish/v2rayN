@@ -23,7 +23,8 @@
     <UserControl.Resources>
         <!--  Векторные глифы (порт Android drawable/ic_acc_*; 24dp).  -->
         <StreamGeometry x:Key="Geo.Acc.Add">M19,13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z</StreamGeometry>
-        <StreamGeometry x:Key="Geo.Acc.Camera">M12,15.2c1.767,0 3.2,-1.433 3.2,-3.2s-1.433,-3.2 -3.2,-3.2 -3.2,1.433 -3.2,3.2 1.433,3.2 3.2,3.2zM9,2L7.17,4H4c-1.1,0 -2,0.9 -2,2v12c0,1.1 0.9,2 2,2h16c1.1,0 2,-0.9 2,-2V6c0,-1.1 -0.9,-2 -2,-2h-3.17L15,2H9zM12,7c-2.76,0 -5,2.24 -5,5s2.24,5 5,5 5,-2.24 5,-5 -2.24,-5 -5,-5z</StreamGeometry>
+        <!--  Выход из аккаунта (дверь + стрелка).  -->
+        <StreamGeometry x:Key="Geo.Acc.Logout">M17,7l-1.41,1.41L18.17,11H8v2h10.17l-2.58,2.58L17,17l5,-5zM4,5h8V3H4c-1.1,0 -2,0.9 -2,2v14c0,1.1 0.9,2 2,2h8v-2H4V5z</StreamGeometry>
         <StreamGeometry x:Key="Geo.Acc.Copy">M16,1L4,1c-1.1,0 -2,0.9 -2,2v14h2L4,3h12L16,1zM19,5L8,5c-1.1,0 -2,0.9 -2,2v14c0,1.1 0.9,2 2,2h11c1.1,0 2,-0.9 2,-2L21,7c0,-1.1 -0.9,-2 -2,-2zM19,21L8,21L8,7h11v14z</StreamGeometry>
         <StreamGeometry x:Key="Geo.Acc.Upgrade">M16,6l2.29,2.29 -4.88,4.88 -4,-4L2,16.59 3.41,18l6,-6 4,4 6.3,-6.29L22,12V6z</StreamGeometry>
         <StreamGeometry x:Key="Geo.Acc.Devices">M4,6h18V4H4c-1.1,0 -2,0.9 -2,2v11H0v3h14v-3H4V6zM23,8h-6c-0.55,0 -1,0.45 -1,1v10c0,0.55 0.45,1 1,1h6c0.55,0 1,-0.45 1,-1V9c0,-0.55 -0.45,-1 -1,-1zM22,18h-4v-8h4v8z</StreamGeometry>
@@ -89,44 +90,22 @@
                     <!--  Вошедший пользователь: аватар + имя + «Пополнить», баланс, реф-код.  -->
                     <StackPanel IsVisible="{Binding HasProfile}">
                         <Grid ColumnDefinitions="Auto,*,Auto">
-                            <!--  Контейнер 52: аватар 48 (инициал) + бейдж-камера 18.  -->
-                            <Panel
+                            <!--  Аватар 48 с инициалом. Без бейджа-камеры: пикера фото нет.  -->
+                            <Border
                                 Grid.Column="0"
-                                Width="52"
-                                Height="52">
-                                <Border
-                                    Classes="Avatar"
-                                    Width="48"
-                                    Height="48"
+                                Classes="Avatar"
+                                Width="48"
+                                Height="48"
+                                VerticalAlignment="Center">
+                                <TextBlock
                                     HorizontalAlignment="Center"
-                                    VerticalAlignment="Center">
-                                    <TextBlock
-                                        HorizontalAlignment="Center"
-                                        VerticalAlignment="Center"
-                                        FontFamily="{DynamicResource Font.Grotesk}"
-                                        FontSize="20"
-                                        FontWeight="Bold"
-                                        Foreground="{DynamicResource Brush.Accent}"
-                                        Text="{Binding AvatarInitial}" />
-                                </Border>
-                                <Border
-                                    Width="18"
-                                    Height="18"
-                                    HorizontalAlignment="Right"
-                                    VerticalAlignment="Bottom"
-                                    Background="{DynamicResource Brush.Accent}"
-                                    BorderBrush="{DynamicResource Brush.Surface}"
-                                    BorderThickness="2"
-                                    CornerRadius="100">
-                                    <PathIcon
-                                        Width="10"
-                                        Height="10"
-                                        HorizontalAlignment="Center"
-                                        VerticalAlignment="Center"
-                                        Data="{StaticResource Geo.Acc.Camera}"
-                                        Foreground="White" />
-                                </Border>
-                            </Panel>
+                                    VerticalAlignment="Center"
+                                    FontFamily="{DynamicResource Font.Grotesk}"
+                                    FontSize="20"
+                                    FontWeight="Bold"
+                                    Foreground="{DynamicResource Brush.Accent}"
+                                    Text="{Binding AvatarInitial}" />
+                            </Border>
 
                             <TextBlock
                                 Grid.Column="1"
@@ -136,8 +115,10 @@
                                 Text="{Binding Username}"
                                 TextTrimming="CharacterEllipsis" />
 
-                            <!--  «Пополнить»: синяя пилюля (shared Button.Primary), «+» + текст OnAccent.  -->
+                            <!--  «Пополнить»: синяя пилюля (shared Button.Primary), «+» + текст OnAccent.
+                                  Тап открывает флайаут «Пополнение баланса» → Platega-чекаут.  -->
                             <Button
+                                x:Name="TopUpButton"
                                 Grid.Column="2"
                                 VerticalAlignment="Center"
                                 Classes="Primary">
@@ -156,6 +137,27 @@
                                         Foreground="{DynamicResource Brush.OnAccent}"
                                         Text="Пополнить" />
                                 </StackPanel>
+                                <Button.Flyout>
+                                    <Flyout Placement="Bottom">
+                                        <StackPanel Width="248" Spacing="12">
+                                            <TextBlock Classes="Title" Text="Пополнение баланса" />
+                                            <TextBlock
+                                                Classes="Caption"
+                                                Text="Введите сумму в рублях — откроется страница оплаты." />
+                                            <TextBox
+                                                x:Name="TopUpAmountBox"
+                                                Watermark="Сумма, ₽"
+                                                Text="{Binding TopUpAmount, Mode=TwoWay}"
+                                                FontFeatures="tnum" />
+                                            <Button
+                                                HorizontalAlignment="Stretch"
+                                                HorizontalContentAlignment="Center"
+                                                Classes="Primary"
+                                                Command="{Binding TopUpCmd}"
+                                                Content="Продолжить" />
+                                        </StackPanel>
+                                    </Flyout>
+                                </Button.Flyout>
                             </Button>
                         </Grid>
 
@@ -173,8 +175,9 @@
                             Text="{Binding BalanceText}"
                             TextTrimming="CharacterEllipsis" />
 
-                        <!--  Реф-код: вся строка копирует код (чип + завершающий глиф).  -->
+                        <!--  Реф-код: вся строка копирует код в буфер (чип + завершающий глиф).  -->
                         <Border
+                            x:Name="ReferralRow"
                             Margin="0,12,0,0"
                             Classes="RefRow"
                             IsVisible="{Binding HasReferral}">
@@ -514,6 +517,38 @@
                                 VerticalAlignment="Center"
                                 Data="{StaticResource Geo.Acc.Chevron}"
                                 Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+                        </Grid>
+                    </Border>
+
+                    <!--  Разделитель + «Выйти из аккаунта» — только для вошедшего пользователя.  -->
+                    <Border
+                        Height="1"
+                        Margin="72,0,0,0"
+                        Background="{DynamicResource Brush.OutlineVariant}"
+                        IsVisible="{Binding IsLoggedIn}" />
+                    <Border
+                        x:Name="LogoutRow"
+                        Padding="16,8"
+                        Classes="Row"
+                        CornerRadius="0"
+                        Cursor="Hand"
+                        IsVisible="{Binding IsLoggedIn}">
+                        <Grid ColumnDefinitions="Auto,*" VerticalAlignment="Center">
+                            <Border Grid.Column="0" Classes="Tile">
+                                <PathIcon
+                                    Width="22"
+                                    Height="22"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Data="{StaticResource Geo.Acc.Logout}"
+                                    Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+                            </Border>
+                            <TextBlock
+                                Grid.Column="1"
+                                Margin="16,0,8,0"
+                                VerticalAlignment="Center"
+                                Classes="Title"
+                                Text="Выйти из аккаунта" />
                         </Grid>
                     </Border>
                 </StackPanel>

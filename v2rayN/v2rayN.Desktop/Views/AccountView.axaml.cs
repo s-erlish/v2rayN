@@ -1,3 +1,4 @@
+using v2rayN.Desktop.Common;
 using v2rayN.Desktop.ViewModels;
 
 namespace v2rayN.Desktop.Views;
@@ -42,5 +43,39 @@ public partial class AccountView : UserControl
         DevicesRow.Tapped += (_, _) => DevicesRequested?.Invoke(this, EventArgs.Empty);
         HistoryRow.Tapped += (_, _) => HistoryRequested?.Invoke(this, EventArgs.Empty);
         LoginCtaButton.Click += (_, _) => LoginRequested?.Invoke(this, EventArgs.Empty);
+
+        // Реф-строка: копирует код в буфер + тост «Скопировано» (clipboard живёт на TopLevel, поэтому
+        // это чисто view-действие; сам код берём из VM).
+        ReferralRow.Tapped += OnCopyReferral;
+
+        // «Выйти из аккаунта» → LogoutCmd (AccountSession.Wipe → возврат к гейту входа).
+        LogoutRow.Tapped += (_, _) => (DataContext as AccountViewModel)?.LogoutCmd.Execute().Subscribe();
+
+        // Пополнение: работу делает TopUpCmd (биндинг кнопки во флайауте). Закрываем флайаут после
+        // выполнения команды — ReactiveCommand это IObservable и эмитит по завершении исполнения.
+        DataContextChanged += (_, _) => HookTopUp();
+        HookTopUp();
+    }
+
+    private IDisposable? _topUpSub;
+
+    private void HookTopUp()
+    {
+        _topUpSub?.Dispose();
+        if (DataContext is AccountViewModel vm)
+        {
+            _topUpSub = vm.TopUpCmd.Subscribe(_ => TopUpButton.Flyout?.Hide());
+        }
+    }
+
+    private async void OnCopyReferral(object? sender, TappedEventArgs e)
+    {
+        var code = (DataContext as AccountViewModel)?.ReferralCode;
+        if (code.IsNullOrEmpty())
+        {
+            return;
+        }
+        await AvaUtils.SetClipboardData(this, code);
+        AppEvents.SendSnackMsgRequested.Publish("Скопировано");
     }
 }

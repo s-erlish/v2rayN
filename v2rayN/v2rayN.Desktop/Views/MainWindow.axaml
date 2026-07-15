@@ -11,8 +11,8 @@
     Title="departament VPN"
     Width="1120"
     Height="760"
-    MinWidth="900"
-    MinHeight="640"
+    MinWidth="1000"
+    MinHeight="680"
     x:DataType="vms:MainWindowViewModel"
     Background="{DynamicResource Brush.Bg}"
     Design.DataContext="{x:Static dd:DesignData.MainWindow}"
@@ -28,7 +28,7 @@
         <Style Selector="Button.WinBtn">
             <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
             <Setter Property="Width" Value="40" />
-            <Setter Property="Height" Value="28" />
+            <Setter Property="Height" Value="24" />
             <Setter Property="Padding" Value="0" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
@@ -56,7 +56,7 @@
             </Setter>
         </Style>
         <Style Selector="Button.WinBtn:pointerover Border.WinBtnBg">
-            <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
+            <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
         </Style>
         <Style Selector="Button.WinBtn.close:pointerover Border.WinBtnBg">
             <Setter Property="Background" Value="{DynamicResource Brush.Red}" />
@@ -68,9 +68,11 @@
         CloseOnClickAway="True"
         DisableOpeningAnimation="True">
         <Panel>
-            <Grid RowDefinitions="40,*">
+            <Grid RowDefinitions="32,*">
 
-                <!--  ==================== Кастомная строка окна (chrome, высота 40) ====================  -->
+                <!--  ==================== Кастомная строка окна (chrome, высота 32) ====================
+                      Тонкая рамка-заголовок (было 40 — владелец: «слишком толстая»); держит
+                      мини-вордмарк + drag + системные кнопки (min/max/close 40×24).  -->
                 <Grid
                     x:Name="titleBar"
                     Grid.Row="0"

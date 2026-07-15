@@ -104,6 +104,21 @@ public class UIItem
     public List<ColumnItem> MainColumnItem { get; set; }
     public List<WindowSizeItem> WindowSizeItem { get; set; }
     public bool HideColumnIpInfo { get; set; }
+
+    // departament: «Облегчённый режим» (lite / performance). Persisted source of truth for
+    // reduced-motion across the desktop shell: when true the connect choreography, page
+    // cross-fade and press/hover transitions are suppressed. Read by App/MainWindow/ConnectHeroView
+    // AND written by the Settings «Облегчённый режим» toggle (SettingsViewModel.LiteMode) — one
+    // shared flag, additive + defaults false, so existing JSON configs deserialize unchanged.
+    public bool LiteMode { get; set; }
+
+    // departament: «Прокси по приложениям» (split-tunnel) UI state for the desktop Settings screen.
+    // The EFFECTIVE routing lives in the active RoutingItem.RuleSet (managed RulesItem with
+    // process_name/process_path, injected on save); these fields only persist what the picker shows.
+    // Additive + safe defaults, so existing JSON configs deserialize unchanged.
+    public bool PerAppProxyEnabled { get; set; }
+    public bool PerAppProxyBypass { get; set; } = true; // true = exclude/bypass listed apps; false = only listed apps via VPN
+    public List<string>? PerAppProxyList { get; set; }
 }
 
 [Serializable]

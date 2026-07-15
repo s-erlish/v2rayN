@@ -1,21 +1,22 @@
-using System.Reactive.Threading.Tasks;
-using v2rayN.Desktop.Common;
+using System.ComponentModel;
+using ServiceLib.Helper;
 using v2rayN.Desktop.ViewModels;
 
 namespace v2rayN.Desktop.Views;
 
 /// <summary>
-/// Мета-бар подписки (под-план 2 / Ф-D4): заголовок + подзаголовок, действия (пинг/обновить/пин),
-/// трафик-пилюля + expiry, announce, поддержка + Telegram.
+/// Мета-бар подписки = ЗАГОЛОВОК её группы серверов (под-план 2 / Ф-D4). Владелец потребовал, чтобы
+/// карточка подписки сверху бесшовно продолжалась в свои серверы одной секцией — поэтому этот вид
+/// живёт КАК header каждой группы внутри <see cref="ServerListView"/> (никакого отдельного
+/// «Сервера»-заголовка). Показывает: заголовок/подзаголовок, действия (пинг/обновить/пин/«+»),
+/// трафик-пилюлю + expiry, announce, поддержку + Telegram. Шеврон сворачивает серверы ЭТОЙ подписки.
 ///
-/// Data-driven: поля привязаны в code-behind к ВЫБРАННОЙ подписке
-/// (<c>ProfilesViewModel.SelectedSub</c>, наследуемый DataContext = <see cref="HomeViewModel"/>).
-/// userinfo (трафик/срок/announce/support/web-page/title) заполняет движок —
-/// <c>SubscriptionHandler</c> из заголовка <c>subscription-userinfo</c> и директив. Ничего не
-/// выдумываем: пусто, пока не появится подписка с userinfo. Карта видна только когда выбрана
-/// РЕАЛЬНАЯ подписка (непустой Id), а не псевдо-группа «Все серверы».
-///
-/// Образцы значений существуют ТОЛЬКО в <see cref="Design.IsDesignMode"/> (для превьюера).
+/// Data-driven: <see cref="Control.DataContext"/> = <see cref="HomeServerGroup"/> (наследуется из
+/// шаблона группы). Реальную <see cref="SubItem"/> резолвим по <c>Subid</c> первого сервера группы
+/// (<c>AppManager.GetSubItem</c>) — userinfo (трафик/срок/announce/support/title) заполняет движок из
+/// заголовка <c>subscription-userinfo</c>. Ничего не выдумываем: без реальной подписки тело скрыто,
+/// виден только заголовок группы (имя + сворачивание). Общий движок (пинг/обновление/добавление)
+/// достаём из <see cref="MainWindowViewModel"/> хост-окна. Образцы — ТОЛЬКО в <see cref="Design.IsDesignMode"/>.
 /// </summary>
 public partial class SubscriptionMetaView : UserControl
 {
@@ -27,9 +28,7 @@ public partial class SubscriptionMetaView : UserControl
     //  Ширина трек-пилюли = @dimen Size.TrafficPill (160): заливка = 160 * used/total.
     private const double TrafficPillWidth = 160d;
 
-    private IDisposable? _binding;
-    private ProfilesViewModel? _profiles;
-    private ReactiveCommand<Unit, Unit>? _refreshCmd;
+    private HomeServerGroup? _group;
     private string _supportUrl = string.Empty;
     private string _webPageUrl = string.Empty;
     private string _currentSubId = string.Empty;
@@ -49,24 +48,24 @@ public partial class SubscriptionMetaView : UserControl
         RefreshButton.Click += OnRefreshClick;
         SupportButton.Click += OnSupportClick;
         TelegramButton.Click += OnTelegramClick;
+        PinButton.Click += OnPinClick;
 
-        // Re-bind whenever the inherited HomeViewModel arrives or changes.
         DataContextChanged += (_, _) => Rebind();
-        DetachedFromVisualTree += (_, _) =>
-        {
-            _binding?.Dispose();
-            _binding = null;
-        };
+        DetachedFromVisualTree += (_, _) => Unhook();
 
         Rebind();
     }
 
-    /// <summary>
-    /// Resolve the shared engine VM from the inherited DataContext. We do NOT bind the emitted
-    /// <c>SelectedSub</c> value directly — it defaults to the empty-Id «Все серверы» pseudo-group,
-    /// so the card would never appear. Instead we use SelectedSub/SelectedProfile changes purely as
-    /// TRIGGERS and re-resolve the ACTIVE subscription ourselves (see <see cref="ResolveActiveSub"/>).
-    /// </summary>
+    // ── Bind the owning group ────────────────────────────────────────────────
+
+    private void Unhook()
+    {
+        if (_group is not null)
+        {
+            _group.PropertyChanged -= OnGroupPropertyChanged;
+        }
+    }
+
     private void Rebind()
     {
         if (Design.IsDesignMode)
@@ -74,98 +73,106 @@ public partial class SubscriptionMetaView : UserControl
             return;
         }
 
-        _binding?.Dispose();
-        _binding = null;
+        Unhook();
+        _group = DataContext as HomeServerGroup;
 
-        var vm = DataContext as HomeViewModel;
-        _profiles = vm?.Profiles;
-        _refreshCmd = vm?.RefreshSubscriptionCmd;
-
-        if (_profiles is null)
+        if (_group is null)
         {
-            BindSub(null);
+            MetaCard.IsVisible = false;
             return;
         }
 
-        // Emits immediately, then on every change: SelectedSub is reassigned after each
-        // RefreshSubscriptions() (fresh userinfo just landed), and SelectedProfile moves when the
-        // active server changes (its Subid may point at a different subscription).
-        _binding = _profiles
-            .WhenAnyValue(x => x.SelectedSub, x => x.SelectedProfile)
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
-            .Subscribe(_ => BindSub(ResolveActiveSub()));
+        _group.PropertyChanged += OnGroupPropertyChanged;
+        MetaCard.IsVisible = true;
+        SyncCollapsed();
+
+        // Header baseline from the group itself (always available, even for a manual no-sub group).
+        _currentSubId = string.Empty;
+        TitleText.Text = _group.Name;
+        SubtitleText.Text = string.Empty;
+        SubtitleText.IsVisible = false;
+        MetaBody.IsVisible = false;
+        RefreshButton.IsVisible = false;
+        PinButton.IsVisible = false;
+
+        // Resolve the real subscription (with userinfo) behind this group, if any.
+        _ = ResolveAndBindSub();
     }
 
-    /// <summary>
-    /// The subscription the meta-bar should represent, data-driven and never fabricated:
-    ///   1) the ACTIVE server's subscription (config.IndexId → active ProfileItem → Subid → SubItem);
-    ///   2) else the single real SubItem when exactly one exists;
-    ///   3) else the selected sub if it is real, else the first real one.
-    /// Returns null when there is no real subscription (Id is non-empty) → card hidden.
-    /// </summary>
-    private SubItem? ResolveActiveSub()
+    private void OnGroupPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (_profiles is null)
+        if (e.PropertyName == nameof(HomeServerGroup.IsExpanded))
         {
-            return null;
+            SyncCollapsed();
+        }
+    }
+
+    // Reflect the group's collapsed state on the chevron (−90° collapsed).
+    private void SyncCollapsed()
+    {
+        var collapsed = _group is { IsExpanded: false };
+        if (collapsed)
+        {
+            CollapseIcon.Classes.Add("collapsed");
+        }
+        else
+        {
+            CollapseIcon.Classes.Remove("collapsed");
+        }
+    }
+
+    // The group's Subid → real SubItem. Data-driven: null when the group has no real subscription.
+    private async Task ResolveAndBindSub()
+    {
+        var subid = _group?.Servers.FirstOrDefault(s => s is not null && s.Subid.IsNotEmpty())?.Subid;
+        if (subid.IsNullOrEmpty())
+        {
+            return;
         }
 
-        var realSubs = _profiles.SubItems.Where(s => s is not null && s.Id.IsNotEmpty()).ToList();
-        if (realSubs.Count == 0)
+        SubItem? sub = null;
+        try
         {
-            return null;
+            sub = await AppManager.Instance.GetSubItem(subid);
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog("SubscriptionMetaView.Resolve", ex);
         }
 
-        // 1) Follow the active/default server's Subid.
-        var active = _profiles.ProfileItems.FirstOrDefault(p => p.IsActive);
-        if (active is null)
+        // The group may have been recycled onto another subscription while we awaited.
+        if (_group is null || subid != _group.Servers.FirstOrDefault(s => s is not null && s.Subid.IsNotEmpty())?.Subid)
         {
-            var indexId = AppManager.Instance.Config?.IndexId;
-            if (indexId.IsNotEmpty())
-            {
-                active = _profiles.ProfileItems.FirstOrDefault(p => p.IndexId == indexId);
-            }
+            return;
         }
-        var subid = active?.Subid;
-        if (subid.IsNotEmpty())
+        if (sub is not null)
         {
-            var match = realSubs.FirstOrDefault(s => s.Id == subid);
-            if (match is not null)
-            {
-                return match;
-            }
+            BindSub(sub);
         }
-
-        // 2) Exactly one real subscription — use it.
-        if (realSubs.Count == 1)
-        {
-            return realSubs[0];
-        }
-
-        // 3) Selected sub if real, else the first real one.
-        var sel = _profiles.SelectedSub;
-        return sel is not null && sel.Id.IsNotEmpty() ? sel : realSubs[0];
     }
 
     /// <summary>Project a real subscription (with userinfo) onto the meta-bar fields.</summary>
     private void BindSub(SubItem? sub)
     {
-        // The bar represents ONE subscription. The "Все серверы" pseudo-group has an empty Id and
-        // no userinfo -> hide the card (data-driven: no fabricated aggregate).
         if (sub is null || sub.Id.IsNullOrEmpty())
         {
-            _currentSubId = string.Empty;
-            MetaCard.IsVisible = false;
             return;
         }
         _currentSubId = sub.Id;
-        MetaCard.IsVisible = true;
 
-        // Title: profile-title -> remarks (never fabricated).
-        TitleText.Text = sub.ProfileTitle.IsNotEmpty() ? sub.ProfileTitle : (sub.Remarks ?? string.Empty);
+        // Title: profile-title -> remarks -> group name (never fabricated).
+        var title = sub.ProfileTitle.IsNotEmpty() ? sub.ProfileTitle : (sub.Remarks ?? string.Empty);
+        TitleText.Text = title.IsNotEmpty() ? title : (_group?.Name ?? string.Empty);
 
         // Subtitle: last-update time + auto-update interval.
-        SubtitleText.Text = FormatSubtitle(sub);
+        var subtitle = FormatSubtitle(sub);
+        SubtitleText.Text = subtitle;
+        SubtitleText.IsVisible = subtitle.IsNotEmpty();
+
+        // Body + subscription-only actions become available.
+        MetaBody.IsVisible = true;
+        RefreshButton.IsVisible = true;
+        PinButton.IsVisible = true;
 
         // Traffic pill: used = upload + download; total <= 0 => unlimited ("∞").
         var used = sub.UploadUsed + sub.DownloadUsed;
@@ -185,7 +192,7 @@ public partial class SubscriptionMetaView : UserControl
         AnnounceText.Text = announce;
         AnnounceText.IsVisible = announce.IsNotEmpty();
 
-        // Pin state tint (display only — Accent when pinned, OnSurfaceVariant otherwise).
+        // Pin state tint (Accent when pinned, OnSurfaceVariant otherwise).
         PinIcon.Foreground = sub.Pinned ? _accent : _muted;
 
         // Support / Telegram: shown only when the provider sent the matching URL.
@@ -267,12 +274,27 @@ public partial class SubscriptionMetaView : UserControl
         return $"{text} {_ruUnits[unit]}";
     }
 
+    // ── Engine access (shared VM reached through the host window) ─────────────
+
+    private MainWindowViewModel? MainVm => TopLevel.GetTopLevel(this)?.DataContext as MainWindowViewModel;
+
+    private ProfilesViewModel? Profiles => MainVm?.ProfilesViewModel;
+
     // ── Actions ─────────────────────────────────────────────────────────────
+
+    // Collapse chevron: fold / unfold THIS subscription's server rows (group.IsExpanded).
+    private void OnCollapseClick(object? sender, RoutedEventArgs e)
+    {
+        if (_group is not null)
+        {
+            _group.IsExpanded = !_group.IsExpanded;
+        }
+    }
 
     private void OnPingClick(object? sender, RoutedEventArgs e)
     {
-        // Real-delay test of the selected subscription's servers (per-row delays update live).
-        _profiles?.FastRealPingCmd.Execute().Subscribe(_ => { }, _ => { });
+        // Real-delay test of the shown servers (per-row delays update live).
+        Profiles?.FastRealPingCmd.Execute().Subscribe(_ => { }, _ => { });
     }
 
     private async void OnRefreshClick(object? sender, RoutedEventArgs e)
@@ -282,8 +304,6 @@ public partial class SubscriptionMetaView : UserControl
             return;
         }
 
-        // Refresh the subscription the card actually represents (resolved active sub), NOT
-        // SelectedSub — that would be the empty-Id «Все серверы» pseudo-group.
         var subId = _currentSubId;
         if (subId.IsNullOrEmpty())
         {
@@ -294,17 +314,12 @@ public partial class SubscriptionMetaView : UserControl
         ActionProgress.IsVisible = true;
         try
         {
-            // Refresh THIS subscription only, via the real MainWindowViewModel (reached through the
-            // host window's DataContext). Re-downloads the sub; the engine now also persists its
-            // userinfo/directives. Fall back to the Home "refresh all" command if unreachable.
-            var mainVm = TopLevel.GetTopLevel(this)?.DataContext as MainWindowViewModel;
+            // Refresh THIS subscription only, via the real MainWindowViewModel. Re-downloads the sub;
+            // the engine now also persists its userinfo/directives.
+            var mainVm = MainVm;
             if (mainVm is not null)
             {
                 await mainVm.UpdateSubscriptionProcess(subId, false);
-            }
-            else if (_refreshCmd is not null)
-            {
-                await _refreshCmd.Execute().ToTask();
             }
         }
         catch (Exception ex)
@@ -321,7 +336,7 @@ public partial class SubscriptionMetaView : UserControl
         try
         {
             var fresh = await AppManager.Instance.GetSubItem(subId);
-            if (fresh is not null)
+            if (fresh is not null && fresh.Id == _currentSubId)
             {
                 BindSub(fresh);
             }
@@ -329,6 +344,35 @@ public partial class SubscriptionMetaView : UserControl
         catch (Exception ex)
         {
             Logging.SaveLog("SubscriptionMetaView.Rebind", ex);
+        }
+    }
+
+    // Pin toggle: flip SubItem.Pinned and persist it (pinned subs sort first / become default tab).
+    private async void OnPinClick(object? sender, RoutedEventArgs e)
+    {
+        var subId = _currentSubId;
+        if (subId.IsNullOrEmpty())
+        {
+            return;
+        }
+        try
+        {
+            var sub = await AppManager.Instance.GetSubItem(subId);
+            if (sub is null)
+            {
+                return;
+            }
+            sub.Pinned = !sub.Pinned;
+            await SQLiteHelper.Instance.UpdateAsync(sub);
+            // Optimistic tint update (still the same sub in view).
+            if (_currentSubId == subId)
+            {
+                PinIcon.Foreground = sub.Pinned ? _accent : _muted;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog("SubscriptionMetaView.Pin", ex);
         }
     }
 
@@ -348,17 +392,28 @@ public partial class SubscriptionMetaView : UserControl
         }
     }
 
+    // «+» add-another-subscription menu (clipboard / QR / file) → shared MainWindowViewModel.
+    private void OnImportClipboard(object? sender, RoutedEventArgs e) => _ = MainVm?.AddServerViaClipboardAsync(null);
+
+    private void OnImportQr(object? sender, RoutedEventArgs e) => _ = MainVm?.AddServerViaScanAsync();
+
+    private void OnImportFile(object? sender, RoutedEventArgs e) => _ = MainVm?.AddServerViaImageAsync();
+
     // ── Design-time only ────────────────────────────────────────────────────
 
     /// <summary>Representative sample for the Avalonia previewer. Never runs at runtime.</summary>
     private void ApplyDesignSample()
     {
         MetaCard.IsVisible = true;
+        RefreshButton.IsVisible = true;
+        PinButton.IsVisible = true;
         TitleText.Text = "erlish";
         SubtitleText.Text = "10.07.2026 17:17 · Автообновление — 1 ч.";
+        SubtitleText.IsVisible = true;
+        MetaBody.IsVisible = true;
         TrafficText.Text = "1,7 ТБ / ∞";
-        TrafficFill.Width = 69;
-        ExpiryText.Text = "до 12.08.2026";
+        TrafficFill.Width = 0;
+        ExpiryText.Text = "∞";
         ExpiryText.Foreground = _muted;
         AnnounceText.Text = "Без рекламы на YouTube: Hybrid, Russia\nЕсли не работает, обновите подписку\n@departamentvpn";
         AnnounceText.IsVisible = true;

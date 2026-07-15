@@ -42,6 +42,15 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         _config = AppManager.Instance.Config;
         _manager = new WindowNotificationManager(TopLevel.GetTopLevel(this)) { MaxItems = 3, Position = NotificationPosition.TopRight };
 
+        // «Облегчённый режим» (reduced-motion): класс .lite обнуляет press/hover/reveal-переходы
+        // оболочки (GlobalStyles :is(Window).lite), а тут снимаем анимацию смены вкладок
+        // (page cross-fade). Хореографию connect-щита гасит сам ConnectHeroView по тому же флагу.
+        if (_config.UiItem.LiteMode)
+        {
+            Classes.Add("lite");
+            contentHost.PageTransition = null;
+        }
+
         KeyDown += MainWindow_KeyDown;
 
         // Chrome окна: drag + системные кнопки.

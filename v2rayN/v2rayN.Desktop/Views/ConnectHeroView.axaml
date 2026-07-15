@@ -23,8 +23,8 @@
               (замена плоского SurfaceHigh, из-за которого диск выглядел светлым и «кривым»).  -->
         <RadialGradientBrush
             x:Key="Disc.Fill"
-            Center="50%,46%"
-            GradientOrigin="50%,46%"
+            Center="50%,50%"
+            GradientOrigin="50%,50%"
             RadiusX="62%"
             RadiusY="62%">
             <GradientStop Offset="0" Color="#161B24" />
@@ -191,9 +191,7 @@
                 <Button
                     x:Name="AddButton"
                     Grid.Column="2"
-                    Width="40"
-                    Height="40"
-                    Classes="IconButton"
+                    Classes="IconButton40"
                     ToolTip.Tip="Добавить профиль">
                     <Path
                         Width="18"
@@ -208,12 +206,13 @@
                 </Button>
             </Grid>
 
-            <!--  Герой-блок: щит высоко в панели (верхняя треть), под ним — идентичность сервера.  -->
+            <!--  Герой-блок: щит по центру свободного места панели (стата-строка закреплена
+                  сверху row 0), под щитом — подпись состояния и идентичность сервера. Центрирование
+                  по вертикали убирает «щит висит высоко, снизу пусто» → выглядит ровно (spec §1.4).  -->
             <StackPanel
                 Grid.Row="1"
-                Margin="0,24,0,0"
                 HorizontalAlignment="Center"
-                VerticalAlignment="Top">
+                VerticalAlignment="Center">
 
                 <!--  Рамка 230×230, clip выключен: glow/сонар могут выходить за диск.  -->
                 <Panel

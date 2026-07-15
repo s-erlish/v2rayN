@@ -1,0 +1,137 @@
+<Window
+    x:Class="v2rayN.Desktop.Views.PerAppProxyWindow"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Title="Прокси по приложениям"
+    Width="560"
+    Height="720"
+    Background="{DynamicResource Brush.Bg}"
+    ShowInTaskbar="False"
+    WindowStartupLocation="CenterOwner"
+    mc:Ignorable="d">
+
+    <DockPanel Margin="0">
+        <!--  Seamless header: title + Готово (сохранить и закрыть)  -->
+        <Grid
+            Margin="16,14,16,10"
+            ColumnDefinitions="*,Auto"
+            DockPanel.Dock="Top">
+            <TextBlock
+                Grid.Column="0"
+                VerticalAlignment="Center"
+                Classes="Headline"
+                Text="Прокси по приложениям" />
+            <Button
+                x:Name="btnDone"
+                Grid.Column="1"
+                Classes="Primary"
+                Content="Готово" />
+        </Grid>
+        <Border
+            Height="1"
+            Background="{DynamicResource Brush.OutlineVariant}"
+            DockPanel.Dock="Top" />
+
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="16,12,16,24" Spacing="8">
+
+                <!--  Включение + режим  -->
+                <Border Classes="Card" Padding="16,4">
+                    <StackPanel>
+                        <Grid ColumnDefinitions="*,Auto" MinHeight="56">
+                            <StackPanel
+                                Grid.Column="0"
+                                Margin="0,0,8,0"
+                                VerticalAlignment="Center">
+                                <TextBlock Classes="Body" Text="Раздельное туннелирование" />
+                                <TextBlock
+                                    Margin="0,4,0,0"
+                                    Classes="Subtitle"
+                                    Text="Выберите, какие программы идут через VPN"
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ToggleSwitch
+                                x:Name="switchEnabled"
+                                Grid.Column="1"
+                                VerticalAlignment="Center"
+                                Theme="{DynamicResource ToggleSwitch.iOS}" />
+                        </Grid>
+
+                        <Border
+                            Height="1"
+                            Margin="0,0,0,0"
+                            Background="{DynamicResource Brush.OutlineVariant}" />
+
+                        <RadioButton
+                            x:Name="rbBypass"
+                            MinHeight="56"
+                            Content="Кроме выбранных — идут напрямую, минуя VPN"
+                            Foreground="{DynamicResource Brush.OnSurface}"
+                            GroupName="perAppMode" />
+                        <RadioButton
+                            x:Name="rbInclude"
+                            MinHeight="56"
+                            Content="Только выбранные — через VPN идут лишь они"
+                            Foreground="{DynamicResource Brush.OnSurface}"
+                            GroupName="perAppMode" />
+                    </StackPanel>
+                </Border>
+
+                <!--  Список приложений  -->
+                <TextBlock
+                    Margin="4,10,4,4"
+                    Classes="SectionHeader"
+                    Text="Приложения" />
+
+                <Grid ColumnDefinitions="*,Auto,Auto">
+                    <TextBox
+                        x:Name="txtFilter"
+                        Grid.Column="0"
+                        Margin="0,0,8,0"
+                        VerticalContentAlignment="Center"
+                        Watermark="Поиск…" />
+                    <Button
+                        x:Name="btnRefresh"
+                        Grid.Column="1"
+                        Margin="0,0,8,0"
+                        Content="Обновить" />
+                    <Button
+                        x:Name="btnAddExe"
+                        Grid.Column="2"
+                        Content="Добавить .exe" />
+                </Grid>
+
+                <Border Classes="Card" Padding="8,4">
+                    <ItemsControl x:Name="listApps">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:CompileBindings="False">
+                                <CheckBox
+                                    MinHeight="44"
+                                    Padding="8,0,0,0"
+                                    Foreground="{DynamicResource Brush.OnSurface}"
+                                    IsChecked="{Binding IsChecked, Mode=TwoWay}">
+                                    <StackPanel>
+                                        <TextBlock Classes="Body" Text="{Binding Display}" />
+                                        <TextBlock
+                                            Classes="Subtitle"
+                                            Text="{Binding Identifier}"
+                                            TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                </CheckBox>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Border>
+
+                <TextBlock
+                    Margin="4,4,4,0"
+                    Classes="Subtitle"
+                    Text="Работает в режиме TUN (sing-box). Правила применяются при следующем подключении."
+                    TextWrapping="Wrap" />
+
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

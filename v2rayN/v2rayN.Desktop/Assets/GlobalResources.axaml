@@ -158,6 +158,12 @@
           синий акцент @ 12% (#1F = 31/255). Единый токен вместо литерала         -->
     <SolidColorBrush x:Key="Brush.SelectedFill" Color="#4C8DFF" Opacity="0.12" />
 
+    <!--  ЕДИНЫЙ ХОВЕР (rows / icon-buttons / nav): лёгкое ЗАТЕМНЕНИЕ полупрозрачным
+          чёрным, а НЕ светлый «glow». Владелец: «лучше бы оно просто чуть темнело».
+          Полупрозрачность даёт «чуть темнее» на любой поверхности (Surface/Card),
+          не завися от подложки, и убирает светлый оверлей Semi.                    -->
+    <SolidColorBrush x:Key="Brush.Hover" Color="#000000" Opacity="0.32" />
+
     <!--  Деструктив: базовый Red (#F04452) + затемнённый hover/pressed.          -->
     <Color x:Key="Color.RedPressed">#D93844</Color>
     <SolidColorBrush x:Key="Brush.RedPressed" Color="{StaticResource Color.RedPressed}" />

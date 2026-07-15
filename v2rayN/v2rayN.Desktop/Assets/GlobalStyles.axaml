@@ -50,6 +50,20 @@
         <Setter Property="Height" Value="{StaticResource IconButtonHeight}" />
         <Setter Property="MinWidth" Value="{StaticResource IconButtonWidth}" />
         <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
+        <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
+    </Style>
+    <!--  Легаси IconButton (гик-окна) БЕЗ переопределения давал светлый оверлей темы
+          Semi на hover = «белый glow». Гасим тинт и красим НАШ ховер-затемнение,
+          чтобы нигде не было светлого свечения (Incy-экраны мигрируют на IconButton40).  -->
+    <Style Selector="Button.IconButton /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="CornerRadius" Value="8" />
+    </Style>
+    <Style Selector="Button.IconButton:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
+    </Style>
+    <Style Selector="Button.IconButton:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
     </Style>
 
     <!-- ==================================================================== -->
@@ -130,7 +144,7 @@
         <Setter Property="Background" Value="Transparent" />
     </Style>
     <Style Selector="Border.Row:pointerover">
-        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
+        <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
     </Style>
 
     <!--  Плитка иконки 40 с глифом 22  -->
@@ -161,6 +175,7 @@
 
     <!--  Первичная (акцент). 48h, Grotesk 15 Bold. press scale 0.97 @90мс.  -->
     <Style Selector="Button.Primary">
+        <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
         <Setter Property="Background" Value="{DynamicResource Brush.Accent}" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnAccent}" />
         <Setter Property="CornerRadius" Value="{DynamicResource Radius.Button}" />
@@ -194,6 +209,7 @@
     <!--  Тональная. 48h, SurfaceHighest/OnSurface, Grotesk 15 Medium.
           ДОБАВЛЕНЫ press scale 0.97 + переход (раньше их не было) — как Primary.  -->
     <Style Selector="Button.Tonal">
+        <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
         <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHighest}" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
         <Setter Property="CornerRadius" Value="{DynamicResource Radius.Button}" />
@@ -221,6 +237,7 @@
           Grotesk 15 Medium. Регистрация / Начать заново. Android btn_restart:
           materialButtonOutlinedStyle, strokeColor=colorPrimary, textColor=colorPrimary.  -->
     <Style Selector="Button.OutlinedAccent">
+        <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
@@ -252,6 +269,7 @@
           tile_size 40, cornerRadius 20, iconSize 20, iconTint=colorPrimary,
           backgroundTint=iconTileBgBlue (bg_icon_blue), inset/padding 0.  -->
     <Style Selector="Button.Stepper">
+        <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
         <Setter Property="Width" Value="{DynamicResource Size.Tile}" />
         <Setter Property="Height" Value="{DynamicResource Size.Tile}" />
         <Setter Property="MinWidth" Value="0" />
@@ -313,6 +331,7 @@
           press scale 0.96, selected = заливка #1F4C8DFF + 1.5px Accent, radius 20.
           Рамка всегда 1.5px (прозрачная в покое), чтобы выбор не сдвигал раскладку.  -->
     <Style Selector="Border.ServerRow">
+        <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
         <Setter Property="MinHeight" Value="{DynamicResource Size.Row}" />
         <Setter Property="CornerRadius" Value="{DynamicResource Radius.Card}" />
         <Setter Property="Padding" Value="12,8" />
@@ -328,7 +347,7 @@
         </Setter>
     </Style>
     <Style Selector="Border.ServerRow:pointerover">
-        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
+        <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
     </Style>
     <Style Selector="Border.ServerRow.pressed">
         <Setter Property="RenderTransform" Value="scale(0.96)" />
@@ -369,6 +388,7 @@
     <!--  Диск connect-щита (card_connect): 176 круг, SurfaceHigh, press-scale 0.94→1.0.
           Класс .pressed навешивает потребитель по PointerPressed/Released.  -->
     <Style Selector="Border.ConnectDisc">
+        <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
         <Setter Property="Width" Value="{DynamicResource Size.ConnectDisc}" />
         <Setter Property="Height" Value="{DynamicResource Size.ConnectDisc}" />
         <Setter Property="CornerRadius" Value="88" />
@@ -402,6 +422,7 @@
     <!-- ==================================================================== -->
     <Style Selector="Button.NavRailItem">
         <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
+        <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
         <Setter Property="Width" Value="76" />
         <Setter Property="Height" Value="64" />
         <Setter Property="Padding" Value="0" />
@@ -416,15 +437,17 @@
             </Transitions>
         </Setter>
     </Style>
-    <!--  Гасим стандартную заливку кнопки во всех состояниях (нет ripple на нав).  -->
+    <!--  Гасим стандартную заливку кнопки (нет светлого ripple темы Semi); hover =
+          НАШ единый ховер-затемнение (чуть темнеет), скруглённый под плитку рейла.  -->
     <Style Selector="Button.NavRailItem /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="Transparent" />
+        <Setter Property="CornerRadius" Value="14" />
     </Style>
     <Style Selector="Button.NavRailItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
     </Style>
     <Style Selector="Button.NavRailItem:pressed /template/ ContentPresenter#PART_ContentPresenter">
-        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
     </Style>
     <Style Selector="Button.NavRailItem:pressed">
         <Setter Property="RenderTransform" Value="scale(0.92)" />
@@ -490,6 +513,7 @@
     <!-- ==================================================================== -->
     <Style Selector="Button.IconButton40">
         <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
+        <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
         <Setter Property="Width" Value="{DynamicResource Size.IconButton}" />
         <Setter Property="Height" Value="{DynamicResource Size.IconButton}" />
         <Setter Property="MinWidth" Value="0" />
@@ -513,10 +537,10 @@
         <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill}" />
     </Style>
     <Style Selector="Button.IconButton40:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
+        <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
     </Style>
     <Style Selector="Button.IconButton40:pressed /template/ ContentPresenter#PART_ContentPresenter">
-        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
+        <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
     </Style>
     <Style Selector="Button.IconButton40:pressed">
         <Setter Property="RenderTransform" Value="scale(0.92)" />
@@ -554,6 +578,7 @@
           (Geo.ArrowBack). Класс существует ради читаемости разметки тулбаров.  -->
     <Style Selector="Button.BackNav">
         <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
+        <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
         <Setter Property="Width" Value="{DynamicResource Size.IconButton}" />
         <Setter Property="Height" Value="{DynamicResource Size.IconButton}" />
         <Setter Property="MinWidth" Value="0" />
@@ -576,10 +601,10 @@
         <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill}" />
     </Style>
     <Style Selector="Button.BackNav:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
+        <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
     </Style>
     <Style Selector="Button.BackNav:pressed /template/ ContentPresenter#PART_ContentPresenter">
-        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
+        <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
     </Style>
     <Style Selector="Button.BackNav:pressed">
         <Setter Property="RenderTransform" Value="scale(0.92)" />
@@ -594,6 +619,7 @@
           таргет, press scale 0.97. Пример: «Открыть Telegram», «Забыли пароль».  -->
     <Style Selector="Button.LinkAction">
         <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
+        <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
         <Setter Property="Height" Value="40" />
         <Setter Property="Padding" Value="12,0" />
         <Setter Property="CornerRadius" Value="{DynamicResource Radius.Chip}" />
@@ -625,6 +651,7 @@
     <!--  Фон закреплён и на ContentPresenter, чтобы hover темы Semi не подменял.  -->
     <!-- ==================================================================== -->
     <Style Selector="Button.Destructive">
+        <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
         <Setter Property="Background" Value="{DynamicResource Brush.Red}" />
         <Setter Property="Foreground" Value="White" />
         <Setter Property="CornerRadius" Value="{DynamicResource Radius.Button}" />
@@ -720,7 +747,7 @@
         </Setter>
     </Style>
     <Style Selector="Border.PriceOption:not(.selected):pointerover">
-        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
+        <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
     </Style>
     <Style Selector="Border.PriceOption.selected">
         <Setter Property="Background" Value="{DynamicResource Brush.SelectedFill}" />
@@ -776,6 +803,7 @@
     <!-- ==================================================================== -->
     <Style Selector="ToggleButton.Segment">
         <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
+        <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
         <Setter Property="Height" Value="{DynamicResource Size.SegmentChip}" />
         <Setter Property="MinWidth" Value="44" />
         <Setter Property="Padding" Value="16,0" />
@@ -802,7 +830,7 @@
         <Setter Property="CornerRadius" Value="{DynamicResource Radius.Chip}" />
     </Style>
     <Style Selector="ToggleButton.Segment:not(:checked):pointerover /template/ ContentPresenter#PART_ContentPresenter">
-        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
+        <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
     </Style>
     <Style Selector="ToggleButton.Segment:pressed">
         <Setter Property="RenderTransform" Value="scale(0.96)" />
@@ -905,6 +933,50 @@
     <Style Selector="Border.NavRail">
         <Setter Property="Background" Value="{DynamicResource Brush.Bg}" />
         <Setter Property="BorderThickness" Value="0" />
+    </Style>
+
+    <!-- ==================================================================== -->
+    <!--  «Облегчённый режим» (lite / reduced-motion). Класс .lite ставит окно    -->
+    <!--  (MainWindow) по _config.UiItem.LiteMode; :is(Window) нужно, т.к. это     -->
+    <!--  подкласс Window. Обнуляем Transitions на интерактивных элементах, чтобы   -->
+    <!--  press/hover/reveal переключались МГНОВЕННО (без движения). Циклические     -->
+    <!--  анимации героя (spinning/breathing/sonar/assemble) гасит ConnectHeroView   -->
+    <!--  через ReducedMotion, а page-crossfade — MainWindow (PageTransition=null).  -->
+    <!-- ==================================================================== -->
+    <Style Selector=":is(Window).lite Button">
+        <Setter Property="Transitions">
+            <Transitions />
+        </Setter>
+    </Style>
+    <Style Selector=":is(Window).lite ToggleButton">
+        <Setter Property="Transitions">
+            <Transitions />
+        </Setter>
+    </Style>
+    <Style Selector=":is(Window).lite Border.ServerRow">
+        <Setter Property="Transitions">
+            <Transitions />
+        </Setter>
+    </Style>
+    <Style Selector=":is(Window).lite Border.PriceOption">
+        <Setter Property="Transitions">
+            <Transitions />
+        </Setter>
+    </Style>
+    <Style Selector=":is(Window).lite Border.NavPill">
+        <Setter Property="Transitions">
+            <Transitions />
+        </Setter>
+    </Style>
+    <Style Selector=":is(Window).lite Button.NavRailItem PathIcon">
+        <Setter Property="Transitions">
+            <Transitions />
+        </Setter>
+    </Style>
+    <Style Selector=":is(Window).lite Button.NavRailItem TextBlock">
+        <Setter Property="Transitions">
+            <Transitions />
+        </Setter>
     </Style>
 
 </Styles>

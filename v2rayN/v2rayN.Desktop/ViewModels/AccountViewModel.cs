@@ -48,6 +48,9 @@ public class AccountViewModel : MyReactiveObject
     [Reactive] public string BalanceText { get; set; } = string.Empty;
     [Reactive] public bool HasBalance { get; set; }
     [Reactive] public string ReferralText { get; set; } = string.Empty;
+
+    /// <summary>Raw referral code (e.g. "REF-97F7CBFB") — what the referral row copies to the clipboard.</summary>
+    [Reactive] public string ReferralCode { get; set; } = string.Empty;
     [Reactive] public bool HasReferral { get; set; }
     [Reactive] public bool HasProfile { get; set; }
 
@@ -83,6 +86,9 @@ public class AccountViewModel : MyReactiveObject
     [Reactive] public string LoginPassword { get; set; } = string.Empty;
     [Reactive] public string TwoFaCode { get; set; } = string.Empty;
 
+    /// <summary>The balance top-up amount (₽) the user typed in the «Пополнить» flyout.</summary>
+    [Reactive] public string TopUpAmount { get; set; } = string.Empty;
+
     /// <summary>Non-null tempToken when the last site login requires a 2FA code; null otherwise.</summary>
     [Reactive] public string? TwoFaTempToken { get; set; }
 
@@ -103,6 +109,9 @@ public class AccountViewModel : MyReactiveObject
     public ReactiveCommand<Unit, Unit> Submit2FaCmd { get; }
     public ReactiveCommand<Unit, Unit> LogoutCmd { get; }
     public ReactiveCommand<Unit, Unit> RetryCmd { get; }
+
+    /// <summary>Balance top-up: opens a Platega checkout for <see cref="TopUpAmount"/>.</summary>
+    public ReactiveCommand<Unit, Unit> TopUpCmd { get; }
 
     #endregion commands
 
@@ -130,6 +139,7 @@ public class AccountViewModel : MyReactiveObject
         Submit2FaCmd = ReactiveCommand.CreateFromTask(Submit2Fa);
         LogoutCmd = ReactiveCommand.CreateFromTask(Logout);
         RetryCmd = ReactiveCommand.CreateFromTask(Retry);
+        TopUpCmd = ReactiveCommand.CreateFromTask(TopUp);
 
         // Safety net: a stray command exception surfaces as the error state instead of crashing.
         Observable.Merge(
@@ -142,7 +152,8 @@ public class AccountViewModel : MyReactiveObject
                 LoginSiteCmd.ThrownExceptions,
                 Submit2FaCmd.ThrownExceptions,
                 LogoutCmd.ThrownExceptions,
-                RetryCmd.ThrownExceptions)
+                RetryCmd.ThrownExceptions,
+                TopUpCmd.ThrownExceptions)
             .Subscribe(ex => RunOnUi(() =>
             {
                 Report(ex as ApiError ?? new ApiError.NetworkError(ex));
@@ -155,8 +166,17 @@ public class AccountViewModel : MyReactiveObject
 
         if (IsLoggedIn)
         {
-            _ = LoadAll();
+            // Returning user: re-import the account subscriptions (parity with the Android startup path
+            // in MainActivity) so a sub bought/changed on another device shows up, then load the tab.
+            _ = StartupLoad();
         }
+    }
+
+    /// <summary>Returning-user startup: auto-import subscriptions (→ refresh Home) then load the tab.</summary>
+    private async Task StartupLoad()
+    {
+        await AutoImportAndRefreshHome();
+        await LoadAll();
     }
 
     /// <summary>Design-time constructor: sample logged-in active state so the previewer renders.</summary>
@@ -498,14 +518,52 @@ public class AccountViewModel : MyReactiveObject
             Recompute();
         });
 
-        var import = await _repo.AutoImportSubscriptions();
-        RunOnUi(() => import.OnFailure(Report));
+        await AutoImportAndRefreshHome();
         await FetchAndApplySubscriptions();
         await LoadAll();
         RunOnUi(() =>
         {
             IsLoading = false;
             Recompute();
+        });
+    }
+
+    /// <summary>
+    /// Runs the account auto-import (login → GET account subscriptions → persist + download servers)
+    /// and then refreshes the engine's server list so the imported servers appear on Home and its
+    /// empty/onboarding state flips off. A transient import failure is surfaced but never blocks the
+    /// rest of the load — <see cref="FetchAndApplySubscriptions"/> re-reports real errors.
+    /// </summary>
+    private async Task AutoImportAndRefreshHome()
+    {
+        var import = await _repo.AutoImportSubscriptions();
+        RunOnUi(() => import.OnFailure(Report));
+        RequestHomeServerRefresh();
+    }
+
+    /// <summary>
+    /// Repopulates the engine's server list (<c>ProfilesViewModel.ProfileItems</c>) after an account
+    /// import so the Home screen picks up the freshly-imported servers (HomeViewModel reacts to the
+    /// collection change and flips <c>IsEmpty</c> false). OFF-model: <c>RefreshServers</c> only reloads
+    /// the list from the DB — it never starts the core. Reaches the running MainWindow's VM via
+    /// ReactiveUI's <see cref="IViewFor{T}"/> (read-only; does not touch the Home-owned views).
+    /// </summary>
+    private static void RequestHomeServerRefresh()
+    {
+        Dispatcher.UIThread.Post(async () =>
+        {
+            try
+            {
+                if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop
+                    && desktop.MainWindow is IViewFor<MainWindowViewModel> { ViewModel: { } main })
+                {
+                    await main.ProfilesViewModel.RefreshServers();
+                }
+            }
+            catch (Exception ex)
+            {
+                Logging.SaveLog("AccountAutoImportRefresh", ex);
+            }
         });
     }
 
@@ -542,6 +600,51 @@ public class AccountViewModel : MyReactiveObject
         {
             await LoadAll();
         }
+    }
+
+    /// <summary>
+    /// Balance top-up (parity with Android «Пополнение баланса»): opens a Platega checkout for the
+    /// entered ₽ amount in the external browser. A top-up ADDS to the balance, so it is deliberately a
+    /// provider checkout (PayPlatega), never a balance payment (which would be circular). Data-driven:
+    /// the amount comes straight from the user; nothing is fabricated.
+    /// </summary>
+    private async Task TopUp()
+    {
+        var raw = TopUpAmount?.Trim();
+        if (raw.IsNullOrEmpty()
+            || !(double.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out var amount)
+                 || double.TryParse(raw, NumberStyles.Any, CultureInfo.CurrentCulture, out amount))
+            || amount <= 0)
+        {
+            AppEvents.SendSnackMsgRequested.Publish("Введите сумму больше 0");
+            return;
+        }
+
+        var result = await _repo.Buy(new PaymentRequestDto { Amount = amount, Currency = "RUB" });
+        RunOnUi(() =>
+        {
+            result
+                .OnSuccess(init =>
+                {
+                    TopUpAmount = string.Empty;
+                    var url = init.PaymentUrl;
+                    if (url.IsNullOrEmpty())
+                    {
+                        AppEvents.SendSnackMsgRequested.Publish("Не удалось открыть страницу оплаты");
+                        return;
+                    }
+                    try
+                    {
+                        ProcUtils.ProcessStart(url);
+                        AppEvents.SendSnackMsgRequested.Publish("Завершите оплату в браузере");
+                    }
+                    catch
+                    {
+                        AppEvents.SendSnackMsgRequested.Publish("Не удалось открыть страницу оплаты");
+                    }
+                })
+                .OnFailure(err => AppEvents.SendSnackMsgRequested.Publish(MessageFor(err)));
+        });
     }
 
     #endregion login / logout actions
@@ -604,18 +707,19 @@ public class AccountViewModel : MyReactiveObject
             BalanceText = string.Empty;
             HasBalance = false;
             ReferralText = string.Empty;
+            ReferralCode = string.Empty;
             HasReferral = false;
         }
         else
         {
-            var handle = profile.TelegramUsername.IsNotEmpty() ? $"@{profile.TelegramUsername}" : null;
-            var display = profile.TelegramName.IsNotEmpty() ? profile.TelegramName : null;
-            var email = profile.Email.IsNotEmpty() ? profile.Email : null;
-            Username = handle ?? display ?? email ?? string.Empty;
+            // Same precedence the Home chip renders (telegramUsername → «@…» → telegramName → email),
+            // shared via AccountSession so the two identity surfaces never drift.
+            Username = AccountSession.DisplayNameFor(profile);
             AvatarInitial = Monogram(Username);
             BalanceText = FormatMoney(profile.Balance, profile.Currency);
             HasBalance = true;
             HasReferral = profile.ReferralCode.IsNotEmpty();
+            ReferralCode = HasReferral ? profile.ReferralCode : string.Empty;
             ReferralText = HasReferral ? $"Реф-код {profile.ReferralCode}" : string.Empty;
         }
 
@@ -660,7 +764,23 @@ public class AccountViewModel : MyReactiveObject
         // Error text
         ErrorText = Error != null ? MessageFor(Error) : string.Empty;
 
-        // Hero state machine (port of renderHeroState)
+        // Logged-out: the profile card shows the Telegram login gate and the whole subscription hero is
+        // hidden. Guarding here (not just on Profile == null) is what stops a signed-out user from
+        // seeing a PERPETUALLY-PULSING skeleton — _pendingFirstLoad stays true until a real load runs,
+        // and a logged-out user never runs one.
+        if (!IsLoggedIn)
+        {
+            ShowSkeleton = false;
+            ShowActiveSub = false;
+            ShowEmpty = false;
+            ShowError = false;
+            ShowLoginCta = true;
+            return;
+        }
+        ShowLoginCta = false;
+
+        // Hero state machine (port of renderHeroState) — logged-in only. Skeleton shows ONLY while an
+        // actual first load is in flight (cold-loading) and the profile has not landed yet.
         var coldLoading = _pendingFirstLoad || IsLoading;
         var subsNotEmpty = Subscriptions.Count > 0;
         bool skeleton = false, active = false, empty = false, error = false;
@@ -684,9 +804,6 @@ public class AccountViewModel : MyReactiveObject
         ShowActiveSub = active;
         ShowEmpty = empty;
         ShowError = error;
-
-        // Logged-out: offer the Telegram login CTA instead of a blank profile card.
-        ShowLoginCta = !IsLoggedIn;
     }
 
     private void OnSessionStateChanged(AccountState state)

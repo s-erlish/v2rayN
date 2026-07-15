@@ -81,8 +81,10 @@ public partial class ConnectHeroView : UserControl
     {
         InitializeComponent();
 
-        //  Уважаем системную настройку «Показывать анимации в Windows»; по умолчанию — включено.
-        ReducedMotion = !SystemAnimationsEnabled();
+        //  Движение подавляем, если включён «Облегчённый режим» (Настройки → LiteMode,
+        //  _config.UiItem.LiteMode) ЛИБО система просит меньше анимаций
+        //  («Показывать анимации в Windows» выкл). По умолчанию — движение включено.
+        ReducedMotion = LiteModeEnabled() || !SystemAnimationsEnabled();
 
         //  Держим ссылки на декларативные переходы, чтобы гнуть их темп по направлению.
         //  Порядок соответствует XAML: ShieldOutline[0]=Opacity,[1]=Fill; Filled[0]=Opacity; Glow[0]=Opacity.
@@ -367,6 +369,25 @@ public partial class ConnectHeroView : UserControl
         await Task.Delay(460);
         HeroFrame.Opacity = 1; //  вернуть базовую непрозрачность перед снятием forward-fill
         HeroFrame.Classes.Remove("assembling");
+    }
+
+    // ── «Облегчённый режим» (lite): общий флаг reduced-motion из конфига ──────────────────
+    private static bool LiteModeEnabled()
+    {
+        //  В дизайн-режиме конфига/движка нет — считаем режим выключенным.
+        if (Design.IsDesignMode)
+        {
+            return false;
+        }
+
+        try
+        {
+            return AppManager.Instance.Config.UiItem.LiteMode;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     // ── Reduced-motion: Win32 SPI_GETCLIENTAREAANIMATION («Показывать анимации в Windows») ──

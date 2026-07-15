@@ -56,6 +56,78 @@
         <StreamGeometry x:Key="Geo.Set.Backup">M864,192L704,192L704,96c0,-17.7 -14.3,-32 -32,-32L352,64c-9,0 -17.2,3.7 -22.9,9.7L137.7,265.1c-6,5.8 -9.7,14 -9.7,22.9v512c0,17.7 14.3,32 32,32h160v96c0,17.7 14.3,32 32,32h512c17.7,0 32,-14.3 32,-32L896,224c0,-17.7 -14.3,-32 -32,-32zM320,173.2L320,256h-82.8l82.8,-82.8zM192,768L192,320h160c17.7,0 32,-14.3 32,-32L384,128h256v64h-96c-9,0 -17.2,3.7 -22.9,9.7L329.7,393.1c-6,5.8 -9.7,14 -9.7,22.9v352L192,768zM512,301.2L512,384h-82.8l82.8,-82.8zM832,896L384,896L384,448h160c17.7,0 32,-14.3 32,-32L576,256h256v640z</StreamGeometry>
         <!--  Схемы URL / ссылка (ic_hub_url_scheme)  -->
         <StreamGeometry x:Key="Geo.Set.UrlScheme">M3.9,12c0,-1.71 1.39,-3.1 3.1,-3.1h4V7H7c-2.76,0 -5,2.24 -5,5s2.24,5 5,5h4v-1.9H7c-1.71,0 -3.1,-1.39 -3.1,-3.1zM8,13h8v-2H8v2zM17,7h-4v1.9h4c1.71,0 3.1,1.39 3.1,3.1s-1.39,3.1 -3.1,3.1h-4V17h4c2.76,0 5,-2.24 5,-5s-2.24,-5 -5,-5z</StreamGeometry>
+
+        <!--  Поле ввода локального прокси. Полная ControlTheme (как TextBox.Incy в LoginView),
+              чтобы тема Semi не перекрашивала фон/фокус своими токенами: recessed SurfaceHigh,
+              радиус 12, высота 44, фокус = рамка Accent, текст OnSurface, каретка синяя.  -->
+        <ControlTheme x:Key="TextBox.IncyField" TargetType="TextBox">
+            <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineVariant}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{DynamicResource Radius.Tile}" />
+            <Setter Property="MinHeight" Value="44" />
+            <Setter Property="Padding" Value="12,0" />
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
+            <Setter Property="CaretBrush" Value="{DynamicResource Brush.Accent}" />
+            <Setter Property="SelectionBrush" Value="#334C8DFF" />
+            <Setter Property="SelectionForegroundBrush" Value="{DynamicResource Brush.OnSurface}" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Cursor" Value="IBeam" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border
+                        x:Name="PART_BorderElement"
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        CornerRadius="{TemplateBinding CornerRadius}">
+                        <Border.Transitions>
+                            <Transitions>
+                                <BrushTransition Property="BorderBrush" Duration="0:0:0.15" />
+                            </Transitions>
+                        </Border.Transitions>
+                        <Grid Margin="{TemplateBinding Padding}" ColumnDefinitions="*,Auto">
+                            <Panel Grid.Column="0" VerticalAlignment="{TemplateBinding VerticalContentAlignment}">
+                                <TextBlock
+                                    x:Name="PART_Watermark"
+                                    VerticalAlignment="Center"
+                                    Foreground="{DynamicResource Brush.OnSurfaceVariant}"
+                                    IsVisible="{TemplateBinding Text, Converter={x:Static StringConverters.IsNullOrEmpty}}"
+                                    Text="{TemplateBinding Watermark}"
+                                    TextAlignment="{TemplateBinding TextAlignment}"
+                                    TextWrapping="NoWrap" />
+                                <ScrollViewer
+                                    x:Name="PART_ScrollViewer"
+                                    HorizontalScrollBarVisibility="Hidden"
+                                    VerticalScrollBarVisibility="Disabled">
+                                    <TextPresenter
+                                        x:Name="PART_TextPresenter"
+                                        VerticalAlignment="Center"
+                                        CaretBrush="{TemplateBinding CaretBrush}"
+                                        CaretIndex="{TemplateBinding CaretIndex}"
+                                        PasswordChar="{TemplateBinding PasswordChar}"
+                                        RevealPassword="{TemplateBinding RevealPassword}"
+                                        SelectionBrush="{TemplateBinding SelectionBrush}"
+                                        SelectionEnd="{TemplateBinding SelectionEnd}"
+                                        SelectionForegroundBrush="{TemplateBinding SelectionForegroundBrush}"
+                                        SelectionStart="{TemplateBinding SelectionStart}"
+                                        Text="{TemplateBinding Text, Mode=TwoWay}"
+                                        TextAlignment="{TemplateBinding TextAlignment}"
+                                        TextWrapping="{TemplateBinding TextWrapping}" />
+                                </ScrollViewer>
+                            </Panel>
+                        </Grid>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#PART_BorderElement">
+                <Setter Property="BorderBrush" Value="{DynamicResource Brush.Outline}" />
+            </Style>
+            <Style Selector="^:focus /template/ Border#PART_BorderElement">
+                <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+            </Style>
+        </ControlTheme>
     </UserControl.Resources>
 
     <UserControl.Styles>
@@ -80,6 +152,26 @@
         <Style Selector="Border.SettingRow:pointerover">
             <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
         </Style>
+
+        <!--  Строка «только для чтения»: те же метрики, но БЕЗ hover — не притворяется кликабельной
+              (значение показывается, действия нет; шеврон в разметке снят).  -->
+        <Style Selector="Border.SettingRow.Readonly:pointerover">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+
+        <!--  «Скоро»: строка запланирована, но экран ещё не построен на ПК — приглушена,
+              без действия и без шеврона. Честнее мёртвого affordance.  -->
+        <Style Selector="Border.SettingRow.Soon">
+            <Setter Property="Opacity" Value="0.5" />
+        </Style>
+        <Style Selector="TextBlock.SoonBadge">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextAlignment" Value="Right" />
+            <Setter Property="Margin" Value="8,0,0,0" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
+        </Style>
+
+        <!--  Поле ввода локального прокси: одна высота 44, recessed SurfaceHigh, синий каретка.  -->
 
         <!--  Разделитель 1px, инсет слева 72 (16 паддинг + 40 плитка + 16 отступ).  -->
         <Style Selector="Border.SettingDivider">
@@ -163,38 +255,6 @@
                                 Grid.Column="2"
                                 Classes="Subtitle RowValue"
                                 Text="{Binding ModeText}" />
-                            <PathIcon
-                                Grid.Column="3"
-                                Classes="Chevron"
-                                Data="{StaticResource Geo.Set.Chevron}" />
-                        </Grid>
-                    </Border>
-
-                    <Border Classes="SettingDivider" />
-
-                    <!--  Прокси по приложениям → Выкл  -->
-                    <Border x:Name="RowPerApp" Classes="SettingRow">
-                        <Grid ColumnDefinitions="Auto,*,Auto,Auto">
-                            <Border
-                                Grid.Column="0"
-                                Classes="Tile Orange"
-                                VerticalAlignment="Center">
-                                <PathIcon
-                                    Classes="Glyph"
-                                    Data="{StaticResource Geo.Set.Grid}"
-                                    Foreground="{DynamicResource Brush.Icon.Orange}" />
-                            </Border>
-                            <TextBlock
-                                Grid.Column="1"
-                                Margin="16,0,0,0"
-                                VerticalAlignment="Center"
-                                Classes="Body"
-                                Text="Прокси по приложениям" />
-                            <TextBlock
-                                x:Name="ValuePerApp"
-                                Grid.Column="2"
-                                Classes="Subtitle RowValue"
-                                Text="{Binding PerAppText}" />
                             <PathIcon
                                 Grid.Column="3"
                                 Classes="Chevron"
@@ -304,9 +364,10 @@
 
                     <Border Classes="SettingDivider" />
 
-                    <!--  Пинг → Реальная задержка (через ядро)  -->
-                    <Border x:Name="RowPingMethod" Classes="SettingRow">
-                        <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                    <!--  Пинг → Реальная задержка (через ядро). Единственный метод на ПК →
+                          только значение, без шеврона/hover (не притворяется настраиваемым).  -->
+                    <Border x:Name="RowPingMethod" Classes="SettingRow Readonly">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
                             <Border
                                 Grid.Column="0"
                                 Classes="Tile Yellow"
@@ -327,10 +388,6 @@
                                 Grid.Column="2"
                                 Classes="Subtitle RowValue"
                                 Text="{Binding PingMethodText}" />
-                            <PathIcon
-                                Grid.Column="3"
-                                Classes="Chevron"
-                                Data="{StaticResource Geo.Set.Chevron}" />
                         </Grid>
                     </Border>
 
@@ -360,42 +417,58 @@
                                     TextWrapping="Wrap" />
                             </StackPanel>
                             <PathIcon
+                                x:Name="LocalProxyChevron"
                                 Grid.Column="3"
                                 Classes="Chevron"
-                                Data="{StaticResource Geo.Set.Chevron}" />
+                                Data="{StaticResource Geo.Set.Chevron}"
+                                RenderTransformOrigin="0.5,0.5" />
                         </Grid>
                     </Border>
 
-                    <Border Classes="SettingDivider" />
-
-                    <!--  Always-on VPN и блокировка → chevron  -->
-                    <Border x:Name="RowAlwaysOn" Classes="SettingRow">
-                        <Grid ColumnDefinitions="Auto,*,Auto,Auto">
-                            <Border
-                                Grid.Column="0"
-                                Classes="Tile Blue"
-                                VerticalAlignment="Center">
-                                <PathIcon
-                                    Classes="Glyph"
-                                    Data="{StaticResource Geo.Set.Shield}"
-                                    Foreground="{DynamicResource Brush.Accent}" />
-                            </Border>
-                            <StackPanel
-                                Grid.Column="1"
-                                Margin="16,0,8,0"
-                                VerticalAlignment="Center">
-                                <TextBlock Classes="Body" Text="Always-on VPN и блокировка" />
-                                <TextBlock
-                                    Margin="0,4,0,0"
-                                    Classes="Subtitle"
-                                    Text="Постоянное подключение и блокировка без VPN"
-                                    TextWrapping="Wrap" />
+                    <!--  Инлайн-суб-поверхность локального прокси: реальные поля Inbound[0]
+                          (порт + SOCKS5-авторизация). Раскрывается по тапу строки; коммит на
+                          потере фокуса / при сворачивании. Адрес фиксирован 127.0.0.1.  -->
+                    <Border
+                        x:Name="LocalProxyPanel"
+                        Padding="16,4,16,16"
+                        Background="Transparent"
+                        IsVisible="False">
+                        <StackPanel Spacing="12">
+                            <StackPanel Spacing="6">
+                                <TextBlock Classes="Subtitle" Text="Порт" />
+                                <TextBox
+                                    x:Name="ProxyPortBox"
+                                    MaxLength="5"
+                                    Text="{Binding LocalPortText, Mode=TwoWay}"
+                                    Theme="{StaticResource TextBox.IncyField}" />
                             </StackPanel>
-                            <PathIcon
-                                Grid.Column="3"
-                                Classes="Chevron"
-                                Data="{StaticResource Geo.Set.Chevron}" />
-                        </Grid>
+                            <TextBlock
+                                Margin="0,4,0,0"
+                                Classes="Subtitle"
+                                Foreground="{DynamicResource Brush.OnSurface}"
+                                Text="SOCKS5-авторизация" />
+                            <StackPanel Spacing="6">
+                                <TextBlock Classes="Subtitle" Text="Логин" />
+                                <TextBox
+                                    x:Name="ProxyUserBox"
+                                    Text="{Binding ProxyUser, Mode=TwoWay}"
+                                    Theme="{StaticResource TextBox.IncyField}"
+                                    Watermark="Не задан" />
+                            </StackPanel>
+                            <StackPanel Spacing="6">
+                                <TextBlock Classes="Subtitle" Text="Пароль" />
+                                <TextBox
+                                    x:Name="ProxyPassBox"
+                                    PasswordChar="●"
+                                    Text="{Binding ProxyPass, Mode=TwoWay}"
+                                    Theme="{StaticResource TextBox.IncyField}"
+                                    Watermark="Не задан" />
+                            </StackPanel>
+                            <TextBlock
+                                Classes="Subtitle"
+                                Text="Адрес: 127.0.0.1. Пустые логин и пароль отключают SOCKS5-авторизацию."
+                                TextWrapping="Wrap" />
+                        </StackPanel>
                     </Border>
 
                 </StackPanel>
@@ -575,9 +648,10 @@
                 Padding="0">
                 <StackPanel>
 
-                    <!--  Оформление → Тёмная  -->
-                    <Border x:Name="RowAppearance" Classes="SettingRow">
-                        <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                    <!--  Оформление → Тёмная. Incy — тёмный бренд (один синий акцент); светлой темы
+                          в оформлении нет, поэтому строка показывает значение, без шеврона/hover.  -->
+                    <Border x:Name="RowAppearance" Classes="SettingRow Readonly">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
                             <Border
                                 Grid.Column="0"
                                 Classes="Tile Purple"
@@ -598,10 +672,6 @@
                                 Grid.Column="2"
                                 Classes="Subtitle RowValue"
                                 Text="{Binding AppearanceText}" />
-                            <PathIcon
-                                Grid.Column="3"
-                                Classes="Chevron"
-                                Data="{StaticResource Geo.Set.Chevron}" />
                         </Grid>
                     </Border>
 
@@ -659,7 +729,7 @@
                                 <TextBlock
                                     Margin="0,4,0,0"
                                     Classes="Subtitle"
-                                    Text="Подключаться после перезагрузки устройства"
+                                    Text="Открывать departament при входе в систему"
                                     TextWrapping="Wrap" />
                             </StackPanel>
                             <ToggleSwitch
@@ -743,9 +813,9 @@
 
                     <Border Classes="SettingDivider" />
 
-                    <!--  Файлы ресурсов → chevron  -->
-                    <Border x:Name="RowAssets" Classes="SettingRow">
-                        <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                    <!--  Файлы ресурсов → экран на ПК ещё не построен → «Скоро», без действия  -->
+                    <Border x:Name="RowAssets" Classes="SettingRow Readonly Soon">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
                             <Border
                                 Grid.Column="0"
                                 Classes="Tile Green"
@@ -761,18 +831,18 @@
                                 VerticalAlignment="Center"
                                 Classes="Body"
                                 Text="Файлы ресурсов" />
-                            <PathIcon
-                                Grid.Column="3"
-                                Classes="Chevron"
-                                Data="{StaticResource Geo.Set.Chevron}" />
+                            <TextBlock
+                                Grid.Column="2"
+                                Classes="Subtitle SoonBadge"
+                                Text="Скоро" />
                         </Grid>
                     </Border>
 
                     <Border Classes="SettingDivider" />
 
-                    <!--  Настройки провайдеров → chevron  -->
-                    <Border x:Name="RowProvider" Classes="SettingRow">
-                        <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                    <!--  Настройки провайдеров → экран на ПК ещё не построен → «Скоро», без действия  -->
+                    <Border x:Name="RowProvider" Classes="SettingRow Readonly Soon">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
                             <Border
                                 Grid.Column="0"
                                 Classes="Tile Orange"
@@ -793,10 +863,10 @@
                                     Text="Автообновление, HWID, User-Agent"
                                     TextWrapping="Wrap" />
                             </StackPanel>
-                            <PathIcon
-                                Grid.Column="3"
-                                Classes="Chevron"
-                                Data="{StaticResource Geo.Set.Chevron}" />
+                            <TextBlock
+                                Grid.Column="2"
+                                Classes="Subtitle SoonBadge"
+                                Text="Скоро" />
                         </Grid>
                     </Border>
 
@@ -813,9 +883,9 @@
                 Padding="0">
                 <StackPanel>
 
-                    <!--  О приложении → версия  -->
-                    <Border x:Name="RowAbout" Classes="SettingRow">
-                        <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                    <!--  О приложении → версия. Значение, без шеврона/hover (некуда вести).  -->
+                    <Border x:Name="RowAbout" Classes="SettingRow Readonly">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
                             <Border
                                 Grid.Column="0"
                                 Classes="Tile Blue"
@@ -836,18 +906,14 @@
                                 Grid.Column="2"
                                 Classes="Subtitle RowValue"
                                 Text="{Binding AboutText}" />
-                            <PathIcon
-                                Grid.Column="3"
-                                Classes="Chevron"
-                                Data="{StaticResource Geo.Set.Chevron}" />
                         </Grid>
                     </Border>
 
                     <Border Classes="SettingDivider" />
 
-                    <!--  Резервное копирование → chevron  -->
-                    <Border x:Name="RowBackup" Classes="SettingRow">
-                        <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                    <!--  Резервное копирование → экран на ПК ещё не построен → «Скоро», без действия  -->
+                    <Border x:Name="RowBackup" Classes="SettingRow Readonly Soon">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
                             <Border
                                 Grid.Column="0"
                                 Classes="Tile Green"
@@ -863,18 +929,18 @@
                                 VerticalAlignment="Center"
                                 Classes="Body"
                                 Text="Резервное копирование" />
-                            <PathIcon
-                                Grid.Column="3"
-                                Classes="Chevron"
-                                Data="{StaticResource Geo.Set.Chevron}" />
+                            <TextBlock
+                                Grid.Column="2"
+                                Classes="Subtitle SoonBadge"
+                                Text="Скоро" />
                         </Grid>
                     </Border>
 
                     <Border Classes="SettingDivider" />
 
-                    <!--  Схемы URL-адресов → chevron  -->
-                    <Border x:Name="RowUrlScheme" Classes="SettingRow">
-                        <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                    <!--  Схемы URL-адресов → обработчик на ПК ещё не построен → «Скоро», без действия  -->
+                    <Border x:Name="RowUrlScheme" Classes="SettingRow Readonly Soon">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
                             <Border
                                 Grid.Column="0"
                                 Classes="Tile Purple"
@@ -895,10 +961,10 @@
                                     Text="Быстрые команды depv://"
                                     TextWrapping="Wrap" />
                             </StackPanel>
-                            <PathIcon
-                                Grid.Column="3"
-                                Classes="Chevron"
-                                Data="{StaticResource Geo.Set.Chevron}" />
+                            <TextBlock
+                                Grid.Column="2"
+                                Classes="Subtitle SoonBadge"
+                                Text="Скоро" />
                         </Grid>
                     </Border>
 

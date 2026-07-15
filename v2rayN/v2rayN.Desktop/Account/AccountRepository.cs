@@ -20,7 +20,7 @@ public sealed class AccountRepository
     public AccountRepository(IDepartamentApiClient? api = null, SubscriptionSyncManager? subs = null)
     {
         _api = api ?? new DepartamentApiClient();
-        _subs = subs ?? new SubscriptionSyncManager();
+        _subs = subs ?? new SubscriptionSyncManager(_api);
     }
 
     /// <summary>
@@ -85,12 +85,12 @@ public sealed class AccountRepository
 
     public Task<ApiResult<SubscriptionAllDto>> LoadSubscriptions() => Guard(() => _api.GetSubscriptionAll());
 
-    /// <summary>Fetches all subscriptions and imports them into the local plumbing; returns local guids.</summary>
-    public Task<ApiResult<List<string>>> AutoImportSubscriptions() => Guard(async () =>
-    {
-        var all = await _api.GetSubscriptionAll();
-        return await _subs.ImportAll(all.Items);
-    });
+    /// <summary>
+    /// Fetches the account's subscriptions and imports them into the local plumbing; returns local
+    /// guids. The GET + URL resolution lives in <see cref="SubscriptionSyncManager.ImportAll"/> because
+    /// the real connect URL comes from the PRIMARY summary, not the /all items.
+    /// </summary>
+    public Task<ApiResult<List<string>>> AutoImportSubscriptions() => Guard(() => _subs.ImportAll());
 
     public Task<ApiResult<bool>> RenameSubscription(string scope, string id, string name) =>
         Guard(async () => { await _api.RenameSubscription(scope, id, name); return true; });
