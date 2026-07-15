@@ -1,0 +1,24 @@
+<UserControl
+    x:Class="v2rayN.Desktop.Views.SettingsView"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Grid Background="{DynamicResource Brush.Bg}">
+        <StackPanel
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center"
+            Spacing="8">
+            <TextBlock
+                HorizontalAlignment="Center"
+                Classes="Headline"
+                Text="Настройки" />
+            <TextBlock
+                HorizontalAlignment="Center"
+                Classes="Subtitle"
+                Text="Секции, строки и iOS-тумблеры появятся на этапе 1." />
+        </StackPanel>
+    </Grid>
+</UserControl>

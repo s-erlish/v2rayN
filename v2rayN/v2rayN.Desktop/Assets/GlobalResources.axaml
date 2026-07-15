@@ -98,4 +98,112 @@
     <!--  Motion-длительности задаются литералами в Transitions (0:0:0.09 и т.д.),
           соответствуют motion.xml Android. Ресурс-токены длительностей появятся
           в фазе анимаций (через sys:TimeSpan).  -->
+
+    <!-- ==================================================================== -->
+    <!--  НЕДОСТАЮЩИЕ токены мастер-плана §2.4 (добавлено фазой 0 / агент A)     -->
+    <!-- ==================================================================== -->
+
+    <!--  Текст на контейнере акцента (чип протокола, тариф-бейдж, аватар)  -->
+    <Color x:Key="Color.OnAccentContainer">#CFE0FF</Color>
+    <SolidColorBrush x:Key="Brush.OnAccentContainer" Color="{StaticResource Color.OnAccentContainer}" />
+
+    <!--  Цветные плитки иконок (настройки/аккаунт): фон 20% + сплошной глиф.
+          blue/green/purple/red/yellow/neutral. purple≡blue, глиф blue/green/purple/red/neutral
+          уже покрыты Accent/Green/Red/OnSurfaceVariant.  -->
+    <SolidColorBrush x:Key="Brush.Tile.Orange" Color="#FB923C" Opacity="0.20" />
+    <SolidColorBrush x:Key="Brush.Tile.Purple" Color="#4C8DFF" Opacity="0.20" />
+    <SolidColorBrush x:Key="Brush.Tile.Red" Color="#F04452" Opacity="0.20" />
+    <SolidColorBrush x:Key="Brush.Tile.Yellow" Color="#EAB308" Opacity="0.20" />
+    <SolidColorBrush x:Key="Brush.Icon.Orange" Color="#FB923C" />
+    <SolidColorBrush x:Key="Brush.Icon.Yellow" Color="#EAB308" />
+
+    <!--  Декоративный радиальный фон Главной (bg_home_gradient, night):
+          центр (0.5,0.30), радиус ~0.75 отн., #1B2D50 → #0E141F → #0A0B0D.  -->
+    <RadialGradientBrush x:Key="Brush.HomeGradient"
+                         Center="50%,30%"
+                         GradientOrigin="50%,30%"
+                         RadiusX="75%"
+                         RadiusY="75%">
+        <GradientStop Offset="0" Color="#1B2D50" />
+        <GradientStop Offset="0.55" Color="#0E141F" />
+        <GradientStop Offset="1" Color="#0A0B0D" />
+    </RadialGradientBrush>
+
+    <!--  Halo connect-щита (bg_connect_glow, night): #594C8DFF → #264C8DFF → #004C8DFF.  -->
+    <RadialGradientBrush x:Key="Brush.ConnectGlow"
+                         Center="50%,50%"
+                         GradientOrigin="50%,50%"
+                         RadiusX="50%"
+                         RadiusY="50%">
+        <GradientStop Offset="0" Color="#594C8DFF" />
+        <GradientStop Offset="0.5" Color="#264C8DFF" />
+        <GradientStop Offset="1" Color="#004C8DFF" />
+    </RadialGradientBrush>
+
+    <!--  Кольца connect-щита (bg_connect_ring, night): внешнее 1.5px #334C8DFF, внутреннее 2px #804C8DFF.  -->
+    <SolidColorBrush x:Key="Brush.Ring.Outer" Color="#334C8DFF" />
+    <SolidColorBrush x:Key="Brush.Ring.Inner" Color="#804C8DFF" />
+
+    <!--  Дополнительные радиусы  -->
+    <CornerRadius x:Key="Radius.Search">14</CornerRadius>
+    <CornerRadius x:Key="Radius.Traffic">8</CornerRadius>
+
+    <!--  Дополнительные размерные токены (connect-герой + трафик-пилюля)  -->
+    <x:Double x:Key="Size.TrafficPill">160</x:Double>
+    <x:Double x:Key="Size.HeroFrame">230</x:Double>
+    <x:Double x:Key="Size.ConnectDisc">176</x:Double>
+    <x:Double x:Key="Size.ShieldGlyph">80</x:Double>
+    <x:Double x:Key="Size.ConnectArc">212</x:Double>
+
+    <!--  Векторные глифы нав-рейла (порт Android bottom-nav ic_nav_*, Material 24dp, filled)  -->
+    <StreamGeometry x:Key="Geo.Nav.Home">M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z</StreamGeometry>
+    <StreamGeometry x:Key="Geo.Nav.Servers">M20 13H4c-.55 0-1 .45-1 1v6c0 .55.45 1 1 1h16c.55 0 1-.45 1-1v-6c0-.55-.45-1-1-1zM7 19c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zM20 3H4c-.55 0-1 .45-1 1v6c0 .55.45 1 1 1h16c.55 0 1-.45 1-1V4c0-.55-.45-1-1-1zM7 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z</StreamGeometry>
+    <StreamGeometry x:Key="Geo.Nav.Settings">M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z</StreamGeometry>
+    <StreamGeometry x:Key="Geo.Nav.Account">M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z</StreamGeometry>
+    <StreamGeometry x:Key="Geo.Shield">M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3z</StreamGeometry>
+
+    <!-- ====================================================================== -->
+    <!--  iOS-стиль ToggleSwitch (мастер-план §2.4/5.2): трек-пилюля 52×32,        -->
+    <!--  off=SurfaceHighest, on=Accent, белый кнопок, плавный сдвиг 220мс.        -->
+    <!-- ====================================================================== -->
+    <ControlTheme x:Key="ToggleSwitch.iOS" TargetType="ToggleSwitch">
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border x:Name="track"
+                        Width="52"
+                        Height="32"
+                        Background="{DynamicResource Brush.SurfaceHighest}"
+                        CornerRadius="16">
+                    <Border.Transitions>
+                        <Transitions>
+                            <BrushTransition Property="Background" Duration="0:0:0.22" />
+                        </Transitions>
+                    </Border.Transitions>
+                    <!--  PART_MovingKnobs / PART_SwitchKnob — обязательные части ToggleSwitch (AVLN2205).  -->
+                    <Panel x:Name="PART_MovingKnobs" Margin="3">
+                        <Panel x:Name="PART_SwitchKnob"
+                               Width="26"
+                               Height="26"
+                               HorizontalAlignment="Left"
+                               VerticalAlignment="Center">
+                            <Panel.Transitions>
+                                <Transitions>
+                                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.22" />
+                                </Transitions>
+                            </Panel.Transitions>
+                            <Ellipse Width="26" Height="26" Fill="White" />
+                        </Panel>
+                    </Panel>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+        <Style Selector="^:checked /template/ Border#track">
+            <Setter Property="Background" Value="{DynamicResource Brush.Accent}" />
+        </Style>
+        <Style Selector="^:checked /template/ Panel#PART_SwitchKnob">
+            <Setter Property="RenderTransform" Value="translateX(20px)" />
+        </Style>
+    </ControlTheme>
 </ResourceDictionary>

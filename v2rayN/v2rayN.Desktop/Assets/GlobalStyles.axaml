@@ -168,4 +168,198 @@
         <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
 
+    <!-- ==================================================================== -->
+    <!--  departament VPN — недостающие компоненты мастер-плана §2.4 (фаза 0)   -->
+    <!-- ==================================================================== -->
+
+    <!--  Цветные варианты плитки иконки 40 (к базовому Border.Tile + .Blue)  -->
+    <Style Selector="Border.Tile.Orange">
+        <Setter Property="Background" Value="{DynamicResource Brush.Tile.Orange}" />
+    </Style>
+    <Style Selector="Border.Tile.Purple">
+        <Setter Property="Background" Value="{DynamicResource Brush.Tile.Purple}" />
+    </Style>
+    <Style Selector="Border.Tile.Red">
+        <Setter Property="Background" Value="{DynamicResource Brush.Tile.Red}" />
+    </Style>
+    <Style Selector="Border.Tile.Yellow">
+        <Setter Property="Background" Value="{DynamicResource Brush.Tile.Yellow}" />
+    </Style>
+
+    <!--  Бейдж протокола (bg_type_chip): контейнер акцента, radius 12, паддинг 8,2.
+          Текст внутри — класс Chip цвет Accent, значение через .ToUpper() («VLESS»).  -->
+    <Style Selector="Border.ProtocolChip">
+        <Setter Property="Background" Value="{DynamicResource Brush.AccentContainer}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Chip}" />
+        <Setter Property="Padding" Value="8,2" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!--  Строка сервера (bg_server_row): default прозрачная, hover→SurfaceHigh,
+          press scale 0.96, selected = заливка #1F4C8DFF + 1.5px Accent, radius 20.
+          Рамка всегда 1.5px (прозрачная в покое), чтобы выбор не сдвигал раскладку.  -->
+    <Style Selector="Border.ServerRow">
+        <Setter Property="MinHeight" Value="{DynamicResource Size.Row}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Card}" />
+        <Setter Property="Padding" Value="12,8" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="1.5" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" />
+                <BrushTransition Property="Background" Duration="0:0:0.15" />
+                <BrushTransition Property="BorderBrush" Duration="0:0:0.15" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Border.ServerRow:pointerover">
+        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
+    </Style>
+    <Style Selector="Border.ServerRow.pressed">
+        <Setter Property="RenderTransform" Value="scale(0.96)" />
+    </Style>
+    <Style Selector="Border.ServerRow.selected">
+        <Setter Property="Background" Value="#1F4C8DFF" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+    </Style>
+
+    <!--  Поиск-пилюля (bg_search_pill): Surface, radius 14, 1px OutlineVariant.  -->
+    <Style Selector="Border.SearchPill">
+        <Setter Property="Background" Value="{DynamicResource Brush.Surface}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Search}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineVariant}" />
+        <Setter Property="BorderThickness" Value="1" />
+    </Style>
+
+    <!--  Трафик-пилюля: трек SurfaceVariant, высота 16, radius 8 (+ .Fill = заливка Accent).  -->
+    <Style Selector="Border.TrafficPill">
+        <Setter Property="Height" Value="16" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Traffic}" />
+        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceVariant}" />
+        <Setter Property="ClipToBounds" Value="True" />
+    </Style>
+    <Style Selector="Border.TrafficPill.Fill">
+        <Setter Property="Background" Value="{DynamicResource Brush.Accent}" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+    </Style>
+
+    <!--  Аватар (bg_avatar_circle): овал, фон Tile.Blue; инициал — TextBlock цвет Accent.
+          Размер (36/48) задаёт потребитель.  -->
+    <Style Selector="Border.Avatar">
+        <Setter Property="CornerRadius" Value="100" />
+        <Setter Property="Background" Value="{DynamicResource Brush.Tile.Blue}" />
+        <Setter Property="ClipToBounds" Value="True" />
+    </Style>
+
+    <!--  Диск connect-щита (card_connect): 176 круг, SurfaceHigh, press-scale 0.94→1.0.
+          Класс .pressed навешивает потребитель по PointerPressed/Released.  -->
+    <Style Selector="Border.ConnectDisc">
+        <Setter Property="Width" Value="{DynamicResource Size.ConnectDisc}" />
+        <Setter Property="Height" Value="{DynamicResource Size.ConnectDisc}" />
+        <Setter Property="CornerRadius" Value="88" />
+        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.16" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Border.ConnectDisc.pressed">
+        <Setter Property="RenderTransform" Value="scale(0.94)" />
+    </Style>
+
+    <!--  Точки-пейджер карусели: неактивная 6/OutlineVariant, активная 8/Accent.  -->
+    <Style Selector="Ellipse.Dot">
+        <Setter Property="Width" Value="{DynamicResource Dot}" />
+        <Setter Property="Height" Value="{DynamicResource Dot}" />
+        <Setter Property="Fill" Value="{DynamicResource Brush.OutlineVariant}" />
+    </Style>
+    <Style Selector="Ellipse.Dot.active">
+        <Setter Property="Width" Value="{DynamicResource Dot.Active}" />
+        <Setter Property="Height" Value="{DynamicResource Dot.Active}" />
+        <Setter Property="Fill" Value="{DynamicResource Brush.Accent}" />
+    </Style>
+
+    <!-- ==================================================================== -->
+    <!--  Навигационный рейл (замена Android bottom-nav): пункт 76×64, глиф 24 +   -->
+    <!--  подпись 11. Неактив = OnSurfaceVariant/500; актив = Accent/700 + левая    -->
+    <!--  пилюля 3×28. Press scale 0.92. Без ripple/glow.                          -->
+    <!-- ==================================================================== -->
+    <Style Selector="Button.NavRailItem">
+        <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
+        <Setter Property="Width" Value="76" />
+        <Setter Property="Height" Value="64" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Stretch" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <!--  Гасим стандартную заливку кнопки во всех состояниях (нет ripple на нав).  -->
+    <Style Selector="Button.NavRailItem /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.NavRailItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.NavRailItem:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.NavRailItem:pressed">
+        <Setter Property="RenderTransform" Value="scale(0.92)" />
+    </Style>
+    <!--  Глиф/подпись: неактивные  -->
+    <Style Selector="Button.NavRailItem PathIcon">
+        <Setter Property="Width" Value="24" />
+        <Setter Property="Height" Value="24" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Foreground" Duration="0:0:0.2" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button.NavRailItem TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
+        <Setter Property="FontWeight" Value="Medium" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Foreground" Duration="0:0:0.2" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <!--  Левая акцентная пилюля (bg_nav_dot, перенесённая слева): скрыта в покое.  -->
+    <Style Selector="Button.NavRailItem Border.NavPill">
+        <Setter Property="Width" Value="3" />
+        <Setter Property="Height" Value="28" />
+        <Setter Property="CornerRadius" Value="2" />
+        <Setter Property="Background" Value="{DynamicResource Brush.Accent}" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Opacity" Value="0" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <DoubleTransition Property="Opacity" Duration="0:0:0.2" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <!--  Активный пункт  -->
+    <Style Selector="Button.NavRailItem.active PathIcon">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+    </Style>
+    <Style Selector="Button.NavRailItem.active TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+        <Setter Property="FontWeight" Value="Bold" />
+    </Style>
+    <Style Selector="Button.NavRailItem.active Border.NavPill">
+        <Setter Property="Opacity" Value="1" />
+    </Style>
+
 </Styles>

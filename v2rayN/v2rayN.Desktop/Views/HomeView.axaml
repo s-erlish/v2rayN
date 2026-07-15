@@ -1,0 +1,83 @@
+<UserControl
+    x:Class="v2rayN.Desktop.Views.HomeView"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <!--  Фон Главной — радиальный градиент (bg_home_gradient), тянется на всю область.  -->
+    <Border Background="{DynamicResource Brush.HomeGradient}">
+
+        <!--  §1.4 Двухпанельная раскладка: ЛЕВО (440, серверы) | 1px divider | ПРАВО (flex, подключение).
+              Здесь только регионы-заглушки — реальный контент подставит фаза 1.  -->
+        <Grid ColumnDefinitions="440,1,*">
+
+            <!--  ЛЕВАЯ колонка (440, min 380): мета-бар подписки + список серверов.  -->
+            <Grid Grid.Column="0" Margin="16" MinWidth="380">
+                <StackPanel
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    MaxWidth="320"
+                    Spacing="6">
+                    <TextBlock
+                        HorizontalAlignment="Center"
+                        Classes="Title"
+                        Text="Список серверов" />
+                    <TextBlock
+                        HorizontalAlignment="Center"
+                        Classes="Subtitle"
+                        Text="Мета-бар подписки и список серверов появятся здесь."
+                        TextAlignment="Center"
+                        TextWrapping="Wrap" />
+                </StackPanel>
+            </Grid>
+
+            <!--  Вертикальный разделитель 1px  -->
+            <Border Grid.Column="1" Background="{DynamicResource Brush.OutlineVariant}" />
+
+            <!--  ПРАВАЯ колонка (flex): чип аккаунта + стата-строка + connect-щит + подпись.  -->
+            <Grid Grid.Column="2" Margin="16">
+                <StackPanel
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Spacing="16">
+
+                    <!--  Заглушка connect-героя (кольца + диск + щит) — фаза 1 (агент C) заменит.  -->
+                    <Panel Width="{StaticResource Size.HeroFrame}" Height="{StaticResource Size.HeroFrame}">
+                        <Ellipse
+                            Width="{StaticResource Size.ConnectArc}"
+                            Height="{StaticResource Size.ConnectArc}"
+                            Stroke="{DynamicResource Brush.Ring.Outer}"
+                            StrokeThickness="1.5" />
+                        <Ellipse
+                            Width="184"
+                            Height="184"
+                            Stroke="{DynamicResource Brush.Ring.Inner}"
+                            StrokeThickness="2" />
+                        <Border Classes="ConnectDisc" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        <PathIcon
+                            Width="{StaticResource Size.ShieldGlyph}"
+                            Height="{StaticResource Size.ShieldGlyph}"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Data="{StaticResource Geo.Shield}"
+                            Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+                    </Panel>
+
+                    <TextBlock
+                        HorizontalAlignment="Center"
+                        Classes="Title"
+                        Text="Подключение" />
+                    <TextBlock
+                        HorizontalAlignment="Center"
+                        MaxWidth="260"
+                        Classes="Subtitle"
+                        Text="Connect-щит, статистика и подпись сервера появятся здесь."
+                        TextAlignment="Center"
+                        TextWrapping="Wrap" />
+                </StackPanel>
+            </Grid>
+        </Grid>
+    </Border>
+</UserControl>
