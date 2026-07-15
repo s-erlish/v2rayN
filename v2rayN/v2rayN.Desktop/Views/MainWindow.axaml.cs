@@ -54,6 +54,27 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
             case "account": SelectTab(navAccount, _accountView); break;
         }
 
+        // DEV screenshot hook: PREVIEW_VIEW=buy|login|devices|history renders that (still
+        // un-wired) sub-page with design-time data into the content area for capture.
+        var previewView = Environment.GetEnvironmentVariable("PREVIEW_VIEW");
+        if (previewView is not null)
+        {
+            Control? preview = previewView switch
+            {
+                "buy" => new BuyView { DataContext = BuyViewModel.CreateDesign() },
+                "login" => new LoginView { DataContext = AccountViewModel.CreateDesign() },
+                "devices" => new DevicesView { DataContext = DevicesViewModel.CreateDesign() },
+                "history" => new PaymentHistoryView { DataContext = PaymentHistoryViewModel.CreateDesign() },
+                _ => null
+            };
+            if (preview is not null)
+            {
+                onboardingView.IsVisible = false;
+                shellRoot.IsVisible = true;
+                contentHost.Content = preview;
+            }
+        }
+
         // Питаем «Главную» реальным HomeViewModel, как только доступен корневой ViewModel
         // (App присваивает его сразу после Build, до показа окна — DataContext успевает встать
         // раньше активации HomeView). Здесь же биндим индикатор подключения в рейле.
@@ -155,6 +176,8 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
             .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(empty =>
             {
+                // Не трогаем видимость в режиме превью суб-экрана (DEV screenshot hook).
+                if (Environment.GetEnvironmentVariable("PREVIEW_VIEW") is not null) return;
                 onboardingView.IsVisible = empty;
                 shellRoot.IsVisible = !empty;
             });

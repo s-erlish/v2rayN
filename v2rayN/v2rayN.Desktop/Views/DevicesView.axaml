@@ -280,7 +280,7 @@
                                             Padding="0"
                                             VerticalAlignment="Center"
                                             Classes="IconButton"
-                                            Command="{Binding #Root.((vms:DevicesViewModel)DataContext).DeleteCmd}"
+                                            Command="{Binding DataContext.DeleteCmd, ElementName=Root}"
                                             CommandParameter="{Binding Dto}"
                                             ToolTip.Tip="Удалить устройство">
                                             <PathIcon
