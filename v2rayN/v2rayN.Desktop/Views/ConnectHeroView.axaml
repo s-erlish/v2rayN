@@ -17,6 +17,24 @@
           Дизайн: Incy (pure dark + один синий #4C8DFF), ease-out анимации, без bounce.
           =================================================================================  -->
 
+    <UserControl.Resources>
+        <!--  ЛОКАЛЬНО (владение view): заливка диска — тёмный «колодец» под щитом, как в android_home.jpg.
+              Центр чуть светлее края, чтобы диск читался объёмной тёмной кнопкой, а не плоским пятном
+              (замена плоского SurfaceHigh, из-за которого диск выглядел светлым и «кривым»).  -->
+        <RadialGradientBrush
+            x:Key="Disc.Fill"
+            Center="50%,46%"
+            GradientOrigin="50%,46%"
+            RadiusX="62%"
+            RadiusY="62%">
+            <GradientStop Offset="0" Color="#161B24" />
+            <GradientStop Offset="1" Color="#0A0C11" />
+        </RadialGradientBrush>
+        <!--  ЛОКАЛЬНО: промежуточная яркость кольца (между Brush.Ring.Inner #80 и Brush.Ring.Outer #33)
+              для второго концентрического кольца сразу под внешним.  -->
+        <SolidColorBrush x:Key="Disc.Ring.Mid" Color="#554C8DFF" />
+    </UserControl.Resources>
+
     <UserControl.Styles>
         <!--  Connecting-дуга: равномерное (линейное) вращение, только пока класс .spinning.  -->
         <Style Selector="Ellipse.ConnectArc.spinning">
@@ -122,7 +140,7 @@
             <Grid
                 x:Name="StatsRow"
                 Grid.Row="0"
-                Margin="16,10,16,0"
+                Margin="16,12,16,0"
                 ColumnDefinitions="40,*,40">
                 <Grid Grid.Column="1" ColumnDefinitions="*,*,*">
                     <StackPanel
@@ -232,24 +250,26 @@
                         </Ellipse.Transitions>
                     </Ellipse>
 
-                    <!--  (2) внешнее кольцо 1.5 #334C8DFF (на кромке рамки).  -->
+                    <!--  (2) Два концентрических ТОНКИХ кольца у кромки рамки (как в android_home.jpg):
+                          внешнее — самое чёткое синее (Brush.Ring.Inner #80), внутреннее сразу под ним —
+                          чуть тусклее (Disc.Ring.Mid #55). Обе обводки 1.5, зазор 9px, идеально
+                          концентричны (общий центр рамки).  -->
                     <Ellipse
                         x:Name="RingOuter"
                         Width="228"
                         Height="228"
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
-                        Stroke="{DynamicResource Brush.Ring.Outer}"
+                        Stroke="{DynamicResource Brush.Ring.Inner}"
                         StrokeThickness="1.5" />
-                    <!--  (2) внутреннее кольцо (инсет-14) 2 #804C8DFF.  -->
                     <Ellipse
                         x:Name="RingInner"
-                        Width="200"
-                        Height="200"
+                        Width="210"
+                        Height="210"
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
-                        Stroke="{DynamicResource Brush.Ring.Inner}"
-                        StrokeThickness="2" />
+                        Stroke="{StaticResource Disc.Ring.Mid}"
+                        StrokeThickness="1.5" />
 
                     <!--  (3) одноразовый сонар-импульс на подтверждение connect.  -->
                     <Ellipse
@@ -287,6 +307,7 @@
                         x:Name="ConnectDisc"
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
+                        Background="{StaticResource Disc.Fill}"
                         Classes="ConnectDisc"
                         Cursor="Hand"
                         RenderTransformOrigin="0.5,0.5">
@@ -397,7 +418,7 @@
                             MaxWidth="240"
                             VerticalAlignment="Center"
                             Classes="TitleMedium"
-                            Text="Hybrid (Автовыбор)"
+                            Text=""
                             TextTrimming="CharacterEllipsis" />
                     </StackPanel>
                     <StackPanel
@@ -409,13 +430,13 @@
                                 x:Name="ServerProtocol"
                                 Classes="Chip"
                                 Foreground="{DynamicResource Brush.Accent}"
-                                Text="VLESS" />
+                                Text="" />
                         </Border>
                         <TextBlock
                             x:Name="ServerTransport"
                             VerticalAlignment="Center"
                             Classes="Caption"
-                            Text="TCP · REALITY" />
+                            Text="" />
                     </StackPanel>
                 </StackPanel>
             </StackPanel>

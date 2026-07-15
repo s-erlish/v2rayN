@@ -472,6 +472,10 @@ public class MainWindowViewModel : MyReactiveObject
             await RefreshSubscriptions();
             await RefreshServersDispatcherAsync();
             NoticeManager.Instance.Enqueue(string.Format(ResUI.SuccessfullyImportedServerViaClipboard, ret));
+            // A pasted http(s) URL only creates a SubItem — no servers were fetched yet. Download
+            // them now so ProfileItems populates and onboarding is replaced (Android does this
+            // immediately after import). Never starts the core (OFF-model).
+            await DownloadImportedSubscriptionAsync(stringData);
         }
         else
         {
@@ -522,12 +526,63 @@ public class MainWindowViewModel : MyReactiveObject
                 await RefreshSubscriptions();
                 await RefreshServersDispatcherAsync();
                 NoticeManager.Instance.Enqueue(ResUI.SuccessfullyImportedServerViaScan);
+                // A scanned http(s) URL only creates a SubItem — fetch its servers now (OFF-model:
+                // never starts the core) so the list populates and onboarding is replaced.
+                await DownloadImportedSubscriptionAsync(result);
             }
             else
             {
                 NoticeManager.Instance.Enqueue(ResUI.OperationFailed);
             }
         }
+    }
+
+    /// <summary>
+    /// When freshly-imported clipboard/QR content contains an http(s) subscription URL, download its
+    /// servers right away (the import step only created a SubItem). This mirrors Android, which
+    /// downloads immediately after import so the first-run onboarding flow does not dead-lock with an
+    /// empty server list. OFF-model contract: this path NEVER starts the core — the dedicated
+    /// log-only handler refreshes the list/meta without a Reload(), unlike the scheduled-update path.
+    /// </summary>
+    private async Task DownloadImportedSubscriptionAsync(string? importedData)
+    {
+        if (!ContainsSubscriptionUrl(importedData))
+        {
+            return;
+        }
+
+        NoticeManager.Instance.Enqueue(ResUI.MsgUpdateSubscriptionStart);
+
+        var beforeCount = ProfilesViewModel.ProfileItems.Count;
+        await Task.Run(async () => await SubscriptionHandler.UpdateProcess(_config, "", false, SubscriptionImportLogHandler));
+
+        await RefreshSubscriptions();
+        await RefreshServersDispatcherAsync();
+
+        var added = ProfilesViewModel.ProfileItems.Count - beforeCount;
+        NoticeManager.Instance.Enqueue(added > 0 ? ResUI.MsgUpdateSubscriptionEnd : ResUI.MsgFailedImportSubscription);
+    }
+
+    private static bool ContainsSubscriptionUrl(string? data)
+    {
+        if (data.IsNullOrEmpty())
+        {
+            return false;
+        }
+        return data.Split('\n', '\r')
+            .Any(line => line.Trim().StartsWith(Global.HttpsProtocol) || line.Trim().StartsWith(Global.HttpProtocol));
+    }
+
+    /// <summary>
+    /// Log-only completion handler for an import-triggered subscription download. Routes engine
+    /// progress to the message panel (no toast spam) exactly like <c>UpdateTaskHandler</c>, but
+    /// deliberately omits its <c>Reload()</c> so importing a subscription on a disconnected app does
+    /// not silently connect it (OFF-model). The list/meta refresh is done by the caller once.
+    /// </summary>
+    private static async Task SubscriptionImportLogHandler(bool success, string msg)
+    {
+        NoticeManager.Instance.SendMessageEx(msg);
+        await Task.CompletedTask;
     }
 
     #endregion Add Servers

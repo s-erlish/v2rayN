@@ -95,11 +95,20 @@ public class CoreManager
         await WaitForProxyPort(preContext);
         await CoreStartPreService(preContext);
 
-        AppManager.Instance.RunningCoreType = preContext?.RunCoreType ?? mainContext.RunCoreType;
-
         if (_processService != null)
         {
+            // Core process actually started — mark the app as running so IsRunningCore()/the connect
+            // shield/tray honestly read "connected".
+            AppManager.Instance.RunningCoreType = preContext?.RunCoreType ?? mainContext.RunCoreType;
             await UpdateFunc(true, $"{node.GetSummary()}");
+        }
+        else
+        {
+            // Core failed to start (RunProcess returned null: wrong exe / blocked / crash). Do NOT
+            // leave RunningCoreType set, or IsRunningCore() would falsely report "connected" with no
+            // core behind it (blue shield + tray + false «Подключено» toast). Reset to the same
+            // sentinel CoreStop uses so connect state reads "idle". LoadCore re-assigns on next start.
+            AppManager.Instance.RunningCoreType = ECoreType.v2rayN;
         }
     }
 

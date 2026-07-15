@@ -222,9 +222,9 @@
                             Text="Войдите, чтобы увидеть подписку, устройства и историю платежей."
                             TextWrapping="Wrap" />
                         <Button
+                            x:Name="LoginCtaButton"
                             HorizontalAlignment="Left"
-                            Classes="Primary"
-                            Command="{Binding LoginTelegramCmd}">
+                            Classes="Primary">
                             <StackPanel
                                 Orientation="Horizontal"
                                 Spacing="8"
@@ -387,6 +387,7 @@
 
                     <!--  «Купить подписку» — промо: синий тайл (тренд-вверх) + акцентный текст.  -->
                     <Border
+                        x:Name="BuyRow"
                         Padding="16,8"
                         Classes="Row"
                         CornerRadius="0"
@@ -427,6 +428,7 @@
 
                     <!--  «Устройства» — нейтральный тайл + значение «N / ∞» (tnum).  -->
                     <Border
+                        x:Name="DevicesRow"
                         Padding="16,8"
                         Classes="Row"
                         CornerRadius="0"
@@ -474,6 +476,7 @@
 
                     <!--  «История платежей» — нейтральный тайл + дата последнего платежа.  -->
                     <Border
+                        x:Name="HistoryRow"
                         Padding="16,8"
                         Classes="Row"
                         CornerRadius="0"

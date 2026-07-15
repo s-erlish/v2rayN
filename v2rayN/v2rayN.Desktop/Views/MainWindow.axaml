@@ -168,12 +168,10 @@
                     <!--  Шелл: рейл 76 | контент. Скрыт целиком, пока приложение пустое.  -->
                     <Grid x:Name="shellRoot" ColumnDefinitions="76,*" IsVisible="False">
 
-                    <!--  Левый icon-рейл  -->
+                    <!--  Левый icon-рейл: фон = Bg (сливается с окном), без правой границы (DESIGN_PLAN Часть 3).  -->
                     <Border
                         Grid.Column="0"
-                        Background="{DynamicResource Brush.Surface}"
-                        BorderBrush="{DynamicResource Brush.OutlineVariant}"
-                        BorderThickness="0,0,1,0">
+                        Background="{DynamicResource Brush.Bg}">
                         <DockPanel LastChildFill="False">
 
                             <!--  3 вкладки (Главная · Настройки · Аккаунт). Список серверов живёт
@@ -263,6 +261,15 @@
 
                     <!--  Онбординг на всю ширину Row 1 (без рейла/панелей). Виден, пока нет подписок.  -->
                     <views:OnboardingView x:Name="onboardingView" />
+
+                    <!--  ==================== Хост суб-страниц (Buy/Login/Devices/History) ====================
+                          Поверх контента И онбординга: суб-вью — полноэкранные, каждая со своим бесшовным
+                          back-тулбаром (Brush.Bg фон полностью перекрывает низлежащее). Стек «назад» ведёт
+                          MainWindow.PushSubPage/PopSubPage; скрыт, пока стек пуст.  -->
+                    <ContentControl
+                        x:Name="subPageHost"
+                        Background="{DynamicResource Brush.Bg}"
+                        IsVisible="False" />
                 </Panel>
             </Grid>
 

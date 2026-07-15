@@ -82,6 +82,14 @@ public partial class HomeView : ReactiveUserControl<HomeViewModel>
                     .ObserveOn(RxSchedulers.MainThreadScheduler)
                     .Subscribe(_ => ApplyServerInfo(vm))
                     .DisposeWith(disposables);
+
+                // The active row is flagged during a list rebuild (IsActive), which may not move
+                // SelectedProfile — re-resolve identity whenever the collection itself changes.
+                void OnItemsChanged(object? s, System.Collections.Specialized.NotifyCollectionChangedEventArgs e) =>
+                    Dispatcher.UIThread.Post(() => ApplyServerInfo(vm));
+                vm.Profiles.ProfileItems.CollectionChanged += OnItemsChanged;
+                Disposable.Create(() => vm.Profiles.ProfileItems.CollectionChanged -= OnItemsChanged)
+                    .DisposeWith(disposables);
             }
 
             ConnectHero.ShowEmptyState(vm.IsEmpty);
@@ -109,7 +117,10 @@ public partial class HomeView : ReactiveUserControl<HomeViewModel>
 
     private void ApplyServerInfo(HomeViewModel vm)
     {
-        var p = vm.Profiles?.SelectedProfile;
+        // Follow the ACTIVE / default server (the row that will actually connect), not the first
+        // list row. The engine marks it IsActive (IndexId == _config.IndexId); fall back to the
+        // config's IndexId, then to the selected row. Data-driven — read-only over ProfileItems.
+        var p = ResolveActiveProfile(vm);
         if (p is null || p.IndexId.IsNullOrEmpty())
         {
             return;
@@ -117,9 +128,38 @@ public partial class HomeView : ReactiveUserControl<HomeViewModel>
 
         var flag = _flag.Convert(p.Remarks, typeof(IImage), null, CultureInfo.CurrentCulture) as IImage;
         ConnectHero.SetServerInfo(
-            p.Remarks ?? string.Empty,
+            // Strip the leading flag emoji — the flag renders in its own tile, and Windows draws
+            // emoji flags as tofu boxes otherwise.
+            FlagResolver.StripLeadingFlag(p.Remarks) ?? string.Empty,
             ProfileDisplay.Protocol(p.ConfigType),
-            ProfileDisplay.Transport(p),
+            ProfileDisplay.Transport(p.Network, p.StreamSecurity),
             flag);
+    }
+
+    private static ProfileItemModel? ResolveActiveProfile(HomeViewModel vm)
+    {
+        var items = vm.Profiles?.ProfileItems;
+        if (items is null || items.Count == 0)
+        {
+            return vm.Profiles?.SelectedProfile;
+        }
+
+        var active = items.FirstOrDefault(t => t.IsActive);
+        if (active is not null)
+        {
+            return active;
+        }
+
+        var indexId = AppManager.Instance.Config?.IndexId;
+        if (indexId.IsNotEmpty())
+        {
+            var match = items.FirstOrDefault(t => t.IndexId == indexId);
+            if (match is not null)
+            {
+                return match;
+            }
+        }
+
+        return vm.Profiles?.SelectedProfile;
     }
 }

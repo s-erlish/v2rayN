@@ -17,9 +17,19 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     // в её левой колонке — отдельной вкладки «Сервера» в рейле нет.
     private readonly Control _homeView = new HomeView();
     private readonly Control _settingsView = new SettingsView();
-    private readonly Control _accountView = new AccountView();
+    private readonly AccountView _accountView = new AccountView();
     private readonly Button[] _navButtons;
     private HomeViewModel? _homeViewModel;
+
+    // ОДИН экземпляр AccountViewModel на всё приложение: делится между вкладкой «Аккаунт»
+    // (AccountView) и суб-страницей «Вход» (LoginView), поэтому состояние входа распространяется
+    // на оба (P0-8). Ctor VM безопасен на этапе инициализации полей (без AppManager).
+    private readonly AccountViewModel _accountVm =
+        Design.IsDesignMode ? AccountViewModel.CreateDesign() : new AccountViewModel();
+
+    // Стек открытых суб-страниц (Buy/Login/Devices/History) в хосте subPageHost. Back снимает
+    // верхнюю; когда стек пуст — хост скрыт и снова видна вкладка/онбординг под ним.
+    private readonly List<Control> _subStack = new();
 
     // Индикатор подключения в рейле: серый (idle) ↔ синий (connected).
     private static readonly IBrush _dotOff = new SolidColorBrush(Color.Parse("#9BA1AD"));
@@ -47,6 +57,21 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         navSettings.Click += (_, _) => SelectTab(navSettings, _settingsView);
         navAccount.Click += (_, _) => SelectTab(navAccount, _accountView);
         SelectTab(navHome, _homeView);
+
+        // Общий AccountViewModel на вкладку «Аккаунт» (в рантайме DataContext ставит MainWindow,
+        // не сама вью — тот же экземпляр уедет в LoginView). «Управление»-строки и CTA входа
+        // поднимают события — здесь они превращаются в открытие суб-страниц.
+        _accountView.DataContext = _accountVm;
+        _accountView.BuyRequested += (_, _) => OpenBuy();
+        _accountView.DevicesRequested += (_, _) => OpenDevices();
+        _accountView.HistoryRequested += (_, _) => OpenHistory();
+        _accountView.LoginRequested += (_, _) => OpenLogin();
+
+        // P1-3: вкладка «Аккаунт» в рейле видна только когда пользователь вошёл. Начальное
+        // значение приходит сразу (WhenAnyValue выдаёт текущее), далее следит за входом/выходом.
+        _accountVm.WhenAnyValue(x => x.IsLoggedIn)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .Subscribe(UpdateAccountTabVisibility);
         // DEV screenshot hook: INITIAL_TAB=settings|account opens that tab on launch.
         switch (Environment.GetEnvironmentVariable("INITIAL_TAB"))
         {
@@ -166,9 +191,10 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         _homeView.DataContext = _homeViewModel;
         onboardingView.DataContext = _homeViewModel;
 
-        _homeViewModel.WhenAnyValue(x => x.IsConnected)
+        // Индикатор рейла: серый в покое, синий при подключении И в процессе подключения (P1-3).
+        _homeViewModel.WhenAnyValue(x => x.IsConnected, x => x.IsConnecting, (connected, connecting) => connected || connecting)
             .ObserveOn(RxSchedulers.MainThreadScheduler)
-            .Subscribe(connected => railStatusDot.Fill = connected ? _dotOn : _dotOff);
+            .Subscribe(active => railStatusDot.Fill = active ? _dotOn : _dotOff);
 
         // Пустой старт (нет подписок): показываем ТОЛЬКО онбординг на всю ширину под chrome —
         // рейл и контент скрыты. После добавления подписки (IsEmpty=false) — обычный шелл.
@@ -183,9 +209,82 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
             });
     }
 
-    // Онбординг «Войти через Telegram/сайт» пока ведёт на вкладку «Аккаунт»; реальный вход
-    // подключит агент AccountViewModel (Ф-D6/D7).
-    public void SelectAccountTab() => SelectTab(navAccount, _accountView);
+    // P1-3: вкладка «Аккаунт» видна только для вошедших. Если её скрыли, пока она была активной
+    // (выход из аккаунта), возвращаемся на «Главную».
+    private void UpdateAccountTabVisibility(bool loggedIn)
+    {
+        navAccount.IsVisible = loggedIn;
+        if (!loggedIn && navAccount.Classes.Contains("active"))
+        {
+            SelectTab(navHome, _homeView);
+        }
+    }
+
+    #region Sub-page host (Buy / Login / Devices / History)
+
+    // Кладёт суб-страницу поверх контента/онбординга и показывает хост.
+    private void PushSubPage(Control view)
+    {
+        _subStack.Add(view);
+        subPageHost.Content = view;
+        subPageHost.IsVisible = true;
+    }
+
+    // Снимает верхнюю суб-страницу: показываем предыдущую из стека либо прячем хост целиком
+    // (тогда снова виден шелл-контент или онбординг, смотря по IsEmpty).
+    private void PopSubPage()
+    {
+        if (_subStack.Count > 0)
+        {
+            _subStack.RemoveAt(_subStack.Count - 1);
+        }
+        if (_subStack.Count > 0)
+        {
+            subPageHost.Content = _subStack[^1];
+        }
+        else
+        {
+            subPageHost.Content = null;
+            subPageHost.IsVisible = false;
+        }
+    }
+
+    // «Купить подписку»: BuyView со своим BuyViewModel (грузит каталог в ctor).
+    public void OpenBuy()
+    {
+        var view = new BuyView();
+        view.BackRequested += (_, _) => PopSubPage();
+        PushSubPage(view);
+    }
+
+    // «Устройства»: DevicesView со своим DevicesViewModel (uuid активной подписки резолвит сам
+    // из вошедшего профиля; список грузится в ctor).
+    public void OpenDevices()
+    {
+        var view = new DevicesView();
+        view.BackRequested += (_, _) => PopSubPage();
+        PushSubPage(view);
+    }
+
+    // «История платежей»: PaymentHistoryView; пустой CTA «Купить подписку» ведёт на Buy поверх.
+    public void OpenHistory()
+    {
+        var view = new PaymentHistoryView();
+        view.BackRequested += (_, _) => PopSubPage();
+        view.BuyRequested += (_, _) => OpenBuy();
+        PushSubPage(view);
+    }
+
+    // «Вход»: LoginView на ОБЩЕМ AccountViewModel — состояние входа видит и вкладка «Аккаунт».
+    // BackRequested поднимается и по кнопке «назад», и по успешному входу (закрывает суб-страницу).
+    public void OpenLogin()
+    {
+        var view = new LoginView { DataContext = _accountVm };
+        view.BackRequested += (_, _) => PopSubPage();
+        PushSubPage(view);
+    }
+
+    #endregion Sub-page host
 
     private void TitleBar_PointerPressed(object? sender, PointerPressedEventArgs e)
     {

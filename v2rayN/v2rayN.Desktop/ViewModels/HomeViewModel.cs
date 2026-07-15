@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using ServiceLib.Handler.SysProxy;
 
 namespace v2rayN.Desktop.ViewModels;
 
@@ -130,6 +131,17 @@ public class HomeViewModel : MyReactiveObject
         BeginConnecting();
         // Reload builds the config and starts the core with the current default server.
         await _main.Reload();
+
+        // Truthful failure: Reload has fully awaited the core start, so if the core is not actually
+        // running the attempt failed (wrong exe / bad config / blocked). Do NOT leave the shield
+        // spinning up to 12s and never read as connected — clear the connecting state now and
+        // surface the failure. Verbatim Android string (values-ru/strings.xml toast_status_failed).
+        if (!IsCoreRunning())
+        {
+            IsConnecting = false;
+            _connectingUntil = null;
+            AppEvents.SendSnackMsgRequested.Publish("Не удалось подключиться");
+        }
         SyncState();
     }
 
@@ -138,6 +150,10 @@ public class HomeViewModel : MyReactiveObject
         IsConnecting = false;
         _connectingUntil = null;
         await CoreManager.Instance.CoreStop();
+        // Clear the Windows system proxy so the user keeps internet after disconnecting. Without
+        // this the OS keeps routing through the now-dead 127.0.0.1:port and every browser breaks
+        // until reconnect/reboot. forceDisable=true mirrors AppManager.AppExitAsync.
+        await SysProxyHandler.UpdateSysProxy(_config, true);
         _connectedSince = null;
         SyncState();
     }

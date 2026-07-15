@@ -116,8 +116,9 @@ public partial class ConnectHeroView : UserControl
 
         Loaded += OnFirstLoaded;
 
-        //  Дизайн-тайм / первый рендер: idle с выбранным сервером (образец идентичности виден).
-        SetConnectState(ConnectVisualState.Idle, hasServer: true, animate: false);
+        //  Первый рендер: idle БЕЗ сервера — идентичность скрыта, пока HomeView не подставит
+        //  реальный активный сервер (data-driven: никаких плейсхолдеров в рантайме).
+        SetConnectState(ConnectVisualState.Idle, hasServer: false, animate: false);
     }
 
     /// <summary>

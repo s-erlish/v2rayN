@@ -2,6 +2,7 @@
     x:Class="v2rayN.Desktop.Views.ServerListView"
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:conv="clr-namespace:v2rayN.Desktop.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:dd="clr-namespace:v2rayN.Desktop.DesignData"
     xmlns:local="clr-namespace:v2rayN.Desktop.Views"
@@ -37,6 +38,8 @@
         <local:StripLeadingFlagConverter x:Key="StripLeadingFlag" />
         <!--  Ping value shows only once a latency test produced a result (non-empty DelayVal).  -->
         <local:NotEmptyConverter x:Key="NotEmpty" />
+        <!--  Ping value color by latency: green (good) / red (timeout·bad) — Android signal, not grey.  -->
+        <conv:DelayColorConverter x:Key="DelayColor" />
     </UserControl.Resources>
 
     <UserControl.Styles>
@@ -67,7 +70,7 @@
               selected row so the blue pill reads cleanly.  -->
         <Style Selector="Border.rowDivider">
             <Setter Property="Height" Value="1" />
-            <Setter Property="Margin" Value="64,0,16,0" />
+            <Setter Property="Margin" Value="72,0,16,0" />
             <Setter Property="Background" Value="{DynamicResource Brush.OutlineVariant}" />
         </Style>
 
@@ -171,11 +174,13 @@
                 </StackPanel>
             </Grid>
 
-            <!--  Subtitle «N серверов · M провайдеров» — recomputed from the real collections.  -->
+            <!--  Subtitle «N серверов · M провайдеров» — recomputed from the real collections in
+                  code-behind with correct RU pluralization (1 сервер / 2 сервера / 5 серверов).  -->
             <TextBlock
+                x:Name="SubtitleText"
                 Margin="0,4,0,0"
                 Classes="Subtitle"
-                Text="{Binding Subtitle}" />
+                Text="" />
 
             <!--  Search pill (bg_search_pill): filter glyph + «Поиск серверов…» → ServerFilter, Enter refreshes.  -->
             <Border
@@ -258,7 +263,7 @@
                                                       scale 0.96, selected = blue pill (#1F4C8DFF + 1.5px Accent, IsActive).
                                                       Tap → SelectServer (default + connect). Right-click → §2.13 actions.  -->
                                                 <Border
-                                                    Margin="16,2"
+                                                    Margin="16,4"
                                                     Classes="ServerRow"
                                                     Classes.selected="{Binding IsActive}"
                                                     ContextRequested="OnRowContextRequested"
@@ -335,7 +340,7 @@
                                                             VerticalAlignment="Center"
                                                             Classes="Numeric"
                                                             FontWeight="Bold"
-                                                            Foreground="{DynamicResource Brush.OnSurfaceVariant}"
+                                                            Foreground="{Binding Delay, Converter={StaticResource DelayColor}}"
                                                             IsVisible="{Binding DelayVal, Converter={StaticResource NotEmpty}}"
                                                             Text="{Binding DelayVal}"
                                                             TextAlignment="Right" />

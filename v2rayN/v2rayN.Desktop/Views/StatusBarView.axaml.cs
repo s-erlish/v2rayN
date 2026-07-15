@@ -156,6 +156,9 @@ public partial class StatusBarView : ReactiveUserControl<StatusBarViewModel>
             ConnState.Connecting => "Подключение…",
             ConnState.Connected => ConnectedMessage(),
             ConnState.Idle when prev == ConnState.Connected => "Отключено",
+            // Connecting → Idle without ever reaching Connected = the core failed to start.
+            // Verbatim Android string (values-ru/strings.xml toast_status_failed).
+            ConnState.Idle when prev == ConnState.Connecting => "Не удалось подключиться",
             _ => null
         };
 

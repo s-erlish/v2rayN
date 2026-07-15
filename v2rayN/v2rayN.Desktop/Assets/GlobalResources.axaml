@@ -147,6 +147,32 @@
     <SolidColorBrush x:Key="Brush.Icon.Orange" Color="#FB923C" />
     <SolidColorBrush x:Key="Brush.Icon.Yellow" Color="#EAB308" />
 
+    <!-- ==================================================================== -->
+    <!--  departament VPN — токены для ПРОДВИНУТЫХ (promoted) компонентов        -->
+    <!--  GlobalStyles: статус-чипы, поля ввода, шит/скрим, тост, опция цены,    -->
+    <!--  деструктив. Значения = Incy 1:1 из локальных копий экранов (Payment    -->
+    <!--  History / Buy / Login / Devices). Промоушен по REVIEW_BACKLOG P1 18.   -->
+    <!-- ==================================================================== -->
+
+    <!--  Заливка выбранного (bg selected: server row / тариф / опция цены):
+          синий акцент @ 12% (#1F = 31/255). Единый токен вместо литерала         -->
+    <SolidColorBrush x:Key="Brush.SelectedFill" Color="#4C8DFF" Opacity="0.12" />
+
+    <!--  Деструктив: базовый Red (#F04452) + затемнённый hover/pressed.          -->
+    <Color x:Key="Color.RedPressed">#D93844</Color>
+    <SolidColorBrush x:Key="Brush.RedPressed" Color="{StaticResource Color.RedPressed}" />
+
+    <!--  Статус чипы истории платежей (PaymentsAdapter): текст = полный цвет,
+          фон = тот же цвет @ 18% (0x2E). Один источник на всё приложение.        -->
+    <SolidColorBrush x:Key="Brush.StatusChip.Green" Color="#22C55E" Opacity="0.18" />
+    <SolidColorBrush x:Key="Brush.StatusChip.Orange" Color="#FB923C" Opacity="0.18" />
+    <SolidColorBrush x:Key="Brush.StatusChip.Red" Color="#F04452" Opacity="0.18" />
+    <SolidColorBrush x:Key="Brush.StatusChip.Yellow" Color="#EAB308" Opacity="0.18" />
+
+    <!--  Скрим модалок/шитов (~60% чёрный) и фон тоста (SurfaceHighest).         -->
+    <SolidColorBrush x:Key="Brush.Scrim" Color="#000000" Opacity="0.6" />
+    <SolidColorBrush x:Key="Brush.Toast.Bg" Color="{StaticResource Color.SurfaceHighest}" />
+
     <!--  Декоративный радиальный фон Главной (bg_home_gradient, night):
           центр (0.5,0.30), радиус ~0.75 отн., #1B2D50 → #0E141F → #0A0B0D.  -->
     <RadialGradientBrush x:Key="Brush.HomeGradient"
@@ -185,12 +211,33 @@
     <x:Double x:Key="Size.ShieldGlyph">80</x:Double>
     <x:Double x:Key="Size.ConnectArc">212</x:Double>
 
+    <!--  Размерные токены §5.3 (promoted компоненты). Все сеточные, без дрейфа.
+          Radius опции/поля = Radius.Search (14); верх шита = Radius.Sheet
+          (24,24,0,0) — отдельные токены не заводим, переиспользуем.              -->
+    <x:Double x:Key="Size.IconButton">40</x:Double>
+    <x:Double x:Key="Size.SubToolbar">56</x:Double>
+    <x:Double x:Key="Size.CtaTall">52</x:Double>
+    <x:Double x:Key="Size.SegmentChip">44</x:Double>
+    <x:Double x:Key="Size.EmptyIcon">64</x:Double>
+    <x:Double x:Key="Size.EmptyGlyph">32</x:Double>
+    <x:Double x:Key="Size.FlagTile">28</x:Double>
+    <x:Double x:Key="Size.AvatarChip">36</x:Double>
+    <x:Double x:Key="Size.AvatarAcc">48</x:Double>
+    <x:Double x:Key="Size.AvatarBadge">18</x:Double>
+    <x:Double x:Key="Size.SheetHandleW">36</x:Double>
+    <x:Double x:Key="Size.SheetHandleH">4</x:Double>
+    <x:Double x:Key="Size.SkeletonCard">76</x:Double>
+
     <!--  Векторные глифы нав-рейла (порт Android bottom-nav ic_nav_*, Material 24dp, filled)  -->
     <StreamGeometry x:Key="Geo.Nav.Home">M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z</StreamGeometry>
     <StreamGeometry x:Key="Geo.Nav.Servers">M20 13H4c-.55 0-1 .45-1 1v6c0 .55.45 1 1 1h16c.55 0 1-.45 1-1v-6c0-.55-.45-1-1-1zM7 19c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zM20 3H4c-.55 0-1 .45-1 1v6c0 .55.45 1 1 1h16c.55 0 1-.45 1-1V4c0-.55-.45-1-1-1zM7 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z</StreamGeometry>
     <StreamGeometry x:Key="Geo.Nav.Settings">M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z</StreamGeometry>
     <StreamGeometry x:Key="Geo.Nav.Account">M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z</StreamGeometry>
     <StreamGeometry x:Key="Geo.Shield">M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3z</StreamGeometry>
+    <!--  Общие глифы тулбара/строк (Material 24dp): стрелка «назад» + шеврон вправо.
+          Промоушен дублей из Buy/Login/PaymentHistory. Для back-кнопок и строк значений.  -->
+    <StreamGeometry x:Key="Geo.ArrowBack">M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z</StreamGeometry>
+    <StreamGeometry x:Key="Geo.ChevronRight">M8.6,4.6L7.2,6l6,6l-6,6l1.4,1.4L16,12z</StreamGeometry>
 
     <!-- ====================================================================== -->
     <!--  iOS-стиль ToggleSwitch (мастер-план §2.4/5.2): трек-пилюля 52×32,        -->
@@ -234,6 +281,92 @@
         </Style>
         <Style Selector="^:checked /template/ Panel#PART_SwitchKnob">
             <Setter Property="RenderTransform" Value="translateX(20px)" />
+        </Style>
+    </ControlTheme>
+
+    <!-- ====================================================================== -->
+    <!--  Поле ввода Incy (promoted из LoginView, §2.6/5.4). Замена               -->
+    <!--  Widget.Material3.TextInputLayout.OutlinedBox: фон SurfaceVariant,       -->
+    <!--  1px OutlineVariant, радиус 14 (Radius.Search), фокус = рамка Accent,    -->
+    <!--  плейсхолдер OnSurfaceVariant (контраст 6.2:1). Полная ControlTheme,     -->
+    <!--  чтобы тема Semi не перекрашивала pointerover/focus. Применять:          -->
+    <!--  Theme="{StaticResource TextBox.Incy}". InnerRightContent = слот для     -->
+    <!--  password toggle (глаз) / кнопки копирования.                            -->
+    <!-- ====================================================================== -->
+    <ControlTheme x:Key="TextBox.Incy" TargetType="TextBox">
+        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceVariant}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineVariant}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Search}" />
+        <Setter Property="MinHeight" Value="52" />
+        <Setter Property="Padding" Value="16,0" />
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
+        <Setter Property="CaretBrush" Value="{DynamicResource Brush.Accent}" />
+        <Setter Property="SelectionBrush" Value="#334C8DFF" />
+        <Setter Property="SelectionForegroundBrush" Value="{DynamicResource Brush.OnSurface}" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Cursor" Value="IBeam" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border
+                    x:Name="PART_BorderElement"
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="{TemplateBinding CornerRadius}">
+                    <Border.Transitions>
+                        <Transitions>
+                            <BrushTransition Property="BorderBrush" Duration="0:0:0.15" />
+                        </Transitions>
+                    </Border.Transitions>
+                    <Grid ColumnDefinitions="*,Auto" Margin="{TemplateBinding Padding}">
+                        <Panel Grid.Column="0" VerticalAlignment="{TemplateBinding VerticalContentAlignment}">
+                            <TextBlock
+                                x:Name="PART_Watermark"
+                                VerticalAlignment="Center"
+                                Foreground="{DynamicResource Brush.OnSurfaceVariant}"
+                                IsVisible="{TemplateBinding Text, Converter={x:Static StringConverters.IsNullOrEmpty}}"
+                                Text="{TemplateBinding Watermark}"
+                                TextAlignment="{TemplateBinding TextAlignment}"
+                                TextWrapping="NoWrap" />
+                            <ScrollViewer
+                                x:Name="PART_ScrollViewer"
+                                HorizontalScrollBarVisibility="Hidden"
+                                VerticalScrollBarVisibility="Disabled">
+                                <TextPresenter
+                                    x:Name="PART_TextPresenter"
+                                    VerticalAlignment="Center"
+                                    CaretBrush="{TemplateBinding CaretBrush}"
+                                    CaretIndex="{TemplateBinding CaretIndex}"
+                                    LineHeight="{TemplateBinding LineHeight}"
+                                    PasswordChar="{TemplateBinding PasswordChar}"
+                                    RevealPassword="{TemplateBinding RevealPassword}"
+                                    SelectionBrush="{TemplateBinding SelectionBrush}"
+                                    SelectionEnd="{TemplateBinding SelectionEnd}"
+                                    SelectionForegroundBrush="{TemplateBinding SelectionForegroundBrush}"
+                                    SelectionStart="{TemplateBinding SelectionStart}"
+                                    Text="{TemplateBinding Text, Mode=TwoWay}"
+                                    TextAlignment="{TemplateBinding TextAlignment}"
+                                    TextWrapping="{TemplateBinding TextWrapping}" />
+                            </ScrollViewer>
+                        </Panel>
+                        <ContentPresenter
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
+                            Content="{TemplateBinding InnerRightContent}" />
+                    </Grid>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+        <Style Selector="^:pointerover /template/ Border#PART_BorderElement">
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Outline}" />
+        </Style>
+        <Style Selector="^:focus /template/ Border#PART_BorderElement">
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+        </Style>
+        <Style Selector="^:disabled">
+            <Setter Property="Opacity" Value="0.38" />
         </Style>
     </ControlTheme>
 </ResourceDictionary>

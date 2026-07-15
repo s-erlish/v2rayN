@@ -334,7 +334,7 @@
         <Setter Property="RenderTransform" Value="scale(0.96)" />
     </Style>
     <Style Selector="Border.ServerRow.selected">
-        <Setter Property="Background" Value="#1F4C8DFF" />
+        <Setter Property="Background" Value="{DynamicResource Brush.SelectedFill}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
     </Style>
 
@@ -474,6 +474,437 @@
     </Style>
     <Style Selector="Button.NavRailItem.active Border.NavPill">
         <Setter Property="Opacity" Value="1" />
+    </Style>
+
+    <!-- ==================================================================== -->
+    <!--  ОДНА иконочная кнопка Incy (DESIGN_PLAN §0.1, REVIEW_BACKLOG P1 2).     -->
+    <!--                                                                          -->
+    <!--  КАНОНИЧЕСКОЕ РЕШЕНИЕ: Button.IconButton40 = 40×40, прозрачная, круглая,  -->
+    <!--  глиф 22 (в строках 20 через .Row), hover SurfaceHigh, pressed scale     -->
+    <!--  0.92, БЕЗ ripple/glow, БЕЗ рамки. Это единый класс для тулбаров, строк  -->
+    <!--  и мета-действий на ВСЕХ Incy экранах — конец дрейфа 32/36/40.           -->
+    <!--                                                                          -->
+    <!--  Легаси Button.IconButton (32×32, выше) НЕ трогаем: на нём висят старые   -->
+    <!--  geek-экраны v2rayN (AddServer/Profiles/Clash/Option/Backup...). Incy    -->
+    <!--  экраны переходят на IconButton40 в проходе дедупликации.                -->
+    <!-- ==================================================================== -->
+    <Style Selector="Button.IconButton40">
+        <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
+        <Setter Property="Width" Value="{DynamicResource Size.IconButton}" />
+        <Setter Property="Height" Value="{DynamicResource Size.IconButton}" />
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <!--  Гасим Semi-тинт и рисуем Incy hover на ContentPresenter (круг Pill).  -->
+    <Style Selector="Button.IconButton40 /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill}" />
+    </Style>
+    <Style Selector="Button.IconButton40:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
+    </Style>
+    <Style Selector="Button.IconButton40:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
+    </Style>
+    <Style Selector="Button.IconButton40:pressed">
+        <Setter Property="RenderTransform" Value="scale(0.92)" />
+    </Style>
+    <Style Selector="Button.IconButton40:disabled">
+        <Setter Property="Opacity" Value="0.38" />
+    </Style>
+    <!--  Глиф 22 по умолчанию (перекрывает базовый PathIcon 16).  -->
+    <Style Selector="Button.IconButton40 PathIcon">
+        <Setter Property="Width" Value="{DynamicResource Size.Glyph}" />
+        <Setter Property="Height" Value="{DynamicResource Size.Glyph}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
+    </Style>
+    <!--  Вариант «в строке»: глиф 20 (§0.4 «иконки действий в строках 20 22»).  -->
+    <Style Selector="Button.IconButton40.Row PathIcon">
+        <Setter Property="Width" Value="20" />
+        <Setter Property="Height" Value="20" />
+    </Style>
+    <!--  Вариант «акцент»: глиф Accent (активные/выбранные действия).  -->
+    <Style Selector="Button.IconButton40.Accent PathIcon">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+    </Style>
+
+    <!--  Бесшовный тулбар суб-страницы (§5.4 SubScreenToolbar): контейнер 56,
+          фон Bg (сливается с окном), без рамки/тени. Хостит BackNav + Headline.  -->
+    <Style Selector="Border.SubToolbar">
+        <Setter Property="Height" Value="{DynamicResource Size.SubToolbar}" />
+        <Setter Property="Background" Value="{DynamicResource Brush.Bg}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="16,0" />
+    </Style>
+
+    <!--  Back-кнопка тулбара (§5.4): семантика IconButton40 (40 круг, hover
+          SurfaceHigh, press 0.92, без ripple). Глиф задаёт потребитель
+          (Geo.ArrowBack). Класс существует ради читаемости разметки тулбаров.  -->
+    <Style Selector="Button.BackNav">
+        <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
+        <Setter Property="Width" Value="{DynamicResource Size.IconButton}" />
+        <Setter Property="Height" Value="{DynamicResource Size.IconButton}" />
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button.BackNav /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill}" />
+    </Style>
+    <Style Selector="Button.BackNav:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
+    </Style>
+    <Style Selector="Button.BackNav:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
+    </Style>
+    <Style Selector="Button.BackNav:pressed">
+        <Setter Property="RenderTransform" Value="scale(0.92)" />
+    </Style>
+    <Style Selector="Button.BackNav PathIcon">
+        <Setter Property="Width" Value="{DynamicResource Size.Glyph}" />
+        <Setter Property="Height" Value="{DynamicResource Size.Glyph}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
+    </Style>
+
+    <!--  Линк-действие (текст-кнопка акцента, §5.4): без рамки/фона, 40h тач-
+          таргет, press scale 0.97. Пример: «Открыть Telegram», «Забыли пароль».  -->
+    <Style Selector="Button.LinkAction">
+        <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
+        <Setter Property="Height" Value="40" />
+        <Setter Property="Padding" Value="12,0" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Chip}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+        <Setter Property="FontWeight" Value="Medium" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button.LinkAction /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.LinkAction:pressed">
+        <Setter Property="RenderTransform" Value="scale(0.97)" />
+    </Style>
+
+    <!-- ==================================================================== -->
+    <!--  Деструктивная кнопка (promoted из DevicesView). Метрики Button.Primary  -->
+    <!--  (48h, Radius.Button 16, Grotesk 15 Bold, press 0.97, disabled 0.38),    -->
+    <!--  но фон Red #F04452, текст белый, hover/pressed Red затемнён (#D93844).   -->
+    <!--  Фон закреплён и на ContentPresenter, чтобы hover темы Semi не подменял.  -->
+    <!-- ==================================================================== -->
+    <Style Selector="Button.Destructive">
+        <Setter Property="Background" Value="{DynamicResource Brush.Red}" />
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Button}" />
+        <Setter Property="Height" Value="48" />
+        <Setter Property="Padding" Value="24,0" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button.Destructive /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource Brush.Red}" />
+        <Setter Property="Foreground" Value="White" />
+    </Style>
+    <Style Selector="Button.Destructive:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource Brush.RedPressed}" />
+        <Setter Property="Foreground" Value="White" />
+    </Style>
+    <Style Selector="Button.Destructive:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource Brush.RedPressed}" />
+        <Setter Property="Foreground" Value="White" />
+    </Style>
+    <Style Selector="Button.Destructive:pressed">
+        <Setter Property="RenderTransform" Value="scale(0.97)" />
+    </Style>
+    <Style Selector="Button.Destructive:disabled">
+        <Setter Property="Opacity" Value="0.38" />
+    </Style>
+
+    <!-- ==================================================================== -->
+    <!--  Статус-чип истории платежей (promoted из PaymentHistoryView, P1 18).    -->
+    <!--  Радиус 12, паддинг 8,2 (оптический вертикальный 2 — санкционированное    -->
+    <!--  исключение чипа, §0.3). База = неизвестный статус (нейтрально). Вариант  -->
+    <!--  несёт цвет статуса: текст = полный цвет, фон = тот же цвет @ 18%.        -->
+    <!-- ==================================================================== -->
+    <Style Selector="Border.StatusChip">
+        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceVariant}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Chip}" />
+        <Setter Property="Padding" Value="8,2" />
+    </Style>
+    <Style Selector="Border.StatusChip TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
+    </Style>
+    <Style Selector="Border.StatusChip.paid">
+        <Setter Property="Background" Value="{DynamicResource Brush.StatusChip.Green}" />
+    </Style>
+    <Style Selector="Border.StatusChip.paid TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Green}" />
+    </Style>
+    <Style Selector="Border.StatusChip.pending">
+        <Setter Property="Background" Value="{DynamicResource Brush.StatusChip.Orange}" />
+    </Style>
+    <Style Selector="Border.StatusChip.pending TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Icon.Orange}" />
+    </Style>
+    <Style Selector="Border.StatusChip.failed">
+        <Setter Property="Background" Value="{DynamicResource Brush.StatusChip.Red}" />
+    </Style>
+    <Style Selector="Border.StatusChip.failed TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Red}" />
+    </Style>
+    <Style Selector="Border.StatusChip.canceled">
+        <Setter Property="Background" Value="{DynamicResource Brush.StatusChip.Yellow}" />
+    </Style>
+    <Style Selector="Border.StatusChip.canceled TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Icon.Yellow}" />
+    </Style>
+
+    <!-- ==================================================================== -->
+    <!--  Опция срока/цены (§2.3, §5.4 Border.PriceOption; promoted из BuyView     -->
+    <!--  Border.OptionRow). Радиус 14 (Radius.Search), minHeight 48, рамка        -->
+    <!--  ПОСТОЯННО 1.5px (§0.6 выбор не сдвигает раскладку); selected =           -->
+    <!--  SelectedFill + 1.5px Accent. hover только у невыбранной.                 -->
+    <!-- ==================================================================== -->
+    <Style Selector="Border.PriceOption">
+        <Setter Property="MinHeight" Value="48" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Search}" />
+        <Setter Property="Padding" Value="12" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineVariant}" />
+        <Setter Property="BorderThickness" Value="1.5" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.15" />
+                <BrushTransition Property="BorderBrush" Duration="0:0:0.15" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Border.PriceOption:not(.selected):pointerover">
+        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
+    </Style>
+    <Style Selector="Border.PriceOption.selected">
+        <Setter Property="Background" Value="{DynamicResource Brush.SelectedFill}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+    </Style>
+
+    <!-- ==================================================================== -->
+    <!--  Верх шита + grab-handle + скрим (§2.4, §5.4; promoted из BuyView).       -->
+    <!--  SheetTop: Surface, радиус 24,24,0,0, 1px OutlineVariant по верху.        -->
+    <!--  SheetHandle: 36×4 SurfaceHighest, радиус pill. Scrim: ~60% чёрный.       -->
+    <!-- ==================================================================== -->
+    <Style Selector="Border.SheetTop">
+        <Setter Property="Background" Value="{DynamicResource Brush.Surface}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Sheet}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineVariant}" />
+        <Setter Property="BorderThickness" Value="1,1,1,0" />
+    </Style>
+    <Style Selector="Border.SheetHandle">
+        <Setter Property="Width" Value="{DynamicResource Size.SheetHandleW}" />
+        <Setter Property="Height" Value="{DynamicResource Size.SheetHandleH}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill}" />
+        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHighest}" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.Scrim">
+        <Setter Property="Background" Value="{DynamicResource Brush.Scrim}" />
+    </Style>
+
+    <!-- ==================================================================== -->
+    <!--  Статус-тост (§1.4G, §5.4). Нейтральная пилюля внизу-по-центру:          -->
+    <!--  SurfaceHighest, радиус pill, паддинг 22,12, мягкая тень, текст           -->
+    <!--  OnSurface 14/Bold. Позицию/авто-скрытие/cross-fade задаёт оверлей.       -->
+    <!-- ==================================================================== -->
+    <Style Selector="Border.Toast">
+        <Setter Property="Background" Value="{DynamicResource Brush.Toast.Bg}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill}" />
+        <Setter Property="Padding" Value="22,12" />
+        <Setter Property="BoxShadow" Value="0 8 24 0 #40000000" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.Toast TextBlock">
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
+    </Style>
+
+    <!-- ==================================================================== -->
+    <!--  Сегмент-переключатель (§2.11c ToggleButton.Segment): чипы 44, single-    -->
+    <!--  select. Покой = прозрачный + 1px OutlineVariant, текст muted; checked =  -->
+    <!--  SelectedFill + 1.5px Accent, текст Accent. press scale 0.96, без ripple. -->
+    <!--  Одиночный выбор обеспечивает потребитель (RadioButton-группа/биндинг).   -->
+    <!-- ==================================================================== -->
+    <Style Selector="ToggleButton.Segment">
+        <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
+        <Setter Property="Height" Value="{DynamicResource Size.SegmentChip}" />
+        <Setter Property="MinWidth" Value="44" />
+        <Setter Property="Padding" Value="16,0" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Chip}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineVariant}" />
+        <Setter Property="BorderThickness" Value="1.5" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+        <Setter Property="FontWeight" Value="Medium" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" />
+                <BrushTransition Property="BorderBrush" Duration="0:0:0.15" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="ToggleButton.Segment /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Chip}" />
+    </Style>
+    <Style Selector="ToggleButton.Segment:not(:checked):pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
+    </Style>
+    <Style Selector="ToggleButton.Segment:pressed">
+        <Setter Property="RenderTransform" Value="scale(0.96)" />
+    </Style>
+    <Style Selector="ToggleButton.Segment:checked /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource Brush.SelectedFill}" />
+    </Style>
+    <Style Selector="ToggleButton.Segment:checked">
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+    </Style>
+
+    <!-- ==================================================================== -->
+    <!--  Hero-иконка пустого состояния (§0.4, §5.4 Border.EmptyIcon): 64 синий    -->
+    <!--  тайл, радиус 20, глиф 32 Accent по центру. НЕ строчный тайл 40.          -->
+    <!-- ==================================================================== -->
+    <Style Selector="Border.EmptyIcon">
+        <Setter Property="Width" Value="{DynamicResource Size.EmptyIcon}" />
+        <Setter Property="Height" Value="{DynamicResource Size.EmptyIcon}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Card}" />
+        <Setter Property="Background" Value="{DynamicResource Brush.Tile.Blue}" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.EmptyIcon PathIcon">
+        <Setter Property="Width" Value="{DynamicResource Size.EmptyGlyph}" />
+        <Setter Property="Height" Value="{DynamicResource Size.EmptyGlyph}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- ==================================================================== -->
+    <!--  Скелет-примитивы (§1.5, §2.3; promoted из Account/Payment/Buy/Devices).  -->
+    <!--  Один пульс на всё приложение: класс .SkeletonPulse (любой контейнер) —   -->
+    <!--  alpha 0.45..1.0, 900мс, SineEaseInOut, реверс, бесконечно. Без шиммера.  -->
+    <!--  Формы: SkelBar (полоса 16) и SkelCard (карта 76). Reduced-motion         -->
+    <!--  снимает класс .SkeletonPulse на стороне потребителя (статичная alpha).   -->
+    <!-- ==================================================================== -->
+    <Style Selector=":is(Control).SkeletonPulse">
+        <Style.Animations>
+            <Animation
+                Duration="0:0:0.9"
+                Easing="SineEaseInOut"
+                IterationCount="Infinite"
+                PlaybackDirection="Alternate">
+                <KeyFrame Cue="0%">
+                    <Setter Property="Opacity" Value="0.45" />
+                </KeyFrame>
+                <KeyFrame Cue="100%">
+                    <Setter Property="Opacity" Value="1.0" />
+                </KeyFrame>
+            </Animation>
+        </Style.Animations>
+    </Style>
+    <Style Selector="Border.SkelBar">
+        <Setter Property="Height" Value="16" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Chip}" />
+        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHighest}" />
+    </Style>
+    <Style Selector="Border.SkelCard">
+        <Setter Property="Height" Value="{DynamicResource Size.SkeletonCard}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Card}" />
+        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceVariant}" />
+    </Style>
+
+    <!-- ==================================================================== -->
+    <!--  Индикатор-спиннер (§1.5; переиспользует вращение дуги ConnectHeroView).  -->
+    <!--  Ellipse с дуговым StrokeDashArray (задаёт потребитель) + класс           -->
+    <!--  .spinning для равномерного вращения 1.1с. RenderTransformOrigin         -->
+    <!--  0.5,0.5 и Stroke/StrokeThickness/StrokeDashArray ставит потребитель.     -->
+    <!-- ==================================================================== -->
+    <Style Selector="Ellipse.Spinner">
+        <Setter Property="IsHitTestVisible" Value="False" />
+        <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
+    </Style>
+    <Style Selector="Ellipse.Spinner.spinning">
+        <Style.Animations>
+            <Animation
+                Duration="0:0:1.1"
+                Easing="LinearEasing"
+                IterationCount="Infinite">
+                <KeyFrame Cue="0%">
+                    <Setter Property="RotateTransform.Angle" Value="0" />
+                </KeyFrame>
+                <KeyFrame Cue="100%">
+                    <Setter Property="RotateTransform.Angle" Value="360" />
+                </KeyFrame>
+            </Animation>
+        </Style.Animations>
+    </Style>
+
+    <!-- ==================================================================== -->
+    <!--  Навигационный рейл — корректная поверхность (REVIEW_BACKLOG P1 3,        -->
+    <!--  DESIGN_PLAN Часть 3). Фон Bg (сливается с окном), БЕЗ правой границы.    -->
+    <!--  Аддитивный класс: контейнер рейла в MainWindow переходит на него в       -->
+    <!--  проходе дедупликации (сейчас там Surface + 1px правая граница).          -->
+    <!--  Активный пункт (Accent глиф + левая пилюля 3×28, press 0.92, без ripple) -->
+    <!--  уже задан классом Button.NavRailItem выше.                              -->
+    <!-- ==================================================================== -->
+    <Style Selector="Border.NavRail">
+        <Setter Property="Background" Value="{DynamicResource Brush.Bg}" />
+        <Setter Property="BorderThickness" Value="0" />
     </Style>
 
 </Styles>

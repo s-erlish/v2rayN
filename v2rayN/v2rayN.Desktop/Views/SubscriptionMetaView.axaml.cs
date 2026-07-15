@@ -32,6 +32,7 @@ public partial class SubscriptionMetaView : UserControl
     private ReactiveCommand<Unit, Unit>? _refreshCmd;
     private string _supportUrl = string.Empty;
     private string _webPageUrl = string.Empty;
+    private string _currentSubId = string.Empty;
     private bool _refreshing;
 
     public SubscriptionMetaView()
@@ -60,7 +61,12 @@ public partial class SubscriptionMetaView : UserControl
         Rebind();
     }
 
-    /// <summary>Resolve the shared engine VM from the inherited DataContext and follow SelectedSub.</summary>
+    /// <summary>
+    /// Resolve the shared engine VM from the inherited DataContext. We do NOT bind the emitted
+    /// <c>SelectedSub</c> value directly — it defaults to the empty-Id «Все серверы» pseudo-group,
+    /// so the card would never appear. Instead we use SelectedSub/SelectedProfile changes purely as
+    /// TRIGGERS and re-resolve the ACTIVE subscription ourselves (see <see cref="ResolveActiveSub"/>).
+    /// </summary>
     private void Rebind()
     {
         if (Design.IsDesignMode)
@@ -81,12 +87,64 @@ public partial class SubscriptionMetaView : UserControl
             return;
         }
 
-        // WhenAnyValue emits the current SelectedSub immediately, then on every change (incl. the
-        // reassignment RefreshSubscriptions() does after an update — which carries fresh userinfo).
+        // Emits immediately, then on every change: SelectedSub is reassigned after each
+        // RefreshSubscriptions() (fresh userinfo just landed), and SelectedProfile moves when the
+        // active server changes (its Subid may point at a different subscription).
         _binding = _profiles
-            .WhenAnyValue(x => x.SelectedSub)
+            .WhenAnyValue(x => x.SelectedSub, x => x.SelectedProfile)
             .ObserveOn(RxSchedulers.MainThreadScheduler)
-            .Subscribe(sub => BindSub(sub));
+            .Subscribe(_ => BindSub(ResolveActiveSub()));
+    }
+
+    /// <summary>
+    /// The subscription the meta-bar should represent, data-driven and never fabricated:
+    ///   1) the ACTIVE server's subscription (config.IndexId → active ProfileItem → Subid → SubItem);
+    ///   2) else the single real SubItem when exactly one exists;
+    ///   3) else the selected sub if it is real, else the first real one.
+    /// Returns null when there is no real subscription (Id is non-empty) → card hidden.
+    /// </summary>
+    private SubItem? ResolveActiveSub()
+    {
+        if (_profiles is null)
+        {
+            return null;
+        }
+
+        var realSubs = _profiles.SubItems.Where(s => s is not null && s.Id.IsNotEmpty()).ToList();
+        if (realSubs.Count == 0)
+        {
+            return null;
+        }
+
+        // 1) Follow the active/default server's Subid.
+        var active = _profiles.ProfileItems.FirstOrDefault(p => p.IsActive);
+        if (active is null)
+        {
+            var indexId = AppManager.Instance.Config?.IndexId;
+            if (indexId.IsNotEmpty())
+            {
+                active = _profiles.ProfileItems.FirstOrDefault(p => p.IndexId == indexId);
+            }
+        }
+        var subid = active?.Subid;
+        if (subid.IsNotEmpty())
+        {
+            var match = realSubs.FirstOrDefault(s => s.Id == subid);
+            if (match is not null)
+            {
+                return match;
+            }
+        }
+
+        // 2) Exactly one real subscription — use it.
+        if (realSubs.Count == 1)
+        {
+            return realSubs[0];
+        }
+
+        // 3) Selected sub if real, else the first real one.
+        var sel = _profiles.SelectedSub;
+        return sel is not null && sel.Id.IsNotEmpty() ? sel : realSubs[0];
     }
 
     /// <summary>Project a real subscription (with userinfo) onto the meta-bar fields.</summary>
@@ -96,9 +154,11 @@ public partial class SubscriptionMetaView : UserControl
         // no userinfo -> hide the card (data-driven: no fabricated aggregate).
         if (sub is null || sub.Id.IsNullOrEmpty())
         {
+            _currentSubId = string.Empty;
             MetaCard.IsVisible = false;
             return;
         }
+        _currentSubId = sub.Id;
         MetaCard.IsVisible = true;
 
         // Title: profile-title -> remarks (never fabricated).
@@ -112,8 +172,8 @@ public partial class SubscriptionMetaView : UserControl
         var total = sub.TotalTraffic;
         var unlimited = total <= 0;
         TrafficText.Text = unlimited
-            ? $"{Utils.HumanFy(used)} / ∞"
-            : $"{Utils.HumanFy(used)} / {Utils.HumanFy(total)}";
+            ? $"{FormatBytesRu(used)} / ∞"
+            : $"{FormatBytesRu(used)} / {FormatBytesRu(total)}";
         // Fill width = 160 * used/total; unlimited => empty track (0), like the reference.
         TrafficFill.Width = unlimited ? 0d : TrafficPillWidth * Math.Clamp((double)used / total, 0d, 1d);
 
@@ -178,6 +238,35 @@ public partial class SubscriptionMetaView : UserControl
         return minutes % 60 == 0 ? $"{minutes / 60} ч." : $"{minutes} мин.";
     }
 
+    //  RU byte formatter to match the reference pill «1,7 ТБ / ∞» (comma decimal + Cyrillic units),
+    //  since Utils.HumanFy is EN-invariant («1.7 TB»). Base 1024; 1 decimal from КБ up, trimmed.
+    private static readonly string[] _ruUnits = { "Б", "КБ", "МБ", "ГБ", "ТБ", "ПБ" };
+
+    private static string FormatBytesRu(long bytes)
+    {
+        if (bytes <= 0)
+        {
+            return "0 Б";
+        }
+
+        double value = bytes;
+        var unit = 0;
+        while (value >= 1024 && unit < _ruUnits.Length - 1)
+        {
+            value /= 1024;
+            unit++;
+        }
+
+        var ru = CultureInfo.GetCultureInfo("ru-RU");
+        var digits = unit == 0 ? 0 : 1;
+        var text = value.ToString("N" + digits, ru);
+        if (digits == 1 && text.EndsWith(",0", StringComparison.Ordinal))
+        {
+            text = text[..^2];
+        }
+        return $"{text} {_ruUnits[unit]}";
+    }
+
     // ── Actions ─────────────────────────────────────────────────────────────
 
     private void OnPingClick(object? sender, RoutedEventArgs e)
@@ -193,7 +282,9 @@ public partial class SubscriptionMetaView : UserControl
             return;
         }
 
-        var subId = _profiles?.SelectedSub?.Id;
+        // Refresh the subscription the card actually represents (resolved active sub), NOT
+        // SelectedSub — that would be the empty-Id «Все серверы» pseudo-group.
+        var subId = _currentSubId;
         if (subId.IsNullOrEmpty())
         {
             return;
@@ -265,7 +356,7 @@ public partial class SubscriptionMetaView : UserControl
         MetaCard.IsVisible = true;
         TitleText.Text = "erlish";
         SubtitleText.Text = "10.07.2026 17:17 · Автообновление — 1 ч.";
-        TrafficText.Text = "1.7 TB / ∞";
+        TrafficText.Text = "1,7 ТБ / ∞";
         TrafficFill.Width = 69;
         ExpiryText.Text = "до 12.08.2026";
         ExpiryText.Foreground = _muted;

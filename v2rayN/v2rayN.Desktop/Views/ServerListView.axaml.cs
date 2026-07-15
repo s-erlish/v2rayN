@@ -1,3 +1,4 @@
+using System.Collections.Specialized;
 using Avalonia.Data.Converters;
 using DialogHostAvalonia;
 using v2rayN.Desktop.Common;
@@ -32,13 +33,67 @@ public partial class ServerListView : UserControl
     // robust across Avalonia versions vs. relying on the MenuItem's inherited DataContext.
     private ProfileItemModel? _actionTarget;
 
+    // The real ServerGroups collection we currently observe for the subtitle (unsubscribed on swap).
+    private INotifyCollectionChanged? _groupsObserved;
+
     public ServerListView()
     {
         InitializeComponent();
         // NOTE: no runtime DataContext here — it inherits the real HomeViewModel from HomeView.
         // The XAML Design.DataContext (DesignData.Home) only feeds the previewer.
-        DataContextChanged += (_, _) => RegisterInteractions();
+        DataContextChanged += (_, _) =>
+        {
+            RegisterInteractions();
+            BindSubtitle();
+        };
     }
+
+    #region Subtitle («N серверов · M провайдеров», correct RU plural)
+
+    // The subtitle is derived here (not from HomeViewModel.Subtitle) so we can apply correct Russian
+    // pluralization. Recomputed live whenever the real ServerGroups collection changes.
+    private void BindSubtitle()
+    {
+        if (_groupsObserved is not null)
+        {
+            _groupsObserved.CollectionChanged -= OnGroupsChanged;
+            _groupsObserved = null;
+        }
+        if (DataContext is HomeViewModel vm && vm.ServerGroups is INotifyCollectionChanged incc)
+        {
+            incc.CollectionChanged += OnGroupsChanged;
+            _groupsObserved = incc;
+        }
+        UpdateSubtitle();
+    }
+
+    private void OnGroupsChanged(object? sender, NotifyCollectionChangedEventArgs e) => UpdateSubtitle();
+
+    private void UpdateSubtitle()
+    {
+        if (SubtitleText is null)
+        {
+            return;
+        }
+        if (DataContext is not HomeViewModel vm)
+        {
+            SubtitleText.Text = string.Empty;
+            return;
+        }
+
+        var servers = vm.ServerGroups.Sum(g => g.Count);
+        // Providers = real subscription groups (Key = "<subid>|<name>", non-empty subid);
+        // fall back to the group count when nothing carries a subscription id.
+        var providers = vm.ServerGroups.Count(g => !string.IsNullOrEmpty(g.Key.Split('|', 2)[0]));
+        if (providers == 0)
+        {
+            providers = vm.ServerGroups.Count;
+        }
+
+        SubtitleText.Text = $"{ProfileDisplay.Servers(servers)} · {ProfileDisplay.Providers(providers)}";
+    }
+
+    #endregion Subtitle
 
     #region Server-action interaction handlers (mirror ProfilesView, so share/delete work here)
 
@@ -46,6 +101,7 @@ public partial class ServerListView : UserControl
     {
         base.OnAttachedToVisualTree(e);
         RegisterInteractions();
+        BindSubtitle();
     }
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
@@ -56,6 +112,12 @@ public partial class ServerListView : UserControl
             handler.Dispose();
         }
         _interactionHandlers.Clear();
+
+        if (_groupsObserved is not null)
+        {
+            _groupsObserved.CollectionChanged -= OnGroupsChanged;
+            _groupsObserved = null;
+        }
     }
 
     // Registered once against the shared ProfilesViewModel. Idempotent; disposed on detach.

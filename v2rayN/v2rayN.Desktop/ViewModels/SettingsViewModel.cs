@@ -198,14 +198,35 @@ public class SettingsViewModel : MyReactiveObject
 
     #region Row actions (invoked from the view code-behind on tap)
 
-    /// <summary>Режим row: flip TUN ↔ Proxy. Reuses StatusBarViewModel.DoEnableTun (persist + UAC + reload).</summary>
-    public void ToggleTun()
+    /// <summary>
+    /// Режим row: flip TUN ↔ Прокси as a PASSIVE setting. Consumer-VPN OFF model — a settings tap must
+    /// never start the core or relaunch the app. So we do NOT route through
+    /// <see cref="StatusBarViewModel.EnableTun"/> (whose <c>DoEnableTun</c> unconditionally reloads and,
+    /// on non-admin Windows, calls <c>RebootAsAdmin()</c> with a UAC prompt). Instead we write the real
+    /// config directly, persist it, and re-apply live ONLY when the core is already running. If TUN needs
+    /// admin rights, that escalation belongs to the connect action, not this row.
+    /// </summary>
+    public async Task ToggleTun()
     {
         if (_designMode)
         {
             return;
         }
-        StatusBarViewModel.Instance.EnableTun = !StatusBarViewModel.Instance.EnableTun;
+
+        var enable = !_config.TunModeItem.EnableTun;
+        _config.TunModeItem.EnableTun = enable;
+        await ConfigHandler.SaveConfig(_config);
+
+        // Keep the shared status-bar VM in sync WITHOUT triggering its reload/UAC path: DoEnableTun
+        // early-returns because _config.TunModeItem.EnableTun already equals the value we assign here.
+        StatusBarViewModel.Instance.EnableTun = enable;
+        ModeText = enable ? "TUN" : "Прокси";
+
+        // Re-apply live only if the core is already up; a disconnected app stays disconnected.
+        if (IsCoreRunning())
+        {
+            StatusBarViewModel.Instance.ReloadRequested.Publish();
+        }
     }
 
     /// <summary>DNS row: open the real DNS settings sub-screen, then refresh the shown value / reload.</summary>
