@@ -1,0 +1,233 @@
+<UserControl
+    x:Class="v2rayN.Desktop.Views.ServerListView"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="clr-namespace:v2rayN.Desktop.Views"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    d:DesignHeight="900"
+    d:DesignWidth="440"
+    x:DataType="local:ServerListModel"
+    mc:Ignorable="d">
+
+    <UserControl.Resources>
+        <!--  Локальные глифы Material 24 (одна семья): шеврон / фильтр / обновить / пинг / плюс.
+              Это НЕ токены дизайн-системы, а вьюскоуп-ресурсы; при переиспользовании вынести
+              в GlobalResources как Geo.*. Порт иконок хедера (layout_servers_header) + групп-шеврона.  -->
+        <StreamGeometry x:Key="Geo.Chevron">M16.59 8.59 12 13.17 7.41 8.59 6 10l6 6 6-6z</StreamGeometry>
+        <StreamGeometry x:Key="Geo.Filter">M4.25 5.61C6.27 8.2 10 13 10 13v5c0 .55.45 1 1 1h2c.55 0 1-.45 1-1v-5s3.72-4.8 5.74-7.39c.51-.66.04-1.61-.79-1.61H5.04c-.83 0-1.3.95-.79 1.61z</StreamGeometry>
+        <StreamGeometry x:Key="Geo.Refresh">M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4z</StreamGeometry>
+        <StreamGeometry x:Key="Geo.Ping">M12 11c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0-4c-3.31 0-6 2.69-6 6h2c0-2.21 1.79-4 4-4s4 1.79 4 4h2c0-3.31-2.69-6-6-6zm0-4C6.48 3 2 7.48 2 13h2c0-4.42 3.58-8 8-8s8 3.58 8 8h2c0-5.52-4.48-10-10-10z</StreamGeometry>
+        <StreamGeometry x:Key="Geo.Plus">M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z</StreamGeometry>
+    </UserControl.Resources>
+
+    <UserControl.Styles>
+        <!--  Групп-шеврон: 0° развёрнут, −90° свёрнут (плавно, аналог поворота rotation в bindHeader).  -->
+        <Style Selector="PathIcon.groupChevron">
+            <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
+            <Setter Property="RenderTransform" Value="rotate(0deg)" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.22" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="PathIcon.groupChevron.collapsed">
+            <Setter Property="RenderTransform" Value="rotate(-90deg)" />
+        </Style>
+
+        <!--  Групп-хедер: hover-подсветка (аналог selectableItemBackground).  -->
+        <Style Selector="Border.groupHeader">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Border.groupHeader:pointerover">
+            <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
+        </Style>
+    </UserControl.Styles>
+
+    <Grid Background="{DynamicResource Brush.Bg}" RowDefinitions="Auto,*">
+
+        <!--  ХЕДЕР (layout_servers_header): заголовок + круглые действия + подзаголовок + поиск-пилюля.  -->
+        <StackPanel Grid.Row="0" Margin="16,8,12,4">
+
+            <!--  Заголовок «Сервера» + действия: свернуть-все / обновить / пинг-все / добавить (синий).  -->
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBlock
+                    Grid.Column="0"
+                    VerticalAlignment="Center"
+                    Classes="Headline"
+                    Text="{Binding Title}" />
+                <StackPanel
+                    Grid.Column="1"
+                    Orientation="Horizontal"
+                    Spacing="2">
+                    <Button Classes="IconButton" Click="OnCollapseAllClick">
+                        <PathIcon
+                            Width="22"
+                            Height="22"
+                            Data="{StaticResource Geo.Chevron}"
+                            Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+                    </Button>
+                    <Button Classes="IconButton">
+                        <PathIcon
+                            Width="22"
+                            Height="22"
+                            Data="{StaticResource Geo.Refresh}"
+                            Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+                    </Button>
+                    <Button Classes="IconButton">
+                        <PathIcon
+                            Width="22"
+                            Height="22"
+                            Data="{StaticResource Geo.Ping}"
+                            Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+                    </Button>
+                    <Button Classes="IconButton">
+                        <PathIcon
+                            Width="22"
+                            Height="22"
+                            Data="{StaticResource Geo.Plus}"
+                            Foreground="{DynamicResource Brush.Accent}" />
+                    </Button>
+                </StackPanel>
+            </Grid>
+
+            <!--  Подзаголовок «26 серверов · 2 провайдеров» (servers_count · providers_count).  -->
+            <TextBlock
+                Margin="0,4,0,0"
+                Classes="Subtitle"
+                Text="{Binding Subtitle}" />
+
+            <!--  Поиск-пилюля (bg_search_pill): фильтр-иконка + поле «Поиск серверов…».  -->
+            <Border
+                Height="44"
+                Margin="0,12,4,0"
+                Classes="SearchPill">
+                <Grid Margin="14,0" ColumnDefinitions="Auto,*">
+                    <PathIcon
+                        Grid.Column="0"
+                        Width="20"
+                        Height="20"
+                        VerticalAlignment="Center"
+                        Data="{StaticResource Geo.Filter}"
+                        Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+                    <TextBox
+                        Grid.Column="1"
+                        Margin="8,0,0,0"
+                        Padding="0"
+                        VerticalAlignment="Center"
+                        VerticalContentAlignment="Center"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        FontSize="14"
+                        Foreground="{DynamicResource Brush.OnSurface}"
+                        Watermark="{Binding SearchHint}" />
+                </Grid>
+            </Border>
+        </StackPanel>
+
+        <!--  СКРОЛЛ: сгруппированный плоский список (групп-хедер + вложенные строки).  -->
+        <ScrollViewer Grid.Row="1">
+            <ItemsControl ItemsSource="{Binding Groups}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="local:ServerGroupItem">
+                        <StackPanel>
+
+                            <!--  Групп-хедер (item_section_header): шеврон + имя подписки + счётчик справа.  -->
+                            <Border
+                                Padding="16,12,16,4"
+                                Classes="groupHeader"
+                                Tapped="OnGroupHeaderTapped">
+                                <Grid ColumnDefinitions="Auto,*,Auto">
+                                    <PathIcon
+                                        Grid.Column="0"
+                                        Width="22"
+                                        Height="22"
+                                        Margin="0,0,8,0"
+                                        VerticalAlignment="Center"
+                                        Classes="groupChevron"
+                                        Classes.collapsed="{Binding !IsExpanded}"
+                                        Data="{StaticResource Geo.Chevron}"
+                                        Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+                                    <TextBlock
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        Classes="Title"
+                                        Text="{Binding Name}"
+                                        TextTrimming="CharacterEllipsis" />
+                                    <TextBlock
+                                        Grid.Column="2"
+                                        Margin="8,0,0,0"
+                                        VerticalAlignment="Center"
+                                        Classes="Subtitle"
+                                        Text="{Binding CountText}" />
+                                </Grid>
+                            </Border>
+
+                            <!--  Строки группы (сворачиваются вместе с группой).  -->
+                            <ItemsControl IsVisible="{Binding IsExpanded}" ItemsSource="{Binding Servers}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="local:ServerRowItem">
+
+                                        <!--  Строка сервера (bg_server_row): selected = синяя пилюля-обводка.  -->
+                                        <Border
+                                            Margin="16,4"
+                                            Classes="ServerRow"
+                                            Classes.selected="{Binding IsSelected}">
+                                            <Grid ColumnDefinitions="Auto,*" VerticalAlignment="Center">
+
+                                                <!--  Флаг: круглый клип (та же конвенция, что ConnectHeroView).
+                                                      Дизайн-плейсхолдер — круг с тинтом страны; FlagResolver (§5)
+                                                      заполнит ServerFlagImage.Source круглым флагом позже.  -->
+                                                <Border
+                                                    x:Name="ServerFlag"
+                                                    Grid.Column="0"
+                                                    Width="32"
+                                                    Height="32"
+                                                    Margin="0,0,12,0"
+                                                    VerticalAlignment="Center"
+                                                    Background="{Binding FlagBrush}"
+                                                    BorderBrush="{DynamicResource Brush.OutlineVariant}"
+                                                    BorderThickness="1"
+                                                    ClipToBounds="True"
+                                                    CornerRadius="100">
+                                                    <Image x:Name="ServerFlagImage" Stretch="UniformToFill" Source="{Binding Name, Converter={StaticResource RemarkToFlag}}" />
+                                                </Border>
+
+                                                <!--  Имя (жирное, ellipsize) + строка «протокол-чип · транспорт».  -->
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                    <TextBlock
+                                                        Classes="Title"
+                                                        Text="{Binding Name}"
+                                                        TextTrimming="CharacterEllipsis" />
+                                                    <StackPanel
+                                                        Margin="0,4,0,0"
+                                                        VerticalAlignment="Center"
+                                                        Orientation="Horizontal">
+                                                        <Border Classes="ProtocolChip">
+                                                            <TextBlock
+                                                                Classes="Chip"
+                                                                Foreground="{DynamicResource Brush.Accent}"
+                                                                Text="{Binding Protocol}" />
+                                                        </Border>
+                                                        <TextBlock
+                                                            Margin="8,0,0,0"
+                                                            VerticalAlignment="Center"
+                                                            Classes="Caption"
+                                                            Text="{Binding Transport}"
+                                                            TextTrimming="CharacterEllipsis" />
+                                                    </StackPanel>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

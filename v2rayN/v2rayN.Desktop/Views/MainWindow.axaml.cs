@@ -42,6 +42,13 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         navSettings.Click += (_, _) => SelectTab(navSettings, _settingsView);
         navAccount.Click += (_, _) => SelectTab(navAccount, _accountView);
         SelectTab(navHome, _homeView);
+        // DEV screenshot hook: INITIAL_TAB=servers|settings|account opens that tab on launch.
+        switch (Environment.GetEnvironmentVariable("INITIAL_TAB"))
+        {
+            case "servers": SelectTab(navServers, _serversView); break;
+            case "settings": SelectTab(navSettings, _settingsView); break;
+            case "account": SelectTab(navAccount, _accountView); break;
+        }
 
         this.WhenActivated(disposables =>
         {

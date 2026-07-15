@@ -1,7 +1,8 @@
 namespace v2rayN.Desktop.Views;
 
 /// <summary>
-/// Сервера — заглушка. Реальный экран (хедер + поиск + список) — фаза 1 (агент E).
+/// Вкладка «Сервера»: хостит <see cref="ServerListView"/> на всю ширину
+/// (хедер + поиск + сгруппированный список серверов, под-план 3).
 /// </summary>
 public partial class ServersView : UserControl
 {

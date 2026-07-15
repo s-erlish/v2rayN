@@ -3,22 +3,10 @@
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="clr-namespace:v2rayN.Desktop.Views"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid Background="{DynamicResource Brush.Bg}">
-        <StackPanel
-            HorizontalAlignment="Center"
-            VerticalAlignment="Center"
-            Spacing="8">
-            <TextBlock
-                HorizontalAlignment="Center"
-                Classes="Headline"
-                Text="Сервера" />
-            <TextBlock
-                HorizontalAlignment="Center"
-                Classes="Subtitle"
-                Text="Хедер, поиск и сгруппированный список появятся на этапе 1." />
-        </StackPanel>
-    </Grid>
+    <!--  Вкладка «Сервера»: полноширинный хедер + поиск + сгруппированный список (под-план 3).  -->
+    <local:ServerListView />
 </UserControl>

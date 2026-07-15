@@ -1,0 +1,448 @@
+<UserControl
+    x:Class="v2rayN.Desktop.Views.ConnectHeroView"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    d:DesignHeight="680"
+    d:DesignWidth="560"
+    mc:Ignorable="d">
+
+    <!--  ================================================================================
+          Connect-щит (герой) + стата-строка — правая панель «Главной».
+          Перенос 1:1 из Android (activity_main.xml hero + MainActivity connect-состояния).
+          Слои снизу вверх: glow → 2 кольца → сонар → connecting-дуга → диск(176)+щит.
+          Состояния (idle/connecting/connected) и режим «нет подписки» переключает
+          код-behind по данным будущего HomeViewModel — разметка чисто визуальная.
+          Дизайн: Incy (pure dark + один синий #4C8DFF), ease-out анимации, без bounce.
+          =================================================================================  -->
+
+    <UserControl.Styles>
+        <!--  Connecting-дуга: равномерное (линейное) вращение, только пока класс .spinning.  -->
+        <Style Selector="Ellipse.ConnectArc.spinning">
+            <Style.Animations>
+                <Animation
+                    Duration="0:0:1.1"
+                    Easing="LinearEasing"
+                    IterationCount="Infinite">
+                    <KeyFrame Cue="0%">
+                        <Setter Property="RotateTransform.Angle" Value="0" />
+                    </KeyFrame>
+                    <KeyFrame Cue="100%">
+                        <Setter Property="RotateTransform.Angle" Value="360" />
+                    </KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+
+        <!--  Glow «дышит» пока класс .breathing (connecting): scale 0.96↔1.04, alpha 0.3↔0.6.  -->
+        <Style Selector="Ellipse.Glow.breathing">
+            <Style.Animations>
+                <Animation
+                    Duration="0:0:0.85"
+                    Easing="SineEaseInOut"
+                    IterationCount="Infinite"
+                    PlaybackDirection="Alternate">
+                    <KeyFrame Cue="0%">
+                        <Setter Property="ScaleTransform.ScaleX" Value="0.96" />
+                        <Setter Property="ScaleTransform.ScaleY" Value="0.96" />
+                        <Setter Property="Opacity" Value="0.3" />
+                    </KeyFrame>
+                    <KeyFrame Cue="100%">
+                        <Setter Property="ScaleTransform.ScaleX" Value="1.04" />
+                        <Setter Property="ScaleTransform.ScaleY" Value="1.04" />
+                        <Setter Property="Opacity" Value="0.6" />
+                    </KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+
+        <!--  Один сонар-импульс на connect-confirm: scale 1→1.6, alpha 1→0 (ease-out-quint).  -->
+        <Style Selector="Ellipse.Sonar.pulsing">
+            <Style.Animations>
+                <Animation
+                    Duration="0:0:0.6"
+                    Easing="QuinticEaseOut"
+                    FillMode="Forward"
+                    IterationCount="1">
+                    <KeyFrame Cue="0%">
+                        <Setter Property="ScaleTransform.ScaleX" Value="1" />
+                        <Setter Property="ScaleTransform.ScaleY" Value="1" />
+                        <Setter Property="Opacity" Value="1" />
+                    </KeyFrame>
+                    <KeyFrame Cue="100%">
+                        <Setter Property="ScaleTransform.ScaleX" Value="1.6" />
+                        <Setter Property="ScaleTransform.ScaleY" Value="1.6" />
+                        <Setter Property="Opacity" Value="0" />
+                    </KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+    </UserControl.Styles>
+
+    <!--  Корень прозрачный: панель лежит поверх радиального фона Главной (Brush.HomeGradient).  -->
+    <Panel>
+
+        <!--  ===================== СЛОЙ «есть подписка»: стата + герой ===================== -->
+        <Grid x:Name="LayerNormal" RowDefinitions="Auto,*">
+
+            <!--  Стата-строка: ↑ отдача · таймер · ↓ приём + «+». Скрыта, когда подписок нет.
+                  Сетка 40|*|40 центрирует средний блок так, что таймер стоит по центру панели.  -->
+            <Grid
+                x:Name="StatsRow"
+                Grid.Row="0"
+                Margin="16,10,16,0"
+                ColumnDefinitions="40,*,40">
+                <Grid Grid.Column="1" ColumnDefinitions="*,*,*">
+                    <StackPanel
+                        Grid.Column="0"
+                        HorizontalAlignment="Center"
+                        Orientation="Horizontal"
+                        Spacing="4">
+                        <TextBlock
+                            VerticalAlignment="Center"
+                            Classes="Caption"
+                            Foreground="{DynamicResource Brush.Accent}"
+                            Text="↑" />
+                        <TextBlock
+                            x:Name="UpSpeed"
+                            Classes="Numeric"
+                            FontSize="13"
+                            FontWeight="Bold"
+                            Text="0 KB/s" />
+                    </StackPanel>
+                    <TextBlock
+                        x:Name="Uptime"
+                        Grid.Column="1"
+                        HorizontalAlignment="Center"
+                        Classes="Numeric"
+                        FontSize="14"
+                        FontWeight="Bold"
+                        Foreground="{DynamicResource Brush.OnSurfaceVariant}"
+                        Text="00:00:00" />
+                    <StackPanel
+                        Grid.Column="2"
+                        HorizontalAlignment="Center"
+                        Orientation="Horizontal"
+                        Spacing="4">
+                        <TextBlock
+                            VerticalAlignment="Center"
+                            Classes="Caption"
+                            Foreground="{DynamicResource Brush.Accent}"
+                            Text="↓" />
+                        <TextBlock
+                            x:Name="DownSpeed"
+                            Classes="Numeric"
+                            FontSize="13"
+                            FontWeight="Bold"
+                            Text="0 KB/s" />
+                    </StackPanel>
+                </Grid>
+                <!--  «+» добавить профиль/подписку — то же меню, что тулбар на Android.  -->
+                <Button
+                    x:Name="AddButton"
+                    Grid.Column="2"
+                    Width="40"
+                    Height="40"
+                    Classes="IconButton"
+                    ToolTip.Tip="Добавить профиль">
+                    <Path
+                        Width="18"
+                        Height="18"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Data="M12 5 V19 M5 12 H19"
+                        Stretch="Uniform"
+                        Stroke="{DynamicResource Brush.OnSurface}"
+                        StrokeLineCap="Round"
+                        StrokeThickness="1.6" />
+                </Button>
+            </Grid>
+
+            <!--  Герой-блок: щит высоко в панели (верхняя треть), под ним — идентичность сервера.  -->
+            <StackPanel
+                Grid.Row="1"
+                Margin="0,24,0,0"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Top">
+
+                <!--  Рамка 230×230, clip выключен: glow/сонар могут выходить за диск.  -->
+                <Panel
+                    x:Name="HeroFrame"
+                    Width="{StaticResource Size.HeroFrame}"
+                    Height="{StaticResource Size.HeroFrame}"
+                    HorizontalAlignment="Center"
+                    ClipToBounds="False">
+
+                    <!--  (1) glow-halo (bg_connect_glow) — виден только при connected.  -->
+                    <Ellipse
+                        x:Name="GlowHalo"
+                        Width="220"
+                        Height="220"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Classes="Glow"
+                        Fill="{DynamicResource Brush.ConnectGlow}"
+                        IsVisible="False"
+                        Opacity="0"
+                        RenderTransformOrigin="0.5,0.5">
+                        <Ellipse.Transitions>
+                            <Transitions>
+                                <DoubleTransition
+                                    Easing="QuinticEaseOut"
+                                    Property="Opacity"
+                                    Duration="0:0:0.3" />
+                            </Transitions>
+                        </Ellipse.Transitions>
+                    </Ellipse>
+
+                    <!--  (2) внешнее кольцо 1.5 #334C8DFF (на кромке рамки).  -->
+                    <Ellipse
+                        x:Name="RingOuter"
+                        Width="228"
+                        Height="228"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Stroke="{DynamicResource Brush.Ring.Outer}"
+                        StrokeThickness="1.5" />
+                    <!--  (2) внутреннее кольцо (инсет-14) 2 #804C8DFF.  -->
+                    <Ellipse
+                        x:Name="RingInner"
+                        Width="200"
+                        Height="200"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Stroke="{DynamicResource Brush.Ring.Inner}"
+                        StrokeThickness="2" />
+
+                    <!--  (3) одноразовый сонар-импульс на подтверждение connect.  -->
+                    <Ellipse
+                        x:Name="SonarPulse"
+                        Width="200"
+                        Height="200"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Classes="Sonar"
+                        IsVisible="False"
+                        Opacity="0"
+                        RenderTransformOrigin="0.5,0.5"
+                        Stroke="{DynamicResource Brush.Ring.Inner}"
+                        StrokeThickness="2" />
+
+                    <!--  (4) тонкая connecting-дуга Ø212 толщина 3 (акцент): одиночный сегмент
+                          пунктиром (~25% окружности), крутится. Видна только при connecting.  -->
+                    <Ellipse
+                        x:Name="ConnectingArc"
+                        Width="{StaticResource Size.ConnectArc}"
+                        Height="{StaticResource Size.ConnectArc}"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Classes="ConnectArc"
+                        IsVisible="False"
+                        RenderTransformOrigin="0.5,0.5"
+                        Stroke="{DynamicResource Brush.Accent}"
+                        StrokeDashArray="56,166"
+                        StrokeLineCap="Round"
+                        StrokeThickness="3" />
+
+                    <!--  (5) диск-кнопка 176 r88 (Border.ConnectDisc, SurfaceHigh, press-scale 0.94).
+                          (6) внутри два щита: контур (idle, серый) + залив (connected, синий).  -->
+                    <Border
+                        x:Name="ConnectDisc"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Classes="ConnectDisc"
+                        Cursor="Hand">
+                        <Panel>
+                            <!--  Контур-щит (ic_shield_outline, evenodd-дырка): idle серый / connecting синий.  -->
+                            <Path
+                                x:Name="ShieldOutline"
+                                Width="{StaticResource Size.ShieldGlyph}"
+                                Height="{StaticResource Size.ShieldGlyph}"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Data="F0 M12,2.2 L19.6,5.2 L19.6,11.4 C19.6,16.1 15.9,19.9 12,21.8 C8.1,19.9 4.4,16.1 4.4,11.4 L4.4,5.2 Z M12,4.7 L17.2,6.8 L17.2,11.4 C17.2,14.9 14.7,17.9 12,19.3 C9.3,17.9 6.8,14.9 6.8,11.4 L6.8,6.8 Z"
+                                Fill="{DynamicResource Brush.OnSurfaceVariant}"
+                                Stretch="Uniform">
+                                <Path.Transitions>
+                                    <Transitions>
+                                        <DoubleTransition
+                                            Easing="QuarticEaseOut"
+                                            Property="Opacity"
+                                            Duration="0:0:0.22" />
+                                        <BrushTransition Property="Fill" Duration="0:0:0.22" />
+                                    </Transitions>
+                                </Path.Transitions>
+                            </Path>
+                            <!--  Залив-щит (ic_shield_filled, тот же силуэт): crossfade-in при connect, синий.  -->
+                            <Path
+                                x:Name="ShieldFilled"
+                                Width="{StaticResource Size.ShieldGlyph}"
+                                Height="{StaticResource Size.ShieldGlyph}"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Data="M12,2.2 L19.6,5.2 L19.6,11.4 C19.6,16.1 15.9,19.9 12,21.8 C8.1,19.9 4.4,16.1 4.4,11.4 L4.4,5.2 Z"
+                                Fill="{DynamicResource Brush.Accent}"
+                                Opacity="0"
+                                Stretch="Uniform">
+                                <Path.Transitions>
+                                    <Transitions>
+                                        <DoubleTransition
+                                            Easing="QuarticEaseOut"
+                                            Property="Opacity"
+                                            Duration="0:0:0.22" />
+                                    </Transitions>
+                                </Path.Transitions>
+                            </Path>
+                        </Panel>
+                    </Border>
+                </Panel>
+
+                <!--  Подпись-состояние (Title bold). idle: «Не подключено»/«Выберите сервер»,
+                      connecting: «Подключение…», connected: «Прокси подключён».  -->
+                <TextBlock
+                    x:Name="StatusText"
+                    Margin="24,16,24,0"
+                    MaxWidth="320"
+                    HorizontalAlignment="Center"
+                    Classes="Title"
+                    Text="Не подключено"
+                    TextAlignment="Center"
+                    TextTrimming="CharacterEllipsis">
+                    <TextBlock.Transitions>
+                        <Transitions>
+                            <BrushTransition Property="Foreground" Duration="0:0:0.2" />
+                        </Transitions>
+                    </TextBlock.Transitions>
+                </TextBlock>
+
+                <!--  Идентичность сервера: флаг + имя (remark) + бейдж протокола + транспорт.
+                      Видна при выбранном/подключённом сервере. Данные: выбранный ProfileItem
+                      (remark→флаг/имя, EConfigType→протокол, Network+Security→транспорт).  -->
+                <StackPanel
+                    x:Name="ServerInfo"
+                    Margin="0,12,0,0"
+                    HorizontalAlignment="Center"
+                    Spacing="6">
+                    <StackPanel
+                        HorizontalAlignment="Center"
+                        Orientation="Horizontal"
+                        Spacing="8">
+                        <!--  Флаг-чип: круглый клип; заполняется FlagResolver (§5). Дизайн-плейсхолдер — нейтральный круг.  -->
+                        <Border
+                            x:Name="ServerFlag"
+                            Width="22"
+                            Height="22"
+                            VerticalAlignment="Center"
+                            Background="{DynamicResource Brush.SurfaceVariant}"
+                            BorderBrush="{DynamicResource Brush.OutlineVariant}"
+                            BorderThickness="1"
+                            ClipToBounds="True"
+                            CornerRadius="100">
+                            <Image x:Name="ServerFlagImage" Stretch="UniformToFill" />
+                        </Border>
+                        <TextBlock
+                            x:Name="ServerName"
+                            MaxWidth="240"
+                            VerticalAlignment="Center"
+                            Classes="TitleMedium"
+                            Text="Hybrid (Автовыбор)"
+                            TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                    <StackPanel
+                        HorizontalAlignment="Center"
+                        Orientation="Horizontal"
+                        Spacing="8">
+                        <Border Classes="ProtocolChip">
+                            <TextBlock
+                                x:Name="ServerProtocol"
+                                Classes="Chip"
+                                Foreground="{DynamicResource Brush.Accent}"
+                                Text="VLESS" />
+                        </Border>
+                        <TextBlock
+                            x:Name="ServerTransport"
+                            VerticalAlignment="Center"
+                            Classes="Caption"
+                            Text="TCP · REALITY" />
+                    </StackPanel>
+                </StackPanel>
+            </StackPanel>
+        </Grid>
+
+        <!--  ===================== СЛОЙ «нет подписки» (онбординг) — скрыт по умолчанию =====================
+              Аналог Android updateHomeEmptyState: щит прячется, показывается приветствие +
+              карточка-онбординг с двумя CTA. Тексты verbatim из strings(-ru).xml.  -->
+        <StackPanel
+            x:Name="LayerEmpty"
+            MaxWidth="400"
+            Margin="16"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center"
+            IsVisible="False">
+            <TextBlock
+                Margin="0,0,0,12"
+                HorizontalAlignment="Center"
+                Classes="Headline"
+                Text="Приветствуем!"
+                TextAlignment="Center" />
+            <Border Classes="Card">
+                <StackPanel>
+                    <TextBlock
+                        HorizontalAlignment="Center"
+                        Classes="Title"
+                        Text="Пока нет подписок" />
+                    <TextBlock
+                        Margin="0,8,0,0"
+                        HorizontalAlignment="Center"
+                        Classes="Subtitle"
+                        Text="Добавьте подписку, чтобы начать пользоваться"
+                        TextAlignment="Center"
+                        TextWrapping="Wrap" />
+                    <Button
+                        x:Name="AddQrButton"
+                        Margin="0,24,0,0"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Center"
+                        Classes="Primary">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Path
+                                Width="18"
+                                Height="18"
+                                VerticalAlignment="Center"
+                                Data="M4 9 V6 A2 2 0 0 1 6 4 H9 M15 4 H18 A2 2 0 0 1 20 6 V9 M20 15 V18 A2 2 0 0 1 18 20 H15 M9 20 H6 A2 2 0 0 1 4 18 V15"
+                                Stretch="Uniform"
+                                Stroke="{DynamicResource Brush.OnAccent}"
+                                StrokeJoin="Round"
+                                StrokeLineCap="Round"
+                                StrokeThickness="1.8" />
+                            <TextBlock
+                                VerticalAlignment="Center"
+                                Foreground="{DynamicResource Brush.OnAccent}"
+                                Text="Добавить по QR-коду" />
+                        </StackPanel>
+                    </Button>
+                    <Button
+                        x:Name="AddClipboardButton"
+                        Margin="0,8,0,0"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Center"
+                        Classes="Tonal">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <PathIcon
+                                Width="16"
+                                Height="16"
+                                VerticalAlignment="Center"
+                                Data="{StaticResource building_copy}"
+                                Foreground="{DynamicResource Brush.OnSurface}" />
+                            <TextBlock
+                                VerticalAlignment="Center"
+                                Foreground="{DynamicResource Brush.OnSurface}"
+                                Text="Добавить из буфера обмена" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </Panel>
+</UserControl>

@@ -6,19 +6,367 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid Background="{DynamicResource Brush.Bg}">
-        <StackPanel
-            HorizontalAlignment="Center"
-            VerticalAlignment="Center"
-            Spacing="8">
+    <!--
+        Экран «Аккаунт» (порт Android activity_account.xml + item_subscription_card.xml,
+        AccountFragment.kt / SubscriptionPagerAdapter.kt). Две зоны: HERO (профиль-карта +
+        карточка подписки, читаются как один блок) и одна секция «Управление». Incy: pure dark,
+        один синий акцент, Space Grotesk, токен-отступы/радиусы/плитки, sentence-case Russian,
+        0 elevation, 1px OutlineVariant, без вложенных карт и градиентов.
+
+        DATA-DRIVEN (под-план 4b): все значения приходят из departament-API (UserProfileDto /
+        SubInfoDto / PaymentDto через AccountViewModel-порт). x:Name-поля ниже — точки привязки
+        реальных данных; тексты-примеры («@serumfx», «0 ₽», «REF-888F7211», «Base», «04.06.2099»,
+        «23 / ∞», «10.07.2026») совпадают со скриншотом и служат только для отрисовки.
+    -->
+
+    <UserControl.Resources>
+        <!--  Векторные глифы (порт Android drawable/ic_acc_*, ic_add_24dp, ic_copy, ic_chevron_right; 24dp).  -->
+        <StreamGeometry x:Key="Geo.Acc.Add">M19,13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z</StreamGeometry>
+        <StreamGeometry x:Key="Geo.Acc.Camera">M12,15.2c1.767,0 3.2,-1.433 3.2,-3.2s-1.433,-3.2 -3.2,-3.2 -3.2,1.433 -3.2,3.2 1.433,3.2 3.2,3.2zM9,2L7.17,4H4c-1.1,0 -2,0.9 -2,2v12c0,1.1 0.9,2 2,2h16c1.1,0 2,-0.9 2,-2V6c0,-1.1 -0.9,-2 -2,-2h-3.17L15,2H9zM12,7c-2.76,0 -5,2.24 -5,5s2.24,5 5,5 5,-2.24 5,-5 -2.24,-5 -5,-5z</StreamGeometry>
+        <StreamGeometry x:Key="Geo.Acc.Copy">M16,1L4,1c-1.1,0 -2,0.9 -2,2v14h2L4,3h12L16,1zM19,5L8,5c-1.1,0 -2,0.9 -2,2v14c0,1.1 0.9,2 2,2h11c1.1,0 2,-0.9 2,-2L21,7c0,-1.1 -0.9,-2 -2,-2zM19,21L8,21L8,7h11v14z</StreamGeometry>
+        <!--  Тренд-вверх (ic_acc_upgrade) — промо «Купить подписку».  -->
+        <StreamGeometry x:Key="Geo.Acc.Upgrade">M16,6l2.29,2.29 -4.88,4.88 -4,-4L2,16.59 3.41,18l6,-6 4,4 6.3,-6.29L22,12V6z</StreamGeometry>
+        <StreamGeometry x:Key="Geo.Acc.Devices">M4,6h18V4H4c-1.1,0 -2,0.9 -2,2v11H0v3h14v-3H4V6zM23,8h-6c-0.55,0 -1,0.45 -1,1v10c0,0.55 0.45,1 1,1h6c0.55,0 1,-0.45 1,-1V9c0,-0.55 -0.45,-1 -1,-1zM22,18h-4v-8h4v8z</StreamGeometry>
+        <StreamGeometry x:Key="Geo.Acc.History">M13,3c-4.97,0 -9,4.03 -9,9H1l3.89,3.89 0.07,0.14L9,12H6c0,-3.87 3.13,-7 7,-7s7,3.13 7,7 -3.13,7 -7,7c-1.93,0 -3.68,-0.79 -4.94,-2.06l-1.42,1.42C8.27,19.99 10.51,21 13,21c4.97,0 9,-4.03 9,-9s-4.03,-9 -9,-9zM12,8v5l4.28,2.54 0.72,-1.21 -3.5,-2.08V8H12z</StreamGeometry>
+        <StreamGeometry x:Key="Geo.Acc.Chevron">M8.6,4.6L7.2,6l6,6l-6,6l1.4,1.4L16,12z</StreamGeometry>
+    </UserControl.Resources>
+
+    <UserControl.Styles>
+        <!--  Реф-строка целиком кликабельна (аналог selectableItemBackground): фон задаём в стиле,
+              чтобы :pointerover мог его переопределить (inline-значение победило бы стиль).  -->
+        <Style Selector="Border.RefRow">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="CornerRadius" Value="{StaticResource Radius.Chip}" />
+            <Setter Property="Padding" Value="6" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+        </Style>
+        <Style Selector="Border.RefRow:pointerover">
+            <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
+        </Style>
+    </UserControl.Styles>
+
+    <ScrollViewer
+        Background="{DynamicResource Brush.Bg}"
+        HorizontalScrollBarVisibility="Disabled"
+        VerticalScrollBarVisibility="Auto">
+
+        <!--  Центрированная колонка ~560; на узком окне ужимается с 16dp-гаттером (Stretch+MaxWidth = центр).  -->
+        <StackPanel MaxWidth="560" Margin="16,12,16,24">
+
+            <!-- ============ HERO: профиль-карта ============ -->
+            <Border Classes="Card">
+                <StackPanel>
+
+                    <!--  Строка 1: аватар + @ник + пилюля «Пополнить»  -->
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                        <!--  Контейнер 52: аватар 48 (инициал) + бейдж-камера 18 снизу-справа  -->
+                        <Panel
+                            Grid.Column="0"
+                            Width="52"
+                            Height="52">
+                            <Border
+                                Classes="Avatar"
+                                Width="48"
+                                Height="48"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center">
+                                <TextBlock
+                                    x:Name="AvatarInitial"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    FontFamily="{DynamicResource Font.Grotesk}"
+                                    FontSize="20"
+                                    FontWeight="Bold"
+                                    Foreground="{DynamicResource Brush.Accent}"
+                                    Text="S" />
+                            </Border>
+                            <Border
+                                Width="18"
+                                Height="18"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Bottom"
+                                Background="{DynamicResource Brush.Accent}"
+                                BorderBrush="{DynamicResource Brush.Surface}"
+                                BorderThickness="2"
+                                CornerRadius="100">
+                                <PathIcon
+                                    Width="10"
+                                    Height="10"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Data="{StaticResource Geo.Acc.Camera}"
+                                    Foreground="White" />
+                            </Border>
+                        </Panel>
+
+                        <TextBlock
+                            x:Name="TvUsername"
+                            Grid.Column="1"
+                            Margin="12,0,12,0"
+                            VerticalAlignment="Center"
+                            Classes="Title"
+                            Text="@serumfx"
+                            TextTrimming="CharacterEllipsis" />
+
+                        <!--  «Пополнить»: компактная синяя пилюля, «+» + текст явным цветом OnAccent (не блёклый).  -->
+                        <Button
+                            x:Name="BtnTopUp"
+                            Grid.Column="2"
+                            Height="44"
+                            Padding="18,0"
+                            VerticalAlignment="Center"
+                            Classes="Primary">
+                            <StackPanel
+                                Orientation="Horizontal"
+                                Spacing="8"
+                                VerticalAlignment="Center">
+                                <PathIcon
+                                    Width="18"
+                                    Height="18"
+                                    VerticalAlignment="Center"
+                                    Data="{StaticResource Geo.Acc.Add}"
+                                    Foreground="{DynamicResource Brush.OnAccent}" />
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    FontFamily="{DynamicResource Font.Grotesk}"
+                                    FontSize="15"
+                                    FontWeight="Bold"
+                                    Foreground="{DynamicResource Brush.OnAccent}"
+                                    Text="Пополнить" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+
+                    <!--  Баланс: тихая подпись над крупной бренд-цифрой  -->
+                    <TextBlock
+                        Margin="0,16,0,0"
+                        Classes="Caption"
+                        Text="Баланс" />
+                    <TextBlock
+                        x:Name="TvBalance"
+                        Margin="0,4,0,0"
+                        Classes="Display Numeric"
+                        Text="0 ₽"
+                        TextTrimming="CharacterEllipsis" />
+
+                    <!--  Реф-код: вся строка копирует код (чип + завершающий глиф-копирование).  -->
+                    <Border
+                        x:Name="RowReferral"
+                        Margin="0,12,0,0"
+                        Classes="RefRow">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Border
+                                Padding="12,8"
+                                Background="{DynamicResource Brush.SurfaceVariant}"
+                                CornerRadius="{StaticResource Radius.Chip}">
+                                <TextBlock
+                                    x:Name="TvReferral"
+                                    Classes="Caption"
+                                    Text="Реф-код REF-888F7211"
+                                    TextTrimming="CharacterEllipsis" />
+                            </Border>
+                            <PathIcon
+                                Width="18"
+                                Height="18"
+                                Margin="8,0,0,0"
+                                VerticalAlignment="Center"
+                                Data="{StaticResource Geo.Acc.Copy}"
+                                Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Border>
+
+            <!-- ============ HERO: карточка подписки (sibling, не вложенная) ============ -->
+            <Border
+                Classes="Card"
+                Margin="0,12,0,0"
+                MinHeight="152">
+                <StackPanel VerticalAlignment="Top">
+                    <!--  Шапка: имя подписки (слева, обрезается) + тариф-бейдж (справа)  -->
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock
+                            x:Name="TvSubName"
+                            Grid.Column="0"
+                            VerticalAlignment="Center"
+                            Classes="Title"
+                            Text="departament vpn"
+                            TextTrimming="CharacterEllipsis" />
+                        <!--  Тариф-бейдж (bg_acc_badge): плитка Tile.Blue radius 12, текст Chip цвет Accent.  -->
+                        <Border
+                            x:Name="TariffBadge"
+                            Grid.Column="1"
+                            Margin="8,0,0,0"
+                            Padding="8,4"
+                            VerticalAlignment="Center"
+                            Background="{DynamicResource Brush.Tile.Blue}"
+                            CornerRadius="{StaticResource Radius.Chip}">
+                            <TextBlock
+                                x:Name="TvTariffBadge"
+                                Classes="Chip"
+                                Foreground="{DynamicResource Brush.Accent}"
+                                Text="Base" />
+                        </Border>
+                    </Grid>
+
+                    <TextBlock
+                        x:Name="TvSubExpiry"
+                        Margin="0,12,0,0"
+                        Classes="Subtitle"
+                        Text="Действует до 04.06.2099" />
+                    <TextBlock
+                        x:Name="TvSubDevices"
+                        Margin="0,4,0,0"
+                        Classes="Subtitle"
+                        Text="Устройства: 23 / ∞" />
+                </StackPanel>
+            </Border>
+
+            <!-- ============ Секция «Управление» ============ -->
             <TextBlock
-                HorizontalAlignment="Center"
-                Classes="Headline"
-                Text="Аккаунт" />
-            <TextBlock
-                HorizontalAlignment="Center"
-                Classes="Subtitle"
-                Text="Профиль, подписки и управление появятся на этапе 1." />
+                Margin="0,24,0,8"
+                Classes="SectionHeader"
+                Text="Управление" />
+
+            <!--  Padding 0 + ClipToBounds: строки во всю ширину, hover-подсветка клипается к radius 20.  -->
+            <Border
+                Classes="Card"
+                Padding="0"
+                ClipToBounds="True">
+                <StackPanel>
+
+                    <!--  «Купить подписку» — промо: синий тайл (тренд-вверх) + акцентный текст.  -->
+                    <Border
+                        x:Name="RowBuy"
+                        Padding="16,8"
+                        Classes="Row"
+                        CornerRadius="0"
+                        Cursor="Hand">
+                        <Grid ColumnDefinitions="Auto,*,Auto,Auto" VerticalAlignment="Center">
+                            <Border Grid.Column="0" Classes="Tile Blue">
+                                <PathIcon
+                                    Width="22"
+                                    Height="22"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Data="{StaticResource Geo.Acc.Upgrade}"
+                                    Foreground="{DynamicResource Brush.Accent}" />
+                            </Border>
+                            <TextBlock
+                                Grid.Column="1"
+                                Margin="16,0,8,0"
+                                VerticalAlignment="Center"
+                                Classes="Title"
+                                Foreground="{DynamicResource Brush.Accent}"
+                                Text="Купить подписку"
+                                TextTrimming="CharacterEllipsis" />
+                            <PathIcon
+                                Grid.Column="3"
+                                Width="18"
+                                Height="18"
+                                Margin="4,0,0,0"
+                                VerticalAlignment="Center"
+                                Data="{StaticResource Geo.Acc.Chevron}"
+                                Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+                        </Grid>
+                    </Border>
+
+                    <Border
+                        Height="1"
+                        Margin="72,0,0,0"
+                        Background="{DynamicResource Brush.OutlineVariant}" />
+
+                    <!--  «Устройства» — нейтральный тайл + значение «N / ∞».  -->
+                    <Border
+                        x:Name="RowDevices"
+                        Padding="16,8"
+                        Classes="Row"
+                        CornerRadius="0"
+                        Cursor="Hand">
+                        <Grid ColumnDefinitions="Auto,*,Auto,Auto" VerticalAlignment="Center">
+                            <Border Grid.Column="0" Classes="Tile">
+                                <PathIcon
+                                    Width="22"
+                                    Height="22"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Data="{StaticResource Geo.Acc.Devices}"
+                                    Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+                            </Border>
+                            <TextBlock
+                                Grid.Column="1"
+                                Margin="16,0,8,0"
+                                VerticalAlignment="Center"
+                                Classes="Title"
+                                Text="Устройства" />
+                            <TextBlock
+                                x:Name="TvRowValueDevices"
+                                Grid.Column="2"
+                                Margin="0,0,8,0"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center"
+                                Classes="Subtitle"
+                                Text="23 / ∞" />
+                            <PathIcon
+                                Grid.Column="3"
+                                Width="18"
+                                Height="18"
+                                Margin="4,0,0,0"
+                                VerticalAlignment="Center"
+                                Data="{StaticResource Geo.Acc.Chevron}"
+                                Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+                        </Grid>
+                    </Border>
+
+                    <Border
+                        Height="1"
+                        Margin="72,0,0,0"
+                        Background="{DynamicResource Brush.OutlineVariant}" />
+
+                    <!--  «История платежей» — нейтральный тайл + дата последнего платежа.  -->
+                    <Border
+                        x:Name="RowHistory"
+                        Padding="16,8"
+                        Classes="Row"
+                        CornerRadius="0"
+                        Cursor="Hand">
+                        <Grid ColumnDefinitions="Auto,*,Auto,Auto" VerticalAlignment="Center">
+                            <Border Grid.Column="0" Classes="Tile">
+                                <PathIcon
+                                    Width="22"
+                                    Height="22"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Data="{StaticResource Geo.Acc.History}"
+                                    Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+                            </Border>
+                            <TextBlock
+                                Grid.Column="1"
+                                Margin="16,0,8,0"
+                                VerticalAlignment="Center"
+                                Classes="Title"
+                                Text="История платежей" />
+                            <TextBlock
+                                x:Name="TvRowValueHistory"
+                                Grid.Column="2"
+                                Margin="0,0,8,0"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center"
+                                Classes="Subtitle"
+                                Text="10.07.2026" />
+                            <PathIcon
+                                Grid.Column="3"
+                                Width="18"
+                                Height="18"
+                                Margin="4,0,0,0"
+                                VerticalAlignment="Center"
+                                Data="{StaticResource Geo.Acc.Chevron}"
+                                Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+                        </Grid>
+                    </Border>
+                </StackPanel>
+            </Border>
         </StackPanel>
-    </Grid>
+    </ScrollViewer>
 </UserControl>
