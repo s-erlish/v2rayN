@@ -1,4 +1,21 @@
 <Styles xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- ==================================================================== -->
+    <!--  Радиус кнопок (CTA/пилюль) — НЕ пилюля, НЕ капсула.                   -->
+    <!--  Android Material-CTA задаёт cornerRadius=26dp на кнопке 52dp          -->
+    <!--  (activity_buy_tariff.xml:303 btn_pay, activity_login.xml:64           -->
+    <!--  btn_telegram; tonal-retry :75 = 22). Но 26 >= половины высоты 48 52,  -->
+    <!--  поэтому и Android (после 6dp inset), и Avalonia клампят угол до        -->
+    <!--  полукруга -> получается капсула-стадион (android_buy.jpg/login.jpg).   -->
+    <!--  Владелец отклонил эти капсулы. Порт: настоящий скруглённый             -->
+    <!--  ПРЯМОУГОЛЬНИК radius 16 (на 48h остаётся прямой вертикальный край;     -->
+    <!--  язык формы как у Android bg_buy_option radius 14). 16 достраивает      -->
+    <!--  шкалу Incy chip 12 / button 16 / card 20 / sheet 24 и меньше радиуса   -->
+    <!--  карты (кнопка внутри карты 20 остаётся концентрически гармоничной).    -->
+    <!-- ==================================================================== -->
+    <Styles.Resources>
+        <CornerRadius x:Key="Radius.Button">16</CornerRadius>
+    </Styles.Resources>
+
     <Design.PreviewWith>
         <Border Padding="20">
             <!--  Add Controls for Previewer Here  -->
@@ -134,11 +151,19 @@
         <Setter Property="Padding" Value="10,4" />
     </Style>
 
-    <!--  Кнопки: синяя пилюля / тональная / иконка. Ripple/glow не используем.  -->
+    <!-- ==================================================================== -->
+    <!--  ОДНА система кнопок (DESIGN_PLAN §0.1). Каждый экран использует ЭТИ     -->
+    <!--  классы; никакой экран НЕ задаёт свою высоту/радиус/паддинг кнопки.     -->
+    <!--  Радиус = Radius.Button 16 (скруглённый прямоугольник, не капсула,      -->
+    <!--  объяснение у Styles.Resources сверху). Никакого ripple/glow: един-     -->
+    <!--  ственный отклик на нажатие — scale (Android press_scale/nav_press).    -->
+    <!-- ==================================================================== -->
+
+    <!--  Первичная (акцент). 48h, Grotesk 15 Bold. press scale 0.97 @90мс.  -->
     <Style Selector="Button.Primary">
         <Setter Property="Background" Value="{DynamicResource Brush.Accent}" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnAccent}" />
-        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Button}" />
         <Setter Property="Height" Value="48" />
         <Setter Property="Padding" Value="24,0" />
         <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
@@ -155,10 +180,23 @@
     <Style Selector="Button.Primary:pressed">
         <Setter Property="RenderTransform" Value="scale(0.97)" />
     </Style>
+    <Style Selector="Button.Primary:disabled">
+        <Setter Property="Opacity" Value="0.38" />
+    </Style>
+
+    <!--  Первичная высокая (CTA форм: Оплатить / Войти / Подтвердить). 52h.
+          Android btn_pay/btn_telegram = layout height 52dp. Всё остальное =
+          Primary (наследует фон/типографику/press-scale/disabled по классу).  -->
+    <Style Selector="Button.Primary.Tall">
+        <Setter Property="Height" Value="52" />
+    </Style>
+
+    <!--  Тональная. 48h, SurfaceHighest/OnSurface, Grotesk 15 Medium.
+          ДОБАВЛЕНЫ press scale 0.97 + переход (раньше их не было) — как Primary.  -->
     <Style Selector="Button.Tonal">
         <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHighest}" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
-        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Button}" />
         <Setter Property="Height" Value="48" />
         <Setter Property="Padding" Value="24,0" />
         <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
@@ -166,6 +204,82 @@
         <Setter Property="FontSize" Value="15" />
         <Setter Property="HorizontalContentAlignment" Value="Center" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button.Tonal:pressed">
+        <Setter Property="RenderTransform" Value="scale(0.97)" />
+    </Style>
+    <Style Selector="Button.Tonal:disabled">
+        <Setter Property="Opacity" Value="0.38" />
+    </Style>
+
+    <!--  Контурная (акцент): прозрачный фон + 1px рамка Accent, текст Accent,
+          Grotesk 15 Medium. Регистрация / Начать заново. Android btn_restart:
+          materialButtonOutlinedStyle, strokeColor=colorPrimary, textColor=colorPrimary.  -->
+    <Style Selector="Button.OutlinedAccent">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Button}" />
+        <Setter Property="Height" Value="48" />
+        <Setter Property="Padding" Value="24,0" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+        <Setter Property="FontWeight" Value="Medium" />
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button.OutlinedAccent:pressed">
+        <Setter Property="RenderTransform" Value="scale(0.97)" />
+    </Style>
+    <Style Selector="Button.OutlinedAccent:disabled">
+        <Setter Property="Opacity" Value="0.38" />
+    </Style>
+
+    <!--  Степпер (±): круг 40 (CornerRadius 20 = круг), фон Tile.Blue, глиф 20
+          Accent. press scale 0.94 (как connect-диск animateConnectPress).
+          Android btn_dev_minus/plus (activity_buy_tariff.xml:213-259):
+          tile_size 40, cornerRadius 20, iconSize 20, iconTint=colorPrimary,
+          backgroundTint=iconTileBgBlue (bg_icon_blue), inset/padding 0.  -->
+    <Style Selector="Button.Stepper">
+        <Setter Property="Width" Value="{DynamicResource Size.Tile}" />
+        <Setter Property="Height" Value="{DynamicResource Size.Tile}" />
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="CornerRadius" Value="20" />
+        <Setter Property="Background" Value="{DynamicResource Brush.Tile.Blue}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <!--  Глиф степпера: 20, цвет Accent (перекрывает базовый PathIcon 16/tertiary).  -->
+    <Style Selector="Button.Stepper PathIcon">
+        <Setter Property="Width" Value="20" />
+        <Setter Property="Height" Value="20" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+    </Style>
+    <Style Selector="Button.Stepper:pressed">
+        <Setter Property="RenderTransform" Value="scale(0.94)" />
+    </Style>
+    <Style Selector="Button.Stepper:disabled">
+        <Setter Property="Opacity" Value="0.38" />
     </Style>
 
     <!-- ==================================================================== -->

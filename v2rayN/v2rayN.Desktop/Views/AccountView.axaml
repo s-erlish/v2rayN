@@ -4,36 +4,39 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:vms="clr-namespace:v2rayN.Desktop.ViewModels"
+    x:DataType="vms:AccountViewModel"
     mc:Ignorable="d">
 
     <!--
         Экран «Аккаунт» (порт Android activity_account.xml + item_subscription_card.xml,
         AccountFragment.kt / SubscriptionPagerAdapter.kt). Две зоны: HERO (профиль-карта +
-        карточка подписки, читаются как один блок) и одна секция «Управление». Incy: pure dark,
+        карточка подписки как СОСЕДНИЕ, не вложенные) и секция «Управление». Incy: pure dark,
         один синий акцент, Space Grotesk, токен-отступы/радиусы/плитки, sentence-case Russian,
         0 elevation, 1px OutlineVariant, без вложенных карт и градиентов.
 
-        DATA-DRIVEN (под-план 4b): все значения приходят из departament-API (UserProfileDto /
-        SubInfoDto / PaymentDto через AccountViewModel-порт). x:Name-поля ниже — точки привязки
-        реальных данных; тексты-примеры («@serumfx», «0 ₽», «REF-888F7211», «Base», «04.06.2099»,
-        «23 / ∞», «10.07.2026») совпадают со скриншотом и служат только для отрисовки.
+        DATA-DRIVEN: КАЖДОЕ значение приходит из departament-API через AccountViewModel
+        (UserProfileDto / SubInfoDto / PaymentDto). Никаких заглушек: пусто до входа и реального
+        ответа. Карточка подписки — ровно одно из 4 состояний: скелет / активная / пусто / ошибка.
     -->
 
     <UserControl.Resources>
-        <!--  Векторные глифы (порт Android drawable/ic_acc_*, ic_add_24dp, ic_copy, ic_chevron_right; 24dp).  -->
+        <!--  Векторные глифы (порт Android drawable/ic_acc_*; 24dp).  -->
         <StreamGeometry x:Key="Geo.Acc.Add">M19,13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z</StreamGeometry>
         <StreamGeometry x:Key="Geo.Acc.Camera">M12,15.2c1.767,0 3.2,-1.433 3.2,-3.2s-1.433,-3.2 -3.2,-3.2 -3.2,1.433 -3.2,3.2 1.433,3.2 3.2,3.2zM9,2L7.17,4H4c-1.1,0 -2,0.9 -2,2v12c0,1.1 0.9,2 2,2h16c1.1,0 2,-0.9 2,-2V6c0,-1.1 -0.9,-2 -2,-2h-3.17L15,2H9zM12,7c-2.76,0 -5,2.24 -5,5s2.24,5 5,5 5,-2.24 5,-5 -2.24,-5 -5,-5z</StreamGeometry>
         <StreamGeometry x:Key="Geo.Acc.Copy">M16,1L4,1c-1.1,0 -2,0.9 -2,2v14h2L4,3h12L16,1zM19,5L8,5c-1.1,0 -2,0.9 -2,2v14c0,1.1 0.9,2 2,2h11c1.1,0 2,-0.9 2,-2L21,7c0,-1.1 -0.9,-2 -2,-2zM19,21L8,21L8,7h11v14z</StreamGeometry>
-        <!--  Тренд-вверх (ic_acc_upgrade) — промо «Купить подписку».  -->
         <StreamGeometry x:Key="Geo.Acc.Upgrade">M16,6l2.29,2.29 -4.88,4.88 -4,-4L2,16.59 3.41,18l6,-6 4,4 6.3,-6.29L22,12V6z</StreamGeometry>
         <StreamGeometry x:Key="Geo.Acc.Devices">M4,6h18V4H4c-1.1,0 -2,0.9 -2,2v11H0v3h14v-3H4V6zM23,8h-6c-0.55,0 -1,0.45 -1,1v10c0,0.55 0.45,1 1,1h6c0.55,0 1,-0.45 1,-1V9c0,-0.55 -0.45,-1 -1,-1zM22,18h-4v-8h4v8z</StreamGeometry>
         <StreamGeometry x:Key="Geo.Acc.History">M13,3c-4.97,0 -9,4.03 -9,9H1l3.89,3.89 0.07,0.14L9,12H6c0,-3.87 3.13,-7 7,-7s7,3.13 7,7 -3.13,7 -7,7c-1.93,0 -3.68,-0.79 -4.94,-2.06l-1.42,1.42C8.27,19.99 10.51,21 13,21c4.97,0 9,-4.03 9,-9s-4.03,-9 -9,-9zM12,8v5l4.28,2.54 0.72,-1.21 -3.5,-2.08V8H12z</StreamGeometry>
         <StreamGeometry x:Key="Geo.Acc.Chevron">M8.6,4.6L7.2,6l6,6l-6,6l1.4,1.4L16,12z</StreamGeometry>
+        <!--  Telegram (paper plane) — для CTA входа.  -->
+        <StreamGeometry x:Key="Geo.Acc.Telegram">M9.78,18.65l0.28,-4.23l7.68,-6.92c0.34,-0.31 -0.07,-0.46 -0.52,-0.19L7.74,13.3L3.64,12c-0.88,-0.25 -0.89,-0.86 0.2,-1.3l15.97,-6.16c0.73,-0.33 1.43,0.18 1.15,1.3l-2.72,12.81c-0.19,0.91 -0.74,1.13 -1.5,0.71L12.6,16.3l-1.99,1.93c-0.23,0.23 -0.42,0.42 -0.83,0.42z</StreamGeometry>
+        <!--  Инфо-круг — для состояния ошибки.  -->
+        <StreamGeometry x:Key="Geo.Acc.Alert">M12,2A10,10 0 1,0 12,22A10,10 0 0,0 12,2M13,17h-2v-2h2v2M13,13h-2V7h2v6z</StreamGeometry>
     </UserControl.Resources>
 
     <UserControl.Styles>
-        <!--  Реф-строка целиком кликабельна (аналог selectableItemBackground): фон задаём в стиле,
-              чтобы :pointerover мог его переопределить (inline-значение победило бы стиль).  -->
+        <!--  Реф-строка целиком кликабельна: фон задаём в стиле, чтобы :pointerover переопределил.  -->
         <Style Selector="Border.RefRow">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="CornerRadius" Value="{StaticResource Radius.Chip}" />
@@ -44,6 +47,31 @@
         <Style Selector="Border.RefRow:pointerover">
             <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
         </Style>
+
+        <!--  Плейсхолдер-полоса скелета: нейтральная поверхность, скруглённая.  -->
+        <Style Selector="Border.SkelBar">
+            <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHighest}" />
+            <Setter Property="CornerRadius" Value="{StaticResource Radius.Chip}" />
+            <Setter Property="Height" Value="16" />
+        </Style>
+
+        <!--  Пульс скелета: alpha 0.45 to 1.0, 900ms, реверс, бесконечно (передаёт «загрузка»).  -->
+        <Style Selector="Border.Skeleton">
+            <Style.Animations>
+                <Animation
+                    Duration="0:0:0.9"
+                    Easing="SineEaseInOut"
+                    IterationCount="Infinite"
+                    PlaybackDirection="Alternate">
+                    <KeyFrame Cue="0%">
+                        <Setter Property="Opacity" Value="0.45" />
+                    </KeyFrame>
+                    <KeyFrame Cue="100%">
+                        <Setter Property="Opacity" Value="1.0" />
+                    </KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
     </UserControl.Styles>
 
     <ScrollViewer
@@ -51,72 +79,152 @@
         HorizontalScrollBarVisibility="Disabled"
         VerticalScrollBarVisibility="Auto">
 
-        <!--  Центрированная колонка ~560; на узком окне ужимается с 16dp-гаттером (Stretch+MaxWidth = центр).  -->
+        <!--  Центрированная колонка ~560; на узком окне ужимается с 16dp-гаттером.  -->
         <StackPanel MaxWidth="560" Margin="16,12,16,24">
 
             <!-- ============ HERO: профиль-карта ============ -->
             <Border Classes="Card">
-                <StackPanel>
+                <Panel>
 
-                    <!--  Строка 1: аватар + @ник + пилюля «Пополнить»  -->
-                    <Grid ColumnDefinitions="Auto,*,Auto">
-                        <!--  Контейнер 52: аватар 48 (инициал) + бейдж-камера 18 снизу-справа  -->
-                        <Panel
-                            Grid.Column="0"
-                            Width="52"
-                            Height="52">
-                            <Border
-                                Classes="Avatar"
-                                Width="48"
-                                Height="48"
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Center">
-                                <TextBlock
-                                    x:Name="AvatarInitial"
+                    <!--  Вошедший пользователь: аватар + имя + «Пополнить», баланс, реф-код.  -->
+                    <StackPanel IsVisible="{Binding HasProfile}">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <!--  Контейнер 52: аватар 48 (инициал) + бейдж-камера 18.  -->
+                            <Panel
+                                Grid.Column="0"
+                                Width="52"
+                                Height="52">
+                                <Border
+                                    Classes="Avatar"
+                                    Width="48"
+                                    Height="48"
                                     HorizontalAlignment="Center"
-                                    VerticalAlignment="Center"
-                                    FontFamily="{DynamicResource Font.Grotesk}"
-                                    FontSize="20"
-                                    FontWeight="Bold"
-                                    Foreground="{DynamicResource Brush.Accent}"
-                                    Text="S" />
-                            </Border>
-                            <Border
-                                Width="18"
-                                Height="18"
-                                HorizontalAlignment="Right"
-                                VerticalAlignment="Bottom"
-                                Background="{DynamicResource Brush.Accent}"
-                                BorderBrush="{DynamicResource Brush.Surface}"
-                                BorderThickness="2"
-                                CornerRadius="100">
-                                <PathIcon
-                                    Width="10"
-                                    Height="10"
-                                    HorizontalAlignment="Center"
-                                    VerticalAlignment="Center"
-                                    Data="{StaticResource Geo.Acc.Camera}"
-                                    Foreground="White" />
-                            </Border>
-                        </Panel>
+                                    VerticalAlignment="Center">
+                                    <TextBlock
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        FontFamily="{DynamicResource Font.Grotesk}"
+                                        FontSize="20"
+                                        FontWeight="Bold"
+                                        Foreground="{DynamicResource Brush.Accent}"
+                                        Text="{Binding AvatarInitial}" />
+                                </Border>
+                                <Border
+                                    Width="18"
+                                    Height="18"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Bottom"
+                                    Background="{DynamicResource Brush.Accent}"
+                                    BorderBrush="{DynamicResource Brush.Surface}"
+                                    BorderThickness="2"
+                                    CornerRadius="100">
+                                    <PathIcon
+                                        Width="10"
+                                        Height="10"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        Data="{StaticResource Geo.Acc.Camera}"
+                                        Foreground="White" />
+                                </Border>
+                            </Panel>
 
+                            <TextBlock
+                                Grid.Column="1"
+                                Margin="12,0,12,0"
+                                VerticalAlignment="Center"
+                                Classes="Title"
+                                Text="{Binding Username}"
+                                TextTrimming="CharacterEllipsis" />
+
+                            <!--  «Пополнить»: синяя пилюля (shared Button.Primary), «+» + текст OnAccent.  -->
+                            <Button
+                                Grid.Column="2"
+                                VerticalAlignment="Center"
+                                Classes="Primary">
+                                <StackPanel
+                                    Orientation="Horizontal"
+                                    Spacing="8"
+                                    VerticalAlignment="Center">
+                                    <PathIcon
+                                        Width="18"
+                                        Height="18"
+                                        VerticalAlignment="Center"
+                                        Data="{StaticResource Geo.Acc.Add}"
+                                        Foreground="{DynamicResource Brush.OnAccent}" />
+                                    <TextBlock
+                                        VerticalAlignment="Center"
+                                        Foreground="{DynamicResource Brush.OnAccent}"
+                                        Text="Пополнить" />
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+
+                        <!--  Баланс: тихая подпись над крупной бренд-цифрой (tnum для ровных знаков).  -->
                         <TextBlock
-                            x:Name="TvUsername"
-                            Grid.Column="1"
-                            Margin="12,0,12,0"
-                            VerticalAlignment="Center"
-                            Classes="Title"
-                            Text="@serumfx"
+                            Margin="0,16,0,0"
+                            Classes="Caption"
+                            IsVisible="{Binding HasBalance}"
+                            Text="Баланс" />
+                        <TextBlock
+                            Margin="0,4,0,0"
+                            Classes="Display Numeric"
+                            FontFeatures="tnum"
+                            IsVisible="{Binding HasBalance}"
+                            Text="{Binding BalanceText}"
                             TextTrimming="CharacterEllipsis" />
 
-                        <!--  «Пополнить»: компактная синяя пилюля, «+» + текст явным цветом OnAccent (не блёклый).  -->
+                        <!--  Реф-код: вся строка копирует код (чип + завершающий глиф).  -->
+                        <Border
+                            Margin="0,12,0,0"
+                            Classes="RefRow"
+                            IsVisible="{Binding HasReferral}">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <Border
+                                    Padding="12,8"
+                                    Background="{DynamicResource Brush.SurfaceVariant}"
+                                    CornerRadius="{StaticResource Radius.Chip}">
+                                    <TextBlock
+                                        Classes="Caption"
+                                        Text="{Binding ReferralText}"
+                                        TextTrimming="CharacterEllipsis" />
+                                </Border>
+                                <PathIcon
+                                    Width="18"
+                                    Height="18"
+                                    Margin="8,0,0,0"
+                                    VerticalAlignment="Center"
+                                    Data="{StaticResource Geo.Acc.Copy}"
+                                    Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!--  Не вошёл: приглашение войти через Telegram (nav-гейтинг отложен).  -->
+                    <StackPanel IsVisible="{Binding ShowLoginCta}" Spacing="12">
+                        <Border
+                            Classes="Avatar"
+                            Width="48"
+                            Height="48"
+                            HorizontalAlignment="Left">
+                            <PathIcon
+                                Width="24"
+                                Height="24"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Data="{StaticResource Geo.Acc.Telegram}"
+                                Foreground="{DynamicResource Brush.Accent}" />
+                        </Border>
+                        <TextBlock Classes="Title" Text="Войдите в аккаунт" />
+                        <TextBlock
+                            Classes="Subtitle"
+                            MaxWidth="360"
+                            HorizontalAlignment="Left"
+                            Text="Войдите, чтобы увидеть подписку, устройства и историю платежей."
+                            TextWrapping="Wrap" />
                         <Button
-                            x:Name="BtnTopUp"
-                            Grid.Column="2"
-                            Height="44"
-                            Padding="18,0"
-                            VerticalAlignment="Center"
-                            Classes="Primary">
+                            HorizontalAlignment="Left"
+                            Classes="Primary"
+                            Command="{Binding LoginTelegramCmd}">
                             <StackPanel
                                 Orientation="Horizontal"
                                 Spacing="8"
@@ -125,101 +233,142 @@
                                     Width="18"
                                     Height="18"
                                     VerticalAlignment="Center"
-                                    Data="{StaticResource Geo.Acc.Add}"
+                                    Data="{StaticResource Geo.Acc.Telegram}"
                                     Foreground="{DynamicResource Brush.OnAccent}" />
                                 <TextBlock
                                     VerticalAlignment="Center"
-                                    FontFamily="{DynamicResource Font.Grotesk}"
-                                    FontSize="15"
-                                    FontWeight="Bold"
                                     Foreground="{DynamicResource Brush.OnAccent}"
-                                    Text="Пополнить" />
+                                    Text="Войти через Telegram" />
                             </StackPanel>
                         </Button>
+                    </StackPanel>
+                </Panel>
+            </Border>
+
+            <!-- ============ HERO: карточка подписки (сосед, не вложенная) — 4 состояния ============ -->
+
+            <!--  Состояние СКЕЛЕТ: пульсирующие плейсхолдеры пока идёт первая загрузка.  -->
+            <Border
+                Classes="Card Skeleton"
+                Margin="0,12,0,0"
+                MinHeight="152"
+                IsVisible="{Binding ShowSkeleton}">
+                <StackPanel VerticalAlignment="Top" Spacing="12">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <Border
+                            Grid.Column="0"
+                            Classes="SkelBar"
+                            Width="180"
+                            HorizontalAlignment="Left" />
+                        <Border
+                            Grid.Column="1"
+                            Width="52"
+                            Height="24"
+                            Background="{DynamicResource Brush.SurfaceHighest}"
+                            CornerRadius="{StaticResource Radius.Chip}" />
                     </Grid>
-
-                    <!--  Баланс: тихая подпись над крупной бренд-цифрой  -->
-                    <TextBlock
-                        Margin="0,16,0,0"
-                        Classes="Caption"
-                        Text="Баланс" />
-                    <TextBlock
-                        x:Name="TvBalance"
-                        Margin="0,4,0,0"
-                        Classes="Display Numeric"
-                        Text="0 ₽"
-                        TextTrimming="CharacterEllipsis" />
-
-                    <!--  Реф-код: вся строка копирует код (чип + завершающий глиф-копирование).  -->
                     <Border
-                        x:Name="RowReferral"
-                        Margin="0,12,0,0"
-                        Classes="RefRow">
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <Border
-                                Padding="12,8"
-                                Background="{DynamicResource Brush.SurfaceVariant}"
-                                CornerRadius="{StaticResource Radius.Chip}">
-                                <TextBlock
-                                    x:Name="TvReferral"
-                                    Classes="Caption"
-                                    Text="Реф-код REF-888F7211"
-                                    TextTrimming="CharacterEllipsis" />
-                            </Border>
-                            <PathIcon
-                                Width="18"
-                                Height="18"
-                                Margin="8,0,0,0"
-                                VerticalAlignment="Center"
-                                Data="{StaticResource Geo.Acc.Copy}"
-                                Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
-                        </StackPanel>
-                    </Border>
+                        Classes="SkelBar"
+                        Width="220"
+                        HorizontalAlignment="Left" />
+                    <Border
+                        Classes="SkelBar"
+                        Width="140"
+                        HorizontalAlignment="Left" />
                 </StackPanel>
             </Border>
 
-            <!-- ============ HERO: карточка подписки (sibling, не вложенная) ============ -->
+            <!--  Состояние АКТИВНАЯ ПОДПИСКА.  -->
             <Border
                 Classes="Card"
                 Margin="0,12,0,0"
-                MinHeight="152">
+                MinHeight="152"
+                IsVisible="{Binding ShowActiveSub}">
                 <StackPanel VerticalAlignment="Top">
-                    <!--  Шапка: имя подписки (слева, обрезается) + тариф-бейдж (справа)  -->
+                    <!--  Шапка: имя подписки (обрезается) + тариф-бейдж.  -->
                     <Grid ColumnDefinitions="*,Auto">
                         <TextBlock
-                            x:Name="TvSubName"
                             Grid.Column="0"
                             VerticalAlignment="Center"
                             Classes="Title"
-                            Text="departament vpn"
+                            Text="{Binding SubName}"
                             TextTrimming="CharacterEllipsis" />
-                        <!--  Тариф-бейдж (bg_acc_badge): плитка Tile.Blue radius 12, текст Chip цвет Accent.  -->
+                        <!--  Тариф-бейдж: плитка Tile.Blue radius 12 pad 8,4, текст Chip цвет Accent.  -->
                         <Border
-                            x:Name="TariffBadge"
                             Grid.Column="1"
                             Margin="8,0,0,0"
                             Padding="8,4"
                             VerticalAlignment="Center"
                             Background="{DynamicResource Brush.Tile.Blue}"
-                            CornerRadius="{StaticResource Radius.Chip}">
+                            CornerRadius="{StaticResource Radius.Chip}"
+                            IsVisible="{Binding HasTariffBadge}">
                             <TextBlock
-                                x:Name="TvTariffBadge"
                                 Classes="Chip"
                                 Foreground="{DynamicResource Brush.Accent}"
-                                Text="Base" />
+                                Text="{Binding TariffBadge}" />
                         </Border>
                     </Grid>
 
                     <TextBlock
-                        x:Name="TvSubExpiry"
                         Margin="0,12,0,0"
                         Classes="Subtitle"
-                        Text="Действует до 04.06.2099" />
+                        IsVisible="{Binding HasSubExpiry}"
+                        Text="{Binding SubExpiry}" />
                     <TextBlock
-                        x:Name="TvSubDevices"
                         Margin="0,4,0,0"
                         Classes="Subtitle"
-                        Text="Устройства: 23 / ∞" />
+                        FontFeatures="tnum"
+                        Text="{Binding SubDevicesText}" />
+                </StackPanel>
+            </Border>
+
+            <!--  Состояние ПУСТО: нет активной подписки (обучающая копия, sentence-case).  -->
+            <Border
+                Classes="Card"
+                Margin="0,12,0,0"
+                MinHeight="120"
+                IsVisible="{Binding ShowEmpty}">
+                <StackPanel VerticalAlignment="Center" Spacing="6">
+                    <TextBlock Classes="Title" Text="Оформите первую подписку" />
+                    <TextBlock
+                        Classes="Subtitle"
+                        MaxWidth="420"
+                        HorizontalAlignment="Left"
+                        Text="Пока нет активной подписки. Оформите её, чтобы подключиться."
+                        TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <!--  Состояние ОШИБКА: не удалось загрузить + причина + «Повторить».  -->
+            <Border
+                Classes="Card"
+                Margin="0,12,0,0"
+                MinHeight="120"
+                IsVisible="{Binding ShowError}">
+                <StackPanel VerticalAlignment="Center" Spacing="12">
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                        <Border Classes="Tile">
+                            <PathIcon
+                                Width="22"
+                                Height="22"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Data="{StaticResource Geo.Acc.Alert}"
+                                Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+                        </Border>
+                        <StackPanel VerticalAlignment="Center" Spacing="4">
+                            <TextBlock Classes="Title" Text="Не удалось загрузить" />
+                            <TextBlock
+                                Classes="Subtitle"
+                                Text="{Binding ErrorText}"
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                    </StackPanel>
+                    <Button
+                        HorizontalAlignment="Left"
+                        Classes="Primary"
+                        Command="{Binding RetryCmd}"
+                        Content="Повторить" />
                 </StackPanel>
             </Border>
 
@@ -229,7 +378,7 @@
                 Classes="SectionHeader"
                 Text="Управление" />
 
-            <!--  Padding 0 + ClipToBounds: строки во всю ширину, hover-подсветка клипается к radius 20.  -->
+            <!--  Padding 0 + ClipToBounds: строки во всю ширину, hover клипается к radius 20.  -->
             <Border
                 Classes="Card"
                 Padding="0"
@@ -238,7 +387,6 @@
 
                     <!--  «Купить подписку» — промо: синий тайл (тренд-вверх) + акцентный текст.  -->
                     <Border
-                        x:Name="RowBuy"
                         Padding="16,8"
                         Classes="Row"
                         CornerRadius="0"
@@ -277,9 +425,8 @@
                         Margin="72,0,0,0"
                         Background="{DynamicResource Brush.OutlineVariant}" />
 
-                    <!--  «Устройства» — нейтральный тайл + значение «N / ∞».  -->
+                    <!--  «Устройства» — нейтральный тайл + значение «N / ∞» (tnum).  -->
                     <Border
-                        x:Name="RowDevices"
                         Padding="16,8"
                         Classes="Row"
                         CornerRadius="0"
@@ -301,13 +448,14 @@
                                 Classes="Title"
                                 Text="Устройства" />
                             <TextBlock
-                                x:Name="TvRowValueDevices"
                                 Grid.Column="2"
                                 Margin="0,0,8,0"
                                 HorizontalAlignment="Right"
                                 VerticalAlignment="Center"
                                 Classes="Subtitle"
-                                Text="23 / ∞" />
+                                FontFeatures="tnum"
+                                IsVisible="{Binding HasDevicesRowValue}"
+                                Text="{Binding DevicesRowValue}" />
                             <PathIcon
                                 Grid.Column="3"
                                 Width="18"
@@ -326,7 +474,6 @@
 
                     <!--  «История платежей» — нейтральный тайл + дата последнего платежа.  -->
                     <Border
-                        x:Name="RowHistory"
                         Padding="16,8"
                         Classes="Row"
                         CornerRadius="0"
@@ -348,13 +495,14 @@
                                 Classes="Title"
                                 Text="История платежей" />
                             <TextBlock
-                                x:Name="TvRowValueHistory"
                                 Grid.Column="2"
                                 Margin="0,0,8,0"
                                 HorizontalAlignment="Right"
                                 VerticalAlignment="Center"
                                 Classes="Subtitle"
-                                Text="10.07.2026" />
+                                FontFeatures="tnum"
+                                IsVisible="{Binding HasHistoryRowValue}"
+                                Text="{Binding HistoryRowValue}" />
                             <PathIcon
                                 Grid.Column="3"
                                 Width="18"

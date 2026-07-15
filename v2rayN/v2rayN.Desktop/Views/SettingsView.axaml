@@ -4,6 +4,9 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:vms="clr-namespace:v2rayN.Desktop.ViewModels"
+    x:DataType="vms:SettingsViewModel"
+    Design.DataContext="{x:Static vms:SettingsViewModel.Design}"
     mc:Ignorable="d">
 
     <!--
@@ -159,7 +162,7 @@
                                 x:Name="ValueMode"
                                 Grid.Column="2"
                                 Classes="Subtitle RowValue"
-                                Text="TUN" />
+                                Text="{Binding ModeText}" />
                             <PathIcon
                                 Grid.Column="3"
                                 Classes="Chevron"
@@ -191,7 +194,7 @@
                                 x:Name="ValuePerApp"
                                 Grid.Column="2"
                                 Classes="Subtitle RowValue"
-                                Text="Выкл" />
+                                Text="{Binding PerAppText}" />
                             <PathIcon
                                 Grid.Column="3"
                                 Classes="Chevron"
@@ -228,7 +231,7 @@
                                 x:Name="SwitchBypassLan"
                                 Grid.Column="2"
                                 Classes="RowSwitch"
-                                IsChecked="True"
+                                IsChecked="{Binding BypassLan, Mode=TwoWay}"
                                 Theme="{DynamicResource ToggleSwitch.iOS}" />
                         </Grid>
                     </Border>
@@ -262,7 +265,7 @@
                                 x:Name="SwitchIpv6"
                                 Grid.Column="2"
                                 Classes="RowSwitch"
-                                IsChecked="False"
+                                IsChecked="{Binding EnableIpv6, Mode=TwoWay}"
                                 Theme="{DynamicResource ToggleSwitch.iOS}" />
                         </Grid>
                     </Border>
@@ -291,7 +294,7 @@
                                 x:Name="ValueDns"
                                 Grid.Column="2"
                                 Classes="Subtitle RowValue"
-                                Text="Cloudflare" />
+                                Text="{Binding DnsText}" />
                             <PathIcon
                                 Grid.Column="3"
                                 Classes="Chevron"
@@ -323,7 +326,7 @@
                                 x:Name="ValuePingMethod"
                                 Grid.Column="2"
                                 Classes="Subtitle RowValue"
-                                Text="Реальная задержка (через ядро)" />
+                                Text="{Binding PingMethodText}" />
                             <PathIcon
                                 Grid.Column="3"
                                 Classes="Chevron"
@@ -435,7 +438,7 @@
                                 x:Name="SwitchMux"
                                 Grid.Column="2"
                                 Classes="RowSwitch"
-                                IsChecked="False"
+                                IsChecked="{Binding MuxEnabled, Mode=TwoWay}"
                                 Theme="{DynamicResource ToggleSwitch.iOS}" />
                         </Grid>
                     </Border>
@@ -467,7 +470,7 @@
                                 x:Name="ValueMuxConcurrency"
                                 Grid.Column="2"
                                 Classes="Subtitle RowValue"
-                                Text="8" />
+                                Text="{Binding MuxConcurrencyText}" />
                             <PathIcon
                                 Grid.Column="3"
                                 Classes="Chevron"
@@ -507,7 +510,7 @@
                                 x:Name="SwitchFragment"
                                 Grid.Column="2"
                                 Classes="RowSwitch"
-                                IsChecked="False"
+                                IsChecked="{Binding FragmentEnabled, Mode=TwoWay}"
                                 Theme="{DynamicResource ToggleSwitch.iOS}" />
                         </Grid>
                     </Border>
@@ -554,7 +557,7 @@
                                 x:Name="SwitchLiteMode"
                                 Grid.Column="2"
                                 Classes="RowSwitch"
-                                IsChecked="False"
+                                IsChecked="{Binding LiteMode, Mode=TwoWay}"
                                 Theme="{DynamicResource ToggleSwitch.iOS}" />
                         </Grid>
                     </Border>
@@ -594,7 +597,7 @@
                                 x:Name="ValueAppearance"
                                 Grid.Column="2"
                                 Classes="Subtitle RowValue"
-                                Text="Тёмная" />
+                                Text="{Binding AppearanceText}" />
                             <PathIcon
                                 Grid.Column="3"
                                 Classes="Chevron"
@@ -626,7 +629,7 @@
                                 x:Name="ValueLanguage"
                                 Grid.Column="2"
                                 Classes="Subtitle RowValue"
-                                Text="Русский" />
+                                Text="{Binding LanguageText}" />
                             <PathIcon
                                 Grid.Column="3"
                                 Classes="Chevron"
@@ -663,7 +666,7 @@
                                 x:Name="SwitchBoot"
                                 Grid.Column="2"
                                 Classes="RowSwitch"
-                                IsChecked="False"
+                                IsChecked="{Binding AutoStart, Mode=TwoWay}"
                                 Theme="{DynamicResource ToggleSwitch.iOS}" />
                         </Grid>
                     </Border>
@@ -703,7 +706,7 @@
                                 x:Name="ValueSubAutoUpdate"
                                 Grid.Column="2"
                                 Classes="Subtitle RowValue"
-                                Text="24 часа" />
+                                Text="{Binding SubAutoUpdateText}" />
                             <PathIcon
                                 Grid.Column="3"
                                 Classes="Chevron"
@@ -832,7 +835,7 @@
                                 x:Name="ValueAbout"
                                 Grid.Column="2"
                                 Classes="Subtitle RowValue"
-                                Text="1.0.0" />
+                                Text="{Binding AboutText}" />
                             <PathIcon
                                 Grid.Column="3"
                                 Classes="Chevron"

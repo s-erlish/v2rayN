@@ -1,0 +1,783 @@
+using v2rayN.Desktop.Account;
+using v2rayN.Desktop.Account.Dto;
+
+namespace v2rayN.Desktop.ViewModels;
+
+/// <summary>
+/// Backs the Account tab. Port of V2rayNG viewmodel/AccountViewModel.kt (StateFlow → ReactiveUI):
+/// holds the observable account/subscription/tariff/payment data, delegates every action to
+/// <see cref="AccountRepository"/> / <see cref="AuthManager"/>, and derives the display strings the
+/// (compiled-binding) view binds to. DATA-DRIVEN: nothing is invented — everything stays blank/empty
+/// until the real API returns.
+/// </summary>
+public class AccountViewModel : MyReactiveObject
+{
+    private readonly AccountRepository _repo;
+    private readonly AuthManager _authManager;
+
+    // Cache of the last subscription fetch so we can re-merge the synthesized root when the profile
+    // (which supplies the root's auto-renew flag + remnawave uuid) arrives after the sub list.
+    private PrimarySubscriptionDto? _lastPrimary;
+    private List<SubInfoDto> _lastAll = new();
+    private bool _hasSubData;
+
+    // True until the FIRST real load result lands. Gates the loading skeleton so a genuinely-empty
+    // account resolves to the empty state rather than spinning forever.
+    private bool _pendingFirstLoad = true;
+
+    private CancellationTokenSource? _telegramCts;
+
+    #region reactive state (raw)
+
+    [Reactive] public UserProfileDto? Profile { get; set; }
+    [Reactive] public List<SubInfoDto> Subscriptions { get; set; } = new();
+    [Reactive] public List<TariffGroupDto> Tariffs { get; set; } = new();
+    [Reactive] public List<PaymentDto> Payments { get; set; } = new();
+    [Reactive] public int? DeviceCount { get; set; }
+    [Reactive] public bool IsLoading { get; set; }
+    [Reactive] public ApiError? Error { get; set; }
+    [Reactive] public bool IsLoggedIn { get; set; }
+    [Reactive] public PublicConfigDto? PublicConfig { get; set; }
+
+    #endregion reactive state (raw)
+
+    #region reactive state (derived display)
+
+    [Reactive] public string Username { get; set; } = string.Empty;
+    [Reactive] public string AvatarInitial { get; set; } = string.Empty;
+    [Reactive] public string BalanceText { get; set; } = string.Empty;
+    [Reactive] public bool HasBalance { get; set; }
+    [Reactive] public string ReferralText { get; set; } = string.Empty;
+    [Reactive] public bool HasReferral { get; set; }
+    [Reactive] public bool HasProfile { get; set; }
+
+    [Reactive] public string SubName { get; set; } = string.Empty;
+    [Reactive] public string TariffBadge { get; set; } = string.Empty;
+    [Reactive] public bool HasTariffBadge { get; set; }
+    [Reactive] public string SubExpiry { get; set; } = string.Empty;
+    [Reactive] public bool HasSubExpiry { get; set; }
+    [Reactive] public string SubDevicesText { get; set; } = string.Empty;
+
+    [Reactive] public string DevicesRowValue { get; set; } = string.Empty;
+    [Reactive] public bool HasDevicesRowValue { get; set; }
+    [Reactive] public string HistoryRowValue { get; set; } = string.Empty;
+    [Reactive] public bool HasHistoryRowValue { get; set; }
+
+    [Reactive] public string ErrorText { get; set; } = string.Empty;
+
+    // The four mutually-exclusive hero states (skeleton / active / empty / error).
+    [Reactive] public bool ShowSkeleton { get; set; }
+    [Reactive] public bool ShowActiveSub { get; set; }
+    [Reactive] public bool ShowEmpty { get; set; }
+    [Reactive] public bool ShowError { get; set; }
+
+    // Logged-out CTA (nav-gating is deferred, so the tab shows a Telegram login prompt itself).
+    [Reactive] public bool ShowLoginCta { get; set; }
+
+    #endregion reactive state (derived display)
+
+    #region login state / inputs
+
+    [Reactive] public LoginState CurrentLoginState { get; set; } = new LoginState.Idle();
+    [Reactive] public string LoginEmail { get; set; } = string.Empty;
+    [Reactive] public string LoginPassword { get; set; } = string.Empty;
+    [Reactive] public string TwoFaCode { get; set; } = string.Empty;
+
+    /// <summary>Non-null tempToken when the last site login requires a 2FA code; null otherwise.</summary>
+    [Reactive] public string? TwoFaTempToken { get; set; }
+
+    /// <summary>The Telegram deep link to open, when a Telegram login is awaiting confirmation.</summary>
+    [Reactive] public string? TelegramDeepLink { get; set; }
+
+    #endregion login state / inputs
+
+    #region commands
+
+    public ReactiveCommand<Unit, Unit> RefreshProfileCmd { get; }
+    public ReactiveCommand<Unit, Unit> LoadSubscriptionsCmd { get; }
+    public ReactiveCommand<Unit, Unit> LoadTariffsCmd { get; }
+    public ReactiveCommand<Unit, Unit> LoadPaymentsCmd { get; }
+    public ReactiveCommand<Unit, Unit> LoadDevicesCmd { get; }
+    public ReactiveCommand<Unit, Unit> LoginTelegramCmd { get; }
+    public ReactiveCommand<Unit, Unit> LoginSiteCmd { get; }
+    public ReactiveCommand<Unit, Unit> Submit2FaCmd { get; }
+    public ReactiveCommand<Unit, Unit> LogoutCmd { get; }
+    public ReactiveCommand<Unit, Unit> RetryCmd { get; }
+
+    #endregion commands
+
+    /// <summary>Runtime constructor: seeds from the persisted session and loads real data when logged in.</summary>
+    public AccountViewModel()
+    {
+        // Note: no AppManager access here — this VM is constructed during MainWindow field-init;
+        // the engine (AppManager.Config) is only touched later, on user action, by the sync manager.
+        _repo = new AccountRepository();
+        _authManager = new AuthManager();
+
+        IsLoggedIn = AccountSession.IsLoggedIn();
+        if (IsLoggedIn)
+        {
+            Profile = AuthTokenStore.GetUser();
+        }
+
+        RefreshProfileCmd = ReactiveCommand.CreateFromTask(RefreshProfile);
+        LoadSubscriptionsCmd = ReactiveCommand.CreateFromTask(LoadSubscriptions);
+        LoadTariffsCmd = ReactiveCommand.CreateFromTask(LoadTariffs);
+        LoadPaymentsCmd = ReactiveCommand.CreateFromTask(LoadPayments);
+        LoadDevicesCmd = ReactiveCommand.CreateFromTask(LoadActiveDevices);
+        LoginTelegramCmd = ReactiveCommand.CreateFromTask(StartTelegramLogin);
+        LoginSiteCmd = ReactiveCommand.CreateFromTask(LoginSite);
+        Submit2FaCmd = ReactiveCommand.CreateFromTask(Submit2Fa);
+        LogoutCmd = ReactiveCommand.CreateFromTask(Logout);
+        RetryCmd = ReactiveCommand.CreateFromTask(Retry);
+
+        // Safety net: a stray command exception surfaces as the error state instead of crashing.
+        Observable.Merge(
+                RefreshProfileCmd.ThrownExceptions,
+                LoadSubscriptionsCmd.ThrownExceptions,
+                LoadTariffsCmd.ThrownExceptions,
+                LoadPaymentsCmd.ThrownExceptions,
+                LoadDevicesCmd.ThrownExceptions,
+                LoginTelegramCmd.ThrownExceptions,
+                LoginSiteCmd.ThrownExceptions,
+                Submit2FaCmd.ThrownExceptions,
+                LogoutCmd.ThrownExceptions,
+                RetryCmd.ThrownExceptions)
+            .Subscribe(ex => RunOnUi(() =>
+            {
+                Report(ex as ApiError ?? new ApiError.NetworkError(ex));
+                Recompute();
+            }));
+
+        AccountSession.StateChanged += OnSessionStateChanged;
+
+        Recompute();
+
+        if (IsLoggedIn)
+        {
+            _ = LoadAll();
+        }
+    }
+
+    /// <summary>Design-time constructor: sample logged-in active state so the previewer renders.</summary>
+    private AccountViewModel(bool design)
+    {
+        _repo = null!;
+        _authManager = null!;
+        IsLoggedIn = true;
+        Profile = new UserProfileDto
+        {
+            Email = "user@example.com",
+            TelegramUsername = "serumfx",
+            Balance = 0.0,
+            Currency = "RUB",
+            ReferralCode = "REF-888F7211",
+        };
+        Subscriptions = new List<SubInfoDto>
+        {
+            new()
+            {
+                Type = "root",
+                DisplayName = "departament vpn",
+                TariffDisplayName = "Base",
+                ExpireAtIso = "2099-06-04T00:00:00Z",
+                TotalDevices = 0,
+                Subscription = new SubResponseWrapper { Response = new RawSubDto { HwidDeviceLimit = 0 } },
+            },
+        };
+        DeviceCount = 23;
+        Payments = new List<PaymentDto> { new() { CreatedAt = "2026-07-10T12:00:00Z" } };
+        _pendingFirstLoad = false;
+        Recompute();
+    }
+
+    public static AccountViewModel CreateDesign() => new(true);
+
+    #region loads
+
+    private async Task LoadAll()
+    {
+        await RefreshProfile();
+        await LoadSubscriptions();
+        await LoadPublicConfig();
+        await LoadTariffs();
+        await LoadPayments();
+    }
+
+    private async Task RefreshProfile()
+    {
+        var result = await _repo.RefreshProfile();
+        RunOnUi(() =>
+        {
+            result
+                .OnSuccess(p =>
+                {
+                    Profile = p;
+                    MarkLoaded();
+                    if (_hasSubData)
+                    {
+                        Subscriptions = MergeSubscriptions(_lastPrimary, _lastAll, p);
+                    }
+                })
+                .OnFailure(Report);
+            Recompute();
+        });
+    }
+
+    private async Task LoadSubscriptions()
+    {
+        await FetchAndApplySubscriptions();
+    }
+
+    /// <summary>
+    /// Fetches /subscription/all plus the authoritative primary subscription and publishes the merged
+    /// list, so the active/primary sub always renders (never the raw un-merged /all list). Port of
+    /// AccountViewModel.fetchAndApplySubscriptions.
+    /// </summary>
+    private async Task FetchAndApplySubscriptions()
+    {
+        var allResult = await _repo.LoadSubscriptions();
+        var primaryResult = await _repo.LoadPrimarySubscription();
+
+        RunOnUi(() =>
+        {
+            var all = allResult.GetOrNull()?.Items ?? new List<SubInfoDto>();
+            var primary = primaryResult.GetOrNull();
+            var merged = MergeSubscriptions(primary, all, Profile);
+
+            if (merged.Count > 0 || allResult.IsSuccess)
+            {
+                _lastPrimary = primary;
+                _lastAll = all;
+                _hasSubData = true;
+                Subscriptions = merged;
+                if (merged.Count > 0)
+                {
+                    MarkLoaded();
+                }
+                // Fetch the REAL connected-device count for the active (first/root) sub.
+                var uuid = merged.FirstOrDefault()?.RemnawaveUuid;
+                if (uuid.IsNotEmpty())
+                {
+                    _ = LoadDevices(uuid!);
+                }
+            }
+            else
+            {
+                var err = allResult.ExceptionOrNull() ?? primaryResult.ExceptionOrNull();
+                if (err != null)
+                {
+                    Report(err);
+                }
+            }
+            Recompute();
+        });
+    }
+
+    /// <summary>
+    /// Builds the list the Account screen consumes: the active/root subscription first (enriched from
+    /// the primary payload when present), then the secondaries from /all. Port of mergeSubscriptions.
+    /// </summary>
+    private static List<SubInfoDto> MergeSubscriptions(PrimarySubscriptionDto? primary, List<SubInfoDto> all, UserProfileDto? profile)
+    {
+        var rootFromAll = all.FirstOrDefault(it => string.Equals(it.Type, "root", StringComparison.OrdinalIgnoreCase));
+        var secondaries = all.Where(it => !string.Equals(it.Type, "root", StringComparison.OrdinalIgnoreCase)).ToList();
+
+        SubInfoDto? activeRoot;
+        if (primary?.HasActiveSubscription() == true)
+        {
+            activeRoot = BuildRootSub(primary, rootFromAll, profile);
+        }
+        else
+        {
+            activeRoot = rootFromAll;
+        }
+
+        var ordered = new List<SubInfoDto>();
+        if (activeRoot != null)
+        {
+            ordered.Add(activeRoot);
+        }
+        ordered.AddRange(secondaries);
+
+        // Dedup by non-blank id (a synthesized root can have a blank id and must be kept).
+        var seen = new HashSet<string>();
+        return ordered.Where(it => it.Id.IsNullOrEmpty() || seen.Add(it.Id)).ToList();
+    }
+
+    /// <summary>Synthesizes/enriches the root sub from the primary payload. Port of buildRootSub.</summary>
+    private static SubInfoDto BuildRootSub(PrimarySubscriptionDto primary, SubInfoDto? rootFromAll, UserProfileDto? profile)
+    {
+        var raw = primary.Raw();
+        return new SubInfoDto
+        {
+            Type = "root",
+            Id = rootFromAll?.Id ?? string.Empty,
+            RemnawaveUuid = FirstNonBlank(profile?.RemnawaveUuid, rootFromAll?.RemnawaveUuid),
+            Subscription = primary.Subscription,
+            TariffDisplayName = primary.TariffDisplayName.IsNotEmpty() ? primary.TariffDisplayName : rootFromAll?.TariffDisplayName,
+            DisplayName = rootFromAll?.DisplayName,
+            DefaultLabel = rootFromAll?.DefaultLabel,
+            SubscriptionIndex = rootFromAll?.SubscriptionIndex,
+            TariffId = rootFromAll?.TariffId.IsNotEmpty() == true ? rootFromAll.TariffId : primary.ActiveTariffId(),
+            TariffPriceOptionId = rootFromAll?.TariffPriceOptionId,
+            DeviceCount = rootFromAll?.DeviceCount ?? 0,
+            TotalDevices = rootFromAll?.TotalDevices ?? (raw?.HwidDeviceLimit > 0 ? raw.HwidDeviceLimit : 0),
+            ConnectedDevices = rootFromAll?.ConnectedDevices ?? 0,
+            AutoRenewEnabled = profile?.AutoRenewEnabled ?? rootFromAll?.AutoRenewEnabled ?? false,
+            ExpireAtIso = raw?.ExpireAt.IsNotEmpty() == true ? raw.ExpireAt : rootFromAll?.ExpireAtIso,
+            IsTrial = rootFromAll?.IsTrial ?? false,
+            TariffPrice = rootFromAll?.TariffPrice,
+            TariffCurrency = primary.AutoRenewCurrency.IsNotEmpty() ? primary.AutoRenewCurrency : rootFromAll?.TariffCurrency,
+            RenewalPrice = primary.AutoRenewNextChargeAmount ?? rootFromAll?.RenewalPrice,
+        };
+    }
+
+    private async Task LoadTariffs()
+    {
+        var result = await _repo.LoadCatalog();
+        RunOnUi(() =>
+        {
+            result.OnSuccess(c => Tariffs = c.Items).OnFailure(Report);
+            Recompute();
+        });
+    }
+
+    private async Task LoadPayments()
+    {
+        var result = await _repo.GetPayments();
+        RunOnUi(() =>
+        {
+            result
+                .OnSuccess(p =>
+                {
+                    Payments = p.Items;
+                    AccountCache.PutPayments(p.Items);
+                })
+                .OnFailure(Report);
+            Recompute();
+        });
+    }
+
+    private async Task LoadPublicConfig()
+    {
+        var result = await _repo.LoadPublicConfig();
+        RunOnUi(() => result.OnSuccess(c => PublicConfig = c).OnFailure(Report));
+    }
+
+    private async Task LoadActiveDevices()
+    {
+        var uuid = Subscriptions.FirstOrDefault()?.RemnawaveUuid;
+        if (uuid.IsNotEmpty())
+        {
+            await LoadDevices(uuid!);
+        }
+    }
+
+    /// <summary>
+    /// Resolves the ACTIVE subscription's connected-device count from GET /client/devices (cache-first).
+    /// A device-fetch failure is swallowed on purpose — the count is secondary. Port of loadDevices.
+    /// </summary>
+    private async Task LoadDevices(string uuid)
+    {
+        if (uuid.IsNullOrEmpty())
+        {
+            return;
+        }
+        var cached = AccountCache.GetDevices(uuid);
+        if (cached != null)
+        {
+            RunOnUi(() =>
+            {
+                DeviceCount = cached.Count;
+                Recompute();
+            });
+            return;
+        }
+        var result = await _repo.GetDevices(uuid);
+        RunOnUi(() =>
+        {
+            result.OnSuccess(d =>
+            {
+                AccountCache.PutDevices(uuid, d.Devices);
+                DeviceCount = d.Devices.Count;
+                Recompute();
+            });
+            // On failure: keep last known count, no error surfaced.
+        });
+    }
+
+    #endregion loads
+
+    #region login / logout actions
+
+    private async Task StartTelegramLogin()
+    {
+        _telegramCts?.Cancel();
+        var cts = new CancellationTokenSource();
+        _telegramCts = cts;
+        TwoFaTempToken = null;
+        CurrentLoginState = new LoginState.Idle();
+
+        await _authManager.BeginTelegramLogin(state => RunOnUi(() => ApplyLoginState(state)), cts.Token);
+    }
+
+    private async Task LoginSite()
+    {
+        _telegramCts?.Cancel();
+        TwoFaTempToken = null;
+        CurrentLoginState = new LoginState.SiteLoading();
+        try
+        {
+            var result = await _authManager.LoginSite(LoginEmail, LoginPassword);
+            if (result is LoginResult.Success success)
+            {
+                await OnAuthenticated(success.Client);
+            }
+            else if (result is LoginResult.Requires2Fa twoFa)
+            {
+                RunOnUi(() =>
+                {
+                    TwoFaTempToken = twoFa.TempToken;
+                    CurrentLoginState = new LoginState.Idle();
+                });
+            }
+        }
+        catch (ApiError e)
+        {
+            RunOnUi(() => CurrentLoginState = new LoginState.Error(e));
+        }
+    }
+
+    private async Task Submit2Fa()
+    {
+        var tempToken = TwoFaTempToken;
+        if (tempToken.IsNullOrEmpty())
+        {
+            return;
+        }
+        CurrentLoginState = new LoginState.SiteLoading();
+        try
+        {
+            var profile = await _authManager.Submit2Fa(tempToken!, TwoFaCode);
+            RunOnUi(() => TwoFaTempToken = null);
+            await OnAuthenticated(profile);
+        }
+        catch (ApiError e)
+        {
+            RunOnUi(() => CurrentLoginState = new LoginState.Error(e));
+        }
+    }
+
+    private void ApplyLoginState(LoginState state)
+    {
+        CurrentLoginState = state;
+        switch (state)
+        {
+            case LoginState.AwaitingTelegram awaiting:
+                TelegramDeepLink = awaiting.DeepLink;
+                // Open the Telegram deep link in the default browser so the user can confirm.
+                ProcUtils.ProcessStart(awaiting.DeepLink);
+                break;
+            case LoginState.Success success:
+                _ = OnAuthenticated(success.Profile);
+                break;
+        }
+    }
+
+    /// <summary>On a successful auth: flip to logged-in, auto-import subscriptions, load real data.</summary>
+    private async Task OnAuthenticated(UserProfileDto profile)
+    {
+        RunOnUi(() =>
+        {
+            IsLoggedIn = true;
+            Profile = profile;
+            _pendingFirstLoad = true;
+            IsLoading = true;
+            CurrentLoginState = new LoginState.Success(profile);
+            Recompute();
+        });
+
+        var import = await _repo.AutoImportSubscriptions();
+        RunOnUi(() => import.OnFailure(Report));
+        await FetchAndApplySubscriptions();
+        await LoadAll();
+        RunOnUi(() =>
+        {
+            IsLoading = false;
+            Recompute();
+        });
+    }
+
+    private async Task Logout()
+    {
+        _telegramCts?.Cancel();
+        await AccountSession.Wipe();
+        AccountCache.InvalidateAll();
+        RunOnUi(() =>
+        {
+            IsLoggedIn = false;
+            Profile = null;
+            Subscriptions = new List<SubInfoDto>();
+            _lastPrimary = null;
+            _lastAll = new List<SubInfoDto>();
+            _hasSubData = false;
+            Payments = new List<PaymentDto>();
+            DeviceCount = null;
+            Tariffs = new List<TariffGroupDto>();
+            TwoFaTempToken = null;
+            TelegramDeepLink = null;
+            CurrentLoginState = new LoginState.Idle();
+            _pendingFirstLoad = false;
+            Recompute();
+        });
+    }
+
+    private async Task Retry()
+    {
+        _pendingFirstLoad = true;
+        ClearError();
+        Recompute();
+        if (IsLoggedIn)
+        {
+            await LoadAll();
+        }
+    }
+
+    #endregion login / logout actions
+
+    #region tariff badge resolution (public helpers)
+
+    /// <summary>Resolves a tariff's display name from its tariff id against the loaded catalog.</summary>
+    public string? TariffNameFor(string? tariffId)
+    {
+        if (tariffId.IsNullOrEmpty())
+        {
+            return null;
+        }
+        return Tariffs.SelectMany(g => g.Tariffs).FirstOrDefault(t => t.Id == tariffId)?.Name.NullIfEmpty();
+    }
+
+    /// <summary>Resolves a tariff's display name from the price-option id the subscription renews on.</summary>
+    public string? TariffNameForPriceOptionId(string? priceOptionId)
+    {
+        if (priceOptionId.IsNullOrEmpty())
+        {
+            return null;
+        }
+        return Tariffs
+            .SelectMany(g => g.Tariffs)
+            .FirstOrDefault(t => t.PriceOptions.Any(o => o.Id == priceOptionId))
+            ?.Name.NullIfEmpty();
+    }
+
+    #endregion tariff badge resolution
+
+    #region derive display + hero state
+
+    public void ClearError()
+    {
+        Error = null;
+    }
+
+    private void Report(ApiError error)
+    {
+        Error = error;
+        _pendingFirstLoad = false;
+    }
+
+    private void MarkLoaded()
+    {
+        _pendingFirstLoad = false;
+    }
+
+    /// <summary>Recomputes every derived display string + the mutually-exclusive hero state.</summary>
+    private void Recompute()
+    {
+        // Profile block
+        var profile = Profile;
+        HasProfile = profile != null;
+        if (profile == null)
+        {
+            Username = string.Empty;
+            AvatarInitial = string.Empty;
+            BalanceText = string.Empty;
+            HasBalance = false;
+            ReferralText = string.Empty;
+            HasReferral = false;
+        }
+        else
+        {
+            var handle = profile.TelegramUsername.IsNotEmpty() ? $"@{profile.TelegramUsername}" : null;
+            var display = profile.TelegramName.IsNotEmpty() ? profile.TelegramName : null;
+            var email = profile.Email.IsNotEmpty() ? profile.Email : null;
+            Username = handle ?? display ?? email ?? string.Empty;
+            AvatarInitial = Monogram(Username);
+            BalanceText = FormatMoney(profile.Balance, profile.Currency);
+            HasBalance = true;
+            HasReferral = profile.ReferralCode.IsNotEmpty();
+            ReferralText = HasReferral ? $"Реф-код {profile.ReferralCode}" : string.Empty;
+        }
+
+        // Active subscription block (first/root of the merged list)
+        var sub = Subscriptions.FirstOrDefault();
+        if (sub == null)
+        {
+            SubName = string.Empty;
+            TariffBadge = string.Empty;
+            HasTariffBadge = false;
+            SubExpiry = string.Empty;
+            HasSubExpiry = false;
+            SubDevicesText = string.Empty;
+            DevicesRowValue = string.Empty;
+            HasDevicesRowValue = false;
+        }
+        else
+        {
+            SubName = FirstNonBlank(sub.DisplayName, sub.TariffDisplayName, sub.DefaultLabel, "Мои подписки");
+
+            var badge = TariffNameFor(sub.TariffId) ?? TariffNameForPriceOptionId(sub.TariffPriceOptionId) ?? sub.TariffBadgeName();
+            HasTariffBadge = badge.IsNotEmpty();
+            TariffBadge = badge ?? string.Empty;
+
+            HasSubExpiry = sub.ExpireAtIso.IsNotEmpty();
+            SubExpiry = HasSubExpiry ? $"Действует до {FormatIsoDate(sub.ExpireAtIso)}" : string.Empty;
+
+            var unlimited = sub.Subscription?.Raw()?.IsUnlimitedDevices() == true;
+            var totalStr = unlimited ? "∞" : sub.TotalDevices.ToString();
+            var used = DeviceCount ?? 0;
+            SubDevicesText = $"Устройства: {used} / {totalStr}";
+            DevicesRowValue = $"{used} / {totalStr}";
+            HasDevicesRowValue = true;
+        }
+
+        // History row trailing value (latest payment date)
+        var latestIso = Payments.Count > 0 ? Payments.MaxBy(p => p.CreatedAt)?.CreatedAt : null;
+        var date = FormatIsoDate(latestIso);
+        HasHistoryRowValue = date.IsNotEmpty();
+        HistoryRowValue = date;
+
+        // Error text
+        ErrorText = Error != null ? MessageFor(Error) : string.Empty;
+
+        // Hero state machine (port of renderHeroState)
+        var coldLoading = _pendingFirstLoad || IsLoading;
+        var subsNotEmpty = Subscriptions.Count > 0;
+        bool skeleton = false, active = false, empty = false, error = false;
+        if (subsNotEmpty)
+        {
+            active = true;
+        }
+        else if (coldLoading && Profile == null)
+        {
+            skeleton = true;
+        }
+        else if (Profile == null && Error != null)
+        {
+            error = true;
+        }
+        else
+        {
+            empty = true;
+        }
+        ShowSkeleton = skeleton;
+        ShowActiveSub = active;
+        ShowEmpty = empty;
+        ShowError = error;
+
+        // Logged-out: offer the Telegram login CTA instead of a blank profile card.
+        ShowLoginCta = !IsLoggedIn;
+    }
+
+    private void OnSessionStateChanged(AccountState state)
+    {
+        RunOnUi(() =>
+        {
+            IsLoggedIn = state is AccountState.LoggedIn;
+            if (state is AccountState.LoggedIn loggedIn)
+            {
+                Profile = loggedIn.Profile;
+            }
+            else if (state is AccountState.LoggedOut)
+            {
+                Profile = null;
+            }
+            Recompute();
+        });
+    }
+
+    #endregion derive display + hero state
+
+    #region formatting helpers (ported 1:1)
+
+    private static string FormatMoney(double amount, string currency)
+    {
+        var n = amount % 1.0 == 0.0
+            ? ((long)amount).ToString(CultureInfo.InvariantCulture)
+            : amount.ToString("0.00", CultureInfo.InvariantCulture);
+        return $"{n} {CurrencySymbol(currency)}";
+    }
+
+    // RUB-only product: RUB/blank/USD/unknown all render as the ruble sign; only genuinely distinct
+    // currencies keep their own symbol.
+    private static string CurrencySymbol(string currency) => currency.Trim().ToUpperInvariant() switch
+    {
+        "EUR" => "€",
+        "KZT" => "₸",
+        "UAH" => "₴",
+        _ => "₽",
+    };
+
+    private static string FormatIsoDate(string? iso)
+    {
+        if (iso.IsNullOrEmpty())
+        {
+            return string.Empty;
+        }
+        var datePart = iso!.Split('T')[0];
+        var parts = datePart.Split('-');
+        return parts.Length == 3 ? $"{parts[2]}.{parts[1]}.{parts[0]}" : datePart;
+    }
+
+    private static string Monogram(string primary)
+    {
+        var trimmed = primary.Trim().TrimStart('@');
+        return trimmed.Length > 0 ? trimmed.Substring(0, 1).ToUpperInvariant() : string.Empty;
+    }
+
+    private static string MessageFor(ApiError error) => error switch
+    {
+        ApiError.ServiceUnavailable => "Сервис временно недоступен",
+        ApiError.NetworkError => "Ошибка сети. Проверьте подключение",
+        ApiError.Unauthorized => "Требуется вход в аккаунт",
+        ApiError.RateLimited => "Слишком много запросов. Попробуйте позже",
+        ApiError.TimeoutError => "Превышено время ожидания",
+        _ => "Что-то пошло не так",
+    };
+
+    private static string FirstNonBlank(params string?[] values)
+    {
+        foreach (var v in values)
+        {
+            if (v.IsNotEmpty())
+            {
+                return v!;
+            }
+        }
+        return string.Empty;
+    }
+
+    private static void RunOnUi(Action action)
+    {
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            action();
+        }
+        else
+        {
+            Dispatcher.UIThread.Post(action);
+        }
+    }
+
+    #endregion formatting helpers
+}

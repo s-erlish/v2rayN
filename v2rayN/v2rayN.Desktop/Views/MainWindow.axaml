@@ -6,6 +6,7 @@
     xmlns:dd="clr-namespace:v2rayN.Desktop.DesignData"
     xmlns:dialogHost="clr-namespace:DialogHostAvalonia;assembly=DialogHost.Avalonia"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:views="clr-namespace:v2rayN.Desktop.Views"
     xmlns:vms="clr-namespace:ServiceLib.ViewModels;assembly=ServiceLib"
     Title="departament VPN"
     Width="1120"
@@ -158,8 +159,14 @@
                     </StackPanel>
                 </Grid>
 
-                <!--  ==================== Тело: рейл 76 | контент ====================  -->
-                <Grid Grid.Row="1" ColumnDefinitions="76,*">
+                <!--  ==================== Тело (Row 1): шелл (рейл 76 | контент) ↔ онбординг ====================
+                      Пустой старт (нет подписок): виден ТОЛЬКО онбординг на всю ширину под chrome
+                      (рейл и контент скрыты). После добавления подписки (HomeViewModel.IsEmpty=false)
+                      появляется обычный шелл. Видимостью управляет MainWindow.SetupHome.  -->
+                <Panel Grid.Row="1">
+
+                    <!--  Шелл: рейл 76 | контент. Скрыт целиком, пока приложение пустое.  -->
+                    <Grid x:Name="shellRoot" ColumnDefinitions="76,*" IsVisible="False">
 
                     <!--  Левый icon-рейл  -->
                     <Border
@@ -252,7 +259,11 @@
                             <CrossFade Duration="0:0:0.18" />
                         </TransitioningContentControl.PageTransition>
                     </TransitioningContentControl>
-                </Grid>
+                    </Grid>
+
+                    <!--  Онбординг на всю ширину Row 1 (без рейла/панелей). Виден, пока нет подписок.  -->
+                    <views:OnboardingView x:Name="onboardingView" />
+                </Panel>
             </Grid>
 
             <!--  Скрытый StatusBarView: сохраняет обработчики интеракций (буфер/иконка трея/пароль sudo)

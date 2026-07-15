@@ -104,9 +104,30 @@
     <!--  Шрифт: Space Grotesk (переменный)  -->
     <FontFamily x:Key="Font.Grotesk">avares://v2rayN/Assets/Fonts/SpaceGrotesk.ttf#Space Grotesk</FontFamily>
 
-    <!--  Motion-длительности задаются литералами в Transitions (0:0:0.09 и т.д.),
-          соответствуют motion.xml Android. Ресурс-токены длительностей появятся
-          в фазе анимаций (через sys:TimeSpan).  -->
+    <!-- ==================================================================== -->
+    <!--  МОУШЕН-ТОКЕНЫ (§1.1–1.2 DESIGN_PLAN — порт res/values/motion.xml +     -->
+    <!--  res/interpolator/*). Единый темп на всё приложение, ТОЛЬКО ease-out,    -->
+    <!--  выход быстрее входа, без bounce/elastic.                                -->
+    <!-- ==================================================================== -->
+
+    <!--  Кривые = SplineEasing 1:1 с Android. НЕ использовать встроенные          -->
+    <!--  QuarticEaseOut/QuinticEaseOut — у них другие контрольные точки.          -->
+    <!--  ease_out_quart (0.25,1,0.5,1): press-feedback, малые оседания.  -->
+    <SplineEasing x:Key="Ease.OutQuart" X1="0.25" Y1="1" X2="0.5" Y2="1" />
+    <!--  ease_out_quint (0.22,1,0.36,1): уверенные reveal/settle, glow, сонар, отпускание диска.  -->
+    <SplineEasing x:Key="Ease.OutQuint" X1="0.22" Y1="1" X2="0.36" Y2="1" />
+    <!--  ease_standard (0.2,0,0,1): argb-tint/crossfade, двусторонние смены состояния, реверс.  -->
+    <SplineEasing x:Key="Ease.Standard" X1="0.2" Y1="0" X2="0" Y2="1" />
+
+    <!--  Длительности (motion.xml) задаются ЛИТЕРАЛАМИ в Duration="…": XAML-       -->
+    <!--  компилятор Avalonia НЕ поддерживает интринсик x:TimeSpan. Каталог токенов:-->
+    <!--    Dur.PressIn  0:0:0.09  — палец-вниз (press_in 90мс)                      -->
+    <!--    Dur.PressOut 0:0:0.16  — отпускание/возврат (press_out 160мс)           -->
+    <!--    Dur.State    0:0:0.22  — смена состояния / tint-crossfade (state 220мс)  -->
+    <!--    Dur.Reveal   0:0:0.30  — раскрытие / glow (reveal 300мс)                 -->
+    <!--    Dur.Stagger  0:0:0.04  — стаггер списка (40мс)                           -->
+    <!--    Dur.Emphasis 0:0:0.60  — ОДИН hero-момент: connect-сонар (emphasis 600мс)-->
+    <!--  Реверс отключения = 75% темпа: revState 0:0:0.165 · revReveal 0:0:0.225.  -->
 
     <!-- ==================================================================== -->
     <!--  НЕДОСТАЮЩИЕ токены мастер-плана §2.4 (добавлено фазой 0 / агент A)     -->

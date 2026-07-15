@@ -14,22 +14,33 @@
     Design.DataContext="{x:Static dd:DesignData.Home}"
     mc:Ignorable="d">
 
-    <!--  DATA-DRIVEN: binds to the real HomeViewModel (grouped ProfileItems). The app starts EMPTY —
-          the list only appears once a subscription is added. Sample rows live ONLY in
-          DesignData.Home (design-time preview), never at runtime.  -->
+    <!--  DATA-DRIVEN: binds the real HomeViewModel (grouped ProfileItems). Starts EMPTY —
+          the list appears only once a subscription is added. Sample rows live ONLY in
+          DesignData.Home (previewer), never at runtime. 1:1 port of the Android servers screen
+          (layout_servers_header + item_recycler_main + item_section_header + layout_servers_empty).  -->
 
     <UserControl.Resources>
-        <!--  Local Material 24 glyphs (one family): chevron / filter / refresh / ping / plus.
-              View-scope resources (not design-system tokens). Port of layout_servers_header + group chevron.  -->
+        <!--  One Material 24 glyph family (view-scope, port of the Android ic_* drawables).  -->
         <StreamGeometry x:Key="Geo.Chevron">M16.59 8.59 12 13.17 7.41 8.59 6 10l6 6 6-6z</StreamGeometry>
         <StreamGeometry x:Key="Geo.Filter">M4.25 5.61C6.27 8.2 10 13 10 13v5c0 .55.45 1 1 1h2c.55 0 1-.45 1-1v-5s3.72-4.8 5.74-7.39c.51-.66.04-1.61-.79-1.61H5.04c-.83 0-1.3.95-.79 1.61z</StreamGeometry>
         <StreamGeometry x:Key="Geo.Refresh">M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4z</StreamGeometry>
         <StreamGeometry x:Key="Geo.Ping">M12 11c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0-4c-3.31 0-6 2.69-6 6h2c0-2.21 1.79-4 4-4s4 1.79 4 4h2c0-3.31-2.69-6-6-6zm0-4C6.48 3 2 7.48 2 13h2c0-4.42 3.58-8 8-8s8 3.58 8 8h2c0-5.52-4.48-10-10-10z</StreamGeometry>
         <StreamGeometry x:Key="Geo.Plus">M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z</StreamGeometry>
+        <!--  Add-menu glyphs (§2.10): scan QR / paste clipboard / open file.  -->
+        <StreamGeometry x:Key="Geo.Qr">M9.5 6.5v3h-3v-3h3M11 5H5v6h6V5m-1.5 9.5v3h-3v-3h3M11 13H5v6h6v-6m6.5-6.5v3h-3v-3h3M19 5h-6v6h6V5m-1.5 9.5v3h-3v-3h3M19 13h-6v6h6v-6M3 3h2V1H3c-1.1 0-2 .9-2 2v2h2V3m18 0v2h2V3c0-1.1-.9-2-2-2h-2v2h2M3 21v-2H1v2c0 1.1.9 2 2 2h2v-2H3m18 0h-2v2h2c1.1 0 2-.9 2-2v-2h-2v2z</StreamGeometry>
+        <StreamGeometry x:Key="Geo.Clipboard">M19 2h-4.18C14.4.84 13.3 0 12 0c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm7 18H5V4h2v3h10V4h2v16z</StreamGeometry>
+        <StreamGeometry x:Key="Geo.File">M6 2c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6H6zm7 7V3.5L18.5 9H13z</StreamGeometry>
+        <!--  Empty-state hero glyph (cloud download, port of ic_cloud_download_24dp).  -->
+        <StreamGeometry x:Key="Geo.CloudDownload">M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z</StreamGeometry>
+
+        <!--  Server name: drop a leading flag emoji (the flag lives in its tile) — no duplication.  -->
+        <local:StripLeadingFlagConverter x:Key="StripLeadingFlag" />
+        <!--  Ping value shows only once a latency test produced a result (non-empty DelayVal).  -->
+        <local:NotEmptyConverter x:Key="NotEmpty" />
     </UserControl.Resources>
 
     <UserControl.Styles>
-        <!--  Group chevron: 0° expanded, −90° collapsed (smooth, mirrors bindHeader rotation).  -->
+        <!--  Group chevron: 0° expanded, −90° collapsed (mirrors the Android bindHeader rotation).  -->
         <Style Selector="PathIcon.groupChevron">
             <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
             <Setter Property="RenderTransform" Value="rotate(0deg)" />
@@ -43,13 +54,35 @@
             <Setter Property="RenderTransform" Value="rotate(-90deg)" />
         </Style>
 
-        <!--  Group header: hover highlight (like selectableItemBackground).  -->
+        <!--  Group header: selectableItemBackground-style hover.  -->
         <Style Selector="Border.groupHeader">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="Cursor" Value="Hand" />
         </Style>
         <Style Selector="Border.groupHeader:pointerover">
             <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
+        </Style>
+
+        <!--  Row divider (port of custom_divider): 1px, inset under the text column, hidden on the
+              selected row so the blue pill reads cleanly.  -->
+        <Style Selector="Border.rowDivider">
+            <Setter Property="Height" Value="1" />
+            <Setter Property="Margin" Value="64,0,16,0" />
+            <Setter Property="Background" Value="{DynamicResource Brush.OutlineVariant}" />
+        </Style>
+
+        <!--  «+» add-menu (§2.10): Incy dark surface, radius 12, Body items.  -->
+        <Style Selector="MenuFlyoutPresenter">
+            <Setter Property="Background" Value="{DynamicResource Brush.Surface}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineVariant}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="12" />
+            <Setter Property="Padding" Value="6" />
+        </Style>
+        <Style Selector="MenuFlyoutPresenter MenuItem">
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
+            <Setter Property="CornerRadius" Value="8" />
         </Style>
     </UserControl.Styles>
 
@@ -69,28 +102,66 @@
                     Grid.Column="1"
                     Orientation="Horizontal"
                     Spacing="2">
-                    <Button Classes="IconButton" Click="OnCollapseAllClick">
+                    <Button
+                        Classes="IconButton"
+                        Click="OnCollapseAllClick"
+                        ToolTip.Tip="Свернуть все">
                         <PathIcon
                             Width="22"
                             Height="22"
                             Data="{StaticResource Geo.Chevron}"
                             Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
                     </Button>
-                    <Button Classes="IconButton" Command="{Binding RefreshSubscriptionCmd}">
+                    <Button
+                        Classes="IconButton"
+                        Command="{Binding RefreshSubscriptionCmd}"
+                        ToolTip.Tip="Обновить подписку">
                         <PathIcon
                             Width="22"
                             Height="22"
                             Data="{StaticResource Geo.Refresh}"
                             Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
                     </Button>
-                    <Button Classes="IconButton" Command="{Binding Profiles.FastRealPingCmd}">
+                    <Button
+                        Classes="IconButton"
+                        Command="{Binding Profiles.FastRealPingCmd}"
+                        ToolTip.Tip="Проверить задержку">
                         <PathIcon
                             Width="22"
                             Height="22"
                             Data="{StaticResource Geo.Ping}"
                             Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
                     </Button>
-                    <Button Classes="IconButton" Command="{Binding AddViaClipboardCmd}">
+                    <!--  «+» opens the add MenuFlyout (§2.10). Accent glyph = the one primary action.  -->
+                    <Button Classes="IconButton" ToolTip.Tip="Добавить">
+                        <Button.Flyout>
+                            <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                <MenuItem Click="OnImportQr" Header="Импорт из QR-кода">
+                                    <MenuItem.Icon>
+                                        <PathIcon Width="20" Height="20" Data="{StaticResource Geo.Qr}" Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Click="OnImportClipboard" Header="Импорт из буфера обмена">
+                                    <MenuItem.Icon>
+                                        <PathIcon Width="20" Height="20" Data="{StaticResource Geo.Clipboard}" Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Click="OnImportFile" Header="Импорт из файла">
+                                    <MenuItem.Icon>
+                                        <PathIcon Width="20" Height="20" Data="{StaticResource Geo.File}" Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <Separator />
+                                <MenuItem Click="OnAddTyped" Header="Добавить VMess" Tag="VMess" />
+                                <MenuItem Click="OnAddTyped" Header="Добавить VLESS" Tag="VLESS" />
+                                <MenuItem Click="OnAddTyped" Header="Добавить Shadowsocks" Tag="Shadowsocks" />
+                                <MenuItem Click="OnAddTyped" Header="Добавить SOCKS" Tag="SOCKS" />
+                                <MenuItem Click="OnAddTyped" Header="Добавить HTTP" Tag="HTTP" />
+                                <MenuItem Click="OnAddTyped" Header="Добавить Trojan" Tag="Trojan" />
+                                <MenuItem Click="OnAddTyped" Header="Добавить WireGuard" Tag="WireGuard" />
+                                <MenuItem Click="OnAddTyped" Header="Добавить Hysteria2" Tag="Hysteria2" />
+                            </MenuFlyout>
+                        </Button.Flyout>
                         <PathIcon
                             Width="22"
                             Height="22"
@@ -106,7 +177,7 @@
                 Classes="Subtitle"
                 Text="{Binding Subtitle}" />
 
-            <!--  Search pill (bg_search_pill): filter glyph + «Поиск серверов…» bound to ServerFilter.  -->
+            <!--  Search pill (bg_search_pill): filter glyph + «Поиск серверов…» → ServerFilter, Enter refreshes.  -->
             <Border
                 Height="44"
                 Margin="0,12,4,0"
@@ -129,13 +200,14 @@
                         BorderThickness="0"
                         FontSize="14"
                         Foreground="{DynamicResource Brush.OnSurface}"
+                        KeyDown="OnSearchKeyDown"
                         PlaceholderText="Поиск серверов…"
                         Text="{Binding Profiles.ServerFilter}" />
                 </Grid>
             </Border>
         </StackPanel>
 
-        <!--  BODY: real grouped list when there are servers; quiet empty note otherwise.  -->
+        <!--  BODY: real grouped list when there are servers; quiet empty hero otherwise.  -->
         <Panel Grid.Row="1">
 
             <!--  SCROLL: grouped flat list (group header + nested rows), bound to real ProfileItems.  -->
@@ -145,7 +217,7 @@
                         <DataTemplate x:DataType="vms:HomeServerGroup">
                             <StackPanel>
 
-                                <!--  Group header (= subscription): chevron + name + count.  -->
+                                <!--  Group header (= subscription, item_section_header): chevron + name + count.  -->
                                 <Border
                                     Padding="16,12,16,4"
                                     Classes="groupHeader"
@@ -180,57 +252,99 @@
                                 <ItemsControl IsVisible="{Binding IsExpanded}" ItemsSource="{Binding Servers}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="models:ProfileItemModel">
+                                            <StackPanel>
 
-                                            <!--  Server row (bg_server_row): selected = blue pill outline (IsActive).
-                                                  Tap → HomeViewModel.SelectServer (default + connect).  -->
-                                            <Border
-                                                Margin="16,4"
-                                                Classes="ServerRow"
-                                                Classes.selected="{Binding IsActive}"
-                                                Tapped="OnServerRowTapped">
-                                                <Grid ColumnDefinitions="Auto,*" VerticalAlignment="Center">
+                                                <!--  Server row (bg_server_row): default flat, hover SurfaceHigh, pressed
+                                                      scale 0.96, selected = blue pill (#1F4C8DFF + 1.5px Accent, IsActive).
+                                                      Tap → SelectServer (default + connect). Right-click → §2.13 actions.  -->
+                                                <Border
+                                                    Margin="16,2"
+                                                    Classes="ServerRow"
+                                                    Classes.selected="{Binding IsActive}"
+                                                    ContextRequested="OnRowContextRequested"
+                                                    PointerExited="OnRowPointerExited"
+                                                    PointerPressed="OnRowPointerPressed"
+                                                    PointerReleased="OnRowPointerReleased"
+                                                    Tapped="OnServerRowTapped">
+                                                    <Border.ContextMenu>
+                                                        <ContextMenu>
+                                                            <MenuItem Click="OnRowMakeDefault" Header="Сделать основным" />
+                                                            <MenuItem Click="OnRowPing" Header="Проверить задержку" />
+                                                            <Separator />
+                                                            <MenuItem Click="OnRowEdit" Header="Изменить" />
+                                                            <MenuItem Click="OnRowDuplicate" Header="Дублировать" />
+                                                            <Separator />
+                                                            <MenuItem Click="OnRowShareQr" Header="Поделиться · QR-код" />
+                                                            <MenuItem Click="OnRowShareLink" Header="Поделиться · ссылка" />
+                                                            <Separator />
+                                                            <MenuItem
+                                                                Click="OnRowDelete"
+                                                                Foreground="{DynamicResource Brush.Red}"
+                                                                Header="Удалить" />
+                                                        </ContextMenu>
+                                                    </Border.ContextMenu>
 
-                                                    <!--  Flag: circular clip; RemarkToFlag resolves the country flag from Remarks.  -->
-                                                    <Border
-                                                        Grid.Column="0"
-                                                        Width="32"
-                                                        Height="32"
-                                                        Margin="0,0,12,0"
-                                                        VerticalAlignment="Center"
-                                                        Background="{DynamicResource Brush.SurfaceVariant}"
-                                                        BorderBrush="{DynamicResource Brush.OutlineVariant}"
-                                                        BorderThickness="1"
-                                                        ClipToBounds="True"
-                                                        CornerRadius="100">
-                                                        <Image Source="{Binding Remarks, Converter={StaticResource RemarkToFlag}}" Stretch="UniformToFill" />
-                                                    </Border>
+                                                    <Grid VerticalAlignment="Center" ColumnDefinitions="Auto,*,Auto">
 
-                                                    <!--  Name (bold, ellipsize) + «protocol chip · transport».  -->
-                                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                                        <TextBlock
-                                                            Classes="Title"
-                                                            Text="{Binding Remarks}"
-                                                            TextTrimming="CharacterEllipsis" />
-                                                        <StackPanel
-                                                            Margin="0,4,0,0"
+                                                        <!--  Flag: circular clip (matches circle-flags assets in android_servers.jpg);
+                                                              RemarkToFlag resolves the country flag from Remarks.  -->
+                                                        <Border
+                                                            Grid.Column="0"
+                                                            Width="28"
+                                                            Height="28"
+                                                            Margin="0,0,12,0"
                                                             VerticalAlignment="Center"
-                                                            Orientation="Horizontal">
-                                                            <Border Classes="ProtocolChip">
-                                                                <TextBlock
-                                                                    Classes="Chip"
-                                                                    Foreground="{DynamicResource Brush.Accent}"
-                                                                    Text="{Binding ConfigType, Converter={StaticResource ConfigTypeToProtocol}}" />
-                                                            </Border>
+                                                            Background="{DynamicResource Brush.SurfaceVariant}"
+                                                            BorderBrush="{DynamicResource Brush.OutlineVariant}"
+                                                            BorderThickness="1"
+                                                            ClipToBounds="True"
+                                                            CornerRadius="100">
+                                                            <Image Source="{Binding Remarks, Converter={StaticResource RemarkToFlag}}" Stretch="UniformToFill" />
+                                                        </Border>
+
+                                                        <!--  Name (bold, ellipsize, flag stripped) + «protocol chip · transport».  -->
+                                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                                             <TextBlock
-                                                                Margin="8,0,0,0"
-                                                                VerticalAlignment="Center"
-                                                                Classes="Caption"
-                                                                Text="{Binding Converter={StaticResource ProfileTransport}}"
+                                                                Classes="Title"
+                                                                Text="{Binding Remarks, Converter={StaticResource StripLeadingFlag}}"
                                                                 TextTrimming="CharacterEllipsis" />
+                                                            <StackPanel
+                                                                Margin="0,4,0,0"
+                                                                VerticalAlignment="Center"
+                                                                Orientation="Horizontal">
+                                                                <Border Classes="ProtocolChip">
+                                                                    <TextBlock
+                                                                        Classes="Chip"
+                                                                        Foreground="{DynamicResource Brush.Accent}"
+                                                                        Text="{Binding ConfigType, Converter={StaticResource ConfigTypeToProtocol}}" />
+                                                                </Border>
+                                                                <TextBlock
+                                                                    Margin="8,0,0,0"
+                                                                    VerticalAlignment="Center"
+                                                                    Classes="Caption"
+                                                                    Text="{Binding Converter={StaticResource ProfileTransport}}"
+                                                                    TextTrimming="CharacterEllipsis" />
+                                                            </StackPanel>
                                                         </StackPanel>
-                                                    </StackPanel>
-                                                </Grid>
-                                            </Border>
+
+                                                        <!--  Ping value (tv_test_result): right-aligned, tabular Grotesk digits,
+                                                              shown once a latency test has a result. All values on one vertical.  -->
+                                                        <TextBlock
+                                                            Grid.Column="2"
+                                                            Margin="8,0,0,0"
+                                                            VerticalAlignment="Center"
+                                                            Classes="Numeric"
+                                                            FontWeight="Bold"
+                                                            Foreground="{DynamicResource Brush.OnSurfaceVariant}"
+                                                            IsVisible="{Binding DelayVal, Converter={StaticResource NotEmpty}}"
+                                                            Text="{Binding DelayVal}"
+                                                            TextAlignment="Right" />
+                                                    </Grid>
+                                                </Border>
+
+                                                <!--  Inter-row divider (hidden on the selected row).  -->
+                                                <Border Classes="rowDivider" IsVisible="{Binding !IsActive}" />
+                                            </StackPanel>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
@@ -240,23 +354,35 @@
                 </ItemsControl>
             </ScrollViewer>
 
-            <!--  Empty state (left panel): quiet placeholder. The full onboarding CTAs live in the
-                  connect-hero (right panel). Shown when there are no servers/subscriptions.  -->
+            <!--  Empty state (layout_servers_empty): hero icon 64 + «Список пуст». The full onboarding
+                  CTAs live in the connect-hero (right panel of Home), so this stays quiet.  -->
             <StackPanel
                 Margin="24,0"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center"
                 IsVisible="{Binding IsEmpty}"
-                Spacing="6">
+                Spacing="14">
+                <Border
+                    Width="64"
+                    Height="64"
+                    HorizontalAlignment="Center"
+                    Background="{DynamicResource Brush.Tile.Blue}"
+                    CornerRadius="20">
+                    <PathIcon
+                        Width="32"
+                        Height="32"
+                        Data="{StaticResource Geo.CloudDownload}"
+                        Foreground="{DynamicResource Brush.Accent}" />
+                </Border>
                 <TextBlock
                     HorizontalAlignment="Center"
                     Classes="Title"
-                    Foreground="{DynamicResource Brush.OnSurfaceVariant}"
                     Text="Список пуст"
                     TextAlignment="Center" />
                 <TextBlock
                     HorizontalAlignment="Center"
                     Classes="Subtitle"
+                    MaxWidth="260"
                     Text="Добавьте подписку, чтобы увидеть серверы"
                     TextAlignment="Center"
                     TextWrapping="Wrap" />

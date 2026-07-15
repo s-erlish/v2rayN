@@ -28,7 +28,7 @@
         <TrayIcons>
             <TrayIcon
                 Command="{Binding NotifyLeftClickCmd}"
-                Icon="/Assets/NotifyIcon1.ico"
+                Icon="/Assets/NotifyShieldIdle.ico"
                 ToolTipText="{Binding RunningServerToolTipText}">
                 <TrayIcon.Menu>
                     <NativeMenu>

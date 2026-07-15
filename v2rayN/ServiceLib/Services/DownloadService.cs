@@ -156,6 +156,46 @@ public class DownloadService
     }
 
     /// <summary>
+    /// Same as <see cref="TryDownloadString(string, bool, string)"/> but also returns the
+    /// subscription response headers (subscription-userinfo + the announce/support/web-page/title
+    /// directives) which the plain string variant discards. Added as a separate path so existing
+    /// callers keep using GetStringAsync; this one uses GetAsync to expose <c>response.Headers</c>.
+    /// Returns null when the body could not be fetched.
+    /// </summary>
+    public async Task<SubContentResult?> TryDownloadStringWithHeaders(string url, bool blProxy, string userAgent)
+    {
+        var webProxy = await GetWebProxy(blProxy);
+        return await TryDownloadStringWithHeaders(url, webProxy, userAgent);
+    }
+
+    /// <summary>
+    /// Tries to download body + subscription headers with a specified proxy.
+    /// </summary>
+    public async Task<SubContentResult?> TryDownloadStringWithHeaders(string url, IWebProxy? webProxy, string userAgent)
+    {
+        var timeout = 15;
+        try
+        {
+            var result = await DownloadStringWithHeadersAsync(url, webProxy, userAgent, timeout);
+            if (result?.Body.IsNotEmpty() == true)
+            {
+                return result;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog(_tag, ex);
+            Error?.Invoke(this, new ErrorEventArgs(ex));
+            if (ex.InnerException != null)
+            {
+                Error?.Invoke(this, new ErrorEventArgs(ex.InnerException));
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Downloads string content via HttpClient.
     /// </summary>
     private async Task<string?> DownloadStringAsync(string url, IWebProxy? webProxy, string userAgent, int timeout)
@@ -209,6 +249,95 @@ public class DownloadService
             }
         }
 
+        return null;
+    }
+
+    /// <summary>
+    /// Downloads string content via HttpClient using GetAsync so the response headers
+    /// (subscription-userinfo and the Happ/Incy directives) remain available. Mirrors
+    /// <see cref="DownloadStringAsync"/> but returns body + selected headers. Auto-redirects
+    /// are followed by the handler, so the headers read here are those of the final 2xx response.
+    /// </summary>
+    private async Task<SubContentResult?> DownloadStringWithHeadersAsync(string url, IWebProxy? webProxy, string userAgent, int timeout)
+    {
+        try
+        {
+            var connectTimeout = Math.Clamp(timeout / 5, 2, 5);
+            var handler = new SocketsHttpHandler
+            {
+                Proxy = webProxy,
+                UseProxy = webProxy != null,
+                ConnectTimeout = TimeSpan.FromSeconds(connectTimeout)
+            };
+            var certificateChainPolicy = CertPemManager.Instance.BuildCertificateChainPolicy();
+            if (certificateChainPolicy != null)
+            {
+                handler.SslOptions.CertificateChainPolicy = certificateChainPolicy;
+                handler.SslOptions.RemoteCertificateValidationCallback = null;
+            }
+
+            using var client = new HttpClient(handler)
+            {
+                Timeout = Timeout.InfiniteTimeSpan
+            };
+
+            if (userAgent.IsNullOrEmpty())
+            {
+                userAgent = Utils.GetVersion(false);
+            }
+            client.DefaultRequestHeaders.UserAgent.TryParseAdd(userAgent);
+
+            Uri uri = new(url);
+            //Authorization Header
+            if (uri.UserInfo.IsNotEmpty())
+            {
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", Utils.Base64Encode(uri.UserInfo));
+            }
+
+            using var cts = new CancellationTokenSource();
+            cts.CancelAfter(TimeSpan.FromSeconds(timeout));
+
+            using var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cts.Token);
+            response.EnsureSuccessStatusCode();
+            var body = await response.Content.ReadAsStringAsync(cts.Token);
+
+            return new SubContentResult
+            {
+                Body = body,
+                SubscriptionUserInfo = GetHeaderValue(response, "subscription-userinfo"),
+                Announce = GetHeaderValue(response, "announce"),
+                SupportUrl = GetHeaderValue(response, "support-url"),
+                WebPageUrl = GetHeaderValue(response, "profile-web-page-url"),
+                ProfileTitle = GetHeaderValue(response, "profile-title"),
+            };
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog(_tag, ex);
+            Error?.Invoke(this, new ErrorEventArgs(ex));
+            if (ex.InnerException != null)
+            {
+                Error?.Invoke(this, new ErrorEventArgs(ex.InnerException));
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Reads a response header from either the message or the content header collection.
+    /// Returns null when the header is absent so callers can tell "not sent" from "cleared".
+    /// </summary>
+    private static string? GetHeaderValue(HttpResponseMessage response, string name)
+    {
+        if (response.Headers.TryGetValues(name, out var values))
+        {
+            return values.FirstOrDefault();
+        }
+        if (response.Content.Headers.TryGetValues(name, out var contentValues))
+        {
+            return contentValues.FirstOrDefault();
+        }
         return null;
     }
 
@@ -273,4 +402,20 @@ public class DownloadService
             return false;
         }
     }
+}
+
+/// <summary>
+/// Body plus the subscription-related response headers of a subscription fetch.
+/// The directive fields (announce/support/web-page/title) are RAW header values — they may be
+/// <c>base64:</c>-prefixed or "0" (clear); decoding/persisting is done by
+/// <see cref="Handler.SubscriptionHandler"/>. Any field may be null when the header was absent.
+/// </summary>
+public class SubContentResult
+{
+    public string? Body { get; set; }
+    public string? SubscriptionUserInfo { get; set; }
+    public string? Announce { get; set; }
+    public string? SupportUrl { get; set; }
+    public string? WebPageUrl { get; set; }
+    public string? ProfileTitle { get; set; }
 }

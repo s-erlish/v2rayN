@@ -143,11 +143,26 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     {
         _homeViewModel = new HomeViewModel(vm);
         _homeView.DataContext = _homeViewModel;
+        onboardingView.DataContext = _homeViewModel;
 
         _homeViewModel.WhenAnyValue(x => x.IsConnected)
             .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(connected => railStatusDot.Fill = connected ? _dotOn : _dotOff);
+
+        // Пустой старт (нет подписок): показываем ТОЛЬКО онбординг на всю ширину под chrome —
+        // рейл и контент скрыты. После добавления подписки (IsEmpty=false) — обычный шелл.
+        _homeViewModel.WhenAnyValue(x => x.IsEmpty)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .Subscribe(empty =>
+            {
+                onboardingView.IsVisible = empty;
+                shellRoot.IsVisible = !empty;
+            });
     }
+
+    // Онбординг «Войти через Telegram/сайт» пока ведёт на вкладку «Аккаунт»; реальный вход
+    // подключит агент AccountViewModel (Ф-D6/D7).
+    public void SelectAccountTab() => SelectTab(navAccount, _accountView);
 
     private void TitleBar_PointerPressed(object? sender, PointerPressedEventArgs e)
     {

@@ -34,11 +34,12 @@ public static class SubscriptionHandler
                 var downloadHandle = CreateDownloadHandler(hashCode, updateFunc);
                 await updateFunc?.Invoke(false, $"{hashCode}{ResUI.MsgStartGettingSubscriptions}");
 
-                // Get all subscription content (main subscription + additional subscriptions)
+                // Get all subscription content (main subscription + additional subscriptions),
+                // together with the main subscription's response headers (userinfo + directives).
                 var result = await DownloadAllSubscriptions(config, item, blProxy, downloadHandle);
 
-                // Process download result
-                if (await ProcessDownloadResult(config, item.Id, result, hashCode, updateFunc))
+                // Process download result (import servers + persist userinfo/directives to the SubItem)
+                if (await ProcessDownloadResult(config, item, result, hashCode, updateFunc))
                 {
                     successCount++;
                 }
@@ -103,21 +104,46 @@ public static class SubscriptionHandler
         return result ?? string.Empty;
     }
 
-    private static async Task<string> DownloadAllSubscriptions(Config config, SubItem item, bool blProxy, DownloadService downloadHandle)
+    /// <summary>
+    /// Like <see cref="DownloadSubscriptionContent"/> but also returns the subscription response
+    /// headers. Keeps the same proxy -> direct fallback, and adds a final headerless fallback so a
+    /// server that rejects the GetAsync/header path still imports servers (just without metadata).
+    /// </summary>
+    private static async Task<SubContentResult> DownloadSubscriptionContentWithHeaders(DownloadService downloadHandle, string url, bool blProxy, string userAgent)
     {
-        // Download main subscription content
+        var result = await downloadHandle.TryDownloadStringWithHeaders(url, blProxy, userAgent);
+
+        // If download with proxy fails, try direct connection
+        if (blProxy && (result?.Body).IsNullOrEmpty())
+        {
+            result = await downloadHandle.TryDownloadStringWithHeaders(url, false, userAgent);
+        }
+
+        // Headerless fallback: never regress below the plain download path.
+        if ((result?.Body).IsNullOrEmpty())
+        {
+            return new SubContentResult { Body = await DownloadSubscriptionContent(downloadHandle, url, blProxy, userAgent) };
+        }
+
+        return result!;
+    }
+
+    private static async Task<SubContentResult> DownloadAllSubscriptions(Config config, SubItem item, bool blProxy, DownloadService downloadHandle)
+    {
+        // Download main subscription content (body + response headers)
         var result = await DownloadMainSubscription(config, item, blProxy, downloadHandle);
 
-        // Process additional subscription links (if any)
+        // Process additional subscription links (if any). These only extend the body; the
+        // userinfo/directive headers stay those of the main subscription.
         if (item.ConvertTarget.IsNullOrEmpty() && item.MoreUrl.TrimEx().IsNotEmpty())
         {
-            result = await DownloadAdditionalSubscriptions(item, result, blProxy, downloadHandle);
+            result.Body = await DownloadAdditionalSubscriptions(item, result.Body ?? string.Empty, blProxy, downloadHandle);
         }
 
         return result;
     }
 
-    private static async Task<string> DownloadMainSubscription(Config config, SubItem item, bool blProxy, DownloadService downloadHandle)
+    private static async Task<SubContentResult> DownloadMainSubscription(Config config, SubItem item, bool blProxy, DownloadService downloadHandle)
     {
         // Prepare subscription URL and download directly
         var url = Utils.GetPunycode(item.Url.TrimEx());
@@ -140,10 +166,13 @@ public static class SubscriptionHandler
             {
                 url += $"&config={Global.SubConvertConfig.FirstOrDefault()}";
             }
+
+            // A sub-convert service response carries no subscription-userinfo header; body only.
+            return new SubContentResult { Body = await DownloadSubscriptionContent(downloadHandle, url, blProxy, item.UserAgent) };
         }
 
-        // Download and return result directly
-        return await DownloadSubscriptionContent(downloadHandle, url, blProxy, item.UserAgent);
+        // Direct subscription: fetch body together with the userinfo/directive response headers.
+        return await DownloadSubscriptionContentWithHeaders(downloadHandle, url, blProxy, item.UserAgent);
     }
 
     private static async Task<string> DownloadAdditionalSubscriptions(SubItem item, string mainResult, bool blProxy, DownloadService downloadHandle)
@@ -185,9 +214,10 @@ public static class SubscriptionHandler
         return result;
     }
 
-    private static async Task<bool> ProcessDownloadResult(Config config, string id, string result, string hashCode, Func<bool, string, Task> updateFunc)
+    private static async Task<bool> ProcessDownloadResult(Config config, SubItem subItem, SubContentResult result, string hashCode, Func<bool, string, Task> updateFunc)
     {
-        if (result.IsNullOrEmpty())
+        var body = result.Body ?? string.Empty;
+        if (body.IsNullOrEmpty())
         {
             await updateFunc?.Invoke(false, $"{hashCode}{ResUI.MsgSubscriptionDecodingFailed}");
             return false;
@@ -196,19 +226,25 @@ public static class SubscriptionHandler
         await updateFunc?.Invoke(false, $"{hashCode}{ResUI.MsgGetSubscriptionSuccessfully}");
 
         // If result is too short, display content directly
-        if (result.Length < 99)
+        if (body.Length < 99)
         {
-            await updateFunc?.Invoke(false, $"{hashCode}{result}");
+            await updateFunc?.Invoke(false, $"{hashCode}{body}");
         }
 
         await updateFunc?.Invoke(false, $"{hashCode}{ResUI.MsgStartParsingSubscription}");
 
         // Add servers to configuration
-        var ret = await ConfigHandler.AddBatchServers(config, result, id, true);
+        var ret = await ConfigHandler.AddBatchServers(config, body, subItem.Id, true);
         if (ret <= 0)
         {
             Logging.SaveLog("FailedImportSubscription");
-            Logging.SaveLog(result);
+            Logging.SaveLog(body);
+        }
+        else
+        {
+            // Servers imported OK -> persist the subscription-userinfo + directive metadata.
+            // Guarded so that absent headers leave the stored values unchanged.
+            await SaveSubscriptionMetadata(subItem.Id, result);
         }
 
         // Update completion message
@@ -217,5 +253,139 @@ public static class SubscriptionHandler
                 : $"{hashCode}{ResUI.MsgFailedImportSubscription}");
 
         return ret > 0;
+    }
+
+    /// <summary>
+    /// Persists the subscription-userinfo header (traffic/expiry) and the Happ/Incy directives
+    /// (announce / support-url / profile-web-page-url / profile-title) onto the SubItem, exactly
+    /// as Android's AngConfigManager.updateConfigViaSub does. Re-reads the row first so a concurrent
+    /// writer (e.g. TaskManager's UpdateTime) is not clobbered; only called when servers imported.
+    /// </summary>
+    private static async Task SaveSubscriptionMetadata(string subId, SubContentResult result)
+    {
+        try
+        {
+            var item = await AppManager.Instance.GetSubItem(subId);
+            if (item is null)
+            {
+                return;
+            }
+
+            // subscription-userinfo: upload/download/total (bytes) + expire (epoch seconds).
+            var info = ParseUserInfo(result.SubscriptionUserInfo);
+            if (info is not null)
+            {
+                item.UploadUsed = info.Value.Upload;
+                item.DownloadUsed = info.Value.Download;
+                item.TotalTraffic = info.Value.Total;
+                item.Expire = info.Value.Expire;
+                item.UserInfoUpdated = DateTimeOffset.Now.ToUnixTimeMilliseconds();
+            }
+
+            // Directives: null header => leave unchanged; "0" => clear; "base64:.." => decoded.
+            var announce = DecodeSubDirective(result.Announce);
+            if (announce is not null)
+            {
+                item.Announce = announce;
+            }
+            var supportUrl = DecodeSubDirective(result.SupportUrl);
+            if (supportUrl is not null)
+            {
+                item.SupportUrl = supportUrl;
+            }
+            var webPageUrl = DecodeSubDirective(result.WebPageUrl);
+            if (webPageUrl is not null)
+            {
+                item.WebPageUrl = webPageUrl;
+            }
+            // Real provider title (used as the meta-bar heading; TitleText falls back to Remarks).
+            var profileTitle = DecodeSubDirective(result.ProfileTitle);
+            if (profileTitle is not null)
+            {
+                item.ProfileTitle = profileTitle;
+            }
+
+            // Stamp the last-update time (epoch seconds, matching TaskManager) so the meta-bar
+            // subtitle reflects manual refreshes too, not just scheduled auto-updates.
+            item.UpdateTime = DateTimeOffset.Now.ToUnixTimeSeconds();
+
+            await SQLiteHelper.Instance.UpdateAsync(item);
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog("SaveSubscriptionMetadata", ex);
+        }
+    }
+
+    /// <summary>
+    /// Parses the `subscription-userinfo` header value, e.g.
+    /// `upload=4520000000; download=210000000000; total=536870912000; expire=1749954800`.
+    /// Splits on ';' into key=value pairs; a value that is not a long skips that pair.
+    /// Returns null when nothing usable was found (caller then leaves stored metadata unchanged).
+    /// 1:1 port of Android SubscriptionUserInfo.parse.
+    /// </summary>
+    private static (long Upload, long Download, long Total, long Expire)? ParseUserInfo(string? raw)
+    {
+        if (string.IsNullOrEmpty(raw))
+        {
+            return null;
+        }
+
+        long upload = 0, download = 0, total = 0, expire = 0;
+        var any = false;
+        foreach (var part in raw.Split(';'))
+        {
+            var i = part.IndexOf('=');
+            if (i <= 0)
+            {
+                continue;
+            }
+            var key = part.Substring(0, i).Trim().ToLowerInvariant();
+            if (!long.TryParse(part.Substring(i + 1).Trim(), out var val))
+            {
+                continue;
+            }
+            any = true;
+            switch (key)
+            {
+                case "upload": upload = val; break;
+                case "download": download = val; break;
+                case "total": total = val; break;
+                case "expire": expire = val; break;
+            }
+        }
+
+        return any ? (upload, download, total, expire) : null;
+    }
+
+    /// <summary>
+    /// Decodes a Happ/Incy subscription directive header value. Returns null when the header is
+    /// absent (leave the stored value unchanged); "" when the value is "0" (clear); otherwise the
+    /// plaintext ("base64:"-prefixed values are Base64-decoded, falling back to the raw value on
+    /// error). 1:1 port of Android AngConfigManager.decodeSubDirective.
+    /// </summary>
+    private static string? DecodeSubDirective(string? raw)
+    {
+        if (raw is null)
+        {
+            return null;
+        }
+        var v = raw.Trim();
+        if (v == "0")
+        {
+            return string.Empty;
+        }
+        if (v.StartsWith("base64:"))
+        {
+            try
+            {
+                return Encoding.UTF8.GetString(Convert.FromBase64String(v.Substring("base64:".Length))).Trim();
+            }
+            catch
+            {
+                return v;
+            }
+        }
+        return v;
     }
 }

@@ -1,0 +1,472 @@
+<UserControl
+    x:Class="v2rayN.Desktop.Views.LoginView"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:vms="clr-namespace:v2rayN.Desktop.ViewModels"
+    d:DesignHeight="760"
+    d:DesignWidth="900"
+    x:DataType="vms:AccountViewModel"
+    mc:Ignorable="d">
+
+    <!--
+        Экран «Вход» (порт Android activity_login.xml + LoginActivity.kt, 1:1).
+        Суб-страница с бесшовным тулбаром «← Вход» и двумя СОСЕДНИМИ картами (не вложенными):
+        1) Telegram: заголовок + описание + CTA; состояние ожидания (спиннер + «Ожидаем
+           подтверждения в Telegram…» + «Открыть Telegram» + «Начать заново»).
+        2) Сайт: email + пароль (глаз), CTA со спиннером поверх, блок 2FA (разделитель + код 6 цифр
+           + «Подтвердить»), «Регистрация на сайте».
+        Под картами: строка ошибки (Red, по центру) — реальный диагностик из VM.
+        Incy: pure dark + один синий #4C8DFF, Space Grotesk, sentence-case Russian (строки verbatim
+        из strings_auth.xml), сетка 4/8/12/16/24, radius chip 12 / input 14 / button 16 / card 20.
+        Состояния (idle / awaiting-TG / loading-site / 2FA / error) переключает code-behind по
+        AccountViewModel.CurrentLoginState (WhenAnyValue на UI-шедулере).
+    -->
+
+    <UserControl.Resources>
+        <!--  Глифы (порт Android res/drawable, Material 24dp).  -->
+        <!--  Стрелка «назад» тулбара (arrow_back).  -->
+        <StreamGeometry x:Key="Geo.Login.Back">M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z</StreamGeometry>
+        <!--  Telegram (ic_telegram_24dp, viewport 1024) — контурный бумажный самолётик.  -->
+        <StreamGeometry x:Key="Geo.Login.Telegram">M912.2,154A85.3,85.3 0,0 0,853.3 128a85.3,85.3 0,0 0,-33.3 6.8l-708.3,306.8a42.7,42.7 0,0 0,-26.5 42.7V512a42.7,42.7 0,0 0,29.4 42.7L298.7,616.1l55.5,187.3a75.9,75.9 0,0 0,56.3 53.3,62.7 62.7,0 0,0 15.4,0 73.8,73.8 0,0 0,50.8 -20.5l67.8,-64 131.4,103.7a85.3,85.3 0,0 0,90 9.4l14.1,-7.3a88.3,88.3 0,0 0,46.5 -62.7L938.7,235.1a90,90 0,0 0,-26.5 -81.1zM763.7,805.1a25.2,25.2 0,0 1,-12.8 17.5l-14.1,7.3a19.6,19.6 0,0 1,-9 2.1,19.6 19.6,0 0,1 -12.4,-4.7l-160.4,-128a20.9,20.9 0,0 0,-27.7 0l-94.7,89.2a11.1,11.1 0,0 1,-6 2.1V640a21.8,21.8 0,0 1,6.8 -15.8c136.1,-128 217.6,-199.7 266.2,-240.6a15.8,15.8 0,0 0,5.1 -11.1,13.7 13.7,0 0,0 -4.3,-11.1 14.9,14.9 0,0 0,-17.9 -4.3l-322.6,203.5a21.3,21.3 0,0 1,-18.3 0L149.3,494.9l694.2,-301.2a16.6,16.6 0,0 1,7.7 0,22.2 22.2,0 0,1 16.2,7.7 26.9,26.9 0,0 1,6.8 23.5z</StreamGeometry>
+        <!--  Глаз password-toggle: «показать» (visibility) / «скрыть» (visibility_off).  -->
+        <StreamGeometry x:Key="Geo.Login.Eye">M12,4.5C7,4.5 2.73,7.61 1,12c1.73,4.39 6,7.5 11,7.5s9.27,-3.11 11,-7.5c-1.73,-4.39 -6,-7.5 -11,-7.5zM12,17c-2.76,0 -5,-2.24 -5,-5s2.24,-5 5,-5 5,2.24 5,5 -2.24,5 -5,5zM12,9c-1.66,0 -3,1.34 -3,3s1.34,3 3,3 3,-1.34 3,-3 -1.34,-3 -3,-3z</StreamGeometry>
+        <StreamGeometry x:Key="Geo.Login.EyeOff">M12,7c2.76,0 5,2.24 5,5 0,0.65 -0.13,1.26 -0.36,1.83l2.92,2.92c1.51,-1.26 2.7,-2.89 3.43,-4.75 -1.73,-4.39 -6,-7.5 -11,-7.5 -1.4,0 -2.74,0.25 -3.98,0.7l2.16,2.16C10.74,7.13 11.35,7 12,7zM2,4.27l2.28,2.28 0.46,0.46C3.08,8.3 1.78,10.02 1,12c1.73,4.39 6,7.5 11,7.5 1.55,0 3.03,-0.3 4.38,-0.84l0.42,0.42L19.73,22 21,20.73 3.27,3 2,4.27zM7.53,9.8l1.55,1.55c-0.05,0.21 -0.08,0.43 -0.08,0.65 0,1.66 1.34,3 3,3 0.22,0 0.44,-0.03 0.65,-0.08l1.55,1.55c-0.67,0.33 -1.41,0.53 -2.2,0.53 -2.76,0 -5,-2.24 -5,-5 0,-0.79 0.2,-1.53 0.53,-2.2zM11.84,9.02l3.15,3.15 0.02,-0.16c0,-1.66 -1.34,-3 -3,-3l-0.17,0.01z</StreamGeometry>
+
+        <!--
+            [ЛОКАЛЬНО, к продвижению в GlobalResources] Тема текстового поля Incy
+            (замена Widget.Material3.TextInputLayout.OutlinedBox): фон SurfaceVariant,
+            1px OutlineVariant #20242B, радиус 14 (= Radius.Search), фокус = рамка Accent
+            #4C8DFF, текст OnSurface #F2F4F8, плейсхолдер OnSurfaceVariant #9BA1AD
+            (контраст 6.2:1 ≥ 4.5:1). Полная ControlTheme, чтобы тема Semi не
+            перекрашивала pointerover/focus своими токенами.
+        -->
+        <ControlTheme x:Key="TextBox.Incy" TargetType="TextBox">
+            <Setter Property="Background" Value="{DynamicResource Brush.SurfaceVariant}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineVariant}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{DynamicResource Radius.Search}" />
+            <Setter Property="MinHeight" Value="52" />
+            <Setter Property="Padding" Value="16,0" />
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
+            <Setter Property="CaretBrush" Value="{DynamicResource Brush.Accent}" />
+            <Setter Property="SelectionBrush" Value="#334C8DFF" />
+            <Setter Property="SelectionForegroundBrush" Value="{DynamicResource Brush.OnSurface}" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Cursor" Value="IBeam" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border
+                        x:Name="PART_BorderElement"
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        CornerRadius="{TemplateBinding CornerRadius}">
+                        <Border.Transitions>
+                            <Transitions>
+                                <BrushTransition Property="BorderBrush" Duration="0:0:0.15" />
+                            </Transitions>
+                        </Border.Transitions>
+                        <Grid ColumnDefinitions="*,Auto" Margin="{TemplateBinding Padding}">
+                            <Panel Grid.Column="0" VerticalAlignment="{TemplateBinding VerticalContentAlignment}">
+                                <TextBlock
+                                    x:Name="PART_Watermark"
+                                    VerticalAlignment="Center"
+                                    Foreground="{DynamicResource Brush.OnSurfaceVariant}"
+                                    IsVisible="{TemplateBinding Text, Converter={x:Static StringConverters.IsNullOrEmpty}}"
+                                    Text="{TemplateBinding Watermark}"
+                                    TextAlignment="{TemplateBinding TextAlignment}"
+                                    TextWrapping="NoWrap" />
+                                <ScrollViewer
+                                    x:Name="PART_ScrollViewer"
+                                    HorizontalScrollBarVisibility="Hidden"
+                                    VerticalScrollBarVisibility="Disabled">
+                                    <TextPresenter
+                                        x:Name="PART_TextPresenter"
+                                        VerticalAlignment="Center"
+                                        CaretBrush="{TemplateBinding CaretBrush}"
+                                        CaretIndex="{TemplateBinding CaretIndex}"
+                                        LineHeight="{TemplateBinding LineHeight}"
+                                        PasswordChar="{TemplateBinding PasswordChar}"
+                                        RevealPassword="{TemplateBinding RevealPassword}"
+                                        SelectionBrush="{TemplateBinding SelectionBrush}"
+                                        SelectionEnd="{TemplateBinding SelectionEnd}"
+                                        SelectionForegroundBrush="{TemplateBinding SelectionForegroundBrush}"
+                                        SelectionStart="{TemplateBinding SelectionStart}"
+                                        Text="{TemplateBinding Text, Mode=TwoWay}"
+                                        TextAlignment="{TemplateBinding TextAlignment}"
+                                        TextWrapping="{TemplateBinding TextWrapping}" />
+                                </ScrollViewer>
+                            </Panel>
+                            <ContentPresenter
+                                Grid.Column="1"
+                                VerticalAlignment="Center"
+                                Content="{TemplateBinding InnerRightContent}" />
+                        </Grid>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#PART_BorderElement">
+                <Setter Property="BorderBrush" Value="{DynamicResource Brush.Outline}" />
+            </Style>
+            <Style Selector="^:focus /template/ Border#PART_BorderElement">
+                <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Opacity" Value="0.38" />
+            </Style>
+        </ControlTheme>
+    </UserControl.Resources>
+
+    <UserControl.Styles>
+        <!--
+            [ЛОКАЛЬНО, к продвижению] Кнопка «назад» тулбара: 40×40 круг, глиф 22,
+            hover SurfaceHigh, pressed scale 0.92, БЕЗ ripple/glow (§0.1 IconButton).
+        -->
+        <Style Selector="Button.BackButton">
+            <Setter Property="Width" Value="40" />
+            <Setter Property="Height" Value="40" />
+            <Setter Property="MinWidth" Value="40" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill}" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Button.BackButton /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill}" />
+        </Style>
+        <Style Selector="Button.BackButton:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
+        </Style>
+        <Style Selector="Button.BackButton:pressed">
+            <Setter Property="RenderTransform" Value="scale(0.92)" />
+        </Style>
+
+        <!--
+            [ЛОКАЛЬНО, к продвижению] Линк-действие («Открыть Telegram»): текстовая кнопка
+            акцента без рамки, 40h (тач-таргет), pressed scale 0.97.
+        -->
+        <Style Selector="Button.LinkAction">
+            <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
+            <Setter Property="Height" Value="40" />
+            <Setter Property="Padding" Value="12,0" />
+            <Setter Property="CornerRadius" Value="{DynamicResource Radius.Chip}" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+            <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+            <Setter Property="FontWeight" Value="Medium" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Button.LinkAction:pressed">
+            <Setter Property="RenderTransform" Value="scale(0.97)" />
+        </Style>
+
+        <!--
+            Спиннер: дуга ~25% окружности (Ellipse со штрих-пунктиром, приём ConnectHeroView),
+            равномерное вращение только с классом .spinning (навешивает code-behind).
+        -->
+        <Style Selector="Ellipse.Spinner">
+            <Setter Property="IsHitTestVisible" Value="False" />
+        </Style>
+        <Style Selector="Ellipse.Spinner.spinning">
+            <Style.Animations>
+                <Animation
+                    Easing="LinearEasing"
+                    IterationCount="Infinite"
+                    Duration="0:0:1.1">
+                    <KeyFrame Cue="0%">
+                        <Setter Property="RotateTransform.Angle" Value="0" />
+                    </KeyFrame>
+                    <KeyFrame Cue="100%">
+                        <Setter Property="RotateTransform.Angle" Value="360" />
+                    </KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+    </UserControl.Styles>
+
+    <Grid Background="{DynamicResource Brush.Bg}" RowDefinitions="Auto,*">
+
+        <!--  ============ Бесшовный тулбар суб-страницы: «← Вход» ============  -->
+        <Grid
+            Grid.Row="0"
+            Height="56"
+            MaxWidth="560"
+            Margin="16,0"
+            ColumnDefinitions="Auto,*">
+            <Button
+                x:Name="BackButton"
+                Grid.Column="0"
+                VerticalAlignment="Center"
+                Classes="IconButton BackButton"
+                ToolTip.Tip="Назад">
+                <PathIcon
+                    Width="22"
+                    Height="22"
+                    Data="{StaticResource Geo.Login.Back}"
+                    Foreground="{DynamicResource Brush.OnSurface}" />
+            </Button>
+            <TextBlock
+                Grid.Column="1"
+                Margin="12,0,0,0"
+                VerticalAlignment="Center"
+                Classes="Headline"
+                Text="Вход" />
+        </Grid>
+
+        <!--  ============ Контент: скролл, gutter 16, колонка формы ≤560 ============  -->
+        <ScrollViewer
+            Grid.Row="1"
+            HorizontalScrollBarVisibility="Disabled"
+            VerticalScrollBarVisibility="Auto">
+            <StackPanel
+                MaxWidth="560"
+                Margin="16,16,16,24"
+                HorizontalAlignment="Stretch">
+
+                <!--  ==================== Карта 1: Вход через Telegram ====================  -->
+                <Border Classes="Card">
+                    <StackPanel>
+                        <TextBlock Classes="Title" Text="Вход через Telegram" />
+                        <TextBlock
+                            Margin="0,8,0,0"
+                            Classes="Subtitle"
+                            Text="Подключите аккаунт Telegram, чтобы войти в один тап."
+                            TextWrapping="Wrap" />
+
+                        <!--  CTA. Команда VM сама держит кнопку disabled, пока идёт опрос подтверждения.  -->
+                        <Button
+                            x:Name="TelegramButton"
+                            Margin="0,16,0,0"
+                            HorizontalAlignment="Stretch"
+                            Classes="Primary Tall"
+                            Command="{Binding LoginTelegramCmd}">
+                            <StackPanel
+                                VerticalAlignment="Center"
+                                Orientation="Horizontal"
+                                Spacing="10">
+                                <PathIcon
+                                    Width="20"
+                                    Height="20"
+                                    Data="{StaticResource Geo.Login.Telegram}"
+                                    Foreground="{DynamicResource Brush.OnAccent}" />
+                                <TextBlock VerticalAlignment="Center" Text="Войти через Telegram" />
+                            </StackPanel>
+                        </Button>
+
+                        <!--  Состояние ожидания (AwaitingTelegram / Polling): спиннер + текст +
+                              «Открыть Telegram» (повторно открыть deep link) + «Начать заново».  -->
+                        <StackPanel
+                            x:Name="AwaitingBlock"
+                            Margin="0,16,0,0"
+                            HorizontalAlignment="Stretch"
+                            IsVisible="False">
+                            <Ellipse
+                                x:Name="AwaitingSpinner"
+                                Width="32"
+                                Height="32"
+                                HorizontalAlignment="Center"
+                                Classes="Spinner"
+                                RenderTransformOrigin="0.5,0.5"
+                                Stroke="{DynamicResource Brush.Accent}"
+                                StrokeDashArray="8.4,25.1"
+                                StrokeLineCap="Round"
+                                StrokeThickness="3" />
+                            <TextBlock
+                                Margin="0,12,0,0"
+                                Classes="Subtitle"
+                                Text="Ожидаем подтверждения в Telegram…"
+                                TextAlignment="Center"
+                                TextWrapping="Wrap" />
+                            <Button
+                                x:Name="OpenTelegramButton"
+                                Margin="0,12,0,0"
+                                HorizontalAlignment="Center"
+                                Classes="LinkAction"
+                                Content="Открыть Telegram" />
+                            <Button
+                                x:Name="RestartButton"
+                                Margin="0,12,0,0"
+                                HorizontalAlignment="Center"
+                                Classes="OutlinedAccent"
+                                Content="Начать заново" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!--  ==================== Карта 2: Вход через сайт ====================  -->
+                <Border Margin="0,16,0,0" Classes="Card">
+                    <StackPanel>
+                        <TextBlock Classes="Title" Text="Вход через сайт" />
+                        <TextBlock
+                            Margin="0,8,0,0"
+                            Classes="Subtitle"
+                            Text="Войдите по email и паролю от аккаунта departament."
+                            TextWrapping="Wrap" />
+
+                        <!--  Email (auth_email_hint). Enter переводит фокус на пароль.  -->
+                        <TextBox
+                            x:Name="EmailBox"
+                            Margin="0,16,0,0"
+                            Text="{Binding LoginEmail, Mode=TwoWay}"
+                            Theme="{StaticResource TextBox.Incy}"
+                            Watermark="Электронная почта" />
+                        <!--  Живая подсказка невалидного email (auth_email_invalid), как в Android.  -->
+                        <TextBlock
+                            x:Name="EmailError"
+                            Margin="4,4,4,0"
+                            FontSize="12"
+                            Foreground="{DynamicResource Brush.Red}"
+                            IsVisible="False"
+                            Text="Введите корректный email, например name@example.com"
+                            TextWrapping="Wrap" />
+
+                        <!--  Пароль (auth_password_hint) + глаз (password_toggle). Enter = войти.  -->
+                        <TextBox
+                            x:Name="PasswordBox"
+                            Margin="0,12,0,0"
+                            PasswordChar="●"
+                            Text="{Binding LoginPassword, Mode=TwoWay}"
+                            Theme="{StaticResource TextBox.Incy}"
+                            Watermark="Пароль">
+                            <TextBox.InnerRightContent>
+                                <Button
+                                    x:Name="TogglePasswordButton"
+                                    Width="36"
+                                    Height="36"
+                                    Padding="0"
+                                    Classes="IconButton"
+                                    ToolTip.Tip="Показать пароль">
+                                    <Panel>
+                                        <PathIcon
+                                            x:Name="EyeOnIcon"
+                                            Width="20"
+                                            Height="20"
+                                            Data="{StaticResource Geo.Login.Eye}"
+                                            Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+                                        <PathIcon
+                                            x:Name="EyeOffIcon"
+                                            Width="20"
+                                            Height="20"
+                                            Data="{StaticResource Geo.Login.EyeOff}"
+                                            Foreground="{DynamicResource Brush.OnSurfaceVariant}"
+                                            IsVisible="False" />
+                                    </Panel>
+                                </Button>
+                            </TextBox.InnerRightContent>
+                        </TextBox>
+
+                        <!--  CTA «Войти через сайт» + спиннер поверх во время SiteLoading (pb_site).  -->
+                        <Panel Margin="0,16,0,0">
+                            <Button
+                                x:Name="SiteButton"
+                                HorizontalAlignment="Stretch"
+                                Classes="Primary Tall"
+                                Command="{Binding LoginSiteCmd}">
+                                <TextBlock x:Name="SiteButtonLabel" Text="Войти через сайт" />
+                            </Button>
+                            <Ellipse
+                                x:Name="SiteSpinner"
+                                Width="22"
+                                Height="22"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Classes="Spinner"
+                                IsVisible="False"
+                                RenderTransformOrigin="0.5,0.5"
+                                Stroke="{DynamicResource Brush.OnAccent}"
+                                StrokeDashArray="6.9,20.8"
+                                StrokeLineCap="Round"
+                                StrokeThickness="2.5" />
+                        </Panel>
+
+                        <!--  Блок 2FA (TOTP): виден только когда бэкенд запросил код (layout_2fa).  -->
+                        <StackPanel
+                            x:Name="TwoFaBlock"
+                            Margin="0,16,0,0"
+                            IsVisible="False">
+                            <Border Height="1" Background="{DynamicResource Brush.OutlineVariant}" />
+                            <TextBlock
+                                Margin="0,16,0,0"
+                                Classes="Subtitle"
+                                Text="Введите 6-значный код из приложения"
+                                TextWrapping="Wrap" />
+                            <TextBox
+                                x:Name="CodeBox"
+                                Margin="0,12,0,0"
+                                FontFeatures="tnum,lnum"
+                                FontSize="18"
+                                MaxLength="6"
+                                Text="{Binding TwoFaCode, Mode=TwoWay}"
+                                TextAlignment="Center"
+                                Theme="{StaticResource TextBox.Incy}"
+                                Watermark="6-значный код" />
+                            <!--  Живая подсказка (auth_code_invalid).  -->
+                            <TextBlock
+                                x:Name="CodeError"
+                                Margin="4,4,4,0"
+                                FontSize="12"
+                                Foreground="{DynamicResource Brush.Red}"
+                                IsVisible="False"
+                                Text="Код состоит из 6 цифр"
+                                TextAlignment="Center"
+                                TextWrapping="Wrap" />
+                            <Panel Margin="0,12,0,0">
+                                <Button
+                                    x:Name="ConfirmButton"
+                                    HorizontalAlignment="Stretch"
+                                    Classes="Primary Tall"
+                                    Command="{Binding Submit2FaCmd}">
+                                    <TextBlock x:Name="ConfirmButtonLabel" Text="Подтвердить" />
+                                </Button>
+                                <Ellipse
+                                    x:Name="ConfirmSpinner"
+                                    Width="22"
+                                    Height="22"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Classes="Spinner"
+                                    IsVisible="False"
+                                    RenderTransformOrigin="0.5,0.5"
+                                    Stroke="{DynamicResource Brush.OnAccent}"
+                                    StrokeDashArray="6.9,20.8"
+                                    StrokeLineCap="Round"
+                                    StrokeThickness="2.5" />
+                            </Panel>
+                        </StackPanel>
+
+                        <!--  Регистрация на основном сайте (открывается во внешнем браузере).  -->
+                        <Button
+                            x:Name="RegisterButton"
+                            Margin="0,12,0,0"
+                            HorizontalAlignment="Stretch"
+                            Classes="OutlinedAccent"
+                            Content="Регистрация на сайте" />
+                    </StackPanel>
+                </Border>
+
+                <!--  Строка ошибки (tv_error): Red, по центру, только реальный диагностик.  -->
+                <TextBlock
+                    x:Name="ErrorLine"
+                    Margin="0,16,0,0"
+                    Classes="Subtitle"
+                    Foreground="{DynamicResource Brush.Red}"
+                    IsVisible="False"
+                    TextAlignment="Center"
+                    TextWrapping="Wrap" />
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

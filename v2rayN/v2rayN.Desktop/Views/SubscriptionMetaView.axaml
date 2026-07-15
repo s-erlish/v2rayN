@@ -11,8 +11,9 @@
         Мета-бар подписки (под-план 2) — 1:1 с Android layout_subscription_meta_bar.xml.
         Строка 1: шеврон + (title + subtitle) + пинг/обновить/пин.
         Тело (сворачиваемое): трафик-пилюля + expiry, announce, поддержка + telegram.
-        Все текстовые/числовые поля x:Name-нуты под привязку к SubItem (§(b) плана).
-        Значения ниже — ДИЗАЙН-ВРЕМЕННЫЕ образцы; ничего не хардкодим в проде.
+        Все текстовые/числовые поля x:Name-нуты и привязаны в code-behind к выбранной SubItem
+        (ProfilesViewModel.SelectedSub, с userinfo из SubscriptionHandler). В проде — только реальные
+        данные, пусто пока подписки с userinfo нет. Образцы существуют ТОЛЬКО в Design.IsDesignMode.
     -->
 
     <UserControl.Resources>
@@ -32,8 +33,13 @@
     </UserControl.Resources>
 
     <!--  Карточка мета-бара (bg_server_card): Surface, radius 20, 1px OutlineVariant.
-          Паддинг 16/12/12/12 как в Android. Без вложенных карточек.  -->
-    <Border Classes="Card" Padding="16,12,12,12">
+          Паддинг 16/12/12/12 как в Android. Без вложенных карточек.
+          IsVisible гейтится в code-behind: карта видна только когда выбрана РЕАЛЬНАЯ подписка
+          (SelectedSub с непустым Id), а не псевдо-группа «Все серверы».  -->
+    <Border
+        x:Name="MetaCard"
+        Classes="Card"
+        Padding="16,12,12,12">
         <StackPanel>
 
             <!--  ============ Строка 1: шеврон + заголовок/подзаголовок + действия ============  -->
@@ -63,13 +69,13 @@
                     <TextBlock
                         x:Name="TitleText"
                         Classes="Title"
-                        Text="erlish"
+                        Text=""
                         TextTrimming="CharacterEllipsis" />
                     <TextBlock
                         x:Name="SubtitleText"
                         Margin="0,4,0,0"
                         Classes="Caption"
-                        Text="10.07.2026 17:17 · Автообновление — 1 ч."
+                        Text=""
                         TextTrimming="CharacterEllipsis" />
                 </StackPanel>
 
@@ -159,9 +165,10 @@
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center"
                             Classes="Numeric"
+                            FontFeatures="tnum"
                             FontSize="11"
                             FontWeight="Medium"
-                            Text="1,7 ТБ / ∞" />
+                            Text="" />
                     </Panel>
                     <!--  Expiry: «∞» / «до dd.MM.yyyy» / «Просрочено» (красный) — привязка.  -->
                     <TextBlock
@@ -169,22 +176,27 @@
                         HorizontalAlignment="Right"
                         VerticalAlignment="Center"
                         Classes="Caption"
-                        Text="до 12.08.2026" />
+                        FontFeatures="tnum"
+                        Text="" />
                 </Grid>
 
-                <!--  Announce-баннер подписки (по центру, приглушённый, до 5 строк).  -->
+                <!--  Announce-баннер подписки (по центру, приглушённый, до 5 строк). Скрыт, если пусто.  -->
                 <TextBlock
                     x:Name="AnnounceText"
                     Margin="0,8,0,0"
                     Classes="Caption"
                     MaxLines="5"
-                    Text="Без рекламы на YouTube: Hybrid, Russia&#x0A;Если не работает, обновите подписку&#x0A;@departamentvpn"
+                    Text=""
                     TextAlignment="Center"
                     TextTrimming="CharacterEllipsis"
                     TextWrapping="Wrap" />
 
-                <!--  Нижняя строка: тональная «Поддержка» слева + Telegram справа (противоположные углы).  -->
-                <Grid Margin="0,8,0,0" ColumnDefinitions="Auto,*,Auto">
+                <!--  Нижняя строка: тональная «Поддержка» слева + Telegram справа (противоположные углы).
+                      Скрыта целиком, когда провайдер не прислал ни support-url, ни web-page-url.  -->
+                <Grid
+                    x:Name="ActionRow"
+                    Margin="0,8,0,0"
+                    ColumnDefinitions="Auto,*,Auto">
                     <!--  «Поддержка»: компактная тональная пилюля (в теме Incy — синий контейнер акцента).  -->
                     <Button
                         x:Name="SupportButton"

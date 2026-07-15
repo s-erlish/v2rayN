@@ -172,6 +172,12 @@ public class CoreManager
         {
             Logging.SaveLog(_tag, ex);
         }
+
+        // Reset the running-core marker so IsRunningCore() reports "stopped" after teardown.
+        // The Incy connect shield (HomeViewModel) and the tray icon both derive connect state
+        // from IsRunningCore; without this reset RunningCoreType stays sticky and a disconnect
+        // never registers. LoadCore re-assigns it on the next connect.
+        AppManager.Instance.RunningCoreType = ECoreType.v2rayN;
     }
 
     #region Private

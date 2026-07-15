@@ -57,14 +57,18 @@
             </Style.Animations>
         </Style>
 
-        <!--  Один сонар-импульс на connect-confirm: scale 1→1.6, alpha 1→0 (ease-out-quint).  -->
+        <!--  Один сонар-импульс на connect-confirm: кольцо scale 1→1.6 + alpha 1→0 за
+              emphasis (600мс), ease_out_quint (0.22,1,0.36,1 = Ease.OutQuint), ОДИН РАЗ.  -->
         <Style Selector="Ellipse.Sonar.pulsing">
             <Style.Animations>
                 <Animation
                     Duration="0:0:0.6"
-                    Easing="QuinticEaseOut"
                     FillMode="Forward"
                     IterationCount="1">
+                    <!--  Ease.OutQuint (0.22,1,0.36,1) — инлайн, чтобы не зависеть от скоупа стиля.  -->
+                    <Animation.Easing>
+                        <SplineEasing X1="0.22" Y1="1" X2="0.36" Y2="1" />
+                    </Animation.Easing>
                     <KeyFrame Cue="0%">
                         <Setter Property="ScaleTransform.ScaleX" Value="1" />
                         <Setter Property="ScaleTransform.ScaleY" Value="1" />
@@ -74,6 +78,33 @@
                         <Setter Property="ScaleTransform.ScaleX" Value="1.6" />
                         <Setter Property="ScaleTransform.ScaleY" Value="1.6" />
                         <Setter Property="Opacity" Value="0" />
+                    </KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+
+        <!--  Cold-start «сборка» героя: ОДИН раз за процесс — scale 0.9→1 + alpha 0→1 за
+              400мс, ease_out_quint, без овершута; оканчивается в покое (shield_assemble.xml).
+              Навешивается код-behind по первому Loaded (статик-гвард), снимается после.  -->
+        <Style Selector="Panel.assembling">
+            <Style.Animations>
+                <Animation
+                    Duration="0:0:0.4"
+                    FillMode="Forward"
+                    IterationCount="1">
+                    <!--  Ease.OutQuint (0.22,1,0.36,1) — инлайн (см. выше).  -->
+                    <Animation.Easing>
+                        <SplineEasing X1="0.22" Y1="1" X2="0.36" Y2="1" />
+                    </Animation.Easing>
+                    <KeyFrame Cue="0%">
+                        <Setter Property="ScaleTransform.ScaleX" Value="0.9" />
+                        <Setter Property="ScaleTransform.ScaleY" Value="0.9" />
+                        <Setter Property="Opacity" Value="0" />
+                    </KeyFrame>
+                    <KeyFrame Cue="100%">
+                        <Setter Property="ScaleTransform.ScaleX" Value="1" />
+                        <Setter Property="ScaleTransform.ScaleY" Value="1" />
+                        <Setter Property="Opacity" Value="1" />
                     </KeyFrame>
                 </Animation>
             </Style.Animations>
@@ -172,7 +203,8 @@
                     Width="{StaticResource Size.HeroFrame}"
                     Height="{StaticResource Size.HeroFrame}"
                     HorizontalAlignment="Center"
-                    ClipToBounds="False">
+                    ClipToBounds="False"
+                    RenderTransformOrigin="0.5,0.5">
 
                     <!--  (1) glow-halo (bg_connect_glow) — виден только при connected.  -->
                     <Ellipse
@@ -186,12 +218,16 @@
                         IsVisible="False"
                         Opacity="0"
                         RenderTransformOrigin="0.5,0.5">
+                        <!--  Reveal/hide glow: длительность+кривую перекл. код-behind по направлению
+                              (reveal 300 OutQuint / hide 225 Standard). Здесь — forward-дефолт.  -->
                         <Ellipse.Transitions>
                             <Transitions>
-                                <DoubleTransition
-                                    Easing="QuinticEaseOut"
-                                    Property="Opacity"
-                                    Duration="0:0:0.3" />
+                                <DoubleTransition Property="Opacity" Duration="0:0:0.3">
+                                    <!--  Ease.OutQuint (reveal). Код-behind перекл. на Standard при hide.  -->
+                                    <DoubleTransition.Easing>
+                                        <SplineEasing X1="0.22" Y1="1" X2="0.36" Y2="1" />
+                                    </DoubleTransition.Easing>
+                                </DoubleTransition>
                             </Transitions>
                         </Ellipse.Transitions>
                     </Ellipse>
@@ -252,7 +288,8 @@
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
                         Classes="ConnectDisc"
-                        Cursor="Hand">
+                        Cursor="Hand"
+                        RenderTransformOrigin="0.5,0.5">
                         <Panel>
                             <!--  Контур-щит (ic_shield_outline, evenodd-дырка): idle серый / connecting синий.  -->
                             <Path
@@ -264,13 +301,20 @@
                                 Data="F0 M12,2.2 L19.6,5.2 L19.6,11.4 C19.6,16.1 15.9,19.9 12,21.8 C8.1,19.9 4.4,16.1 4.4,11.4 L4.4,5.2 Z M12,4.7 L17.2,6.8 L17.2,11.4 C17.2,14.9 14.7,17.9 12,19.3 C9.3,17.9 6.8,14.9 6.8,11.4 L6.8,6.8 Z"
                                 Fill="{DynamicResource Brush.OnSurfaceVariant}"
                                 Stretch="Uniform">
+                                <!--  Crossfade+tint: код-behind перекл. длительность 220↔165 (реверс 75%).
+                                      ПОРЯДОК фиксирован: [0]=Opacity, [1]=Fill (см. code-behind).  -->
                                 <Path.Transitions>
                                     <Transitions>
-                                        <DoubleTransition
-                                            Easing="QuarticEaseOut"
-                                            Property="Opacity"
-                                            Duration="0:0:0.22" />
-                                        <BrushTransition Property="Fill" Duration="0:0:0.22" />
+                                        <DoubleTransition Property="Opacity" Duration="0:0:0.22">
+                                            <DoubleTransition.Easing>
+                                                <SplineEasing X1="0.2" Y1="0" X2="0" Y2="1" />
+                                            </DoubleTransition.Easing>
+                                        </DoubleTransition>
+                                        <BrushTransition Property="Fill" Duration="0:0:0.22">
+                                            <BrushTransition.Easing>
+                                                <SplineEasing X1="0.2" Y1="0" X2="0" Y2="1" />
+                                            </BrushTransition.Easing>
+                                        </BrushTransition>
                                     </Transitions>
                                 </Path.Transitions>
                             </Path>
@@ -285,12 +329,15 @@
                                 Fill="{DynamicResource Brush.Accent}"
                                 Opacity="0"
                                 Stretch="Uniform">
+                                <!--  Залив: crossfade-in при connect (0→1), out при disconnect.
+                                      Длительность 220↔165 перекл. код-behind ([0]=Opacity).  -->
                                 <Path.Transitions>
                                     <Transitions>
-                                        <DoubleTransition
-                                            Easing="QuarticEaseOut"
-                                            Property="Opacity"
-                                            Duration="0:0:0.22" />
+                                        <DoubleTransition Property="Opacity" Duration="0:0:0.22">
+                                            <DoubleTransition.Easing>
+                                                <SplineEasing X1="0.2" Y1="0" X2="0" Y2="1" />
+                                            </DoubleTransition.Easing>
+                                        </DoubleTransition>
                                     </Transitions>
                                 </Path.Transitions>
                             </Path>
@@ -299,7 +346,7 @@
                 </Panel>
 
                 <!--  Подпись-состояние (Title bold). idle: «Не подключено»/«Выберите сервер»,
-                      connecting: «Подключение…», connected: «Прокси подключён».  -->
+                      connecting: «Подключение…», connected: «Подключено» (цвет → accent).  -->
                 <TextBlock
                     x:Name="StatusText"
                     Margin="24,16,24,0"
@@ -311,7 +358,11 @@
                     TextTrimming="CharacterEllipsis">
                     <TextBlock.Transitions>
                         <Transitions>
-                            <BrushTransition Property="Foreground" Duration="0:0:0.2" />
+                            <BrushTransition Property="Foreground" Duration="0:0:0.2">
+                                <BrushTransition.Easing>
+                                    <SplineEasing X1="0.2" Y1="0" X2="0" Y2="1" />
+                                </BrushTransition.Easing>
+                            </BrushTransition>
                         </Transitions>
                     </TextBlock.Transitions>
                 </TextBlock>
