@@ -8,15 +8,17 @@ namespace v2rayN.Desktop.Views;
 /// (Подключение, Обход блокировок, Производительность, Интерфейс, Подписка, О приложении).
 ///
 /// Значения/тумблеры биндятся к реальному <see cref="SettingsViewModel"/> (данные читаются из
-/// живого <c>Config</c> и пишутся обратно через <c>ConfigHandler.SaveConfig</c>). НИ ОДНА строка не
-/// является мёртвым affordance:
-///   • строки-с-действием (шеврон + hover): Режим, DNS, Маршрутизация — открывают/переключают;
-///     Локальный прокси — раскрывает инлайн-поля; Число Mux / Язык / Автообновление — циклят значение;
-///   • строки-тумблеры реагируют на тап по всей строке (56 px), не только по 52×32 тумблеру;
-///   • строки «только значение» (Пинг, Оформление, О приложении) — без шеврона/hover;
-///   • строки «Скоро» (Файлы ресурсов, Провайдеры, Резервное копирование, Схемы URL) — приглушены,
-///     без действия, пока их экран не построен на ПК.
-/// Sample-данные — только design-time (<c>Design.DataContext</c>).
+/// живого <c>Config</c> и пишутся обратно через <c>ConfigHandler.SaveConfig</c>). КАЖДАЯ строка —
+/// реальная рабочая функция, ни одного мёртвого affordance:
+///   • переключают/открывают диалог: Режим (TUN), DNS, Маршрутизация;
+///   • открывают реальный суб-экран: Прокси по приложениям, Пинг, Файлы ресурсов,
+///     Настройки провайдеров, О приложении, Резервное копирование, Схемы URL-адресов;
+///   • раскрывают инлайн-поля: Локальный прокси;
+///   • циклят реальное значение: Число Mux, Язык, Автообновление, Оформление;
+///   • тумблеры (Обход сети, IPv6, Mux, Фрагментация, Облегчённый режим, Запуск при загрузке)
+///     переключаются тапом по всей строке (56 px), не только по 52×32 тумблеру.
+/// OFF-модель: ни одна строка не запускает ядро — изменения применяются вживую лишь если ядро
+/// уже запущено. Sample-данные — только design-time (<c>Design.DataContext</c>).
 /// </summary>
 public partial class SettingsView : UserControl
 {
@@ -42,10 +44,20 @@ public partial class SettingsView : UserControl
         ProxyUserBox.LostFocus += OnProxyFieldCommit;
         ProxyPassBox.LostFocus += OnProxyFieldCommit;
 
-        // Циклящиеся значения (нет экрана-пикера → продвигаем реальное значение на месте).
+        // Циклящиеся значения (тап продвигает реальное значение на месте).
         RowMuxConcurrency.Tapped += (_, _) => _ = Vm?.CycleMuxConcurrencyAsync();
         RowLanguage.Tapped += (_, _) => _ = Vm?.CycleLanguageAsync();
         RowSubAutoUpdate.Tapped += (_, _) => _ = Vm?.CycleAutoUpdateAsync();
+        RowAppearance.Tapped += (_, _) => _ = Vm?.CycleAppearanceAsync();
+
+        // --- Строки, открывающие реальные суб-экраны (диалоговые окна Incy) ---
+        RowPerApp.Tapped += async (_, _) => await OpenDialogAsync(new PerAppProxyWindow(), refresh: true);
+        RowPingMethod.Tapped += async (_, _) => await OpenDialogAsync(new PingSettingsWindow());
+        RowAssets.Tapped += async (_, _) => await OpenDialogAsync(new GeoFilesWindow());
+        RowProvider.Tapped += async (_, _) => await OpenDialogAsync(new ProviderSettingsWindow(), refresh: true);
+        RowAbout.Tapped += async (_, _) => await OpenDialogAsync(new AboutSubWindow());
+        RowBackup.Tapped += async (_, _) => await OpenDialogAsync(new BackupSubWindow());
+        RowUrlScheme.Tapped += async (_, _) => await OpenDialogAsync(new UrlSchemesWindow());
 
         // --- Тумблер-строки: тап по всей строке переключает тумблер (кроме тапа по самому тумблеру,
         //     иначе двойное переключение = холостой ход) ---
@@ -77,6 +89,24 @@ public partial class SettingsView : UserControl
     }
 
     private void OnProxyFieldCommit(object? sender, RoutedEventArgs e) => _ = Vm?.CommitLocalProxyAsync();
+
+    /// <summary>Open an Incy sub-screen as a modal dialog over the main window, then optionally re-read
+    /// row values it may have changed.</summary>
+    private async Task OpenDialogAsync(Window window, bool refresh = false)
+    {
+        if (TopLevel.GetTopLevel(this) is Window owner)
+        {
+            await window.ShowDialog(owner);
+        }
+        else
+        {
+            window.Show();
+        }
+        if (refresh)
+        {
+            Vm?.RefreshDisplayValues();
+        }
+    }
 
     /// <summary>Тап по строке-тумблеру переключает тумблер — но не когда сам тумблер и был источником
     /// тапа (он уже переключился сам).</summary>

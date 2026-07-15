@@ -139,7 +139,10 @@
                                 </StackPanel>
                                 <Button.Flyout>
                                     <Flyout Placement="Bottom">
-                                        <StackPanel Width="248" Spacing="12">
+                                        <StackPanel
+                                            Width="248"
+                                            Spacing="12"
+                                            x:DataType="vms:AccountViewModel">
                                             <TextBlock Classes="Title" Text="Пополнение баланса" />
                                             <TextBlock
                                                 Classes="Caption"

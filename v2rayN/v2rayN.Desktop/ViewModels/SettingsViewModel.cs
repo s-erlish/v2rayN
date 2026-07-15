@@ -61,6 +61,7 @@ public class SettingsViewModel : MyReactiveObject
     #region One-way display values (read from the real config)
 
     [Reactive] public string ModeText { get; set; } = string.Empty;
+    [Reactive] public string PerAppText { get; set; } = string.Empty;
     [Reactive] public string DnsText { get; set; } = string.Empty;
     [Reactive] public string PingMethodText { get; set; } = string.Empty;
     [Reactive] public string MuxConcurrencyText { get; set; } = string.Empty;
@@ -91,6 +92,7 @@ public class SettingsViewModel : MyReactiveObject
     {
         _designMode = true;
         ModeText = "TUN";
+        PerAppText = "Выкл";
         DnsText = "Cloudflare";
         PingMethodText = "Реальная задержка (через ядро)";
         MuxConcurrencyText = "8";
@@ -125,6 +127,7 @@ public class SettingsViewModel : MyReactiveObject
         ProxyPass = inbound?.Pass ?? string.Empty;
 
         ModeText = StatusBarViewModel.Instance.EnableTun ? "TUN" : "Прокси";
+        PerAppText = ResolvePerAppText();
         DnsText = ResolveDnsText();
         // Ping is a fixed real-delay probe through the core (no persisted method enum to fake).
         PingMethodText = "Реальная задержка (через ядро)";
@@ -391,6 +394,53 @@ public class SettingsViewModel : MyReactiveObject
         NoticeManager.Instance.Enqueue(ResUI.NeedRebootTips);
     }
 
+    /// <summary>Оформление row: toggle Тёмная ↔ Светлая. Persists <c>UiItem.CurrentTheme</c> and applies
+    /// the theme variant live via the same mechanism as ThemeSettingViewModel. NOTE: the Incy design
+    /// tokens (GlobalResources) currently ship dark-only; full light-mode token coverage is owned by the
+    /// theming/GlobalResources agent — this control persists + applies the real preference.</summary>
+    public async Task CycleAppearanceAsync()
+    {
+        if (_designMode)
+        {
+            return;
+        }
+
+        var next = _config.UiItem.CurrentTheme == nameof(ETheme.Light) ? nameof(ETheme.Dark) : nameof(ETheme.Light);
+        _config.UiItem.CurrentTheme = next;
+        await ConfigHandler.SaveConfig(_config);
+        ApplyThemeVariant(next);
+        AppearanceText = ResolveThemeText();
+    }
+
+    private static void ApplyThemeVariant(string theme)
+    {
+        var app = Application.Current;
+        if (app is null)
+        {
+            return;
+        }
+        app.RequestedThemeVariant = theme switch
+        {
+            nameof(ETheme.Light) => ThemeVariant.Light,
+            nameof(ETheme.Dark) => ThemeVariant.Dark,
+            _ => ThemeVariant.Default,
+        };
+    }
+
+    /// <summary>Re-read values that a sub-screen (per-app / ping / provider / etc.) may have changed,
+    /// so the row value labels stay truthful after the dialog closes.</summary>
+    public void RefreshDisplayValues()
+    {
+        if (_designMode)
+        {
+            return;
+        }
+        PerAppText = ResolvePerAppText();
+        SubAutoUpdateText = ResolveAutoUpdateText();
+        AppearanceText = ResolveThemeText();
+        LanguageText = ResolveLanguageText();
+    }
+
     #endregion Row actions
 
     #region Display resolvers
@@ -403,6 +453,17 @@ public class SettingsViewModel : MyReactiveObject
 
     private string ResolveMuxConcurrencyText() =>
         _config.Mux4SboxItem.MaxConnections > 0 ? _config.Mux4SboxItem.MaxConnections.ToString() : "8";
+
+    private string ResolvePerAppText()
+    {
+        if (!_config.UiItem.PerAppProxyEnabled)
+        {
+            return "Выкл";
+        }
+        var n = _config.UiItem.PerAppProxyList?.Count ?? 0;
+        var mode = _config.UiItem.PerAppProxyBypass ? "кроме" : "только";
+        return n > 0 ? $"{mode} {n}" : "Вкл";
+    }
 
     private string ResolveThemeText() => _config.UiItem.CurrentTheme switch
     {

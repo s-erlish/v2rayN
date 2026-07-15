@@ -140,9 +140,8 @@
             <Grid
                 x:Name="StatsRow"
                 Grid.Row="0"
-                Margin="16,12,16,0"
-                ColumnDefinitions="40,*,40">
-                <Grid Grid.Column="1" ColumnDefinitions="*,*,*">
+                Margin="16,12,16,0">
+                <Grid ColumnDefinitions="*,*,*">
                     <StackPanel
                         Grid.Column="0"
                         HorizontalAlignment="Center"
@@ -187,23 +186,6 @@
                             Text="0 KB/s" />
                     </StackPanel>
                 </Grid>
-                <!--  «+» добавить профиль/подписку — то же меню, что тулбар на Android.  -->
-                <Button
-                    x:Name="AddButton"
-                    Grid.Column="2"
-                    Classes="IconButton40"
-                    ToolTip.Tip="Добавить профиль">
-                    <Path
-                        Width="18"
-                        Height="18"
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        Data="M12 5 V19 M5 12 H19"
-                        Stretch="Uniform"
-                        Stroke="{DynamicResource Brush.OnSurface}"
-                        StrokeLineCap="Round"
-                        StrokeThickness="1.6" />
-                </Button>
             </Grid>
 
             <!--  Герой-блок: щит по центру свободного места панели (стата-строка закреплена
@@ -310,17 +292,20 @@
                         Classes="ConnectDisc"
                         Cursor="Hand"
                         RenderTransformOrigin="0.5,0.5">
-                        <Panel>
+                        <!--  Viewbox центрирует узкую геометрию щита в квадрате диска (Stretch+явные
+                              Width/Height у Path прижимали её к краю → щит уходил влево).  -->
+                        <Viewbox
+                            Width="{StaticResource Size.ShieldGlyph}"
+                            Height="{StaticResource Size.ShieldGlyph}"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Stretch="Uniform">
+                          <Panel Width="24" Height="24">
                             <!--  Контур-щит (ic_shield_outline, evenodd-дырка): idle серый / connecting синий.  -->
                             <Path
                                 x:Name="ShieldOutline"
-                                Width="{StaticResource Size.ShieldGlyph}"
-                                Height="{StaticResource Size.ShieldGlyph}"
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Center"
                                 Data="F0 M12,2.2 L19.6,5.2 L19.6,11.4 C19.6,16.1 15.9,19.9 12,21.8 C8.1,19.9 4.4,16.1 4.4,11.4 L4.4,5.2 Z M12,4.7 L17.2,6.8 L17.2,11.4 C17.2,14.9 14.7,17.9 12,19.3 C9.3,17.9 6.8,14.9 6.8,11.4 L6.8,6.8 Z"
-                                Fill="{DynamicResource Brush.OnSurfaceVariant}"
-                                Stretch="Uniform">
+                                Fill="{DynamicResource Brush.OnSurfaceVariant}">
                                 <!--  Crossfade+tint: код-behind перекл. длительность 220↔165 (реверс 75%).
                                       ПОРЯДОК фиксирован: [0]=Opacity, [1]=Fill (см. code-behind).  -->
                                 <Path.Transitions>
@@ -341,14 +326,9 @@
                             <!--  Залив-щит (ic_shield_filled, тот же силуэт): crossfade-in при connect, синий.  -->
                             <Path
                                 x:Name="ShieldFilled"
-                                Width="{StaticResource Size.ShieldGlyph}"
-                                Height="{StaticResource Size.ShieldGlyph}"
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Center"
                                 Data="M12,2.2 L19.6,5.2 L19.6,11.4 C19.6,16.1 15.9,19.9 12,21.8 C8.1,19.9 4.4,16.1 4.4,11.4 L4.4,5.2 Z"
                                 Fill="{DynamicResource Brush.Accent}"
-                                Opacity="0"
-                                Stretch="Uniform">
+                                Opacity="0">
                                 <!--  Залив: crossfade-in при connect (0→1), out при disconnect.
                                       Длительность 220↔165 перекл. код-behind ([0]=Opacity).  -->
                                 <Path.Transitions>
@@ -361,7 +341,8 @@
                                     </Transitions>
                                 </Path.Transitions>
                             </Path>
-                        </Panel>
+                          </Panel>
+                        </Viewbox>
                     </Border>
                 </Panel>
 

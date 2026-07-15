@@ -219,7 +219,7 @@ public partial class PerAppProxyWindow : Window
     private static bool IsCoreRunning() =>
         AppManager.Instance.IsRunningCore(ECoreType.Xray) || AppManager.Instance.IsRunningCore(ECoreType.sing_box);
 
-    private sealed class AppItem
+    public sealed class AppItem
     {
         public string Identifier { get; set; } = string.Empty;
         public string? Display { get; set; }

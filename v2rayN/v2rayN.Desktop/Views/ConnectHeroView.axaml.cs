@@ -105,7 +105,6 @@ public partial class ConnectHeroView : UserControl
         ConnectDisc.PointerCaptureLost += OnDiscPressCancel;
         ConnectDisc.PointerExited += OnDiscPressCancel;
 
-        AddButton.Click += (_, _) => AddRequested?.Invoke(this, EventArgs.Empty);
         AddQrButton.Click += (_, _) => AddByQrRequested?.Invoke(this, EventArgs.Empty);
         AddClipboardButton.Click += (_, _) => AddFromClipboardRequested?.Invoke(this, EventArgs.Empty);
 

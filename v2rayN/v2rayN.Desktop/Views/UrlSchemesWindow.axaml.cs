@@ -136,5 +136,5 @@ public partial class UrlSchemesWindow : Window
         btnUnregister.IsEnabled = reg;
     }
 
-    private sealed record SchemeRow(string Scheme, string Hint);
+    public sealed record SchemeRow(string Scheme, string Hint);
 }
