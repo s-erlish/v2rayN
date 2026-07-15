@@ -9,18 +9,33 @@ namespace v2rayN.Desktop.ViewModels;
 /// the active subscription and removes one after an in-view confirmation. DATA-DRIVEN: everything
 /// comes from GET /client/devices via <see cref="AccountRepository"/>; nothing is invented.
 ///
-/// The subscription UUID may be supplied by the caller; otherwise it is resolved like Android does:
-/// logged-in profile's remnawaveUuid (no network) → first /subscription/all item with a non-blank
-/// remnawaveUuid → profile again → «Активная подписка не найдена».
+/// The subscription UUID may be supplied by the caller; otherwise it is resolved from the account:
+/// logged-in profile's remnawaveUuid (no network) → GET /client/auth/me (the ONLY authoritative
+/// source of the uuid, exactly what the Account tab uses) → first /subscription/all item with a
+/// non-blank remnawaveUuid → «Активная подписка не найдена». The GetMe step is what makes the list
+/// populate: the token-store profile can lack the uuid until the identity endpoint enriches it, and
+/// /all items never carry a remnawaveUuid (SubscriptionDtos.cs), so without GetMe resolution dead-ends.
+///
+/// Re-resolves on login: <see cref="AccountSession.StateChanged"/> is observed so opening Devices
+/// right after signing in (before the profile has a uuid) still populates once the session settles.
 ///
 /// Cache-first: a fresh (&lt; 1h) list in <see cref="AccountCache"/> renders instantly without a
 /// network call; a successful delete rewrites the cached list so the Account tab count stays true.
 /// </summary>
-public class DevicesViewModel : MyReactiveObject
+public class DevicesViewModel : MyReactiveObject, IDisposable
 {
     private readonly AccountRepository _repo;
 
+    // Observes AccountSession so Devices re-resolves when the session becomes logged-in (or the
+    // profile is refreshed with a uuid). Null in design mode. Detached in Dispose to avoid a leak,
+    // since AccountSession.StateChanged is a long-lived static event.
+    private readonly Action<AccountState>? _onAccountStateChanged;
+
     private string? _remnawaveUuid;
+
+    // Coalesces overlapping loads: our own RefreshProfile() fires AccountSession.StateChanged, which
+    // would otherwise kick off a second Load() mid-flight. True for the duration of one load.
+    private volatile bool _loadInFlight;
 
     // True until the FIRST load result lands: gates the skeleton so the pre-load instant does not
     // flash the empty state (same trick as AccountViewModel._pendingFirstLoad).
@@ -49,6 +64,10 @@ public class DevicesViewModel : MyReactiveObject
     // «Устройства, подключённые к вашей подписке» is list-chrome: Android hides it whenever the
     // empty/no-sub/error overlay is up because it would contradict «нет устройств».
     [Reactive] public bool ShowSubtitle { get; set; }
+
+    // Device count shown next to the toolbar title, only while the real list is on screen.
+    [Reactive] public string CountText { get; set; } = string.Empty;
+    [Reactive] public bool HasCount { get; set; }
 
     // Delete confirmation overlay (in-view modal, port of the MaterialAlertDialog).
     [Reactive] public bool ShowDeleteConfirm { get; set; }
@@ -79,10 +98,14 @@ public class DevicesViewModel : MyReactiveObject
         _repo = new AccountRepository();
         _remnawaveUuid = remnawaveUuid.NullIfEmpty() ?? LoggedInProfileUuid();
 
-        LoadCmd = ReactiveCommand.CreateFromTask(() => Load());
+        // «Повторить» refetches, bypassing any stale cache and re-resolving the uuid via GetMe.
+        LoadCmd = ReactiveCommand.CreateFromTask(() => Load(forceRefresh: true));
         DeleteCmd = ReactiveCommand.Create<DeviceDto>(AskDelete);
         ConfirmDeleteCmd = ReactiveCommand.CreateFromTask(ConfirmDelete);
         CancelDeleteCmd = ReactiveCommand.Create(CancelDelete);
+
+        _onAccountStateChanged = OnAccountStateChanged;
+        AccountSession.StateChanged += _onAccountStateChanged;
 
         Recompute();
         _ = Load();
@@ -93,12 +116,14 @@ public class DevicesViewModel : MyReactiveObject
     {
         _repo = null!;
         _pendingFirstLoad = false;
-        Devices = new List<DeviceRow>
+        const string here = "6ec3b80558194dabaf769c0f9351206f"; // «это устройство» in the preview
+        var sample = new List<DeviceDto>
         {
-            new(new DeviceDto { Hwid = "0210da79ff83470092941af8b390692d", Platform = "android", DeviceModel = "Xiaomi 2203129G", LastActiveAt = "2026-07-10T09:03:00Z" }),
-            new(new DeviceDto { Hwid = "bdc968c12cd646848b9a814b6556f1a3", LastActiveAt = "2026-07-10T08:41:00Z" }),
-            new(new DeviceDto { Hwid = "6ec3b80558194dabaf769c0f9351206f", Platform = "windows", LastActiveAt = "2026-07-09T19:12:00Z" }),
+            new() { Hwid = "0210da79ff83470092941af8b390692d", Platform = "android", DeviceModel = "Xiaomi 2203129G", LastActiveAt = "2026-07-10T09:03:00Z" },
+            new() { Hwid = "bdc968c12cd646848b9a814b6556f1a3", Platform = "ios", DeviceModel = "iPhone 15 Pro", LastActiveAt = "2026-07-10T08:41:00Z" },
+            new() { Hwid = here, Platform = "windows", DeviceModel = "PC", LastActiveAt = "2026-07-09T19:12:00Z" },
         };
+        Devices = sample.Select((d, i) => new DeviceRow(d, here, showDivider: i > 0)).ToList();
 
         LoadCmd = ReactiveCommand.Create(() => { });
         DeleteCmd = ReactiveCommand.Create<DeviceDto>(AskDelete);
@@ -115,9 +140,27 @@ public class DevicesViewModel : MyReactiveObject
     /// <summary>
     /// Loads the device list (port of DeviceManagementActivity.loadDevices). Unless
     /// <paramref name="forceRefresh"/>, a fresh cached list for the resolved UUID renders
-    /// immediately with no network call.
+    /// immediately with no network call. Re-entrant calls (e.g. a StateChanged raised by our own
+    /// RefreshProfile) are coalesced so only one load runs at a time.
     /// </summary>
     private async Task Load(bool forceRefresh = false)
+    {
+        if (_loadInFlight)
+        {
+            return;
+        }
+        _loadInFlight = true;
+        try
+        {
+            await LoadCore(forceRefresh);
+        }
+        finally
+        {
+            _loadInFlight = false;
+        }
+    }
+
+    private async Task LoadCore(bool forceRefresh)
     {
         RunOnUi(() =>
         {
@@ -142,17 +185,38 @@ public class DevicesViewModel : MyReactiveObject
             Recompute();
         });
 
-        var uuid = _remnawaveUuid;
+        // Re-read the profile: the session may have settled since the ctor ran (e.g. login just
+        // completed) and now carries the uuid.
+        var uuid = _remnawaveUuid.NullIfEmpty() ?? LoggedInProfileUuid();
+
         if (uuid.IsNullOrEmpty())
         {
-            // First /subscription/all item with a non-blank remnawaveUuid = the active sub.
-            var all = await _repo.LoadSubscriptions();
-            uuid = all.GetOrNull()?.Items?.FirstOrDefault(it => it.RemnawaveUuid.IsNotEmpty())?.RemnawaveUuid;
+            // AUTHORITATIVE step: GET /client/auth/me returns the profile that actually carries the
+            // remnawaveUuid — the same source the Account tab uses to fetch the device count. Without
+            // this the list dead-ends (the stored profile can lack the uuid; /all items never carry it).
+            var me = await _repo.RefreshProfile();
+            uuid = me.GetOrNull()?.RemnawaveUuid.NullIfEmpty() ?? LoggedInProfileUuid();
+
+            // A real transport/server failure while resolving identity is an ERROR (retryable), not a
+            // «нет подписки». Unauthorized means the session is gone → treat as no-subscription below.
+            if (uuid.IsNullOrEmpty() && me.IsFailure && me.Error is { } identityErr and not ApiError.Unauthorized)
+            {
+                RunOnUi(() =>
+                {
+                    Error = identityErr;
+                    _pendingFirstLoad = false;
+                    IsLoading = false;
+                    Recompute();
+                });
+                return;
+            }
         }
         if (uuid.IsNullOrEmpty())
         {
-            // /all is empty for primary-only accounts — fall back to the profile's own uuid.
-            uuid = LoggedInProfileUuid();
+            // Last resort: a non-blank remnawaveUuid on any /subscription/all item (rare — the DTO
+            // documents these are usually blank, which is exactly why GetMe above is the real fix).
+            var all = await _repo.LoadSubscriptions();
+            uuid = all.GetOrNull()?.Items?.FirstOrDefault(it => it.RemnawaveUuid.IsNotEmpty())?.RemnawaveUuid;
         }
         if (uuid.IsNullOrEmpty())
         {
@@ -205,15 +269,68 @@ public class DevicesViewModel : MyReactiveObject
     /// <summary>Publishes the fetched list as display rows and re-derives the content slot.</summary>
     private void Render(List<DeviceDto> devices)
     {
-        Devices = devices.Select(d => new DeviceRow(d)).ToList();
+        // This machine's stable HWID → the row for THIS device is highlighted subtly.
+        var currentHwid = CurrentDeviceHwid();
+        Devices = devices
+            .Select((d, i) => new DeviceRow(d, currentHwid, showDivider: i > 0))
+            .ToList();
         Error = null;
         _pendingFirstLoad = false;
         Recompute();
     }
 
+    /// <summary>The stable per-machine HWID, used to flag the current device. Blank in design mode.</summary>
+    private static string CurrentDeviceHwid()
+    {
+        try
+        {
+            return AuthTokenStore.DeviceId();
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
     /// <summary>remnawaveUuid of the logged-in profile, if any (covers primary-only accounts).</summary>
     private static string? LoggedInProfileUuid() =>
         (AccountSession.State as AccountState.LoggedIn)?.Profile.RemnawaveUuid.NullIfEmpty();
+
+    /// <summary>
+    /// Re-resolves + reloads when the session becomes logged-in (or its profile gains a uuid), so
+    /// opening Devices immediately after login populates without a manual refresh; clears to
+    /// «нет подписки» on logout. Raised on the caller's thread — Load()/RunOnUi marshal to the UI.
+    /// </summary>
+    private void OnAccountStateChanged(AccountState state)
+    {
+        if (state is AccountState.LoggedIn logged)
+        {
+            var uuid = logged.Profile.RemnawaveUuid.NullIfEmpty();
+            if (uuid.IsNotEmpty() && !string.Equals(uuid, _remnawaveUuid, StringComparison.OrdinalIgnoreCase))
+            {
+                _remnawaveUuid = uuid;
+                _ = Load();
+            }
+            else if (_remnawaveUuid.IsNullOrEmpty())
+            {
+                // Session is logged-in but the uuid is not on the profile yet — let Load() resolve it.
+                _ = Load();
+            }
+        }
+        else if (state is AccountState.LoggedOut)
+        {
+            RunOnUi(() =>
+            {
+                _remnawaveUuid = null;
+                _noSubscription = true;
+                _pendingFirstLoad = false;
+                IsLoading = false;
+                Devices = new List<DeviceRow>();
+                Error = null;
+                Recompute();
+            });
+        }
+    }
 
     #endregion load
 
@@ -241,7 +358,7 @@ public class DevicesViewModel : MyReactiveObject
             RunOnUi(() =>
             {
                 CloseConfirm();
-                AppEvents.SendSnackMsgRequested.Publish("Не удалось удалить устройство. Попробуйте позже.");
+                AppEvents.SendSnackMsgRequested.Publish("Не удалось отвязать устройство. Попробуйте позже.");
             });
             return;
         }
@@ -258,9 +375,9 @@ public class DevicesViewModel : MyReactiveObject
                     var updated = Devices.Select(r => r.Dto).Where(d => d.Hwid != device.Hwid).ToList();
                     AccountCache.PutDevices(uuid!, updated);
                     Render(updated);
-                    AppEvents.SendSnackMsgRequested.Publish("Устройство удалено");
+                    AppEvents.SendSnackMsgRequested.Publish("Устройство отвязано");
                 })
-                .OnFailure(_ => AppEvents.SendSnackMsgRequested.Publish("Не удалось удалить устройство. Попробуйте позже."));
+                .OnFailure(_ => AppEvents.SendSnackMsgRequested.Publish("Не удалось отвязать устройство. Попробуйте позже."));
             IsDeleting = false;
             CloseConfirm();
             Recompute();
@@ -318,6 +435,8 @@ public class DevicesViewModel : MyReactiveObject
         ShowNoSub = noSub;
         ShowError = error;
         ShowSubtitle = list || loading;
+        HasCount = list && Devices.Count > 0;
+        CountText = HasCount ? Devices.Count.ToString() : string.Empty;
         ErrorText = Error != null ? MessageFor(Error) : string.Empty;
     }
 
@@ -344,6 +463,15 @@ public class DevicesViewModel : MyReactiveObject
         }
     }
 
+    /// <summary>Detaches the static AccountSession subscription. Called by the view on unload.</summary>
+    public void Dispose()
+    {
+        if (_onAccountStateChanged != null)
+        {
+            AccountSession.StateChanged -= _onAccountStateChanged;
+        }
+    }
+
     #endregion derive state
 }
 
@@ -361,10 +489,51 @@ public sealed class DeviceRow
     public string HwidText { get; }
     public bool HasHwid { get; }
 
-    public DeviceRow(DeviceDto dto)
+    // One inset divider BETWEEN rows: every row except the first draws its top hairline.
+    public bool ShowDivider { get; }
+
+    // THIS machine: the row is tinted and carries an «Это устройство» marker.
+    public bool IsCurrent { get; }
+
+    // Platform tile glyph — exactly one is true (the rest drive collapsed PathIcons in the row).
+    public bool IsAndroid { get; }
+    public bool IsApple { get; }
+    public bool IsWindows { get; }
+    public bool IsRouter { get; }
+    public bool IsGenericPlatform { get; }
+
+    public DeviceRow(DeviceDto dto, string? currentHwid = null, bool showDivider = false)
     {
         Dto = dto;
         Name = DisplayNameOf(dto);
+        ShowDivider = showDivider;
+        IsCurrent = currentHwid.IsNotEmpty() && dto.Hwid.IsNotEmpty()
+            && string.Equals(dto.Hwid, currentHwid, StringComparison.OrdinalIgnoreCase);
+
+        // Map the free-text platform to one tile glyph. "win" is checked AFTER apple so "darwin"
+        // (macOS) does not fall through to the Windows glyph.
+        var p = (dto.Platform ?? string.Empty).ToLowerInvariant();
+        if (p.Contains("android"))
+        {
+            IsAndroid = true;
+        }
+        else if (p.Contains("ios") || p.Contains("iphone") || p.Contains("ipad")
+            || p.Contains("mac") || p.Contains("darwin") || p.Contains("apple"))
+        {
+            IsApple = true;
+        }
+        else if (p.Contains("win"))
+        {
+            IsWindows = true;
+        }
+        else if (p.Contains("router") || p.Contains("openwrt") || p.Contains("keenetic") || p.Contains("gl-"))
+        {
+            IsRouter = true;
+        }
+        else
+        {
+            IsGenericPlatform = true;
+        }
 
         var platform = dto.Platform.NullIfEmpty();
         var lastActive = FormatIsoDate(dto.LastActiveAt);

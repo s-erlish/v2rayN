@@ -253,12 +253,17 @@
                         </DockPanel>
                     </Border>
 
-                    <!--  Контент по вкладкам (fade-through). Заглушки фазы 0; реальные экраны — фаза 1.  -->
-                    <TransitioningContentControl x:Name="contentHost" Grid.Column="1">
-                        <TransitioningContentControl.PageTransition>
-                            <CrossFade Duration="0:0:0.18" />
-                        </TransitioningContentControl.PageTransition>
-                    </TransitioningContentControl>
+                    <!--  Контент по вкладкам (fade-through). Общий Incy-градиент рисуется ОДИН раз
+                          под хостом страниц — каждая вкладка (Главная/Настройки/Аккаунт) наследует
+                          его сквозь прозрачный фон, поэтому фон не «рвётся» на кроссфейде.  -->
+                    <Panel Grid.Column="1">
+                        <Border Background="{DynamicResource Brush.HomeGradient}" />
+                        <TransitioningContentControl x:Name="contentHost" Background="Transparent">
+                            <TransitioningContentControl.PageTransition>
+                                <CrossFade Duration="0:0:0.18" />
+                            </TransitioningContentControl.PageTransition>
+                        </TransitioningContentControl>
+                    </Panel>
                     </Grid>
 
                     <!--  Онбординг на всю ширину Row 1 (без рейла/панелей). Виден, пока нет подписок.  -->

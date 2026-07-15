@@ -109,30 +109,62 @@ public partial class ServerListView : UserControl
 
     #region Row selection
 
-    // Server row tap: select + connect (make default server → engine reloads the core).
-    private void OnServerRowTapped(object? sender, TappedEventArgs e)
-    {
-        if (sender is Control { DataContext: ProfileItemModel item } && DataContext is HomeViewModel vm)
-        {
-            _ = vm.SelectServer(item.IndexId);
-        }
-    }
+    //  Manual press/release selection (NOT Tapped): the rows live inside a ScrollViewer, and
+    //  Avalonia cancels the Tapped gesture on the slightest pointer movement / scroll-drag, so
+    //  a click frequently never selected. Mirroring the ConnectHero disc (_pressing flag), we
+    //  track press → release on the row Border itself: on press we remember the target row; on
+    //  release, if we are still pressing AND the pointer is still over that same row, we select.
+    //  A drag that starts a scroll makes the ScrollViewer capture the pointer, which fires
+    //  PointerCaptureLost on the Border and cancels the press — so a scroll-drag never selects.
+    private bool _rowPressing;
+    private ProfileItemModel? _rowPressTarget;
 
-    // Row press feedback: subtle scale 0.96 (Border.ServerRow.pressed), no ripple/glow (§0.6).
+    // Row press feedback: subtle scale (Border.ServerRow.pressed), no ripple/glow (§0.6), and
+    // arm selection for the row under the pointer (left button only).
     private void OnRowPointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (sender is Border b && !b.Classes.Contains("pressed"))
+        if (sender is not Border b)
+        {
+            return;
+        }
+
+        if (!b.Classes.Contains("pressed"))
         {
             b.Classes.Add("pressed");
         }
+
+        if (e.GetCurrentPoint(b).Properties.IsLeftButtonPressed && b.DataContext is ProfileItemModel item)
+        {
+            _rowPressing = true;
+            _rowPressTarget = item;
+        }
+        else
+        {
+            ClearRowPress();
+        }
     }
 
+    // Server row select + connect (make default server → engine reloads the core). Fires only
+    // when the press completes over the same row it started on — reliable inside the ScrollViewer.
     private void OnRowPointerReleased(object? sender, PointerReleasedEventArgs e)
     {
-        if (sender is Border b)
+        if (sender is not Border b)
         {
-            b.Classes.Remove("pressed");
+            return;
         }
+
+        b.Classes.Remove("pressed");
+
+        if (_rowPressing
+            && e.InitialPressMouseButton == MouseButton.Left
+            && _rowPressTarget is { } item
+            && b.IsPointerOver
+            && DataContext is HomeViewModel vm)
+        {
+            _ = vm.SelectServer(item.IndexId);
+        }
+
+        ClearRowPress();
     }
 
     private void OnRowPointerExited(object? sender, PointerEventArgs e)
@@ -141,6 +173,23 @@ public partial class ServerListView : UserControl
         {
             b.Classes.Remove("pressed");
         }
+        ClearRowPress();
+    }
+
+    // Scroll-drag steals pointer capture → cancel the pending selection (no accidental switch).
+    private void OnRowPointerCaptureLost(object? sender, PointerCaptureLostEventArgs e)
+    {
+        if (sender is Border b)
+        {
+            b.Classes.Remove("pressed");
+        }
+        ClearRowPress();
+    }
+
+    private void ClearRowPress()
+    {
+        _rowPressing = false;
+        _rowPressTarget = null;
     }
 
     #endregion Row selection

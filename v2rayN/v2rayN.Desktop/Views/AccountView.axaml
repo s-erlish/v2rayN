@@ -75,8 +75,9 @@
         </Style>
     </UserControl.Styles>
 
+    <!--  Прозрачный фон: общий Incy-градиент рисуется под хостом страниц (MainWindow), показываем его.  -->
     <ScrollViewer
-        Background="{DynamicResource Brush.Bg}"
+        Background="Transparent"
         HorizontalScrollBarVisibility="Disabled"
         VerticalScrollBarVisibility="Auto">
 

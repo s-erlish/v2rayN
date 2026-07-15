@@ -3,7 +3,9 @@ namespace ServiceLib.Models.Dto;
 [Serializable]
 public class ProfileItemModel : ReactiveObject
 {
+    [Reactive]
     public bool IsActive { get; set; }
+
     public string IndexId { get; set; }
     public EConfigType ConfigType { get; set; }
     public string Remarks { get; set; }
@@ -43,12 +45,7 @@ public class ProfileItemModel : ReactiveObject
 
     public string GetSummary()
     {
-        var summary = $"[{ConfigType}] {Remarks}";
-        if (!ConfigType.IsComplexType())
-        {
-            summary += $"({Address}:{Port})";
-        }
-
-        return summary;
+        // Show only the human server remark — never leak engine tokens like [Custom][Xray].
+        return Remarks;
     }
 }

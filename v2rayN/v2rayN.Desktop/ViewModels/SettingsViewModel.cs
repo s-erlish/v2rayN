@@ -48,6 +48,12 @@ public class SettingsViewModel : MyReactiveObject
     /// animation layer reads (App/MainWindow/ConnectHeroView) to suppress motion.</summary>
     [Reactive] public bool LiteMode { get; set; }
 
+    /// <summary>«Чёрная (AMOLED)» — a SEPARATE appearance toggle that composes ON TOP of the
+    /// Тёмная/Светлая base (mirrors Android's Mono overlay over day/night). Backed by the persisted
+    /// <see cref="UIItem.BlackTheme"/> flag; flipping it applies a true-black overlay live via
+    /// <c>App.ApplyTheme</c> and survives restart. Independent of <see cref="AppearanceText"/>.</summary>
+    [Reactive] public bool BlackTheme { get; set; }
+
     #endregion Toggle-backed settings
 
     #region Local-proxy editable fields (Inbound[0]; committed from the inline sub-panel)
@@ -121,6 +127,7 @@ public class SettingsViewModel : MyReactiveObject
         FragmentEnabled = _config.CoreBasicItem.EnableFragment;
         AutoStart = _config.GuiItem.AutoRun;
         LiteMode = _config.UiItem.LiteMode;
+        BlackTheme = _config.UiItem.BlackTheme;
 
         LocalPortText = (inbound?.LocalPort ?? 0).ToString();
         ProxyUser = inbound?.User ?? string.Empty;
@@ -152,6 +159,7 @@ public class SettingsViewModel : MyReactiveObject
         this.WhenAnyValue(x => x.FragmentEnabled).Subscribe(async v => await OnFragmentChanged(v));
         this.WhenAnyValue(x => x.AutoStart).Subscribe(async v => await OnAutoStartChanged(v));
         this.WhenAnyValue(x => x.LiteMode).Subscribe(async v => await OnLiteModeChanged(v));
+        this.WhenAnyValue(x => x.BlackTheme).Subscribe(async v => await OnBlackThemeChanged(v));
     }
 
     private async Task OnBypassLanChanged(bool v)
@@ -216,6 +224,19 @@ public class SettingsViewModel : MyReactiveObject
         }
         _config.UiItem.LiteMode = v;
         await ConfigHandler.SaveConfig(_config);
+    }
+
+    /// <summary>«Чёрная (AMOLED)» — a pure appearance flag. Persist it (survives restart) and apply the
+    /// true-black overlay live over the current base variant; never touches the core, so no reload.</summary>
+    private async Task OnBlackThemeChanged(bool v)
+    {
+        if (_designMode || _config.UiItem.BlackTheme == v)
+        {
+            return;
+        }
+        _config.UiItem.BlackTheme = v;
+        await ConfigHandler.SaveConfig(_config);
+        v2rayN.Desktop.App.ApplyTheme(_config.UiItem.CurrentTheme, v);
     }
 
     private async Task PersistAndMaybeReload()
@@ -394,10 +415,10 @@ public class SettingsViewModel : MyReactiveObject
         NoticeManager.Instance.Enqueue(ResUI.NeedRebootTips);
     }
 
-    /// <summary>Оформление row: toggle Тёмная ↔ Светлая. Persists <c>UiItem.CurrentTheme</c> and applies
-    /// the theme variant live via the same mechanism as ThemeSettingViewModel. NOTE: the Incy design
-    /// tokens (GlobalResources) currently ship dark-only; full light-mode token coverage is owned by the
-    /// theming/GlobalResources agent — this control persists + applies the real preference.</summary>
+    /// <summary>Оформление row: toggle Тёмная ↔ Светлая base variant. Persists <c>UiItem.CurrentTheme</c>
+    /// and applies it live through <c>App.ApplyTheme</c> — which also re-composits the separate
+    /// «Чёрная (AMOLED)» overlay if it is on, so switching base never drops the black overlay. Both
+    /// base variants carry full Incy light/dark tokens (GlobalResources ThemeDictionaries).</summary>
     public async Task CycleAppearanceAsync()
     {
         if (_designMode)
@@ -408,23 +429,8 @@ public class SettingsViewModel : MyReactiveObject
         var next = _config.UiItem.CurrentTheme == nameof(ETheme.Light) ? nameof(ETheme.Dark) : nameof(ETheme.Light);
         _config.UiItem.CurrentTheme = next;
         await ConfigHandler.SaveConfig(_config);
-        ApplyThemeVariant(next);
+        v2rayN.Desktop.App.ApplyTheme(next, _config.UiItem.BlackTheme);
         AppearanceText = ResolveThemeText();
-    }
-
-    private static void ApplyThemeVariant(string theme)
-    {
-        var app = Application.Current;
-        if (app is null)
-        {
-            return;
-        }
-        app.RequestedThemeVariant = theme switch
-        {
-            nameof(ETheme.Light) => ThemeVariant.Light,
-            nameof(ETheme.Dark) => ThemeVariant.Dark,
-            _ => ThemeVariant.Default,
-        };
     }
 
     /// <summary>Re-read values that a sub-screen (per-app / ping / provider / etc.) may have changed,

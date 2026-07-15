@@ -25,6 +25,11 @@ public partial class App : Application
             {
                 AppManager.Instance.InitComponents();
                 DataContext = StatusBarViewModel.Instance;
+
+                // Оформление из конфига ДО построения окна: первый кадр рисуется правильной темой.
+                // База Тёмная/Светлая + отдельный AMOLED-оверлей (Чёрная) поверх неё.
+                var cfg = AppManager.Instance.Config;
+                ApplyTheme(cfg.UiItem.CurrentTheme, cfg.UiItem.BlackTheme);
             }
 
             var mainWindowViewModel = new MainWindowViewModel();
@@ -246,4 +251,108 @@ public partial class App : Application
     }
 
     #endregion Tray menu
+
+    #region Theme (departament: Тёмная / Светлая базы + Чёрная-AMOLED оверлей)
+
+    // Кэш «чёрного» оверлея. Собирается один раз и добавляется/снимается из
+    // Application.Resources.MergedDictionaries. Как ПОСЛЕДНИЙ словарь он перекрывает
+    // тема-зависимые Brush.* из GlobalResources (merged-словари ищутся с конца),
+    // а DynamicResource перекрашивает вживую при добавлении/снятии.
+    private static ResourceDictionary? _blackOverlay;
+
+    /// <summary>
+    /// Единая точка применения оформления. <paramref name="theme"/> = имя <see cref="ETheme"/>
+    /// (Dark/Light) → базовый <see cref="ThemeVariant"/>; <paramref name="black"/> = ОТДЕЛЬНЫЙ
+    /// AMOLED-оверлей поверх любой базы (как Mono-оверлей в Android поверх day/night). Вызывается
+    /// на старте (из конфига) и вживую из настроек — перекраска без перезапуска.
+    /// </summary>
+    public static void ApplyTheme(string? theme, bool black)
+    {
+        var app = Current;
+        if (app is null)
+        {
+            return;
+        }
+
+        app.RequestedThemeVariant = theme switch
+        {
+            nameof(ETheme.Light) => ThemeVariant.Light,
+            nameof(ETheme.Dark) => ThemeVariant.Dark,
+            // Владелец: базы только Тёмная/Светлая; всё прочее (в т.ч. FollowSystem/null) → Тёмная.
+            _ => ThemeVariant.Dark,
+        };
+
+        ApplyBlackOverlay(black);
+    }
+
+    private static void ApplyBlackOverlay(bool on)
+    {
+        var app = Current;
+        if (app is null)
+        {
+            return;
+        }
+
+        var merged = app.Resources.MergedDictionaries;
+        if (on)
+        {
+            _blackOverlay ??= BuildBlackOverlay();
+            if (!merged.Contains(_blackOverlay))
+            {
+                merged.Add(_blackOverlay);
+            }
+        }
+        else if (_blackOverlay is not null)
+        {
+            merged.Remove(_blackOverlay);
+        }
+    }
+
+    // Чёрная (AMOLED): полный набор тема-зависимых Brush.* с чисто-чёрными поверхностями и
+    // высококонтрастными чернилами. Один набор на любую базу — «Чёрная» всегда даёт OLED-вид.
+    private static ResourceDictionary BuildBlackOverlay()
+    {
+        static SolidColorBrush Solid(string hex) => new(Color.Parse(hex));
+        static SolidColorBrush Alpha(string hex, double opacity) => new(Color.Parse(hex)) { Opacity = opacity };
+
+        return new ResourceDictionary
+        {
+            ["Brush.Bg"] = Solid("#000000"),
+            ["Brush.Surface"] = Solid("#000000"),
+            ["Brush.SurfaceHigh"] = Solid("#000000"),
+            // Чуть приподнятые слои, чтобы поля/плитки/тумблеры читались на чистом чёрном.
+            ["Brush.SurfaceVariant"] = Solid("#0E1013"),
+            ["Brush.SurfaceHighest"] = Solid("#16181D"),
+            ["Brush.OnSurface"] = Solid("#F2F4F8"),
+            ["Brush.OnSurfaceVariant"] = Solid("#9BA1AD"),
+            ["Brush.Outline"] = Solid("#2A2E36"),
+            ["Brush.OutlineVariant"] = Solid("#1A1D21"),
+            ["Brush.AccentContainer"] = Solid("#17325C"),
+            ["Brush.OnAccentContainer"] = Solid("#CFE0FF"),
+            ["Brush.Green"] = Solid("#22C55E"),
+            ["Brush.Red"] = Solid("#F04452"),
+            ["Brush.Tile.Neutral"] = Solid("#16181D"),
+            // На чистом чёрном затемнять нечего — ховер даёт лёгкий белый лифт.
+            ["Brush.Hover"] = Alpha("#FFFFFF", 0.05),
+            ["Brush.Toast.Bg"] = Solid("#16181D"),
+            ["Brush.HomeGradient"] = BuildBlackHomeGradient(),
+        };
+    }
+
+    private static RadialGradientBrush BuildBlackHomeGradient()
+    {
+        var brush = new RadialGradientBrush
+        {
+            Center = new RelativePoint(0.5, 0.30, RelativeUnit.Relative),
+            GradientOrigin = new RelativePoint(0.5, 0.30, RelativeUnit.Relative),
+            RadiusX = new RelativeScalar(0.75, RelativeUnit.Relative),
+            RadiusY = new RelativeScalar(0.75, RelativeUnit.Relative),
+        };
+        brush.GradientStops.Add(new GradientStop(Color.Parse("#0A1424"), 0));
+        brush.GradientStops.Add(new GradientStop(Color.Parse("#05070C"), 0.55));
+        brush.GradientStops.Add(new GradientStop(Color.Parse("#000000"), 1));
+        return brush;
+    }
+
+    #endregion Theme
 }

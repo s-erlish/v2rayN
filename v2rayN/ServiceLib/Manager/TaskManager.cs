@@ -70,18 +70,9 @@ public class TaskManager
                 }
             }
 
-            //Execute once 24 hour
-            if (numOfExecuted % 1440 == 1)
-            {
-                try
-                {
-                    await UpdateTaskRunCheckUpdate();
-                }
-                catch (Exception ex)
-                {
-                    Logging.SaveLog("ScheduledTasks - UpdateTaskRunCheckUpdate", ex);
-                }
-            }
+            // Core/app update check intentionally disabled: this is a consumer VPN with bundled
+            // cores, so we never surface "new cores available" notices nor run a background
+            // network update check.
             numOfExecuted++;
         }
     }
@@ -127,25 +118,6 @@ public class TaskManager
             {
                 await _updateFunc?.Invoke(false, msg);
             }).UpdateGeoFileAll();
-        }
-    }
-
-    private async Task UpdateTaskRunCheckUpdate()
-    {
-        Logging.SaveLog("Execute check update");
-
-        var updateService = new UpdateService(_config, async (success, msg) => await Task.CompletedTask);
-
-        var msgs = await updateService.CheckHasUpdateOnlyAll(_config.CheckUpdateItem.CheckPreReleaseUpdate);
-        foreach (var msg in msgs)
-        {
-            await _updateFunc?.Invoke(false, msg);
-        }
-        NoticeManager.Instance.Enqueue(string.Join("\n", msgs));
-
-        if (msgs.Count > 0)
-        {
-            AppEvents.HasUpdateNotified.Publish(true);
         }
     }
 }

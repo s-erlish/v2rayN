@@ -40,12 +40,12 @@
 
     <UserControl.Styles>
         <!--  Row divider (port of custom_divider): 1px, inset to the text-column start
-              (16 gutter + 12 row padding + 40 tile + 12 gap = 80), full-bleed to the 16 gutter
+              (16 gutter + 12 row padding + 36 tile + 12 gap = 76), full-bleed to the 16 gutter
               on the right. Hidden on the selected row so the blue pill reads cleanly. ONE
-              separator only — a single 6px row gap, no competing margins.  -->
+              separator only — a single row gap, no competing margins.  -->
         <Style Selector="Border.rowDivider">
             <Setter Property="Height" Value="1" />
-            <Setter Property="Margin" Value="80,0,16,0" />
+            <Setter Property="Margin" Value="76,0,16,0" />
             <Setter Property="Background" Value="{DynamicResource Brush.OutlineVariant}" />
         </Style>
     </UserControl.Styles>
@@ -74,15 +74,17 @@
                                                   radius 16). Tap → SelectServer (default + connect). Right-click → §2.13.
                                                   ONE grid: 56 rhythm, 40 tile, single inset divider, no vertical margin.  -->
                                             <Border
-                                                Margin="16,3"
+                                                MinHeight="50"
+                                                Margin="16,2"
+                                                Padding="12,6"
                                                 Classes="ServerRow"
                                                 Classes.selected="{Binding IsActive}"
                                                 ContextRequested="OnRowContextRequested"
                                                 CornerRadius="{StaticResource Radius.Search}"
+                                                PointerCaptureLost="OnRowPointerCaptureLost"
                                                 PointerExited="OnRowPointerExited"
                                                 PointerPressed="OnRowPointerPressed"
-                                                PointerReleased="OnRowPointerReleased"
-                                                Tapped="OnServerRowTapped">
+                                                PointerReleased="OnRowPointerReleased">
                                                 <Border.ContextMenu>
                                                     <ContextMenu>
                                                         <MenuItem Click="OnRowMakeDefault" Header="Сделать основным" />
@@ -103,13 +105,14 @@
 
                                                 <Grid VerticalAlignment="Center" ColumnDefinitions="Auto,*,Auto">
 
-                                                    <!--  Flag: 40dp rounded-square tile (radius 12, unified server icon).
+                                                    <!--  Flag: 36dp rounded-square tile (radius 12, unified server icon) — the
+                                                          denser list uses a slightly smaller tile than the 40 used elsewhere.
                                                           RemarkToFlag resolves the country flag (globe fallback) from Remarks,
                                                           clipped UniformToFill inside the neutral tile.  -->
                                                     <Border
                                                         Grid.Column="0"
-                                                        Width="{StaticResource Size.Tile}"
-                                                        Height="{StaticResource Size.Tile}"
+                                                        Width="36"
+                                                        Height="36"
                                                         Margin="0,0,12,0"
                                                         VerticalAlignment="Center"
                                                         Background="{DynamicResource Brush.Tile.Neutral}"
@@ -125,7 +128,7 @@
                                                             Text="{Binding Remarks, Converter={StaticResource StripLeadingFlag}}"
                                                             TextTrimming="CharacterEllipsis" />
                                                         <StackPanel
-                                                            Margin="0,4,0,0"
+                                                            Margin="0,2,0,0"
                                                             VerticalAlignment="Center"
                                                             Orientation="Horizontal">
                                                             <Border Classes="ProtocolChip">

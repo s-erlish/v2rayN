@@ -1,11 +1,10 @@
-using Avalonia.VisualTree;
 using v2rayN.Desktop.ViewModels;
 
 namespace v2rayN.Desktop.Views;
 
 /// <summary>
-/// Экран «Устройства»: seamless-тулбар «← Устройства», список устройств подписки (HWID) с
-/// удалением через in-view подтверждение. Порт Android activity_devices.xml +
+/// Экран «Устройства»: seamless-тулбар «← Устройства» + счётчик, ОДНА карта со строками устройств
+/// подписки (HWID) и отвязкой через in-view подтверждение. Порт Android activity_devices.xml +
 /// DeviceManagementActivity.kt. DATA-DRIVEN: всё биндится к <see cref="DevicesViewModel"/>
 /// (GET /client/devices departament-API), пусто до реального ответа.
 ///
@@ -15,8 +14,9 @@ namespace v2rayN.Desktop.Views;
 public partial class DevicesView : UserControl
 {
     private readonly DevicesViewModel _viewModel;
+    private readonly IDisposable? _confirmFocusSub;
 
-    /// <summary>Стрелка «назад» тулбара: хост убирает суб-страницу и возвращает «Аккаунт».</summary>
+    /// <summary>Стрелка «назад» тулбара (и CTA «нет подписки»): хост убирает суб-страницу.</summary>
     public event EventHandler? BackRequested;
 
     public DevicesView()
@@ -26,7 +26,7 @@ public partial class DevicesView : UserControl
         DataContext = _viewModel;
 
         // Открытие подтверждения — фокус на «Отмена»: Escape/Tab работают сразу с клавиатуры.
-        _viewModel.WhenAnyValue(vm => vm.ShowDeleteConfirm)
+        _confirmFocusSub = _viewModel.WhenAnyValue(vm => vm.ShowDeleteConfirm)
             .Subscribe(show =>
             {
                 if (show)
@@ -41,7 +41,7 @@ public partial class DevicesView : UserControl
         BackRequested?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <summary>Escape закрывает подтверждение удаления (пока запрос не в полёте).</summary>
+    /// <summary>Escape закрывает подтверждение отвязки (пока запрос не в полёте).</summary>
     protected override void OnKeyDown(KeyEventArgs e)
     {
         if (e.Key == Key.Escape && _viewModel.ShowDeleteConfirm)
@@ -63,34 +63,11 @@ public partial class DevicesView : UserControl
         }
     }
 
-    // Press-scale 0.96 карточки устройства (Android press_scale): класс .pressed на время
-    // нажатия. Нажатие на корзину внутри карточки карточку НЕ сжимает — у кнопки свой отклик.
-
-    private void OnCardPressed(object? sender, PointerPressedEventArgs e)
+    /// <summary>Отсоединяем статическую подписку VM на AccountSession, чтобы суб-страница не текла.</summary>
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
-        if (sender is not Border card)
-        {
-            return;
-        }
-        if (e.Source is Visual origin && origin.FindAncestorOfType<Button>(includeSelf: true) != null)
-        {
-            return;
-        }
-        card.Classes.Add("pressed");
-    }
-
-    private void OnCardReleased(object? sender, PointerReleasedEventArgs e)
-    {
-        (sender as Border)?.Classes.Remove("pressed");
-    }
-
-    private void OnCardExited(object? sender, PointerEventArgs e)
-    {
-        (sender as Border)?.Classes.Remove("pressed");
-    }
-
-    private void OnCardCaptureLost(object? sender, PointerCaptureLostEventArgs e)
-    {
-        (sender as Border)?.Classes.Remove("pressed");
+        _confirmFocusSub?.Dispose();
+        _viewModel.Dispose();
+        base.OnDetachedFromVisualTree(e);
     }
 }

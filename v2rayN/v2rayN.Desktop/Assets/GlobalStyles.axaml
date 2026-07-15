@@ -67,6 +67,26 @@
     </Style>
 
     <!-- ==================================================================== -->
+    <!--  ОДИН шрифт на ВСЁ приложение — Space Grotesk (Android-паритет).        -->
+    <!--  MainWindow ставит FontFamily только на своём корне; каждый отдельный   -->
+    <!--  визуальный корень (легаси суб-окна AddServer/Option/Routing/DNS/...,   -->
+    <!--  диалоги) и всплывашки в своём TopLevel (ContextMenu/MenuFlyout,        -->
+    <!--  ToolTip, выпадашка ComboBox) НЕ наследуют его шрифт и падали на         -->
+    <!--  дефолт темы Semi. Ставим семейство на самых широких корнях, чтобы      -->
+    <!--  КАЖДОЕ окно и попап унаследовали Grotesk. Задаём ТОЛЬКО семейство —     -->
+    <!--  веса/размеры остаются за типографскими классами ниже.                  -->
+    <!-- ==================================================================== -->
+    <Style Selector="TopLevel">
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+    </Style>
+    <Style Selector="TextBlock">
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+    </Style>
+    <Style Selector="TemplatedControl">
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+    </Style>
+
+    <!-- ==================================================================== -->
     <!--  departament VPN — Incy: типографика + компоненты (тёмная тема)        -->
     <!-- ==================================================================== -->
 
@@ -338,10 +358,13 @@
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="1.5" />
         <Setter Property="BorderBrush" Value="Transparent" />
+        <!--  BUG 1: ховер-заливка МГНОВЕННА (Android-паритет). BrushTransition
+              на Background убран — при переходе курсора между строками уходящая
+              строка гасла плавно, а входящая проявлялась → казалось, что подсвечены
+              ДВЕ строки. Оставляем press-scale и BorderBrush-переход.  -->
         <Setter Property="Transitions">
             <Transitions>
                 <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" />
-                <BrushTransition Property="Background" Duration="0:0:0.15" />
                 <BrushTransition Property="BorderBrush" Duration="0:0:0.15" />
             </Transitions>
         </Setter>
@@ -355,6 +378,11 @@
     <Style Selector="Border.ServerRow.selected">
         <Setter Property="Background" Value="{DynamicResource Brush.SelectedFill}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+    </Style>
+    <!--  BUG 1: ховер уже выбранной строки НЕ стекает selected-fill + hover-fill.
+          Держим заливку выбора, чтобы одновременно была затенена ровно одна строка.  -->
+    <Style Selector="Border.ServerRow.selected:pointerover">
+        <Setter Property="Background" Value="{DynamicResource Brush.SelectedFill}" />
     </Style>
 
     <!--  Поиск-пилюля (bg_search_pill): Surface, radius 14, 1px OutlineVariant.  -->

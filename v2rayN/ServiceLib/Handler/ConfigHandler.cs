@@ -1661,6 +1661,57 @@ public static class ConfigHandler
         var subRemarks = subItem?.Remarks;
         var preSocksPort = subItem?.PreSocksPort;
 
+        //Is an Xray JSON template (Remnawave / departament XRAY_JSON): extract each element's proxy
+        //outbound into a real TYPED node so it displays the right protocol, pings, and routes traffic
+        //(instead of an opaque Custom blob). Elements with no identifiable proxy outbound fall back to
+        //Custom. Returns null when the body is not an Xray typed template (e.g. sing-box / clash).
+        var typedProfiles = XrayJsonTemplateFmt.ResolveTypedProfiles(strData, subRemarks);
+        if (typedProfiles is { Count: > 0 })
+        {
+            var typedCount = 0;
+            List<ProfileItem> lstTypedAdd = [];
+            foreach (var it in typedProfiles)
+            {
+                it.Subid = subid;
+                it.IsSub = isSub;
+                it.PreSocksPort = preSocksPort;
+
+                if (it.ConfigType == EConfigType.Custom)
+                {
+                    if (await AddCustomServer(config, it, true) == 0)
+                    {
+                        typedCount++;
+                    }
+                    continue;
+                }
+
+                var addStatus = it.ConfigType switch
+                {
+                    EConfigType.VMess => await AddVMessServer(config, it, false),
+                    EConfigType.Shadowsocks => await AddShadowsocksServer(config, it, false),
+                    EConfigType.SOCKS => await AddSocksServer(config, it, false),
+                    EConfigType.HTTP => await AddHttpServer(config, it, false),
+                    EConfigType.Trojan => await AddTrojanServer(config, it, false),
+                    EConfigType.VLESS => await AddVlessServer(config, it, false),
+                    _ => -1,
+                };
+                if (addStatus == 0)
+                {
+                    typedCount++;
+                    lstTypedAdd.Add(it);
+                }
+            }
+            if (lstTypedAdd.Count > 0)
+            {
+                await SQLiteHelper.Instance.InsertAllAsync(lstTypedAdd);
+            }
+            if (typedCount > 0)
+            {
+                await SaveConfig(config);
+                return typedCount;
+            }
+        }
+
         List<ProfileItem>? lstProfiles = null;
         //Is sing-box array configuration
         if (lstProfiles is null || lstProfiles.Count <= 0)

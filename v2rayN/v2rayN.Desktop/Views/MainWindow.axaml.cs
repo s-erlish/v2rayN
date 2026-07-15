@@ -1,5 +1,4 @@
 using System.Reactive.Disposables;
-using Avalonia.Controls.Notifications;
 using v2rayN.Desktop.Base;
 using v2rayN.Desktop.Common;
 using v2rayN.Desktop.Manager;
@@ -10,7 +9,6 @@ namespace v2rayN.Desktop.Views;
 public partial class MainWindow : WindowBase<MainWindowViewModel>
 {
     private static Config _config;
-    private readonly WindowNotificationManager? _manager;
     private bool _blCloseByUser = false;
 
     // Вкладки. «Главная» подключена к реальному движку (HomeViewModel); список серверов живёт
@@ -40,7 +38,6 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         InitializeComponent();
 
         _config = AppManager.Instance.Config;
-        _manager = new WindowNotificationManager(TopLevel.GetTopLevel(this)) { MaxItems = 3, Position = NotificationPosition.TopRight };
 
         // «Облегчённый режим» (reduced-motion): класс .lite обнуляет press/hover/reveal-переходы
         // оболочки (GlobalStyles :is(Window).lite), а тут снимаем анимацию смены вкладок
@@ -301,11 +298,11 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
             DispatcherPriority.Default);
     }
 
-    private async Task DelegateSnackMsg(string content)
-    {
-        _manager?.Show(new Avalonia.Controls.Notifications.Notification(null, content, NotificationType.Information));
-        await Task.CompletedTask;
-    }
+    // Владелец: НИКАКИХ плавающих уведомлений. Раньше здесь жил TopRight
+    // WindowNotificationManager — все снек-сообщения (connect/fail/disconnect/refresh/copy)
+    // теперь глухо гасятся в единственном стоке. Ни один издатель не трогаем: конечный
+    // автомат подключения лишь публикует строки, статус показывает сам щит.
+    private Task DelegateSnackMsg(string content) => Task.CompletedTask;
 
     private void OnHotkeyHandler(EGlobalHotkey e)
     {
@@ -459,6 +456,12 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
 
     private void StorageUI()
     {
+        // Сохраняем размер ТОЛЬКО в обычном состоянии: развёрнутое/свёрнутое окно
+        // не должно перетекать в персист (иначе следующий запуск открывается «на весь экран»).
+        if (WindowState != WindowState.Normal)
+        {
+            return;
+        }
         ConfigHandler.SaveWindowSizeItem(_config, GetType().Name, Width, Height);
     }
 

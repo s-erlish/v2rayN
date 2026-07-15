@@ -92,7 +92,16 @@ public class UIItem
     public int MainGirdHeight2 { get; set; }
     public EGirdOrientation MainGirdOrientation { get; set; } = EGirdOrientation.Vertical;
     public string? ColorPrimaryName { get; set; }
+
+    // departament: base appearance variant — Тёмная (Dark, default) / Светлая (Light). Persisted as the
+    // ETheme name string and applied as the Avalonia RequestedThemeVariant (App.ApplyTheme).
     public string? CurrentTheme { get; set; }
+
+    // departament: «Чёрная (AMOLED)» — a SEPARATE toggle that composes ON TOP of the Dark/Light base
+    // (mirrors Android's Mono overlay applied over day/night). When true, App.ApplyTheme merges a
+    // true-black overlay (pure #000000 surfaces + high-contrast ink) over whichever base variant is
+    // active. Additive + defaults false, so existing JSON configs deserialize unchanged (black off).
+    public bool BlackTheme { get; set; }
     public string CurrentLanguage { get; set; }
     public string CurrentFontFamily { get; set; }
     public int CurrentFontSize { get; set; }

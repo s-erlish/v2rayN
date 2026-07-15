@@ -33,8 +33,13 @@ public class WindowBase<TViewModel> : ReactiveWindow<TViewModel> where TViewMode
             var scaling = screen.Scaling > 0 ? screen.Scaling : 1.0;
             var workingArea = screen.WorkingArea;
 
-            var width = Math.Min(sizeItem.Width, workingArea.Width / scaling);
-            var height = Math.Min(sizeItem.Height, workingArea.Height / scaling);
+            // Верхняя граница = проектный дефолт окна (1120×760), а не вся рабочая область:
+            // на большом мониторе сохранённый (в т.ч. когда-то развёрнутый) размер не должен
+            // раздувать окно. На малых экранах всё равно ужимаемся под workingArea.
+            var maxWidth = Math.Min(1120.0, workingArea.Width / scaling);
+            var maxHeight = Math.Min(760.0, workingArea.Height / scaling);
+            var width = Math.Min(sizeItem.Width, maxWidth);
+            var height = Math.Min(sizeItem.Height, maxHeight);
             var x = workingArea.X + ((workingArea.Width - (width * scaling)) / 2);
             var y = workingArea.Y + ((workingArea.Height - (height * scaling)) / 2);
 
@@ -50,6 +55,12 @@ public class WindowBase<TViewModel> : ReactiveWindow<TViewModel> where TViewMode
         base.OnClosed(e);
         try
         {
+            // Не персистим развёрнутый/свёрнутый размер — только обычное состояние окна,
+            // иначе следующий запуск восстанавливается «на весь экран».
+            if (WindowState != WindowState.Normal)
+            {
+                return;
+            }
             ConfigHandler.SaveWindowSizeItem(AppManager.Instance.Config, GetType().Name, Width, Height);
         }
         catch { }
