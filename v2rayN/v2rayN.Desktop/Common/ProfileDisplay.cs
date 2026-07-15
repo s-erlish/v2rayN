@@ -14,6 +14,24 @@ public static class ProfileDisplay
     /// <summary>Protocol chip text: <see cref="EConfigType"/> → upper-case token (VLESS, SHADOWSOCKS, …).</summary>
     public static string Protocol(EConfigType configType) => configType.ToString().ToUpperInvariant();
 
+    /// <summary>
+    /// Protocol chip text for a whole row. A CUSTOM (raw xray-json) node shows its wrapped proxy
+    /// outbound's real protocol (VLESS / VMESS / …) from introspection; it falls back to "CUSTOM"
+    /// only when nothing could be introspected. Ordinary nodes use their <see cref="EConfigType"/>.
+    /// </summary>
+    public static string Protocol(ProfileItemModel? item)
+    {
+        if (item == null)
+        {
+            return string.Empty;
+        }
+        if (item.ConfigType == EConfigType.Custom && !string.IsNullOrWhiteSpace(item.ProtocolDisplay))
+        {
+            return item.ProtocolDisplay.Trim().ToUpperInvariant();
+        }
+        return Protocol(item.ConfigType);
+    }
+
     /// <summary>Transport line: "TCP · REALITY" from Network + StreamSecurity (empty security → NONE).</summary>
     public static string Transport(string? network, string? streamSecurity)
     {

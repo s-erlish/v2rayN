@@ -135,7 +135,7 @@
                                                                 <TextBlock
                                                                     Classes="Chip"
                                                                     Foreground="{DynamicResource Brush.Accent}"
-                                                                    Text="{Binding ConfigType, Converter={StaticResource ConfigTypeToProtocol}}" />
+                                                                    Text="{Binding Converter={StaticResource ConfigTypeToProtocol}}" />
                                                             </Border>
                                                             <TextBlock
                                                                 Margin="8,0,0,0"

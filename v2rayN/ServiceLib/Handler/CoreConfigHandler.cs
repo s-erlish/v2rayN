@@ -41,6 +41,25 @@ public static class CoreConfigHandler
         return result;
     }
 
+    // Valid Xray top-level config keys. Anything else (e.g. a Remnawave root-level "remnawave"
+    // metadata object) is stripped before the config reaches the core — mirror Android's
+    // sanitizeXrayRootKeys so an unexpected top-level key can never crash the native core.
+    private static readonly HashSet<string> _xrayRootKeys = new(StringComparer.Ordinal)
+    {
+        "log", "api", "dns", "stats", "inbounds", "outbounds", "routing", "policy",
+        "transport", "reverse", "fakedns", "metrics", "observatory", "burstObservatory",
+    };
+
+    /// <summary>
+    /// Build the run config for a CUSTOM (raw xray-json / departament XRAY_JSON) node.
+    ///
+    /// Faithful port of Android's <c>buildV2rayCustomConfig</c>: the template's own
+    /// <c>outbounds</c> / <c>routing</c> / <c>dns</c> are kept AS-AUTHORED (so the provider's
+    /// ad-block / geo / direct rules are applied). We only (1) strip non-Xray root keys, (2) validate
+    /// outbounds exist, and (3) graft the app's standard local inbound onto it so the OS system proxy
+    /// port actually routes through the app (and traffic stats keep working). A malformed / non-Xray
+    /// payload is never handed to the core verbatim — we fail cleanly instead.
+    /// </summary>
     private static async Task<RetResult> GenerateClientCustomConfig(ProfileItem node, string? fileName)
     {
         var ret = new RetResult();
@@ -68,8 +87,52 @@ public static class CoreConfigHandler
                 ret.Msg = ResUI.FailedGenDefaultConfiguration;
                 return ret;
             }
-            File.Copy(addressFileName, fileName);
-            File.SetAttributes(fileName, FileAttributes.Normal); //Copy will keep the attributes of addressFileName, so we need to add write permissions to fileName just in case of addressFileName is a read-only file.
+
+            // Only Xray (raw xray-json / Remnawave XRAY_JSON) custom configs get the faithful merge.
+            // A sing-box (or other) custom config is copied verbatim exactly as before — its root keys
+            // and inbound model differ and must not be rewritten with Xray semantics.
+            if (node.CoreType != ECoreType.Xray)
+            {
+                File.Copy(addressFileName, fileName);
+                File.SetAttributes(fileName, FileAttributes.Normal);
+                if (!File.Exists(fileName))
+                {
+                    ret.Msg = ResUI.FailedGenDefaultConfiguration;
+                    return ret;
+                }
+                ret.Msg = string.Format(ResUI.SuccessfulConfiguration, "");
+                ret.Success = true;
+                return ret;
+            }
+
+            // Parse up-front. A non-object / non-Xray payload must never be copied verbatim to the
+            // core: that would break routing/port (or crash the core).
+            var raw = await File.ReadAllTextAsync(addressFileName);
+            if (JsonUtils.ParseJson(raw) is not JsonObject root)
+            {
+                ret.Msg = ResUI.FailedGenDefaultConfiguration;
+                return ret;
+            }
+
+            // Keep only valid Xray root keys (drop e.g. a root-level "remnawave" metadata object).
+            foreach (var key in root.Select(p => p.Key).Where(k => !_xrayRootKeys.Contains(k)).ToList())
+            {
+                root.Remove(key);
+            }
+
+            // A config with no outbounds cannot connect; fail cleanly instead of crashing the core.
+            if (root["outbounds"] is not JsonArray outbounds || outbounds.Count == 0)
+            {
+                ret.Msg = ResUI.FailedGenDefaultConfiguration;
+                return ret;
+            }
+
+            // Inject the app's standard local inbound (+ stats). The template's outbounds/routing/dns
+            // are left untouched.
+            MergeAppInbounds(root, node);
+
+            var content = JsonUtils.Serialize(root);
+            await File.WriteAllTextAsync(fileName, content);
 
             //check again
             if (!File.Exists(fileName))
@@ -77,10 +140,11 @@ public static class CoreConfigHandler
                 ret.Msg = ResUI.FailedGenDefaultConfiguration;
                 return ret;
             }
+            File.SetAttributes(fileName, FileAttributes.Normal); //ensure writable even if the stored template was read-only
 
             ret.Msg = string.Format(ResUI.SuccessfulConfiguration, "");
             ret.Success = true;
-            return await Task.FromResult(ret);
+            return ret;
         }
         catch (Exception ex)
         {
@@ -88,6 +152,100 @@ public static class CoreConfigHandler
             ret.Msg = ResUI.FailedGenDefaultConfiguration;
             return ret;
         }
+    }
+
+    /// <summary>
+    /// Replace the template's own socks/http/mixed proxy inbounds with the app's standard local
+    /// inbound(s) (mixed on the system-proxy port, optional second/LAN ports, and the tun inbound
+    /// when TUN is on) and carry the app's stats/metrics/policy. Everything else in the template
+    /// (its own tun/dokodemo inbounds, outbounds, routing, dns) is preserved.
+    /// </summary>
+    private static void MergeAppInbounds(JsonObject root, ProfileItem node)
+    {
+        var config = AppManager.Instance.Config;
+
+        // Generate the app inbounds + stats exactly as a normal connection would.
+        var inboundContext = new CoreConfigContext
+        {
+            Node = node,
+            RunCoreType = ECoreType.Xray,
+            AppConfig = config,
+            IsTunEnabled = config.TunModeItem.EnableTun,
+            IsWindows = Utils.IsWindows(),
+            IsMacOS = Utils.IsMacOS(),
+        };
+        var appConfig = new CoreConfigV2rayService(inboundContext).GenerateInboundsForCustom();
+        var appInbounds = appConfig.inbounds ?? [];
+
+        // Keep every template inbound EXCEPT its own socks/http/mixed proxy inbounds (which may be on
+        // the wrong/absent port). A template-supplied tun inbound is kept and suppresses the app's.
+        var kept = new JsonArray();
+        var templateHasTun = false;
+        if (root["inbounds"] is JsonArray templateInbounds)
+        {
+            foreach (var elem in templateInbounds)
+            {
+                if (elem is null)
+                {
+                    continue;
+                }
+                var protocol = GetJsonProtocol(elem);
+                if (protocol is "socks" or "http" or "mixed")
+                {
+                    continue;
+                }
+                if (protocol == "tun")
+                {
+                    templateHasTun = true;
+                }
+                kept.Add(elem.DeepClone());
+            }
+        }
+
+        foreach (var inbound in appInbounds)
+        {
+            if (inbound.protocol == "tun" && templateHasTun)
+            {
+                continue;
+            }
+            var inboundNode = JsonUtils.ParseJson(JsonUtils.Serialize(inbound));
+            if (inboundNode != null)
+            {
+                kept.Add(inboundNode);
+            }
+        }
+
+        root["inbounds"] = kept;
+
+        // Carry the app's stats/metrics/policy so the traffic widget (which polls metrics.listen on
+        // the app's StatePort) works, matching a normal connection.
+        SetRootObject(root, "stats", appConfig.stats);
+        SetRootObject(root, "metrics", appConfig.metrics);
+        SetRootObject(root, "policy", appConfig.policy);
+    }
+
+    private static void SetRootObject(JsonObject root, string key, object? value)
+    {
+        if (value == null)
+        {
+            return;
+        }
+        var node = JsonUtils.ParseJson(JsonUtils.Serialize(value));
+        if (node != null)
+        {
+            root[key] = node;
+        }
+    }
+
+    private static string? GetJsonProtocol(JsonNode? elem)
+    {
+        if (elem is JsonObject obj
+            && obj["protocol"] is JsonValue v
+            && v.TryGetValue<string>(out var s))
+        {
+            return s;
+        }
+        return null;
     }
 
     public static async Task<RetResult> GenerateClientSpeedtestConfig(Config config, string fileName, List<ServerTestItem> selecteds, ECoreType coreType)
@@ -116,6 +274,9 @@ public static class CoreConfigHandler
         else if (coreType == ECoreType.Xray)
         {
             result = new CoreConfigV2rayService(context).GenerateClientSpeedtestConfig(selecteds);
+            //The Xray service skips CUSTOM (raw xray-json) nodes; graft each one's proxy outbound +
+            //a dedicated inbound + routing rule into the batch config so its latency is measurable.
+            InjectCustomSpeedtestNodes(result, selecteds);
         }
         if (result.Success != true)
         {
@@ -123,6 +284,123 @@ public static class CoreConfigHandler
         }
         await File.WriteAllTextAsync(fileName, result.Data.ToString());
         return result;
+    }
+
+    /// <summary>
+    /// Add CUSTOM (raw xray-json) nodes to a batch Xray speedtest config. For each custom node we
+    /// parse its stored template, strip non-Xray root keys, take the single real proxy outbound
+    /// (mirroring Android's <c>buildV2rayCustomConfig4Speedtest</c> — routing/balancer/observatory/
+    /// dns are dropped so the delay routes straight through the proxy), retag it uniquely and wire it
+    /// to its own local inbound via a routing rule. The node's <see cref="ServerTestItem.Port"/> is
+    /// set to that local inbound port so the real-ping request goes through the proxy.
+    /// </summary>
+    private static void InjectCustomSpeedtestNodes(RetResult result, List<ServerTestItem> selecteds)
+    {
+        var customs = selecteds.Where(s => s.ConfigType == EConfigType.Custom && s.Profile != null).ToList();
+        if (customs.Count == 0)
+        {
+            return;
+        }
+
+        if (JsonUtils.ParseJson(result.Data?.ToString()) is not JsonObject root)
+        {
+            return;
+        }
+        if (root["inbounds"] is not JsonArray inbounds)
+        {
+            inbounds = new JsonArray();
+            root["inbounds"] = inbounds;
+        }
+        if (root["outbounds"] is not JsonArray outbounds)
+        {
+            outbounds = new JsonArray();
+            root["outbounds"] = outbounds;
+        }
+        if (root["routing"] is not JsonObject routing)
+        {
+            routing = new JsonObject();
+            root["routing"] = routing;
+        }
+        if (routing["rules"] is not JsonArray rules)
+        {
+            rules = new JsonArray();
+            routing["rules"] = rules;
+        }
+
+        // Reserve ports that the Xray service already assigned to the non-custom items.
+        var usedPorts = new HashSet<int>(selecteds.Where(s => s.Port > 0).Select(s => s.Port));
+        var seed = AppManager.Instance.GetLocalPort(EInboundProtocol.speedtest);
+
+        foreach (var it in customs)
+        {
+            it.AllowTest = false;
+
+            var addressFileName = it.Profile.Address;
+            if (!File.Exists(addressFileName))
+            {
+                addressFileName = Utils.GetConfigPath(addressFileName);
+            }
+            if (!File.Exists(addressFileName))
+            {
+                continue;
+            }
+
+            if (JsonUtils.ParseJson(File.ReadAllText(addressFileName)) is not JsonObject customRoot)
+            {
+                continue;
+            }
+            if (customRoot["outbounds"] is not JsonArray customOutbounds)
+            {
+                continue;
+            }
+
+            var proxy = customOutbounds
+                .OfType<JsonObject>()
+                .FirstOrDefault(o => XrayJsonTemplateFmt.IsProxyProtocol(GetJsonProtocol(o)));
+            if (proxy == null)
+            {
+                continue;
+            }
+
+            int port;
+            while (true)
+            {
+                port = Utils.GetFreePort(seed++);
+                if (usedPorts.Add(port))
+                {
+                    break;
+                }
+            }
+
+            var inboundTag = $"{EInboundProtocol.mixed}{port}";
+            var proxyTag = $"{Global.ProxyTag}{port}";
+
+            inbounds.Add(new JsonObject
+            {
+                ["tag"] = inboundTag,
+                ["listen"] = Global.Loopback,
+                ["port"] = port,
+                ["protocol"] = nameof(EInboundProtocol.mixed),
+                ["settings"] = new JsonObject { ["udp"] = true, ["auth"] = "noauth" },
+            });
+
+            var proxyClone = (JsonObject)proxy.DeepClone();
+            proxyClone["tag"] = proxyTag;
+            proxyClone.Remove("mux");
+            outbounds.Add(proxyClone);
+
+            rules.Add(new JsonObject
+            {
+                ["type"] = "field",
+                ["inboundTag"] = new JsonArray { inboundTag },
+                ["outboundTag"] = proxyTag,
+            });
+
+            it.Port = port;
+            it.AllowTest = true;
+        }
+
+        result.Data = JsonUtils.Serialize(root);
     }
 
     public static async Task<RetResult> GenerateClientSpeedtestConfig(Config config, CoreConfigContext context, ServerTestItem testItem, string fileName)

@@ -70,8 +70,9 @@ public class SpeedtestService(Config config, Func<SpeedTestResult, Task> updateF
     private async Task<List<ServerTestItem>> GetClearItem(ESpeedActionType actionType, List<ProfileItem> selecteds)
     {
         var lstSelected = new List<ServerTestItem>(selecteds.Count);
+        // CUSTOM (raw xray-json) nodes are wrapped configs — they have no typed Port on the row but
+        // DO carry a real proxy outbound, so they are testable (IsComplexType() covers them).
         var ids = selecteds.Where(it => !it.IndexId.IsNullOrEmpty()
-            && it.ConfigType != EConfigType.Custom
             && (it.ConfigType.IsComplexType() || it.Port > 0))
             .Select(it => it.IndexId)
             .ToList();
@@ -79,22 +80,32 @@ public class SpeedtestService(Config config, Func<SpeedTestResult, Task> updateF
         for (var i = 0; i < selecteds.Count; i++)
         {
             var it = selecteds[i];
-            if (it.ConfigType == EConfigType.Custom)
-            {
-                continue;
-            }
-
             if (!it.ConfigType.IsComplexType() && it.Port <= 0)
             {
                 continue;
             }
 
             var profile = profileMap.GetValueOrDefault(it.IndexId, it);
+
+            // For a CUSTOM node, resolve the wrapped proxy outbound's real server address/port so a
+            // tcping test has a target (real-ping later rewrites Port to a local inbound port).
+            var address = it.Address;
+            var port = it.Port;
+            if (it.ConfigType == EConfigType.Custom)
+            {
+                var info = XrayJsonTemplateFmt.Introspect(profile);
+                if (info != null)
+                {
+                    address = info.Address.IsNullOrEmpty() ? address : info.Address;
+                    port = info.Port > 0 ? info.Port : port;
+                }
+            }
+
             lstSelected.Add(new ServerTestItem()
             {
                 IndexId = it.IndexId,
-                Address = it.Address,
-                Port = it.Port,
+                Address = address,
+                Port = port,
                 ConfigType = it.ConfigType,
                 QueueNum = i,
                 Profile = profile,

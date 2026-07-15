@@ -130,6 +130,21 @@ public partial class CoreConfigV2rayService
         }
     }
 
+    /// <summary>
+    /// Build the app's STANDARD local inbounds (the mixed/socks inbound the OS system proxy points
+    /// at, plus the optional second port / LAN inbound, plus the tun inbound when TUN is enabled)
+    /// together with the stats/metrics/policy block. Used to graft the app's own inbound onto a
+    /// CUSTOM (raw xray-json) config so the OS actually routes through the app's port and up/down
+    /// traffic stats keep working — exactly matching what a normal connection injects.
+    /// </summary>
+    public V2rayConfig GenerateInboundsForCustom()
+    {
+        _coreConfig = new V2rayConfig();
+        GenInbounds();
+        GenStatistic();
+        return _coreConfig;
+    }
+
     private Inbounds4Ray BuildInbound(InItem inItem, EInboundProtocol protocol, bool bSocks)
     {
         var result = EmbedUtils.GetEmbedText(Global.V2raySampleInbound);

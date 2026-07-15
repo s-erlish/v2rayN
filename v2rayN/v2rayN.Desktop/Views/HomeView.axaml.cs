@@ -218,7 +218,7 @@ public partial class HomeView : ReactiveUserControl<HomeViewModel>
             // Strip the leading flag emoji — the flag renders in its own tile, and Windows draws
             // emoji flags as tofu boxes otherwise.
             FlagResolver.StripLeadingFlag(p.Remarks) ?? string.Empty,
-            ProfileDisplay.Protocol(p.ConfigType),
+            ProfileDisplay.Protocol(p),
             ProfileDisplay.Transport(p.Network, p.StreamSecurity),
             flag);
     }

@@ -432,16 +432,21 @@ public class ProfilesViewModel : MyReactiveObject
                     from t22 in t2b.DefaultIfEmpty()
                     join t3 in lstProfileExs on t.IndexId equals t3.IndexId into t3b
                     from t33 in t3b.DefaultIfEmpty()
+                    // For CUSTOM (raw xray-json) nodes, introspect the wrapped proxy outbound once
+                    // here so the row shows the real protocol/transport (VLESS · TCP·REALITY) instead
+                    // of a bare "CUSTOM". Cached per stored-file path, so not re-read on every bind.
+                    let custom = t.ConfigType == EConfigType.Custom ? XrayJsonTemplateFmt.Introspect(t) : null
                     select new ProfileItemModel
                     {
                         IndexId = t.IndexId,
                         ConfigType = t.ConfigType,
+                        ProtocolDisplay = custom?.Protocol,
                         Remarks = t.Remarks,
                         Address = t.Address,
                         Port = t.Port,
                         //Security = t.Security,
-                        Network = t.Network,
-                        StreamSecurity = t.StreamSecurity,
+                        Network = custom != null ? custom.Network : t.Network,
+                        StreamSecurity = custom != null ? custom.Security : t.StreamSecurity,
                         Subid = t.Subid,
                         SubRemarks = t.SubRemarks,
                         IsActive = t.IndexId == _config.IndexId,
