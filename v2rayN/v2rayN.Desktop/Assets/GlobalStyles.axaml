@@ -35,4 +35,137 @@
         <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
     </Style>
 
+    <!-- ==================================================================== -->
+    <!--  departament VPN — Incy: типографика + компоненты (тёмная тема)        -->
+    <!-- ==================================================================== -->
+
+    <!--  Типографика Space Grotesk (шкала 1:1 с Android TextAppearance.App.*)  -->
+    <Style Selector="TextBlock.Display">
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="FontSize" Value="34" />
+        <Setter Property="LetterSpacing" Value="-0.7" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
+    </Style>
+    <Style Selector="TextBlock.Headline">
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="FontSize" Value="24" />
+        <Setter Property="LetterSpacing" Value="-0.24" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
+    </Style>
+    <Style Selector="TextBlock.Title">
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="FontSize" Value="16" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
+    </Style>
+    <Style Selector="TextBlock.TitleMedium">
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+        <Setter Property="FontWeight" Value="Medium" />
+        <Setter Property="FontSize" Value="16" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
+    </Style>
+    <Style Selector="TextBlock.Body">
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
+    </Style>
+    <Style Selector="TextBlock.Subtitle">
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
+    </Style>
+    <Style Selector="TextBlock.Caption">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
+    </Style>
+    <Style Selector="TextBlock.Chip">
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+        <Setter Property="FontWeight" Value="Medium" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
+    </Style>
+    <Style Selector="TextBlock.Numeric">
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
+    </Style>
+    <!--  Заголовок секции — жирный sentence-case, НЕ мелкий ALL-CAPS eyebrow  -->
+    <Style Selector="TextBlock.SectionHeader">
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="FontSize" Value="16" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
+    </Style>
+
+    <!--  Карточка (замена MaterialCardView): поверхность, радиус 20, тонкая рамка, без тени  -->
+    <Style Selector="Border.Card">
+        <Setter Property="Background" Value="{DynamicResource Brush.Surface}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Card}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineVariant}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="16" />
+    </Style>
+
+    <!--  Строка списка (≥56dp, hover-подсветка)  -->
+    <Style Selector="Border.Row">
+        <Setter Property="MinHeight" Value="{DynamicResource Size.Row}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Tile}" />
+        <Setter Property="Padding" Value="12,0" />
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Border.Row:pointerover">
+        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
+    </Style>
+
+    <!--  Плитка иконки 40 с глифом 22  -->
+    <Style Selector="Border.Tile">
+        <Setter Property="Width" Value="{DynamicResource Size.Tile}" />
+        <Setter Property="Height" Value="{DynamicResource Size.Tile}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Tile}" />
+        <Setter Property="Background" Value="{DynamicResource Brush.Tile.Neutral}" />
+    </Style>
+    <Style Selector="Border.Tile.Blue">
+        <Setter Property="Background" Value="{DynamicResource Brush.Tile.Blue}" />
+    </Style>
+
+    <!--  Чип/бейдж  -->
+    <Style Selector="Border.ChipBadge">
+        <Setter Property="Background" Value="{DynamicResource Brush.AccentContainer}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Chip}" />
+        <Setter Property="Padding" Value="10,4" />
+    </Style>
+
+    <!--  Кнопки: синяя пилюля / тональная / иконка. Ripple/glow не используем.  -->
+    <Style Selector="Button.Primary">
+        <Setter Property="Background" Value="{DynamicResource Brush.Accent}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.OnAccent}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill}" />
+        <Setter Property="Height" Value="48" />
+        <Setter Property="Padding" Value="24,0" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button.Primary:pressed">
+        <Setter Property="RenderTransform" Value="scale(0.97)" />
+    </Style>
+    <Style Selector="Button.Tonal">
+        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHighest}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill}" />
+        <Setter Property="Height" Value="48" />
+        <Setter Property="Padding" Value="24,0" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+        <Setter Property="FontWeight" Value="Medium" />
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+
 </Styles>

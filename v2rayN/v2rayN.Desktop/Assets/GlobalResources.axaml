@@ -18,4 +18,84 @@
     <Thickness x:Key="MarginLr8">8,0</Thickness>
     <Thickness x:Key="MarginTb8">0,8</Thickness>
     <Thickness x:Key="Margin8">8</Thickness>
+
+    <!-- ==================================================================== -->
+    <!--  departament VPN — Incy design tokens (тёмная тема, один синий акцент) -->
+    <!--  Перенос 1:1 из Android res/values(-night). Тёмная тема — единственная. -->
+    <!-- ==================================================================== -->
+
+    <!--  Цвета (палитра Incy)  -->
+    <Color x:Key="Color.Bg">#0A0B0D</Color>
+    <Color x:Key="Color.Surface">#141619</Color>
+    <Color x:Key="Color.SurfaceHigh">#1A1D21</Color>
+    <Color x:Key="Color.SurfaceVariant">#1E2126</Color>
+    <Color x:Key="Color.SurfaceHighest">#20242B</Color>
+    <Color x:Key="Color.OnSurface">#F2F4F8</Color>
+    <Color x:Key="Color.OnSurfaceVariant">#9BA1AD</Color>
+    <Color x:Key="Color.OutlineVariant">#20242B</Color>
+    <Color x:Key="Color.Outline">#2A2E36</Color>
+    <Color x:Key="Color.Accent">#4C8DFF</Color>
+    <Color x:Key="Color.OnAccent">#00183A</Color>
+    <Color x:Key="Color.AccentContainer">#17325C</Color>
+    <Color x:Key="Color.Green">#22C55E</Color>
+    <Color x:Key="Color.Red">#F04452</Color>
+
+    <SolidColorBrush x:Key="Brush.Bg" Color="{StaticResource Color.Bg}" />
+    <SolidColorBrush x:Key="Brush.Surface" Color="{StaticResource Color.Surface}" />
+    <SolidColorBrush x:Key="Brush.SurfaceHigh" Color="{StaticResource Color.SurfaceHigh}" />
+    <SolidColorBrush x:Key="Brush.SurfaceVariant" Color="{StaticResource Color.SurfaceVariant}" />
+    <SolidColorBrush x:Key="Brush.SurfaceHighest" Color="{StaticResource Color.SurfaceHighest}" />
+    <SolidColorBrush x:Key="Brush.OnSurface" Color="{StaticResource Color.OnSurface}" />
+    <SolidColorBrush x:Key="Brush.OnSurfaceVariant" Color="{StaticResource Color.OnSurfaceVariant}" />
+    <SolidColorBrush x:Key="Brush.OutlineVariant" Color="{StaticResource Color.OutlineVariant}" />
+    <SolidColorBrush x:Key="Brush.Outline" Color="{StaticResource Color.Outline}" />
+    <SolidColorBrush x:Key="Brush.Accent" Color="{StaticResource Color.Accent}" />
+    <SolidColorBrush x:Key="Brush.OnAccent" Color="{StaticResource Color.OnAccent}" />
+    <SolidColorBrush x:Key="Brush.AccentContainer" Color="{StaticResource Color.AccentContainer}" />
+    <SolidColorBrush x:Key="Brush.Green" Color="{StaticResource Color.Green}" />
+    <SolidColorBrush x:Key="Brush.Red" Color="{StaticResource Color.Red}" />
+    <!--  Плитки иконок: полупрозрачный акцент / нейтральная поверхность  -->
+    <SolidColorBrush x:Key="Brush.Tile.Blue" Color="#4C8DFF" Opacity="0.20" />
+    <SolidColorBrush x:Key="Brush.Tile.Green" Color="#22C55E" Opacity="0.20" />
+    <SolidColorBrush x:Key="Brush.Tile.Neutral" Color="{StaticResource Color.SurfaceHighest}" />
+
+    <!--  Переопределяем акцент темы Semi на наш синий (если Semi берёт по DynamicResource)  -->
+    <SolidColorBrush x:Key="SemiColorPrimary" Color="{StaticResource Color.Accent}" />
+    <SolidColorBrush x:Key="SemiColorPrimaryHover" Color="#5F9AFF" />
+    <SolidColorBrush x:Key="SemiColorPrimaryActive" Color="#3D7EF0" />
+
+    <!--  Отступы (единая шкала) как Double + Thickness-хелперы  -->
+    <x:Double x:Key="Space.4">4</x:Double>
+    <x:Double x:Key="Space.8">8</x:Double>
+    <x:Double x:Key="Space.12">12</x:Double>
+    <x:Double x:Key="Space.16">16</x:Double>
+    <x:Double x:Key="Space.24">24</x:Double>
+    <x:Double x:Key="Space.32">32</x:Double>
+    <Thickness x:Key="Pad.12">12</Thickness>
+    <Thickness x:Key="Pad.16">16</Thickness>
+    <Thickness x:Key="Pad.Card">16</Thickness>
+    <Thickness x:Key="Gutter">16,0</Thickness>
+
+    <!--  Радиусы  -->
+    <CornerRadius x:Key="Radius.Chip">12</CornerRadius>
+    <CornerRadius x:Key="Radius.Tile">12</CornerRadius>
+    <CornerRadius x:Key="Radius.Card">20</CornerRadius>
+    <CornerRadius x:Key="Radius.Sheet">24,24,0,0</CornerRadius>
+    <CornerRadius x:Key="Radius.Pill">100</CornerRadius>
+
+    <!--  Размерные токены  -->
+    <x:Double x:Key="Size.Tile">40</x:Double>
+    <x:Double x:Key="Size.Glyph">22</x:Double>
+    <x:Double x:Key="Size.Row">56</x:Double>
+    <x:Double x:Key="Size.Gutter">16</x:Double>
+    <x:Double x:Key="Dot">6</x:Double>
+    <x:Double x:Key="Dot.Active">8</x:Double>
+    <x:Double x:Key="Dot.Gap">8</x:Double>
+
+    <!--  Шрифт: Space Grotesk (переменный)  -->
+    <FontFamily x:Key="Font.Grotesk">avares://v2rayN/Assets/Fonts/SpaceGrotesk.ttf#Space Grotesk</FontFamily>
+
+    <!--  Motion-длительности задаются литералами в Transitions (0:0:0.09 и т.д.),
+          соответствуют motion.xml Android. Ресурс-токены длительностей появятся
+          в фазе анимаций (через sys:TimeSpan).  -->
 </ResourceDictionary>
