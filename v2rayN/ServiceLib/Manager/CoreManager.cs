@@ -44,6 +44,16 @@ public class CoreManager
     private CoreConfigContext? _lastMainContext;
     private CoreConfigContext? _lastPreContext;
 
+    // Tier 2 (live `xray api rmo/ado` outbound hot-swap) is DISABLED. It declared success on the api
+    // command's exit code alone, which does not prove traffic actually moved: against the panel's custom
+    // XRAY_JSON (Remnawave) configs the swap could exit 0 yet leave routing on the previous outbound, so
+    // the UI painted "connected → new server" while the real exit IP stayed on the FIRST server, and the
+    // "success" suppressed the fallback. Until the live swap is verified to actually re-route (an exit-IP
+    // probe) against a real panel, seamless switches go through Tier 1 (restart only the Xray main core,
+    // keeping sing-box + the tun adapter alive) — a genuine config reload, so the new server is
+    // GUARANTEED, with no adapter flap. Flip to true only once Tier 2 is proven to move traffic.
+    private static readonly bool EnableHotSwapTier = false;
+
     // THE single serialization point for ALL core start/stop state transitions (LoadCoreInternal /
     // CoreStopInternal, the SwitchServer seamless tiers, and every recovery reload). It is the INNERMOST
     // lock — nothing is ever acquired while it is held — so it can never deadlock against _reloadSemaphore
@@ -321,7 +331,11 @@ public class CoreManager
             _lastPreContext = preContext;
 
             // Tier 2: true make-before-break — swap the proxy outbound live, keeping everything else up.
-            if (mainContext.RunCoreType == ECoreType.Xray
+            // DISABLED (see EnableHotSwapTier): it could report success without actually re-routing, so
+            // the switch would silently keep the old server. Tier 1 below is the correct-by-construction
+            // seamless path (real config reload, tun adapter stays up).
+            if (EnableHotSwapTier
+                && mainContext.RunCoreType == ECoreType.Xray
                 && _runningApiPort > 0
                 && _runningProxyTag.IsNotEmpty()
                 && await TryHotSwapOutbound(fileName))
