@@ -155,7 +155,7 @@
     <x:Double x:Key="Dot.Gap">8</x:Double>
 
     <!--  Шрифт: Space Grotesk (переменный)  -->
-    <FontFamily x:Key="Font.Grotesk">avares://v2rayN/Assets/Fonts/SpaceGrotesk.ttf#Space Grotesk</FontFamily>
+    <FontFamily x:Key="Font.Grotesk">avares://departament/Assets/Fonts/SpaceGrotesk.ttf#Space Grotesk</FontFamily>
 
     <!--  Шрифт для ЦИФР (баланс · скорость · пинг · цены · трафик · часы аптайма).
           Отдельного числового .ttf в проекте НЕТ, а сеть недоступна — поэтому берём ТУ ЖЕ
@@ -169,7 +169,7 @@
             · zero — перечёркнутый ноль (0≠O) — техничный, «крафтовый» вид, а не «сухой».
           Вес держим Medium там, где число несёт акцент. Один источник — раскатывать этим
           токеном по всем числовым поверхностям приложения.  -->
-    <FontFamily x:Key="Font.Numeric">avares://v2rayN/Assets/Fonts/SpaceGrotesk.ttf#Space Grotesk</FontFamily>
+    <FontFamily x:Key="Font.Numeric">avares://departament/Assets/Fonts/SpaceGrotesk.ttf#Space Grotesk</FontFamily>
 
     <!-- ==================================================================== -->
     <!--  МОУШЕН-ТОКЕНЫ (§1.1–1.2 DESIGN_PLAN — порт res/values/motion.xml +     -->
