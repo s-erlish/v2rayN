@@ -58,6 +58,7 @@ public partial class App : Application
             if (!Design.IsDesignMode)
             {
                 SetupTrayMenu();
+                SetupConnectivityHooks(desktop);
             }
 
             if (OperatingSystem.IsMacOS())
@@ -138,6 +139,59 @@ public partial class App : Application
     }
 
     #endregion MacOS Activation
+
+    #region Connectivity hooks (network change → core health check)
+
+    // Retained so it can be unsubscribed on shutdown (NetworkChange holds a static handler list).
+    private System.Net.NetworkInformation.NetworkAddressChangedEventHandler? _networkAddressChangedHandler;
+
+    /// <summary>
+    /// Cross-platform connection-reliability hook (BCL only — no new NuGet package). A network address
+    /// change (Wi-Fi flip, DHCP lease, VPN adapter churn, or a sleep/resume storm) can leave the running
+    /// core's tunnel stale. We ask <see cref="CoreManager.RequestHealthCheckAsync"/> to probe and reload
+    /// if dead; it debounces internally and no-ops when idle. We deliberately do NOT reference the
+    /// Windows-only <c>Microsoft.Win32.SystemEvents.PowerModeChanged</c>: a Windows resume also surfaces
+    /// as network changes and the periodic watchdog re-probes within ~7s, so this hook plus the watchdog
+    /// cover resume recovery while keeping the Linux/macOS build clean with zero new dependencies.
+    /// </summary>
+    private void SetupConnectivityHooks(IClassicDesktopStyleApplicationLifetime desktop)
+    {
+        _networkAddressChangedHandler = (_, _) =>
+        {
+            // Only act when a core is supposed to be running (CoreManager re-checks + debounces too).
+            if (IsCoreRunning())
+            {
+                _ = CoreManager.Instance.RequestHealthCheckAsync();
+            }
+        };
+
+        try
+        {
+            System.Net.NetworkInformation.NetworkChange.NetworkAddressChanged += _networkAddressChangedHandler;
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog("SetupConnectivityHooks", ex);
+        }
+
+        // Clean up on app shutdown to avoid a leaked static handler.
+        desktop.Exit += (_, _) =>
+        {
+            try
+            {
+                if (_networkAddressChangedHandler != null)
+                {
+                    System.Net.NetworkInformation.NetworkChange.NetworkAddressChanged -= _networkAddressChangedHandler;
+                    _networkAddressChangedHandler = null;
+                }
+            }
+            catch
+            {
+            }
+        };
+    }
+
+    #endregion Connectivity hooks (network change → core health check)
 
     #region App Event
 
@@ -277,7 +331,8 @@ public partial class App : Application
             if (IsCoreRunning())
             {
                 // Отключение: стоп ядра + снятие системного прокси (иначе интернет ляжет на мёртвый порт).
-                await CoreManager.Instance.CoreStop();
+                // byUser:true — намеренный стоп пользователем: гасит любой авто-рестарт (C1).
+                await CoreManager.Instance.CoreStop(byUser: true);
                 await SysProxyHandler.UpdateSysProxy(AppManager.Instance.Config, true);
             }
             else if ((Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow is MainWindow mw
@@ -330,12 +385,23 @@ public partial class App : Application
     private static ResourceDictionary? _activeMono;
 
     /// <summary>
+    /// Хук плавной смены темы, который ставит <see cref="MainWindow"/>. Получает делегат-СВОП
+    /// (мгновенную перекраску живых контролов) и оборачивает его в красивый переход: снимок текущей
+    /// темы → вызвать своп под снимком → «залить» новую тему расширяющимся круговым клипом. Пока окно
+    /// не построено (старт из конфига) хук = null → своп выполняется мгновенно. В lite/reduced-motion
+    /// хук сам делает мгновенный своп (см. MainWindow.RunThemeTransition). Единственная точка входа —
+    /// <see cref="ApplyTheme"/> (обе кнопки настроек: смена базы и монохромный оверлей идут через неё).
+    /// </summary>
+    public static Action<Action>? ThemeTransitionHook;
+
+    /// <summary>
     /// Единая точка применения оформления. <paramref name="theme"/> = имя <see cref="ETheme"/>
     /// (Dark/Light) → базовый <see cref="ThemeVariant"/>; <paramref name="black"/> = ОТДЕЛЬНЫЙ
     /// МОНОХРОМНЫЙ оверлей поверх любой базы (как ThemeOverlay.Mono в Android поверх day/night:
     /// нейтрализует ВСЕ акцентные оттенки в серый, палитра — чёрно-белая; красный сохраняется
     /// только для деструктива). Вызывается на старте (из конфига) и вживую из настроек —
-    /// перекраска без перезапуска.
+    /// перекраска без перезапуска. Живая смена из настроек проходит через <see cref="ThemeTransitionHook"/>
+    /// (круговая заливка новой темы), если он установлен; на старте (хук ещё null) — мгновенно.
     /// </summary>
     public static void ApplyTheme(string? theme, bool black)
     {
@@ -345,15 +411,32 @@ public partial class App : Application
             return;
         }
 
-        app.RequestedThemeVariant = theme switch
+        // Сам своп темы (мгновенная перекраска): переменная базы + пере-композиция моно-оверлея.
+        // Токены — DynamicResource, поэтому живые контролы перекрашиваются в этот же тик.
+        void Swap()
         {
-            nameof(ETheme.Light) => ThemeVariant.Light,
-            nameof(ETheme.Dark) => ThemeVariant.Dark,
-            // Владелец: базы только Тёмная/Светлая; всё прочее (в т.ч. FollowSystem/null) → Тёмная.
-            _ => ThemeVariant.Dark,
-        };
+            app.RequestedThemeVariant = theme switch
+            {
+                nameof(ETheme.Light) => ThemeVariant.Light,
+                nameof(ETheme.Dark) => ThemeVariant.Dark,
+                // Владелец: базы только Тёмная/Светлая; всё прочее (в т.ч. FollowSystem/null) → Тёмная.
+                _ => ThemeVariant.Dark,
+            };
 
-        ApplyMonoOverlay(black);
+            ApplyMonoOverlay(black);
+        }
+
+        // Окно построено → отдаём своп в переход-хук (снимок → своп → круговая заливка). На старте,
+        // до построения окна, хук ещё null → мгновенный своп (первый кадр рисуется правильной темой).
+        var hook = ThemeTransitionHook;
+        if (hook is not null)
+        {
+            hook(Swap);
+        }
+        else
+        {
+            Swap();
+        }
     }
 
     // Ставит/снимает монохромный оверлей, выбирая light- или dark-набор по активной базе.

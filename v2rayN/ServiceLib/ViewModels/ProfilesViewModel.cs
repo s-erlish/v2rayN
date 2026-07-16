@@ -12,6 +12,12 @@ public class ProfilesViewModel : MyReactiveObject
 
     public EventChannel<Unit> ReloadRequested { get; } = new();
 
+    // Seamless server switch: raised INSTEAD of ReloadRequested when a core is already running and the
+    // user picks a different server. MainWindowViewModel routes this to the make-before-break switch
+    // path (hot-swap → Xray-only restart → full restart) so the tunnel does not visibly drop. A fresh
+    // connect from disconnected still goes through ReloadRequested (a normal start).
+    public EventChannel<Unit> SwitchRequested { get; } = new();
+
     #region private prop
 
     private List<ProfileItem> _lstProfile;
@@ -625,7 +631,20 @@ public class ProfilesViewModel : MyReactiveObject
         if (await ConfigHandler.SetDefaultServerIndex(_config, indexId) == 0)
         {
             await RefreshServers();
-            Reload();
+            // When a core is ALREADY running, this is a live server switch — take the seamless
+            // make-before-break path (no visible drop). When disconnected it is a fresh connect, so
+            // keep today's Reload() (a normal start). Only the outbound/server changes on a switch;
+            // the inbound/ports/TUN are deterministic and identical, which is what makes it seamless.
+            var running = AppManager.Instance.IsRunningCore(ECoreType.Xray)
+                || AppManager.Instance.IsRunningCore(ECoreType.sing_box);
+            if (running)
+            {
+                SwitchRequested.Publish();
+            }
+            else
+            {
+                Reload();
+            }
             return true;
         }
         return false;

@@ -23,6 +23,14 @@ internal sealed class HomeHeroPresenter
     private readonly HomeViewModel _vm;
     private ConnectHeroView.ConnectVisualState _lastState = ConnectHeroView.ConnectVisualState.Idle;
 
+    // The FIRST ApplyConnectState after a (re)bind must JUMP to the VM's current connect state
+    // (animate:false), never animate INTO it. On a compact↔widescreen layout swap the live (already
+    // Connected) VM is rebound to the newly-active hero; without this the initial apply would read
+    // _lastState==Idle, treat Connected as a fresh transition and re-fire the confirm sonar. Seeded
+    // true so the newly-active hero shows the connected shield + running uptime + live speed with no
+    // reset and no spurious pulse; real transitions after the bind animate normally.
+    private bool _firstApply = true;
+
     private HomeHeroPresenter(ConnectHeroView hero, HomeViewModel vm)
     {
         _hero = hero;
@@ -40,6 +48,13 @@ internal sealed class HomeHeroPresenter
         var d = new CompositeDisposable();
         var hero = _hero;
         var vm = _vm;
+
+        // ── Layout activation ──────────────────────────────────────────────
+        //  This presenter binds the ACTIVE-layout hero. Lift the motion gate now (so the re-apply
+        //  below re-attaches the state's loops) and, on unbind (layout goes inactive), stop them so
+        //  the off-screen hero never keeps ticking the compositor. See ConnectHeroView.Deactivate.
+        hero.Activate();
+        Disposable.Create(() => hero.Deactivate()).DisposeWith(d);
 
         // ── Connect-hero events → VM commands ──────────────────────────────
         void OnToggle(object? s, EventArgs e) => vm.ConnectToggle();
@@ -122,12 +137,17 @@ internal sealed class HomeHeroPresenter
                     ? ConnectHeroView.ConnectVisualState.Error
                     : ConnectHeroView.ConnectVisualState.Idle;
 
-        // Play the connect-confirm sonar only on the transition INTO connected.
-        var animate = state == ConnectHeroView.ConnectVisualState.Connected
+        // Play the connect-confirm sonar only on a genuine transition INTO connected — never on the
+        // first apply after a (re)bind, which must jump straight to the current end-state so a
+        // layout swap while connected shows the connected shield + live uptime/speed with no reset
+        // and no re-pulse (see _firstApply).
+        var animate = !_firstApply
+                      && state == ConnectHeroView.ConnectVisualState.Connected
                       && _lastState != ConnectHeroView.ConnectVisualState.Connected;
 
         _hero.SetConnectState(state, hasServer: vm.HasServers, animate: animate);
         _lastState = state;
+        _firstApply = false;
     }
 
     private void ApplyServerInfo()

@@ -40,13 +40,23 @@ public class HomeViewModel : MyReactiveObject, IDisposable
     public ObservableCollection<HomeServerGroup> ServerGroups { get; } = new();
 
     private readonly Dictionary<string, bool> _groupExpanded = new();
+    // Coalesces the Clear()+AddRange() CollectionChanged burst the engine emits on every
+    // refresh/select into ONE deferred reconcile (see OnProfileItemsChanged / ScheduleReconcile).
+    private bool _reconcilePending;
     // Event-driven core state (B1/B3): no permanent 1s poll. The uptime tick below exists ONLY while
     // connected. Both are torn down in Dispose.
     private readonly IDisposable? _coreStateSub;
+    private readonly IDisposable? _switchSettledSub;
     private readonly IDisposable? _statsSub;
     private DispatcherTimer? _uptimeTimer;
     private DateTime? _connectedSince;
     private DateTime? _connectingUntil;
+    // True ONLY during a server SWITCH from a live connection (A5: a changed default reloads the
+    // core). The shield shows Connecting while the old core cycles DOWN→UP; this flag holds that
+    // Connecting state until a real stop transition (CoreRunningStateChanged=false) is observed, so
+    // the still-running OLD core can't snap the shield straight back to Connected before the switch
+    // actually re-establishes. Cleared on the stop event, on the deadline, or on an aborted pick.
+    private bool _awaitingCoreCycle;
     private ServerSpeedItem? _lastSpeed;
 
     #region Reactive state
@@ -124,6 +134,15 @@ public class HomeViewModel : MyReactiveObject, IDisposable
             .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(OnCoreRunningStateChanged);
 
+        // Positive "seamless switch settled" signal (Tier 1/Tier 2 make-before-break). That path raises
+        // NO CoreRunningStateChanged(false), so the mid-switch Connecting hold (_awaitingCoreCycle) would
+        // otherwise linger up to the 12s deadline after an INSTANT switch. Same background-thread
+        // contract → marshal to the UI thread, same disposable pattern as _coreStateSub.
+        _switchSettledSub = AppEvents.CoreSwitchSettled
+            .AsObservable()
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .Subscribe(_ => OnCoreSwitchSettled());
+
         // Reflect whatever the core is doing right now (it may already be running when this VM builds).
         SyncState();
         UpdateStateTick();
@@ -179,9 +198,12 @@ public class HomeViewModel : MyReactiveObject, IDisposable
     {
         IsConnecting = false;
         _connectingUntil = null;
-        // A deliberate user disconnect is not a failure — clear any lingering error shield.
+        // A deliberate user disconnect ends any mid-switch hold and is not a failure.
+        _awaitingCoreCycle = false;
         ConnectFailed = false;
-        await CoreManager.Instance.CoreStop();
+        // byUser:true records sticky user-stop intent and aborts any in-flight auto-restart so the
+        // tunnel the user just tore down can never be silently re-established (C1).
+        await CoreManager.Instance.CoreStop(byUser: true);
         // Clear the Windows system proxy so the user keeps internet after disconnecting. Without
         // this the OS keeps routing through the now-dead 127.0.0.1:port and every browser breaks
         // until reconnect/reboot. forceDisable=true mirrors AppManager.AppExitAsync.
@@ -199,17 +221,34 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         }
 
         // Capture BEFORE the call (SetDefaultServer mutates _config.IndexId):
-        //   changed      — does this pick move the active default? (its Reload connects)
-        //   wasConnected — was a core already running? (an in-place switch, no spinner)
+        //   changed      — does this pick move the active default? (its Reload connects/reconnects)
+        //   wasConnected — was a core already running? (drives the switch-vs-fresh-connect handling)
         // W1d SetDefaultServer contract: returns true = ready to connect; when the pick is ALREADY
         // the default it returns true WITHOUT reloading (the caller must Connect); when the pick
         // CHANGES it persists + Reload()s (which connects, incl. while disconnected); false = do not
-        // connect. So: any server tap while disconnected is a connect intent — spin the shield now.
+        // connect.
         var changed = indexId != _config?.IndexId;
         var wasConnected = IsConnected;
-        if (!wasConnected)
+
+        // Drive the SAME Connecting spin a shield tap does whenever this pick will RELOAD or CONNECT
+        // (A5). Two cases qualify: a CHANGED default (SetDefaultServer's Reload tears the core down
+        // and restarts it — a genuine reconnect, even from a live connection), and ANY pick while
+        // disconnected (it connects). The ONLY tap that spins nothing is re-selecting the already-
+        // active server WHILE CONNECTED: it reloads nothing, so the shield stays Connected.
+        var willConnect = changed || !wasConnected;
+        if (willConnect)
         {
             BeginConnecting();
+            if (wasConnected)
+            {
+                // Switching servers from a live connection: drop Connected NOW so the hero paints
+                // the Connecting spin during the switch (the presenter renders Connected as long as
+                // IsConnected is true). The still-running OLD core must not read as Connected until
+                // it actually cycles — SyncState holds Connecting until the stop event (see
+                // _awaitingCoreCycle), then the new core's start resolves to Connected.
+                IsConnected = false;
+                _awaitingCoreCycle = true;
+            }
         }
 
         if (!await Profiles.SetDefaultServer(indexId))
@@ -217,6 +256,7 @@ public class HomeViewModel : MyReactiveObject, IDisposable
             // Invalid / failed pick — abort the spinner, do not connect.
             IsConnecting = false;
             _connectingUntil = null;
+            _awaitingCoreCycle = false;
             SyncState();
             return;
         }
@@ -252,6 +292,23 @@ public class HomeViewModel : MyReactiveObject, IDisposable
     private void SyncState()
     {
         var running = IsCoreRunning();
+
+        // Mid server-switch hold (A5): while _awaitingCoreCycle is set the OLD core is still up but
+        // we are re-establishing on the newly-picked server, so a running core must NOT read as
+        // Connected yet — keep the Connecting spin. The stop transition clears the flag
+        // (OnCoreRunningStateChanged), after which the new core's start resolves to Connected. The
+        // connect deadline bounds the hold: if it elapses with a core still up and no observed stop
+        // (defensive — CoreStop always publishes the stop), give up and treat the core as Connected
+        // rather than spin forever.
+        if (running && _awaitingCoreCycle)
+        {
+            if (_connectingUntil is { } holdUntil && DateTime.Now <= holdUntil)
+            {
+                return;
+            }
+            _awaitingCoreCycle = false;
+        }
+
         if (running)
         {
             _connectedSince ??= DateTime.Now;
@@ -271,6 +328,9 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         }
         else
         {
+            // Core is down — any mid-switch hold is over (the old core stopped). Belt-and-suspenders
+            // to the stop-event clear, so a hold can never outlive an observed not-running state.
+            _awaitingCoreCycle = false;
             _connectedSince = null;
             IsConnected = false;
             Uptime = "00:00:00";
@@ -300,6 +360,30 @@ public class HomeViewModel : MyReactiveObject, IDisposable
     /// </summary>
     private void OnCoreRunningStateChanged(bool running)
     {
+        // A real STOP transition ends any mid-switch hold: the old core went down, so the next
+        // start is the NEW connection. Use the event's own flag rather than a live IsCoreRunning()
+        // probe — this marshalled callback can arrive AFTER LoadCore's back-to-back stop→start has
+        // already brought the new core up, which a probe would misread as "still running".
+        if (!running)
+        {
+            _awaitingCoreCycle = false;
+        }
+        SyncState();
+        UpdateStateTick();
+    }
+
+    /// <summary>
+    /// A seamless server switch (Tier 1/Tier 2) completed successfully. The switch keeps the tunnel up
+    /// and raises no stop event, so resolve the mid-switch Connecting hold NOW instead of waiting on the
+    /// 12s deadline: clear the hold, snap to Connected, and re-sync the shield.
+    /// </summary>
+    private void OnCoreSwitchSettled()
+    {
+        _awaitingCoreCycle = false;
+        _connectingUntil = null;
+        IsConnecting = false;
+        IsConnected = true;
+        ConnectFailed = false;
         SyncState();
         UpdateStateTick();
     }
@@ -376,7 +460,32 @@ public class HomeViewModel : MyReactiveObject, IDisposable
 
     #region Grouped list projection
 
-    private void OnProfileItemsChanged(object? sender, NotifyCollectionChangedEventArgs e) => ReconcileGroups();
+    // Coalesce the transient Clear()+AddRange() burst the engine emits on EVERY refresh/select
+    // (ProfilesViewModel.RefreshServersBiz rebuilds ProfileItems wholesale) into ONE reconcile on the
+    // next dispatcher tick. Reconciling synchronously on the Clear() would observe a transient
+    // count==0 and (a) latch IsEmpty=true for one frame — the MainWindow shell faithfully crossfades
+    // to the onboarding surface and back, i.e. the "black flash" on select — and (b) tear every group
+    // down only to rebuild it on the following AddRange, defeating the in-place diff. Deferring makes
+    // the reconcile read the SETTLED list (post-AddRange): a pure selection then flips only IsActive,
+    // while a GENUINE empty (logout / no subs) still latches onboarding because the settled count
+    // really is zero. A single pending post absorbs any number of bursts before it fires.
+    private void OnProfileItemsChanged(object? sender, NotifyCollectionChangedEventArgs e) => ScheduleReconcile();
+
+    private void ScheduleReconcile()
+    {
+        if (_reconcilePending)
+        {
+            return;
+        }
+        _reconcilePending = true;
+        Dispatcher.UIThread.Post(
+            () =>
+            {
+                _reconcilePending = false;
+                ReconcileGroups();
+            },
+            DispatcherPriority.Background);
+    }
 
     /// <summary>
     /// Project <c>Profiles.ProfileItems</c> onto the grouped <see cref="ServerGroups"/> by RECONCILING
@@ -556,6 +665,7 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         L.Instance.LanguageChanged -= OnLanguageChanged;
         StopUptimeTick();
         _coreStateSub?.Dispose();
+        _switchSettledSub?.Dispose();
         _statsSub?.Dispose();
     }
 

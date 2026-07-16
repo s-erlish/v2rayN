@@ -277,6 +277,13 @@ public class MainWindowViewModel : MyReactiveObject
                 .Subscribe(async _ => await Reload());
         }
 
+        // Seamless server switch: a live server change routes here instead of Reload() so the tunnel
+        // does not visibly drop (make-before-break; see MainWindowViewModel.SwitchServer).
+        ProfilesViewModel.SwitchRequested
+            .AsObservable()
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .Subscribe(async _ => await SwitchServer());
+
         StatusBarViewModel.AddServerViaScanRequested
             .AsObservable()
             .ObserveOn(RxSchedulers.MainThreadScheduler)
@@ -856,6 +863,83 @@ public class MainWindowViewModel : MyReactiveObject
             SetReloadEnabled(true);
             _reloadSemaphore.Release();
             //If there is a next reload job, execute it.
+            if (_hasNextReloadJob)
+            {
+                _hasNextReloadJob = false;
+                await Reload();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Seamless live server switch. Mirrors <see cref="Reload"/> but routes to
+    /// <see cref="CoreManager.SwitchServer"/> (make-before-break: hot-swap → Xray-only restart → full
+    /// restart) instead of <see cref="LoadCore"/>, and drops the unconditional 1 s settle delay — a
+    /// switch keeps the same deterministic ports/TUN, so there is nothing to wait for. The core path
+    /// never calls CoreStop nor resets RunningCoreType, so the Home shield/tray/status bar keep reading
+    /// "connected" (the shield's own Connecting spin masks the swap) and never flash disconnected.
+    /// Shares the reload semaphore so a switch and a reload can never run concurrently.
+    /// </summary>
+    public async Task SwitchServer()
+    {
+        if (!await _reloadSemaphore.WaitAsync(0))
+        {
+            // A reload/switch is already in flight; mark a follow-up so the newest target still lands.
+            _hasNextReloadJob = true;
+            return;
+        }
+
+        if (DesignMode)
+        {
+            _reloadSemaphore.Release();
+            return;
+        }
+
+        try
+        {
+            SetReloadEnabled(false);
+
+            var profileItem = await ConfigHandler.GetDefaultServer(_config);
+            if (profileItem == null)
+            {
+                NoticeManager.Instance.Enqueue(ResUI.CheckServerSettings);
+                return;
+            }
+            var allResult = await CoreConfigContextBuilder.BuildAll(_config, profileItem);
+            if (NoticeManager.Instance.NotifyValidatorResult(allResult.CombinedValidatorResult) && !allResult.Success)
+            {
+                return;
+            }
+
+            await Task.Run(async () =>
+            {
+                // SwitchServer internally falls back to a full LoadCore when a seamless tier is not
+                // possible or fails, so the user is never left disconnected.
+                await CoreManager.Instance.SwitchServer(allResult.MainResult.Context, allResult.PreSocksResult?.Context);
+                // Ports are unchanged across a switch, so re-asserting the system proxy is idempotent;
+                // keep it so direct/system-proxy mode stays correct. No Task.Delay here (unlike Reload).
+                await SysProxyHandler.UpdateSysProxy(_config, false);
+            });
+            RxSchedulers.MainThreadScheduler.Schedule(async () =>
+            {
+                await StatusBarViewModel.TestServerAvailability();
+            });
+
+            var showClashUI = AppManager.Instance.IsRunningCore(ECoreType.sing_box);
+            if (showClashUI)
+            {
+                RxSchedulers.MainThreadScheduler.Schedule(async () =>
+                {
+                    await ClashProxiesViewModel.ProxiesReload();
+                });
+            }
+
+            ReloadResult(showClashUI);
+        }
+        finally
+        {
+            SetReloadEnabled(true);
+            _reloadSemaphore.Release();
             if (_hasNextReloadJob)
             {
                 _hasNextReloadJob = false;

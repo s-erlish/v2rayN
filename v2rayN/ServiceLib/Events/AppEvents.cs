@@ -22,5 +22,18 @@ public static class AppEvents
     // so UI subscribers must marshal to the UI thread themselves.
     public static readonly EventChannel<bool> CoreRunningStateChanged = new();
 
+    /// <summary>
+    /// Positive "switch settled" signal, raised by <see cref="ServiceLib.Manager.CoreManager.SwitchServer"/>
+    /// on ANY successful switch: the Tier 2 hot-swap, the Tier 1 restart-main, AND the full-restart
+    /// fallback (including the catch-then-recover path). It lets the UI resolve its mid-switch
+    /// "Connecting" hold immediately instead of waiting on the 12s safety deadline. On the seamless
+    /// tiers no <see cref="CoreRunningStateChanged"/> is published at all, so this is the only completion
+    /// signal there; on the fallback it fires alongside the reload's own CoreRunningStateChanged(true),
+    /// which is harmless. Payload is always <c>true</c> (never raised on failure). Fires on a background
+    /// thread — same contract as <see cref="CoreRunningStateChanged"/>; UI subscribers marshal to the UI
+    /// thread themselves.
+    /// </summary>
+    public static readonly EventChannel<bool> CoreSwitchSettled = new();
+
     public static readonly EventChannel<ESysProxyType> SysProxyChangeRequested = new();
 }

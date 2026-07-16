@@ -232,6 +232,77 @@ public static class CoreConfigHandler
         SetRootObject(root, "stats", appConfig.stats);
         SetRootObject(root, "metrics", appConfig.metrics);
         SetRootObject(root, "policy", appConfig.policy);
+
+        // Graft the Xray HandlerService `api` surface so a server switch can hot-swap the proxy
+        // outbound at runtime (Tier 2 make-before-break) without touching this config's inbounds,
+        // routing, TUN adapter or the sing-box pre-service. The template's own outbounds/routing/dns
+        // stay AS-AUTHORED — we only add an api inbound, the api block and the api dispatch rule.
+        GraftXrayApi(root);
+    }
+
+    /// <summary>
+    /// Add the Xray HandlerService <c>api</c> surface to a CUSTOM (raw xray-json) config: a
+    /// dokodemo-door inbound tagged "api" on the deterministic <see cref="AppManager.ApiPort"/>, an
+    /// <c>api</c> block advertising HandlerService, and a routing rule dispatching api-tagged traffic
+    /// to it (prepended so it wins over any catch-all proxy rule). This is what lets
+    /// <c>CoreManager</c> run <c>xray api rmo/ado</c> to re-point the proxy outbound live. If the
+    /// template already ships its own api block we leave it untouched (respect the provider); a
+    /// template api that lacks HandlerService simply means the hot-swap tier is skipped and the switch
+    /// degrades to the Xray-only restart tier. Never throws into config generation.
+    /// </summary>
+    private static void GraftXrayApi(JsonObject root)
+    {
+        try
+        {
+            // Respect a template that already declares its own api surface.
+            if (root["api"] is JsonObject)
+            {
+                return;
+            }
+
+            var apiPort = AppManager.Instance.ApiPort;
+
+            if (root["inbounds"] is not JsonArray inbounds)
+            {
+                inbounds = new JsonArray();
+                root["inbounds"] = inbounds;
+            }
+            inbounds.Add(new JsonObject
+            {
+                ["tag"] = Global.ApiTag,
+                ["listen"] = Global.Loopback,
+                ["port"] = apiPort,
+                ["protocol"] = Global.InboundAPIProtocol,
+                ["settings"] = new JsonObject { ["address"] = Global.Loopback },
+            });
+
+            root["api"] = new JsonObject
+            {
+                ["tag"] = Global.ApiTag,
+                ["services"] = new JsonArray { "HandlerService" },
+            };
+
+            if (root["routing"] is not JsonObject routing)
+            {
+                routing = new JsonObject();
+                root["routing"] = routing;
+            }
+            if (routing["rules"] is not JsonArray rules)
+            {
+                rules = new JsonArray();
+                routing["rules"] = rules;
+            }
+            rules.Insert(0, new JsonObject
+            {
+                ["type"] = "field",
+                ["inboundTag"] = new JsonArray { Global.ApiTag },
+                ["outboundTag"] = Global.ApiTag,
+            });
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog(_tag, ex);
+        }
     }
 
     private static void SetRootObject(JsonObject root, string key, object? value)

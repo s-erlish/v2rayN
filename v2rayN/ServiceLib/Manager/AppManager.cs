@@ -8,6 +8,7 @@ public sealed class AppManager
     private Config _config;
     private int? _statePort;
     private int? _statePort2;
+    private int? _apiPort;
     public static AppManager Instance => _instance.Value;
     public Config Config => _config;
     public IWindowDialog WindowDialog { get; set; } = null!;
@@ -27,6 +28,22 @@ public sealed class AppManager
         {
             _statePort2 ??= Utils.GetFreePort(GetLocalPort(EInboundProtocol.api2));
             return _statePort2.Value + (_config.TunModeItem.EnableTun ? 1 : 0);
+        }
+    }
+
+    // Seamless server switch (Tier 2 hot-swap): the deterministic local port of the Xray
+    // HandlerService `api` inbound (a dokodemo-door). The generated Xray config binds this port and
+    // CoreManager spawns `xray api ado/rmo --server=127.0.0.1:ApiPort ...` against it to swap the
+    // proxy outbound at runtime with no core restart. Seeded well clear of the metrics StatePort
+    // (api slot) and clash/singbox StatePort2 (api2 slot) so it never collides with them, and wrapped
+    // in GetFreePort so a busy seed falls back to a free port. Memoised once per process so config
+    // generation and the runtime api call always agree on the same port for the life of the session.
+    public int ApiPort
+    {
+        get
+        {
+            _apiPort ??= Utils.GetFreePort(GetLocalPort(EInboundProtocol.api) + 100);
+            return _apiPort.Value;
         }
     }
 
@@ -144,7 +161,9 @@ public sealed class AppManager
             await ConfigHandler.SaveConfig(_config);
             await ProfileExManager.Instance.SaveTo();
             await StatisticsManager.Instance.SaveTo();
-            await CoreManager.Instance.CoreStop();
+            // byUser:true — app exit is a deliberate stop; abort any in-flight auto-restart so a crash
+            // loop can't fight the shutdown.
+            await CoreManager.Instance.CoreStop(byUser: true);
             StatisticsManager.Instance.Close();
 
             Logging.SaveLog("AppExitAsync End");

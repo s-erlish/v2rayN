@@ -97,6 +97,20 @@ public partial class ConnectHeroView : UserControl
     //  a state change ARRIVING while hidden (e.g. connect completes in tray) never starts a loop
     //  off-screen; the loop is (re)attached only on the restore re-apply.
     private bool _animationsPaused;
+
+    //  Layout-deactivation pause (RAM/CPU): in the keep-alive shell BOTH the wide and compact hero
+    //  are permanent children of contentHost; only the active-layout hero holds the live VM. The
+    //  INACTIVE hero sits at Opacity=0 — which does NOT stop Style animations (only IsVisible=false
+    //  would) — so without this its ambient breathe/sonar + glow/arc/shield loops would tick the
+    //  compositor forever off-screen. HomeHeroPresenter.Deactivate() (on unbind) sets this and strips
+    //  the loops; Activate() (on rebind) clears it and the presenter's re-apply re-attaches them.
+    //  Folded with _animationsPaused into MotionSuppressed so every loop gate honours BOTH reasons.
+    private bool _deactivated;
+
+    //  True when NO infinite loop may run right now — window hidden/minimized OR this layout is the
+    //  inactive one. Every loop-attach site checks this so a suppressed hero never drives the clock.
+    private bool MotionSuppressed => _animationsPaused || _deactivated;
+
     private Window? _heroWindow;
     private IDisposable? _winStateSub;
     private IDisposable? _winVisibleSub;
@@ -104,6 +118,10 @@ public partial class ConnectHeroView : UserControl
     //  Last hasServer passed to SetConnectState — remembered so a runtime lite toggle can re-apply
     //  the CURRENT visual state (jump to its end-look) without the presenter re-driving it.
     private bool _hasServer = true;
+
+    //  Онбординг «нет подписки» активен (ShowEmptyState(true)): герой снят со сцены, поэтому ambient-
+    //  петля не должна крутить компоновщик под скрытым слоем. SetAmbient уважает этот флаг.
+    private bool _empty;
 
     //  Press-scale диска: собственный ScaleTransform, чей ScaleX/Y анимируем через его же
     //  переходы — длительность+кривую перекл. по направлению (quart-in 90 / quint-out 160).
@@ -216,8 +234,22 @@ public partial class ConnectHeroView : UserControl
     /// </summary>
     public void ShowEmptyState(bool empty)
     {
+        _empty = empty;
         LayerEmpty.IsVisible = empty;
         LayerNormal.IsVisible = !empty;
+
+        //  Онбординг снимает герой со сцены → гасим ambient-петлю (иначе она крутила бы компоновщик
+        //  под скрытым слоем). Возврат к герою re-применяет ambient текущего состояния.
+        if (empty)
+        {
+            RemoveAmbientLoops();
+            AmbientRing.IsVisible = false;
+            AmbientSonar.IsVisible = false;
+        }
+        else
+        {
+            SetAmbient(_visualState);
+        }
     }
 
     /// <summary>
@@ -265,7 +297,7 @@ public partial class ConnectHeroView : UserControl
                 SetGlow(connecting: false, connected: true);
                 //  Сонар — одноразовый confirm; не проигрываем, пока окно скрыто (никто не увидит,
                 //  а на восстановлении re-apply идёт с animate:false — повтор сонара не нужен).
-                if (motion && !_animationsPaused)
+                if (motion && !MotionSuppressed)
                 {
                     PlaySonar();
                 }
@@ -310,6 +342,11 @@ public partial class ConnectHeroView : UserControl
                 Uptime.Text = "00:00:00";
                 break;
         }
+
+        //  Ambient «живой» слой вокруг щита: калм в Idle, чуть ярче/крупнее в Connected (поверх
+        //  статичного glow), выключен в Connecting (там уже своё движение) и Error (статичен).
+        //  Внутри gated по lite/reduced-motion, паузе окна и онбордингу — см. SetAmbient.
+        SetAmbient(state);
 
         //  Подсказка-ретрай видна ТОЛЬКО в Error — тихая аффорданс «тапни щит, чтобы повторить».
         RetryHint.IsVisible = state == ConnectVisualState.Error;
@@ -421,6 +458,7 @@ public partial class ConnectHeroView : UserControl
             GlowHalo.Classes.Remove("breathing");
             ShieldOutline.Classes.Remove("shieldbreathe");
             HideSonar();
+            RemoveAmbientLoops(); // ambient «живой» слой — не тикаем компоновщик за экраном
         }
         else
         {
@@ -430,6 +468,35 @@ public partial class ConnectHeroView : UserControl
             _animationsPaused = false;
             SetConnectState(_visualState, hasServer: _hasServer, animate: false);
         }
+    }
+
+    // ── Layout deactivation: stop this hero's infinite loops when its layout goes inactive ─────────
+    //  In the keep-alive shell only the ACTIVE-layout hero holds the live VM; the other sits at
+    //  Opacity=0 (which does NOT halt Style animations) and is NEVER DetachedFromVisualTree, so its
+    //  loops would otherwise tick the compositor forever off-screen — a real CPU/RAM regression.
+    //  HomeHeroPresenter calls Deactivate() when it unbinds (host nulls the inactive DataContext) and
+    //  Activate() when it (re)binds. Deactivate strips every loop immediately (same teardown as the
+    //  window-hidden pause); Activate just clears the gate — the presenter's subsequent SetConnectState
+    //  re-attaches whatever the current state needs. Idempotent.
+    public void Deactivate()
+    {
+        if (_deactivated)
+        {
+            return;
+        }
+        _deactivated = true;
+        ConnectingArc.Classes.Remove("spinning");
+        GlowHalo.Classes.Remove("breathing");
+        ShieldOutline.Classes.Remove("shieldbreathe");
+        HideSonar();
+        RemoveAmbientLoops();
+    }
+
+    public void Activate()
+    {
+        //  Just lift the gate; the presenter re-applies the current state (animate:false) right after,
+        //  which re-attaches the loops this hero should be running now that it is the active layout.
+        _deactivated = false;
     }
 
     private void OnMotionStateChanged(object? sender, bool lite) => ApplyLiteMode(lite, reapply: true);
@@ -463,6 +530,7 @@ public partial class ConnectHeroView : UserControl
         GlowHalo.Classes.Remove("breathing");
         ShieldOutline.Classes.Remove("shieldbreathe");
         HideSonar();
+        RemoveAmbientLoops();
         HeroFrame.Classes.Remove("assembling");
         EnsureHeroVisible();
         SetConnectState(_visualState, hasServer: _hasServer, animate: false);
@@ -550,7 +618,7 @@ public partial class ConnectHeroView : UserControl
         //  ОДНА чистая центрированная дуга: крутится только пока реально нужно и не под
         //  ReducedMotion/lite (тогда её вообще нет — см. выше). Второй counter-arc убран —
         //  он «облетал» шит, т.к. не имел RenderTransformOrigin в центре.
-        if (on && !ReducedMotion && !_animationsPaused)
+        if (on && !ReducedMotion && !MotionSuppressed)
         {
             ConnectingArc.Classes.Add("spinning");
         }
@@ -566,7 +634,7 @@ public partial class ConnectHeroView : UserControl
     //  подключения остаются читаемыми и без движения).
     private void SetShieldPulse(bool on)
     {
-        if (on && !ReducedMotion && !_animationsPaused)
+        if (on && !ReducedMotion && !MotionSuppressed)
         {
             ShieldOutline.Classes.Add("shieldbreathe");
         }
@@ -574,6 +642,55 @@ public partial class ConnectHeroView : UserControl
         {
             ShieldOutline.Classes.Remove("shieldbreathe");
         }
+    }
+
+    // ── Ambient «живой» слой (idle + connected): дышащее кольцо + покойная сонар-волна ──────
+    //  Медленные (5-6с) низкоконтрастные петли вокруг щита, чтобы герой «дышал» и в покое, и в
+    //  подключении. Присутствует ТОЛЬКО в Idle и Connected (Connecting уже ведёт дугу+breathe-glow,
+    //  Error статичен). Тот же guarded-паттерн, что SetArc/SetGlow/SetShieldPulse: сперва снимаем
+    //  любую идущую петлю (никогда не стекаем), затем навешиваем нужную — и только если движение
+    //  разрешено (не lite/reduced-motion), окно не на паузе (скрыто/свёрнуто) и не онбординг.
+    private void SetAmbient(ConnectVisualState state)
+    {
+        //  Всегда снимаем ПЕРЕД условным добавлением → петли не стекают и не утекают.
+        RemoveAmbientLoops();
+
+        var idle = state == ConnectVisualState.Idle;
+        var live = state == ConnectVisualState.Connected;
+        var show = (idle || live) && !ReducedMotion && !_empty;
+
+        AmbientRing.IsVisible = show;
+        AmbientSonar.IsVisible = show;
+
+        //  Пауза окна: держим слой без петли (base Opacity=0 → невидим); вернётся на восстановлении
+        //  через re-apply (UpdateVisibilityPause → SetConnectState → сюда с _animationsPaused=false).
+        if (!show || MotionSuppressed)
+        {
+            return;
+        }
+
+        if (idle)
+        {
+            //  Калм: медленный вдох 6с + волна 6.5с, не в фазе → «живое», а не «занятое».
+            AmbientRing.Classes.Add("breathe-idle");
+            AmbientSonar.Classes.Add("rest-idle");
+        }
+        else
+        {
+            //  Connected: чуть ярче/крупнее/быстрее (5 / 5.5с) поверх статичного glow = «активно».
+            AmbientRing.Classes.Add("breathe-live");
+            AmbientSonar.Classes.Add("rest-live");
+        }
+    }
+
+    //  Снять все ambient-петли (обе фазы обоих слоёв). Идемпотентно — из SetAmbient, паузы окна,
+    //  lite-тумблера и онбординга. Классы сняты → свойства ревертят к базе (Opacity=0, scale=1).
+    private void RemoveAmbientLoops()
+    {
+        AmbientRing.Classes.Remove("breathe-idle");
+        AmbientRing.Classes.Remove("breathe-live");
+        AmbientSonar.Classes.Remove("rest-idle");
+        AmbientSonar.Classes.Remove("rest-live");
     }
 
     private void SetGlow(bool connecting, bool connected)
@@ -590,8 +707,9 @@ public partial class ConnectHeroView : UserControl
 
             GlowHalo.IsVisible = true;
             GlowHalo.Opacity = 0.6; //  база под «дыханием» (0.3↔0.6) → плавный хэндофф к reveal
-            //  Пауза (окно скрыто): держим статичный halo без петли — она вернётся на восстановлении.
-            if (!_animationsPaused)
+            //  Пауза (окно скрыто ИЛИ раскладка неактивна): держим статичный halo без петли — она
+            //  вернётся на восстановлении/реактивации.
+            if (!MotionSuppressed)
             {
                 GlowHalo.Classes.Add("breathing");
             }

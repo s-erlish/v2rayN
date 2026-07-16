@@ -131,6 +131,50 @@ public partial class CoreConfigV2rayService
     }
 
     /// <summary>
+    /// Emit the Xray HandlerService `api` surface used for a make-before-break server switch
+    /// (Tier 2): a dokodemo-door inbound on the deterministic <see cref="AppManager.ApiPort"/> tagged
+    /// "api", the `api` block advertising HandlerService, and a routing rule that dispatches
+    /// api-tagged traffic to it. With this in place CoreManager can `xray api rmo/ado` the proxy
+    /// outbound at runtime (no core restart, no TUN teardown). Prepended so the api rule always
+    /// matches before any catch-all proxy rule. Additive: without it the config is byte-identical to
+    /// before, so a core that ignores/omits the api simply loses the hot-swap fast-path (falls back).
+    /// </summary>
+    private void GenApi()
+    {
+        try
+        {
+            _coreConfig.inbounds ??= [];
+            _coreConfig.inbounds.Add(new Inbounds4Ray
+            {
+                tag = Global.ApiTag,
+                listen = Global.Loopback,
+                port = AppManager.Instance.ApiPort,
+                protocol = Global.InboundAPIProtocol,
+                settings = new Inboundsettings4Ray { address = Global.Loopback },
+            });
+
+            _coreConfig.api = new Api4Ray
+            {
+                tag = Global.ApiTag,
+                services = ["HandlerService"],
+            };
+
+            _coreConfig.routing ??= new Routing4Ray();
+            _coreConfig.routing.rules ??= [];
+            _coreConfig.routing.rules.Insert(0, new RulesItem4Ray
+            {
+                type = "field",
+                inboundTag = [Global.ApiTag],
+                outboundTag = Global.ApiTag,
+            });
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog(_tag, ex);
+        }
+    }
+
+    /// <summary>
     /// Build the app's STANDARD local inbounds (the mixed/socks inbound the OS system proxy points
     /// at, plus the optional second port / LAN inbound, plus the tun inbound when TUN is enabled)
     /// together with the stats/metrics/policy block. Used to graft the app's own inbound onto a

@@ -107,6 +107,15 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         ApplyMotionMode(MotionState.IsLite);
         MotionState.Changed += OnMotionStateChanged;
 
+        // Плавная смена темы: App.ApplyTheme (обе кнопки настроек — база и монохром) отдаёт свой своп
+        // сюда, а мы оборачиваем его в круговую заливку (снимок → своп под снимком → расширяющийся клип).
+        // Хук — единственный на приложение (одно окно), живёт всё время работы; в lite сам делает мгновенно.
+        App.ThemeTransitionHook = RunThemeTransition;
+
+        // Точка старта заливки = место последнего нажатия (тап по тумблеру темы в настройках). Туннельно и
+        // handledEventsToo — ловим даже если кнопка «съест» событие; координата — в системе координат окна.
+        AddHandler(PointerPressedEvent, OnAnyPointerPressed, RoutingStrategies.Tunnel, handledEventsToo: true);
+
         KeyDown += MainWindow_KeyDown;
 
         // Chrome окна: drag + системные кнопки.
@@ -395,6 +404,40 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         _ => _compactMode ? _compactHome : _homeView,
     };
 
+    // ==================== Layout-aware Home binding (connect pipeline + RAM release) ====================
+    // ТОЛЬКО «Главная» ТЕКУЩЕЙ раскладки держит живой HomeViewModel: она и хит-тестируется (SwapContent),
+    // и несёт connect-щит/список серверов. «Главная» НЕактивной раскладки отвязывается (DataContext=null),
+    // что: (1) освобождает её невиртуализованное дерево строк серверов из памяти — при 80–150 серверах это
+    // доминирующая стоимость, и держать ДВЕ копии (широкую+компактную) вечно незачем; (2) страхует от
+    // «мёртвой широкой»: активная «Главная» ВСЕГДА получает VM (значит HomeView.BindHero привязывает щит,
+    // а строки получают DataContext), а скрытая никогда не перехватывает ввод и не биндит щит.
+    // Идемпотентно и layout-верно: зовётся из SetupHome (первичная привязка) и из ApplyLayoutMode (на
+    // каждом свопе 760px). Переактивация раскладки заново ставит DataContext → строки и щит оживают.
+    private void BindActiveHome()
+    {
+        if (_homeViewModel is null)
+        {
+            return;   // VM ещё не готов (первый ApplyLayoutMode до SetupHome) — привяжет SetupHome позже
+        }
+
+        if (_compactMode)
+        {
+            if (!ReferenceEquals(_homeView.DataContext, null))
+            {
+                _homeView.DataContext = null;   // отвязать широкую → освободить её строки
+            }
+            _compactHome.DataContext = _homeViewModel;
+        }
+        else
+        {
+            if (!ReferenceEquals(_compactHome.DataContext, null))
+            {
+                _compactHome.DataContext = null;   // отвязать компактную → освободить её строки
+            }
+            _homeView.DataContext = _homeViewModel;
+        }
+    }
+
     private void SetRailActive(AppTab tab)
     {
         foreach (var b in _navButtons)
@@ -485,6 +528,11 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         // делаем мгновенно (animate:false) под уже спрятанным contentArea — без гонки rise/fade вкладки
         // с рефлоу сетки (Bug6). Keep-alive дети остаются в дереве, переносов родителя по-прежнему нет.
         ShowTab(_currentTab, animate: false);
+
+        // Привязываем живой HomeViewModel к «Главной» ТЕКУЩЕЙ раскладки и отвязываем неактивную (RAM +
+        // «мёртвая широкая»). Под анимируемым свопом contentArea уже скрыт (Opacity=0 выше), а неактивная
+        // «Главная» и так на Opacity=0, поэтому освобождение её строк проходит невидимо, без глитча.
+        BindActiveHome();
 
         // C6: мягкий кроссфейд морфинга раскладки (compact↔wide) поверх мгновенной подмены — маскирует
         // рефлоу дерева. ТОЛЬКО opacity на contentArea (без layout/transform); сквозная подложка-градиент
@@ -697,9 +745,12 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         _homeViewModel = new HomeViewModel(vm);
         // ОДИН HomeViewModel питает ОБЕ раскладки (широкую и компактную «Главную»), поэтому
         // connect-состояние, выбранный сервер, скорости и таймер одинаковы при любой ширине.
-        _homeView.DataContext = _homeViewModel;
-        _compactHome.DataContext = _homeViewModel;
+        // НО живой VM держит ТОЛЬКО активная по текущей раскладке «Главная» (BindActiveHome):
+        // неактивная раскладка отвязывается, чтобы её (невиртуализованные) строки серверов
+        // освобождались из памяти и она никогда не перехватывала ввод. Онбординг — лёгкий (без
+        // списка серверов), поэтому его DataContext держим постоянно.
         onboardingView.DataContext = _homeViewModel;
+        BindActiveHome();
 
         // Индикатор рейла: серый в покое, синий при подключении И в процессе подключения (P1-3).
         // Цвет ведёт класс .on (C5): BrushTransition OnSurfaceVariant↔Accent из тема-токенов.
@@ -1139,6 +1190,160 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
 
     #endregion Nav & Chrome
 
+    #region Theme transition (круговая заливка смены темы)
+
+    // ==================== Плавная смена темы: круговая «заливка» новой темы ====================
+    // App.ApplyTheme (обе кнопки настроек: смена базы Тёмная↔Светлая и монохромный оверлей) вместо
+    // мгновенного свопа зовёт этот хук. Техника: снимок ТЕКУЩЕЙ темы (RenderTargetBitmap) кладём поверх
+    // окна → applySwap перекрашивает живые контролы ПОД снимком (без вспышки, один синхронный тик) →
+    // снимок «вытекает» расширяющимся круговым клипом из точки нажатия по тумблеру, открывая новую тему.
+    // OutQuint ~520мс, одноразово, покадрово (16мс). В lite/reduced-motion — мгновенный своп без снимка.
+    // Bitmap освобождается по завершении/отмене (FinishThemeTransition) — утечки нет; оверлей hit-test-
+    // прозрачен и скрыт в покое, поэтому UI полностью интерактивен во время и после перехода.
+    private CancellationTokenSource? _themeAnim;
+    private RenderTargetBitmap? _themeSnapshot;
+    private Point? _lastPointerInWindow;
+    private static readonly TimeSpan ThemeRevealDuration = TimeSpan.FromMilliseconds(520);
+
+    private void OnAnyPointerPressed(object? sender, PointerPressedEventArgs e)
+        => _lastPointerInWindow = e.GetPosition(this);
+
+    // Хук из App.ApplyTheme. applySwap = мгновенная перекраска (RequestedThemeVariant + моно-оверлей).
+    private void RunThemeTransition(Action applySwap)
+    {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(() => RunThemeTransition(applySwap));
+            return;
+        }
+
+        // Escape-hatch владельца: в lite/reduced-motion, пока окно скрыто/не разложено — мгновенно, без снимка.
+        var w = chromeRoot.Bounds.Width;
+        var h = chromeRoot.Bounds.Height;
+        if (MotionState.IsLite || !IsVisible || w < 1 || h < 1)
+        {
+            applySwap();
+            return;
+        }
+
+        // Снимаем любой незавершённый предыдущий переход (быстрый повторный тумблер) и освобождаем его bitmap.
+        CancelThemeTransition();
+
+        RenderTargetBitmap? snapshot = null;
+        try
+        {
+            var scaling = RenderScaling > 0 ? RenderScaling : 1.0;
+            var px = new PixelSize(
+                Math.Max(1, (int)Math.Ceiling(w * scaling)),
+                Math.Max(1, (int)Math.Ceiling(h * scaling)));
+            snapshot = new RenderTargetBitmap(px, new Vector(96 * scaling, 96 * scaling));
+            snapshot.Render(chromeRoot);
+        }
+        catch
+        {
+            // Редкий сбой рендера → безопасный откат в мгновенную смену (снимок не оставляем).
+            snapshot?.Dispose();
+            applySwap();
+            return;
+        }
+
+        _themeSnapshot = snapshot;
+        themeTransitionImage.Source = snapshot;
+        // Подложка снимка = СТАРЫЙ Brush.Bg (до свопа): закрывает прозрачную полосу заголовка (Grid без фона),
+        // чтобы под ней не «просвечивала» новая тема до прихода круга.
+        themeTransitionOverlay.Background = ResolveThemeBrush("Brush.Bg");
+        themeTransitionOverlay.Clip = null;
+        themeTransitionOverlay.Opacity = 1d;
+        themeTransitionOverlay.IsVisible = true;
+
+        // Новая тема применяется СЕЙЧАС — под непрозрачным снимком. Живые контролы перекрашиваются скрыто,
+        // без вспышки: кадр ещё не скомпонован, всё синхронно на UI-потоке (снимок сверху = полный, без клипа).
+        applySwap();
+
+        var cts = new CancellationTokenSource();
+        _themeAnim = cts;
+        AnimateThemeReveal(w, h, cts);
+    }
+
+    private async void AnimateThemeReveal(double w, double h, CancellationTokenSource cts)
+    {
+        var ct = cts.Token;
+        var origin = ResolveThemeOrigin(w, h);
+        var maxRadius = MaxCornerDistance(origin, w, h);
+        var rect = new RectangleGeometry(new Rect(0, 0, w, h));
+
+        var startTicks = Environment.TickCount64;
+        var durationMs = ThemeRevealDuration.TotalMilliseconds;
+        try
+        {
+            while (true)
+            {
+                var t = Math.Min(1d, (Environment.TickCount64 - startTicks) / durationMs);
+                var radius = _easeOutQuint.Ease(t) * maxRadius;
+                // Клип = прямоугольник окна МИНУС растущий круг: снимок виден только СНАРУЖИ круга, внутри
+                // проступает уже перекрашенная новая тема. Круг растёт из точки нажатия → «заливка» новой темы.
+                var hole = new EllipseGeometry { Center = origin, RadiusX = radius, RadiusY = radius };
+                themeTransitionOverlay.Clip = new CombinedGeometry(GeometryCombineMode.Exclude, rect, hole);
+                if (t >= 1d)
+                {
+                    break;
+                }
+                await Task.Delay(16, ct);
+            }
+        }
+        catch (OperationCanceledException) { return; }
+        catch { }
+
+        // Финализируем только если нас не сменил/не отменил новый переход.
+        if (ct.IsCancellationRequested || _themeAnim != cts)
+        {
+            return;
+        }
+        FinishThemeTransition();
+    }
+
+    // Старт заливки = последнее нажатие в окне (тап по тумблеру темы), если оно в пределах окна; иначе центр.
+    private Point ResolveThemeOrigin(double w, double h)
+    {
+        if (_lastPointerInWindow is { } p && p.X >= 0 && p.Y >= 0 && p.X <= w && p.Y <= h)
+        {
+            return p;
+        }
+        return new Point(w / 2, h / 2);
+    }
+
+    // Радиус, чтобы круг накрыл самый дальний угол окна от точки старта (полная заливка).
+    private static double MaxCornerDistance(Point o, double w, double h)
+    {
+        var dx = Math.Max(o.X, w - o.X);
+        var dy = Math.Max(o.Y, h - o.Y);
+        return Math.Sqrt((dx * dx) + (dy * dy));
+    }
+
+    // Тема-кисть по ключу в ТЕКУЩЕМ варианте (совпадает с паттерном ConnectHeroView/SubscriptionMetaView).
+    private IBrush? ResolveThemeBrush(string key)
+        => this.TryFindResource(key, ActualThemeVariant, out var v) && v is IBrush b ? b : null;
+
+    // Снятие оверлея + освобождение снимка (нет утечки RenderTargetBitmap). Идемпотентно.
+    private void FinishThemeTransition()
+    {
+        _themeAnim = null;
+        themeTransitionOverlay.IsVisible = false;
+        themeTransitionOverlay.Clip = null;
+        themeTransitionOverlay.Background = null;
+        themeTransitionImage.Source = null;
+        _themeSnapshot?.Dispose();
+        _themeSnapshot = null;
+    }
+
+    private void CancelThemeTransition()
+    {
+        _themeAnim?.Cancel();
+        FinishThemeTransition();
+    }
+
+    #endregion Theme transition
+
     #region Event
 
     private void OnProgramStarted(object state, bool timeout)
@@ -1257,6 +1462,10 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     protected override void OnClosed(EventArgs e)
     {
         _windowInteractions.Dispose();
+        // If the window closes mid theme-transition, cancel the reveal loop's token and dispose the
+        // RenderTargetBitmap snapshot (else it's left to GC and the async-void loop keeps poking a
+        // closing window). No-op when no transition is in flight.
+        CancelThemeTransition();
         base.OnClosed(e);
     }
 

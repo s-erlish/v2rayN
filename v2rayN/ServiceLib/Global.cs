@@ -76,6 +76,7 @@ public class Global
     public const string DefaultXhttpMode = "auto";
     public const string ProxyTag = "proxy";
     public const string DirectTag = "direct";
+    public const string ApiTag = "api";
     public const string BlockTag = "block";
     public const string DnsOutboundTag = "dns";
     public const string DnsTag = "dns-module";

@@ -454,33 +454,62 @@ public partial class ServerListView : UserControl
 
     #endregion List-reveal stagger
 
-    #region Group expand/collapse reveal (smooth composited crossfade; instant under lite)
+    #region Group expand/collapse reveal (Transitions-driven height+opacity accordion; instant under lite)
 
     //  The meta-bar chevron flips HomeServerGroup.IsExpanded. Each group's rows live in a clipped
-    //  reveal Border. We do NOT animate the Border's layout Height per-frame — that thrashes layout
-    //  (every tick re-measures/arranges the rows) and stutters badly. Instead the reveal is a SMOOTH,
-    //  COMPOSITED crossfade: inside the ClipToBounds viewport we animate ONLY the inner rows'
-    //  RenderTransform (a small translateY, TransformOperations — same vocabulary as the row press-scale
-    //  and the list-reveal stagger) + Opacity, which run off the layout path and never jitter. The
-    //  viewport Height is touched EXACTLY ONCE per toggle (reserve natural height on expand / snap to 0
-    //  on collapse), so there is a single layout pass, not one per frame.
+    //  reveal Border, and THIS is the container we open/close.
     //
-    //  Under lite / reduced-motion the toggle is INSTANT (same gate as the list-reveal stagger).
-    //  Rows stay UN-hosted while collapsed (IsVisible=false at rest), so a collapsed group never
-    //  realizes its rows — this preserves the one-shot list-reveal stagger (it keys off row Loaded,
-    //  which only fires for expanded groups) and the chevron rotate is unaffected. The outer groups
-    //  ItemsControl uses a non-virtualizing StackPanel, so each reveal container is stable; we hook its
-    //  group on Loaded, unhook on Unloaded, and cancel any in-flight reveal when a new toggle arrives.
+    //  WHY THE OLD REVEAL SNAPPED (root cause of the persistent bug): it drove the motion with
+    //  `Animation.RunAsync` keyframes on the container's layout `Height` (0↔measured) plus a fade on the
+    //  inner rows. In this window that keyframe-Animation-on-a-layout-Height path did NOT interpolate
+    //  visibly, and the rest states made it worse: collapsed rest was `IsVisible=false` (rows un-hosted)
+    //  and expanded rest was `Height=NaN` (auto) — and NOTHING (neither a keyframe Animation nor a
+    //  transition) can interpolate to/from `Auto`/NaN. A single out-of-cycle `Measure` right after the
+    //  container flips visible could also resolve target≤0, dropping into the `animateHeight=false`
+    //  branch (or the `finally` slamming `Height=NaN`). Net result BOTH ways: the container jumped to
+    //  full height / 0 in one layout frame — an instant SNAP — while only a 12px inner fade played.
+    //
+    //  WHY THIS NOW ANIMATES: we switch to the SAME primitive that already animates flawlessly in this
+    //  exact window — Avalonia `Transitions` + `DoubleTransition` (the chevron's rotate uses precisely
+    //  this). The reveal Border carries a `DoubleTransition` on Height AND Opacity; a toggle just SETS
+    //  the target values and the transition system interpolates ~300ms OutQuint. The classic accordion
+    //  gotchas are handled explicitly: we never transition to/from `Auto` — we prime a CONCRETE start
+    //  height with the transition detached (instant), re-attach the transition, then set the concrete
+    //  target so the change animates; after the motion settles we drop back to `Auto` (expanded) or 0 +
+    //  hidden (collapsed) with the transition detached (imperceptible, content already equals target).
+    //  ClipToBounds on the Border makes the growing/shrinking height visibly clip the rows.
+    //
+    //  Under lite / reduced-motion the toggle is INSTANT (same gate as the list-reveal stagger, and the
+    //  same one the chevron transition honours). Rows stay UN-hosted while collapsed (IsVisible=false at
+    //  rest), so a collapsed group never realizes its rows — preserving the one-shot list-reveal stagger
+    //  (it keys off row Loaded, which only fires for expanded groups). The outer groups ItemsControl uses
+    //  a non-virtualizing StackPanel, so each reveal container is stable; we hook its group on Loaded,
+    //  unhook on Unloaded, and a per-container generation counter voids a superseded settle on re-toggle.
 
-    private const double RevealSlideMs = 300; //  deliberate reveal — OutQuint, both directions (was 190, too snappy)
-
-    //  Small translateY (composited) — a subtle slide that reads as a reveal regardless of list length,
-    //  paired with the opacity crossfade. Full-height slides would whoosh on long lists; 12px stays crisp.
-    private static readonly ITransform _revealFrom = TransformOperations.Parse("translateY(-12px)");
-    private static readonly ITransform _revealHome = TransformOperations.Parse("translateY(0px)");
+    private const double RevealSlideMs = 300; //  deliberate reveal — OutQuint, both directions.
 
     private readonly Dictionary<Border, (HomeServerGroup group, PropertyChangedEventHandler handler)> _revealHooks = new();
-    private readonly Dictionary<Border, CancellationTokenSource> _revealCts = new();
+    //  Per-container animation generation: every toggle bumps it, so the delayed "settle to rest"
+    //  callback of a superseded toggle sees a mismatch and no-ops (rapid re-toggle safety).
+    private readonly Dictionary<Border, int> _revealGen = new();
+
+    //  Build a fresh Transitions collection per container (a Transitions instance is owned by one
+    //  control, never shared). Height + Opacity both ride the OutQuint curve used across the app.
+    private static Transitions BuildRevealTransitions() => new()
+    {
+        new DoubleTransition
+        {
+            Property = Control.HeightProperty,
+            Duration = TimeSpan.FromMilliseconds(RevealSlideMs),
+            Easing = new SplineEasing { X1 = 0.22, Y1 = 1, X2 = 0.36, Y2 = 1 },
+        },
+        new DoubleTransition
+        {
+            Property = Visual.OpacityProperty,
+            Duration = TimeSpan.FromMilliseconds(RevealSlideMs),
+            Easing = new SplineEasing { X1 = 0.22, Y1 = 1, X2 = 0.36, Y2 = 1 },
+        },
+    };
 
     // Hook the group behind this reveal container and set its rest state (no animation on first bind).
     private void OnGroupRevealLoaded(object? sender, RoutedEventArgs e)
@@ -526,229 +555,111 @@ public partial class ServerListView : UserControl
             hook.group.PropertyChanged -= hook.handler;
             _revealHooks.Remove(reveal);
         }
-        if (_revealCts.TryGetValue(reveal, out var cts))
-        {
-            cts.Cancel();
-            cts.Dispose();
-            _revealCts.Remove(reveal);
-        }
+        //  Void any pending settle callback and detach transitions so a torn-down container is inert.
+        _revealGen.Remove(reveal);
+        reveal.Transitions = null;
     }
 
-    // Instant rest state: expanded → auto height, rows settled + visible; collapsed → height 0, hidden
-    // (rows un-hosted). Also normalises the inner rows' transform/opacity so no reveal frame is stranded.
+    // Instant rest state (NO transition): expanded → auto height, visible; collapsed → height 0, hidden
+    // (rows un-hosted). Detaching Transitions first guarantees these sets never animate.
     private static void ApplyRevealState(Border reveal, bool expanded)
     {
-        if (reveal.Child is Control inner)
-        {
-            inner.RenderTransform = null;
-            inner.Opacity = 1;
-        }
+        reveal.Transitions = null;
 
         if (expanded)
         {
             reveal.IsVisible = true;
-            reveal.Height = double.NaN;
+            reveal.Height = double.NaN; //  auto — rows can reflow (ping/rename) with no fixed clip.
             reveal.Opacity = 1;
         }
         else
         {
             reveal.Height = 0;
             reveal.Opacity = 0;
-            reveal.IsVisible = false;
+            reveal.IsVisible = false; //  un-host the rows so a collapsed group never realizes them.
         }
     }
 
-    // Smooth reveal: the ClipToBounds viewport Height is set ONCE (reserve on expand / snap on collapse),
-    // and only the inner rows' RenderTransform (translateY) + Opacity animate — composited, no per-frame
-    // layout. Cancels any in-flight reveal on this container first. Instant under lite / reduced-motion.
-    private async void AnimateReveal(Border reveal, bool expand)
+    // Set a CONCRETE, instant (un-transitioned) state on the container — used to prime the transition's
+    // "from" value so the subsequent target set has a real number to interpolate FROM (never Auto/NaN).
+    private static void SetRevealInstant(Border reveal, double height, double opacity)
     {
-        //  CRASH-SAFETY: this is an `async void` handler fired straight off HomeServerGroup.IsExpanded,
-        //  so ANY exception that escapes it (not just cancellation) is unobserved and tears the process
-        //  down — that was the collapse crash: the reveal animation was run on the inner rows with only
-        //  an OperationCanceledException catch, so a fault from RunAsync (inner detached / no live clock
-        //  while the group is being hidden, a superseding toggle disposing the CTS, a null/again-detached
-        //  child) propagated out and killed the app. Everything below is wrapped; on any failure we fall
-        //  back to the correct INSTANT rest state so the group still ends up right, just without motion.
+        reveal.Transitions = null;
+        reveal.IsVisible = true;
+        reveal.Height = height;
+        reveal.Opacity = opacity;
+    }
+
+    //  Transitions-driven accordion. Both directions resolve a CONCRETE height and animate Height +
+    //  Opacity; after the motion we settle to the proper rest state. Instant under lite / reduced-motion
+    //  or when the container can't be measured/rooted. Fired synchronously off HomeServerGroup.IsExpanded
+    //  (no awaits — the delayed settle rides a DispatcherTimer), so the whole body is wrapped: a fault
+    //  forces the correct instant rest state and is logged, never crashing the app.
+    private void AnimateReveal(Border reveal, bool expand)
+    {
         try
         {
-            if (_revealCts.TryGetValue(reveal, out var prev))
-            {
-                prev.Cancel();
-                prev.Dispose();
-                _revealCts.Remove(reveal);
-            }
+            //  Bump the generation FIRST so any in-flight settle callback from a prior toggle no-ops.
+            var gen = (_revealGen.TryGetValue(reveal, out var g) ? g : 0) + 1;
+            _revealGen[reveal] = gen;
 
-            //  Instant path (no animation possible / wanted): lite / reduced-motion, no inner rows, OR
-            //  the container is no longer rooted. An Avalonia Animation needs a live visual root + clock;
-            //  running it on a detached element throws — so a detached / being-torn-down reveal snaps to
-            //  its rest state instead of animating.
-            if (IsReducedMotion() || reveal.Child is not Control inner || TopLevel.GetTopLevel(reveal) is null)
+            //  Instant path: lite / reduced-motion, no inner content, or detached (no clock).
+            if (IsReducedMotion() || reveal.Child is not Control || TopLevel.GetTopLevel(reveal) is null)
             {
                 ApplyRevealState(reveal, expand);
                 return;
             }
 
-            //  COLLAPSE-SMOOTHNESS: the viewport Height animates TOGETHER with the rows' composited
-            //  opacity/translate (not touched once + snapped). Previously collapse could fall into an instant
-            //  path (a non-concrete Bounds.Height → animateHeight=false → the finally slammed it shut) so the
-            //  rows faded but the container jumped closed — a hard "snap", no smooth hide. Now BOTH directions
-            //  always resolve a concrete height (expand: measured natural; collapse: live bounds else a fresh
-            //  measure) and tween Height 0→natural / natural→0 over the same ~300ms OutQuint, so the list below
-            //  slides open/closed in step with the fade. It is a single group's container height for ~300ms
-            //  (bounded), and it degrades safely: a genuinely unmeasurable container skips the height tween
-            //  and just fades the rows (auto height).
-            double fromH = 0, toH = 0;
-            bool animateHeight;
             if (expand)
             {
+                //  Measure the natural (auto-height) content at the current column width.
                 reveal.IsVisible = true;
-                reveal.Opacity = 1;
                 var target = MeasureRevealHeight(reveal);
-                if (target > 0)
+                if (target <= 0)
                 {
-                    fromH = 0;
-                    toH = target;
-                    animateHeight = true;
-                    reveal.Height = 0; //  start closed — the height tween opens it to `target`.
+                    //  Genuinely unmeasurable → show at auto height (no crash, no snap-to-zero). Rare.
+                    ApplyRevealState(reveal, true);
+                    return;
                 }
-                else
-                {
-                    animateHeight = false;
-                    reveal.Height = double.NaN; //  can't measure → auto height, fade rows only.
-                }
+
+                //  Prime the "from" (closed + transparent) with the transition DETACHED so it's instant,
+                //  then re-attach and set the target — that change is what the transition interpolates.
+                SetRevealInstant(reveal, height: 0, opacity: 0);
+                reveal.Transitions = BuildRevealTransitions();
+                reveal.Height = target; //  animates 0 → measured height (clipped by ClipToBounds)
+                reveal.Opacity = 1;     //  animates 0 → 1 in step
+
+                //  After the motion, release the fixed pixel height back to Auto so rows can reflow.
+                //  Content already equals `target`, so Auto is visually identical — no jump. Guard on the
+                //  generation so a newer toggle owns the container instead.
+                ScheduleRevealSettle(reveal, gen, expanded: true);
             }
             else
             {
-                //  COLLAPSE must ALWAYS animate: get a concrete start height from the live bounds, and if
-                //  those aren't realized at this instant (auto height / mid-layout) fall back to a fresh
-                //  measure — the SAME source expand uses. Only a genuinely unmeasurable container (0) drops
-                //  to the instant path; that is the crash-safe degrade, not the common case. This is what
-                //  fixes «collapse doesn't animate»: previously a non-concrete Bounds.Height snapped it shut.
+                //  Concrete start height from the live bounds (rendered), else a fresh measure.
                 var current = reveal.Bounds.Height;
                 if (current <= 0)
                 {
                     current = MeasureRevealHeight(reveal);
                 }
-                if (current > 0)
+                if (current <= 0)
                 {
-                    fromH = current;
-                    toH = 0;
-                    animateHeight = true;
-                    reveal.Height = current; //  freeze at the concrete height — the tween closes it to 0.
+                    ApplyRevealState(reveal, false);
+                    return;
                 }
-                else
-                {
-                    animateHeight = false;
-                    // Truly unmeasurable → leave as-is; the finally snaps it closed.
-                }
-            }
 
-            var cts = new CancellationTokenSource();
-            _revealCts[reveal] = cts;
-            var token = cts.Token;
+                //  Prime the concrete "from" instantly (out of Auto), then animate down to 0 + fade out.
+                SetRevealInstant(reveal, height: current, opacity: 1);
+                reveal.Transitions = BuildRevealTransitions();
+                reveal.Height = 0;   //  animates current → 0
+                reveal.Opacity = 0;  //  animates 1 → 0 in step
 
-            var fromT = expand ? _revealFrom : _revealHome;
-            var toT = expand ? _revealHome : _revealFrom;
-            var fromO = expand ? 0d : 1d;
-            var toO = expand ? 1d : 0d;
-
-            // Base = start-state (matches keyframe 0) so nothing flashes before the clock ticks; FillMode.None
-            // releases the properties on completion and the finally sets the resting base immediately after.
-            inner.RenderTransform = fromT;
-            inner.Opacity = fromO;
-
-            var anim = new Animation
-            {
-                Duration = TimeSpan.FromMilliseconds(RevealSlideMs),
-                //  Ease.OutQuint (0.22,1,0.36,1) — the confident-reveal curve used across the app.
-                Easing = new SplineEasing { X1 = 0.22, Y1 = 1, X2 = 0.36, Y2 = 1 },
-                FillMode = FillMode.None,
-                Children =
-                {
-                    new KeyFrame
-                    {
-                        Cue = new Cue(0d),
-                        Setters =
-                        {
-                            new Setter(Visual.RenderTransformProperty, fromT),
-                            new Setter(Visual.OpacityProperty, fromO),
-                        },
-                    },
-                    new KeyFrame
-                    {
-                        Cue = new Cue(1d),
-                        Setters =
-                        {
-                            new Setter(Visual.RenderTransformProperty, toT),
-                            new Setter(Visual.OpacityProperty, toO),
-                        },
-                    },
-                },
-            };
-
-            //  Height tween on the reveal container itself (Layoutable.Height), same ~300ms OutQuint curve,
-            //  run CONCURRENTLY with the row crossfade off the SAME token so a superseding toggle cancels
-            //  both together. FillMode.Forward holds the end height until the finally sets the resting state.
-            Animation? heightAnim = animateHeight
-                ? new Animation
-                {
-                    Duration = TimeSpan.FromMilliseconds(RevealSlideMs),
-                    Easing = new SplineEasing { X1 = 0.22, Y1 = 1, X2 = 0.36, Y2 = 1 },
-                    FillMode = FillMode.Forward,
-                    Children =
-                    {
-                        new KeyFrame
-                        {
-                            Cue = new Cue(0d),
-                            Setters = { new Setter(Control.HeightProperty, fromH) },
-                        },
-                        new KeyFrame
-                        {
-                            Cue = new Cue(1d),
-                            Setters = { new Setter(Control.HeightProperty, toH) },
-                        },
-                    },
-                }
-                : null;
-
-            try
-            {
-                if (heightAnim is null)
-                {
-                    await anim.RunAsync(inner, token);
-                }
-                else
-                {
-                    await Task.WhenAll(anim.RunAsync(inner, token), heightAnim.RunAsync(reveal, token));
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                //  Superseded by a newer toggle — it owns the resting state now.
-            }
-            finally
-            {
-                //  Only settle if THIS run still owns the container's CTS — a newer toggle may have
-                //  replaced (and cancelled/disposed) it while we awaited, in which case that toggle owns
-                //  the resting state and the dictionary entry. Dispose is idempotent, so a double-dispose
-                //  from the superseding path can't throw. When we DO own it, ApplyRevealState ALWAYS runs
-                //  (expand → Height=NaN; collapse → Height=0 + hidden), so the FillMode.Forward height
-                //  tween can never strand a stale fixed Height on the container — that stale clip is what
-                //  used to hide the last group/row (Bug 2). If we were cancelled we no longer own the CTS,
-                //  so we correctly defer to the superseding toggle here.
-                if (_revealCts.TryGetValue(reveal, out var mine) && ReferenceEquals(mine, cts))
-                {
-                    ApplyRevealState(reveal, expand);
-                    _revealCts.Remove(reveal);
-                }
-                cts.Dispose();
+                ScheduleRevealSettle(reveal, gen, expanded: false);
             }
         }
         catch (Exception ex)
         {
-            //  Last line of defence for the async-void handler: never let a reveal fault crash the app —
-            //  log it and force the group to its correct instant rest state.
+            //  Last line of defence — never let a reveal fault escape; force the correct instant rest.
             Logging.SaveLog(_tag, ex);
             try
             {
@@ -756,15 +667,38 @@ public partial class ServerListView : UserControl
             }
             catch
             {
-                //  Even the instant fallback can't be allowed to escape the handler.
+                //  Even the instant fallback can't be allowed to escape.
             }
         }
     }
 
+    //  Once the transition has run (duration + small margin), settle the container to its true rest
+    //  state — but ONLY if THIS toggle is still the current one (generation match); a newer toggle owns
+    //  the container otherwise. Detaching the transition inside ApplyRevealState makes the settle instant
+    //  (expanded → Auto height; collapsed → 0 + hidden), so no fixed pixel Height is ever stranded.
+    private void ScheduleRevealSettle(Border reveal, int gen, bool expanded)
+    {
+        DispatcherTimer.RunOnce(
+            () =>
+            {
+                try
+                {
+                    if (_revealGen.TryGetValue(reveal, out var cur) && cur == gen)
+                    {
+                        ApplyRevealState(reveal, expanded);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logging.SaveLog(_tag, ex);
+                }
+            },
+            TimeSpan.FromMilliseconds(RevealSlideMs + 80));
+    }
+
     // Natural height of the reveal's rows at the current column width (measured with Height cleared).
     // Defensive: a manual Measure on a detached / mid-layout element can throw — any failure returns 0,
-    // which the caller reads as "use auto height" (double.NaN), so expand still works, just without a
-    // pre-reserved pixel height.
+    // which the caller reads as "use auto height", so expand still works, just without a pixel-tween.
     private static double MeasureRevealHeight(Border reveal)
     {
         try

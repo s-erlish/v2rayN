@@ -273,7 +273,7 @@
         CloseOnClickAway="True"
         DisableOpeningAnimation="True">
         <Panel>
-            <Grid RowDefinitions="28,*">
+            <Grid x:Name="chromeRoot" RowDefinitions="28,*">
 
                 <!--  ==================== Кастомная строка окна (chrome, высота 28) ====================
                       Слим-рамка-заголовок (было 40 → 32 → 28 — владелец: «слишком толстая»); держит
@@ -602,6 +602,24 @@
                 ClipToBounds="True"
                 IsHitTestVisible="False"
                 Opacity="0" />
+
+            <!--  ==================== Плавная смена темы: круговая заливка (flood/pour reveal) ====================
+                  Верхний оверлей поверх всего окна. При живой смене темы (Тёмная↔Светлая↔Монохром из настроек)
+                  сюда кладётся СНИМОК (RenderTargetBitmap) текущей темы; под ним App.ApplyTheme мгновенно
+                  перекрашивает живые контролы (DynamicResource), затем снимок «вытекает» расширяющимся круговым
+                  клипом из точки нажатия по тумблеру → новая тема «заливается» на место старой (OutQuint ~520мс).
+                  В lite/reduced-motion переход ПРОПУСКАЕТСЯ — мгновенная смена без снимка. Клик сквозной
+                  (IsHitTestVisible=False), снимок освобождается по завершении/отмене (нет утечки bitmap).
+                  Управляется из code-behind (RunThemeTransition ← App.ThemeTransitionHook); в покое скрыт.  -->
+            <Border
+                x:Name="themeTransitionOverlay"
+                IsHitTestVisible="False"
+                IsVisible="False">
+                <Image
+                    x:Name="themeTransitionImage"
+                    IsHitTestVisible="False"
+                    Stretch="Fill" />
+            </Border>
         </Panel>
     </dialogHost:DialogHost>
 </Window>

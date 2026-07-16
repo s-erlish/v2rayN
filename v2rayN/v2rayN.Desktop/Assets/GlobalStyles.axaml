@@ -367,6 +367,21 @@
     <Style Selector="Button.Primary:disabled">
         <Setter Property="Opacity" Value="0.38" />
     </Style>
+    <!--  ГЛОБАЛЬНЫЙ фикс ховера. Без переопределения дефолтная тема Semi ({x:Type
+          Button}) на :pointerover ПОДМЕНЯЕТ фон PART_ContentPresenter своим токеном
+          ButtonDefaultPointeroverBackground (акцент-ховер ~#5F9AFF — СВЕТЛЕЕ покоя),
+          из-за чего CTA «Открыть Telegram»/«Войти» и ВСЕ Primary-кнопки на login/
+          onboarding/etc СВЕТЛЕЛИ. Прибиваем фон к чуть ТЕМНЕЕ покоя (Accent → #3D7EF0),
+          press на шаг темнее (#3877E0) — ровно как локально было у аккаунтной
+          «Пополнить» (TopUpButton), теперь ГЛОБАЛЬНО. Покой (Brush.Accent) и текст
+          (Brush.OnAccent) не трогаем; press-scale 0.97 остаётся выше. Едино в dark/
+          light/mono (значения — прямой затемнённый акцент, не тема-зависимы).  -->
+    <Style Selector="Button.Primary:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="#3D7EF0" />
+    </Style>
+    <Style Selector="Button.Primary:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="#3877E0" />
+    </Style>
 
     <!--  Первичная высокая (CTA форм: Оплатить / Войти / Подтвердить). 52h.
           Android btn_pay/btn_telegram = layout height 52dp. Всё остальное =
@@ -401,6 +416,17 @@
     <Style Selector="Button.Tonal:disabled">
         <Setter Property="Opacity" Value="0.38" />
     </Style>
+    <!--  Тот же фикс: без переопределения :pointerover тема Semi подменяла бы фон
+          тонали своим токеном (СВЕТЛЕЕ / уход в акцент). Затемняем СУБТИЛЬНО тем же
+          Brush.Hover, что несут все прочие ховеры Incy (Row/IconButton/BackNav) —
+          полупрозрачное затемнение, единое в dark/light/mono, НИКОГДА не светление и
+          не акцент-флип. Текст (OnSurface) и press-scale 0.97 не трогаем.  -->
+    <Style Selector="Button.Tonal:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
+    </Style>
+    <Style Selector="Button.Tonal:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
+    </Style>
 
     <!--  Контурная (акцент): прозрачный фон + 1px рамка Accent, текст Accent,
           Grotesk 15 Medium. Регистрация / Начать заново. Android btn_restart:
@@ -430,6 +456,20 @@
     </Style>
     <Style Selector="Button.OutlinedAccent:disabled">
         <Setter Property="Opacity" Value="0.38" />
+    </Style>
+    <!--  Тот же фикс: тема Semi на :pointerover заливала бы контурную кнопку своим
+          светлым токеном (и меняла бы рамку). Держим прозрачный контур и СУБТИЛЬНО
+          затемняем заливку Brush.Hover; рамку прибиваем к Accent, чтобы Semi не увёл
+          её в свой ховер-цвет. Текст (Accent) и press-scale 0.97 не трогаем — итог:
+          мягкий затемняющий тинт внутри контура, без светления/акцент-флипа, dark/
+          light/mono едино.  -->
+    <Style Selector="Button.OutlinedAccent:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+    </Style>
+    <Style Selector="Button.OutlinedAccent:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
     </Style>
 
     <!--  Степпер (±): круг 40 (CornerRadius 20 = круг), фон Tile.Blue, глиф 20

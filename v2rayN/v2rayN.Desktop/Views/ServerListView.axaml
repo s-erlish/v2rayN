@@ -92,17 +92,35 @@
                             <local:SubscriptionMetaView Margin="16,16,16,8" />
 
                             <!--  Group rows reveal (collapse with the group via the meta-bar chevron).
-                                  The chevron flips HomeServerGroup.IsExpanded; the code-behind reveals the
-                                  rows with a SMOOTH composited crossfade — inside this ClipToBounds viewport
-                                  the inner rows' RenderTransform (small translateY) + Opacity crossfade AND
-                                  the viewport Height tween run concurrently (~300ms OutQuint), so the list
-                                  slides open/closed in step with the fade — both expand AND collapse animate.
-                                  Gated: under lite / reduced-motion the toggle is instant.  -->
+                                  The chevron flips HomeServerGroup.IsExpanded; the code-behind runs a
+                                  Transitions-driven accordion on THIS ClipToBounds viewport — a DoubleTransition
+                                  tweens Height (0 ↔ measured content height) AND Opacity (0 ↔ 1) together over
+                                  ~300ms OutQuint, so the list clips open/closed in step with the fade — both
+                                  expand AND collapse visibly animate. Same primitive as the chevron rotate and
+                                  the rail-width animation. Gated: under lite / reduced-motion the toggle is instant.  -->
                             <Border
                                 ClipToBounds="True"
                                 Loaded="OnGroupRevealLoaded"
                                 Unloaded="OnGroupRevealUnloaded">
                             <ItemsControl ItemsSource="{Binding Servers}">
+                                <!--  RAM: virtualize the per-group server rows. Avalonia's
+                                      VirtualizingStackPanel realizes containers off the EFFECTIVE
+                                      VIEWPORT (the visible window propagated down through the
+                                      ScrollViewer / PageScroll clip + this reveal's ClipToBounds),
+                                      NOT off a direct-ScrollViewer-child relationship — so it
+                                      virtualizes even though the rows are nested (reveal Border →
+                                      outer StackPanel → ScrollViewer). Only ~on-screen rows are
+                                      realized+retained; off-screen rows recycle, dropping the
+                                      dominant list RAM cost. The panel still reports the ESTIMATED
+                                      FULL extent (rows are uniform height) as its DesiredSize, so the
+                                      reveal's height measure, the scroll extent and the trailing
+                                      spacer (last-row reachability) all stay correct; a collapsed
+                                      group (Height 0 / IsVisible=false) realizes no rows at all.  -->
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <VirtualizingStackPanel Orientation="Vertical" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="models:ProfileItemModel">
                                         <StackPanel>
