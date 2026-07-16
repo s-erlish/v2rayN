@@ -91,7 +91,7 @@ public class SettingsViewModel : MyReactiveObject
         // directly (see ToggleTun) — passively, never routing through the reload/UAC path.
         StatusBarViewModel.Instance
             .WhenAnyValue(x => x.EnableTun)
-            .Subscribe(tun => ModeText = tun ? "TUN" : "Прокси");
+            .Subscribe(tun => ModeText = tun ? "TUN" : Common.L.T("Settings_ModeProxy"));
     }
 
     /// <summary>Design-time constructor — sample strings only, never touches AppManager/config.</summary>
@@ -135,7 +135,7 @@ public class SettingsViewModel : MyReactiveObject
         ProxyUser = inbound?.User ?? string.Empty;
         ProxyPass = inbound?.Pass ?? string.Empty;
 
-        ModeText = StatusBarViewModel.Instance.EnableTun ? "TUN" : "Прокси";
+        ModeText = StatusBarViewModel.Instance.EnableTun ? "TUN" : Common.L.T("Settings_ModeProxy");
         PerAppText = ResolvePerAppText();
         DnsText = ResolveDnsText();
         PingMethodText = ResolvePingMethodText();
@@ -292,7 +292,7 @@ public class SettingsViewModel : MyReactiveObject
         // Keep the shared status-bar VM in sync WITHOUT triggering its reload/UAC path: DoEnableTun
         // early-returns because _config.TunModeItem.EnableTun already equals the value we assign here.
         StatusBarViewModel.Instance.EnableTun = enable;
-        ModeText = enable ? "TUN" : "Прокси";
+        ModeText = enable ? "TUN" : Common.L.T("Settings_ModeProxy");
 
         // Re-apply live only if the core is already up; a disconnected app stays disconnected.
         if (IsCoreRunning())
@@ -390,10 +390,13 @@ public class SettingsViewModel : MyReactiveObject
 
         var next = _config.UiItem.CurrentLanguage == "en" ? "ru" : "en";
         _config.UiItem.CurrentLanguage = next;
-        Thread.CurrentThread.CurrentUICulture = new CultureInfo(next);
         await ConfigHandler.SaveConfig(_config);
-        LanguageText = ResolveLanguageText();
-        NoticeManager.Instance.Enqueue(ResUI.NeedRebootTips);
+
+        // Живое переключение языка без перезапуска: L.SetLanguage синхронизирует CurrentUICulture
+        // (движок/ResUI) и обновляет все открытые {loc:T} биндинги; RefreshDisplayValues
+        // пере-вычисляет значения строк-резолверов. Уведомление о перезапуске больше не нужно.
+        Common.L.Instance.SetLanguage(next);
+        RefreshDisplayValues();
     }
 
     /// <summary>Оформление row: toggle Тёмная ↔ Светлая base variant. Persists <c>UiItem.CurrentTheme</c>
@@ -422,6 +425,7 @@ public class SettingsViewModel : MyReactiveObject
         {
             return;
         }
+        ModeText = StatusBarViewModel.Instance.EnableTun ? "TUN" : Common.L.T("Settings_ModeProxy");
         PerAppText = ResolvePerAppText();
         DnsText = ResolveDnsText();
         PingMethodText = ResolvePingMethodText();
@@ -443,14 +447,14 @@ public class SettingsViewModel : MyReactiveObject
         var remote = _config.SimpleDNSItem?.RemoteDNS?.Trim();
         if (remote.IsNullOrEmpty())
         {
-            return "По умолчанию";
+            return Common.L.T("Common_Default");
         }
         return remote switch
         {
             "https://cloudflare-dns.com/dns-query" => "Cloudflare",
             "https://dns.google/dns-query" => "Google",
             "https://dns.adguard-dns.com/dns-query" => "AdGuard",
-            _ => "Свой",
+            _ => Common.L.T("Common_Custom"),
         };
     }
 
@@ -462,7 +466,7 @@ public class SettingsViewModel : MyReactiveObject
         "Tcping" => "TCP",
         "Httping" => "HTTP",
         "Icmping" => "ICMP",
-        _ => "Реальная",
+        _ => Common.L.T("Ping_Real"),
     };
 
     private string ResolveMuxConcurrencyText() =>
@@ -472,24 +476,24 @@ public class SettingsViewModel : MyReactiveObject
     {
         if (!_config.UiItem.PerAppProxyEnabled)
         {
-            return "Выкл";
+            return Common.L.T("Common_Off");
         }
         var n = _config.UiItem.PerAppProxyList?.Count ?? 0;
-        var mode = _config.UiItem.PerAppProxyBypass ? "кроме" : "только";
-        return n > 0 ? $"{mode} {n}" : "Вкл";
+        var mode = _config.UiItem.PerAppProxyBypass ? Common.L.T("Settings_PerAppExcept") : Common.L.T("Settings_PerAppOnly");
+        return n > 0 ? $"{mode} {n}" : Common.L.T("Common_On");
     }
 
     private string ResolveThemeText() => _config.UiItem.CurrentTheme switch
     {
-        nameof(ETheme.Light) => "Светлая",
-        nameof(ETheme.Dark) => "Тёмная",
-        null or "" => "Тёмная",
+        nameof(ETheme.Light) => Common.L.T("Settings_ThemeLight"),
+        nameof(ETheme.Dark) => Common.L.T("Settings_ThemeDark"),
+        null or "" => Common.L.T("Settings_ThemeDark"),
         _ => _config.UiItem.CurrentTheme!,
     };
 
     private string ResolveLanguageText() => _config.UiItem.CurrentLanguage switch
     {
-        "ru" => "Русский",
+        "ru" => Common.L.T("Settings_LangRussian"),
         "en" => "English",
         "zh-Hans" => "简体中文",
         "zh-Hant" => "繁體中文",
@@ -497,7 +501,7 @@ public class SettingsViewModel : MyReactiveObject
         "fr" => "Français",
         "hu" => "Magyar",
         "id" => "Bahasa Indonesia",
-        null or "" => "Русский",
+        null or "" => Common.L.T("Settings_LangRussian"),
         _ => _config.UiItem.CurrentLanguage,
     };
 
@@ -505,7 +509,7 @@ public class SettingsViewModel : MyReactiveObject
     {
         // Stored in minutes; the row shows whole hours (60 → «1 ч.»). 0 disables.
         var n = _config.GuiItem.AutoUpdateInterval;
-        return n > 0 ? $"{n / 60} ч." : "Выкл";
+        return n > 0 ? Common.L.F("Common_HoursShort", n / 60) : Common.L.T("Common_Off");
     }
 
     #endregion Display resolvers

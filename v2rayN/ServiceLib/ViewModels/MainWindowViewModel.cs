@@ -485,7 +485,12 @@ public class MainWindowViewModel : MyReactiveObject
         {
             await RefreshSubscriptions();
             await RefreshServersDispatcherAsync();
-            NoticeManager.Instance.Enqueue(string.Format(ResUI.SuccessfullyImportedServerViaClipboard, ret));
+            // Toast only for a direct server-link import; a subscription-URL add must raise no bottom
+            // notification (owner request) — its progress streams into the message panel instead.
+            if (!ContainsSubscriptionUrl(stringData))
+            {
+                NoticeManager.Instance.Enqueue(string.Format(ResUI.SuccessfullyImportedServerViaClipboard, ret));
+            }
             // A pasted http(s) URL only creates a SubItem — no servers were fetched yet. Download
             // them now so ProfileItems populates and onboarding is replaced (Android does this
             // immediately after import). Never starts the core (OFF-model).
@@ -539,7 +544,12 @@ public class MainWindowViewModel : MyReactiveObject
             {
                 await RefreshSubscriptions();
                 await RefreshServersDispatcherAsync();
-                NoticeManager.Instance.Enqueue(ResUI.SuccessfullyImportedServerViaScan);
+                // Toast only for a direct server-link scan; a subscription-URL add must raise no bottom
+                // notification (owner request) — its progress streams into the message panel instead.
+                if (!ContainsSubscriptionUrl(result))
+                {
+                    NoticeManager.Instance.Enqueue(ResUI.SuccessfullyImportedServerViaScan);
+                }
                 // A scanned http(s) URL only creates a SubItem — fetch its servers now (OFF-model:
                 // never starts the core) so the list populates and onboarding is replaced.
                 await DownloadImportedSubscriptionAsync(result);
@@ -565,16 +575,13 @@ public class MainWindowViewModel : MyReactiveObject
             return;
         }
 
-        NoticeManager.Instance.Enqueue(ResUI.MsgUpdateSubscriptionStart);
-
-        var beforeCount = ProfilesViewModel.ProfileItems.Count;
+        // No bottom toast on subscription add — the engine progress already streams into the message
+        // panel via SubscriptionImportLogHandler. (Owner request: adding a subscription must raise no
+        // bottom notifications.)
         await Task.Run(async () => await SubscriptionHandler.UpdateProcess(_config, "", false, SubscriptionImportLogHandler));
 
         await RefreshSubscriptions();
         await RefreshServersDispatcherAsync();
-
-        var added = ProfilesViewModel.ProfileItems.Count - beforeCount;
-        NoticeManager.Instance.Enqueue(added > 0 ? ResUI.MsgUpdateSubscriptionEnd : ResUI.MsgFailedImportSubscription);
     }
 
     private static bool ContainsSubscriptionUrl(string? data)

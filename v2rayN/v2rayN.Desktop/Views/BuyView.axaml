@@ -4,6 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:loc="clr-namespace:v2rayN.Desktop.Common"
     xmlns:vms="clr-namespace:v2rayN.Desktop.ViewModels"
     x:DataType="vms:BuyViewModel"
     d:DesignHeight="820"
@@ -223,7 +224,7 @@
                         VerticalAlignment="Center"
                         Classes="IconButton BackNav"
                         Click="OnBackClick"
-                        ToolTip.Tip="Назад">
+                        ToolTip.Tip="{loc:T Common_Back}">
                         <PathIcon Data="{StaticResource Geo.Buy.Back}" />
                     </Button>
                     <TextBlock
@@ -231,7 +232,7 @@
                         Margin="8,0,0,0"
                         VerticalAlignment="Center"
                         Classes="Headline"
-                        Text="Купить подписку"
+                        Text="{loc:T Common_BuySubscription}"
                         TextTrimming="CharacterEllipsis" />
                 </Grid>
             </Border>
@@ -265,7 +266,7 @@
                             HorizontalAlignment="Center"
                             Classes="Tonal"
                             Command="{Binding RetryCmd}"
-                            Content="Повторить" />
+                            Content="{loc:T Common_Retry}" />
                     </StackPanel>
 
                     <!--  ============ Состояние ПУСТО: hero-тайл 64/радиус 20 + текст ============  -->
@@ -293,14 +294,14 @@
                             Margin="0,12,0,0"
                             HorizontalAlignment="Center"
                             Classes="Title"
-                            Text="Подписка оплачена"
+                            Text="{loc:T Buy_Paid}"
                             TextAlignment="Center" />
                         <TextBlock
                             Margin="0,4,0,0"
                             HorizontalAlignment="Center"
                             Classes="Subtitle"
                             Foreground="{DynamicResource Brush.OnSurfaceVariant}"
-                            Text="Серверы уже добавлены — можно подключаться"
+                            Text="{loc:T Buy_PaidSubtitle}"
                             TextAlignment="Center"
                             TextWrapping="Wrap" />
                     </StackPanel>
@@ -322,7 +323,7 @@
                         <TextBlock
                             Margin="4,0,0,8"
                             Classes="Title"
-                            Text="Выберите тариф" />
+                            Text="{loc:T Buy_ChoosePlan}" />
 
                         <!--  Карты тарифов: тап по шапке выбирает; выбранная раскрывает опции срока.  -->
                         <ItemsControl ItemsSource="{Binding Tariffs}">
@@ -344,7 +345,8 @@
                                                             <TextBlock
                                                                 Margin="0,4,0,0"
                                                                 Classes="Subtitle"
-                                                                FontFeatures="tnum"
+                                                                FontFamily="{DynamicResource Font.Numeric}"
+                                                                FontFeatures="tnum,lnum,zero"
                                                                 Text="{Binding Info}"
                                                                 TextTrimming="CharacterEllipsis" />
                                                         </StackPanel>
@@ -379,14 +381,16 @@
                                                                         Grid.Column="0"
                                                                         VerticalAlignment="Center"
                                                                         Classes="Body"
-                                                                        FontFeatures="tnum"
+                                                                        FontFamily="{DynamicResource Font.Numeric}"
+                                                                        FontFeatures="tnum,lnum,zero"
                                                                         Text="{Binding DurationText}" />
                                                                     <TextBlock
                                                                         Grid.Column="1"
                                                                         Margin="12,0,0,0"
                                                                         VerticalAlignment="Center"
                                                                         Classes="Body"
-                                                                        FontFeatures="tnum"
+                                                                        FontFamily="{DynamicResource Font.Numeric}"
+                                                                        FontFeatures="tnum,lnum,zero"
                                                                         FontWeight="Bold"
                                                                         Foreground="{DynamicResource Brush.Accent}"
                                                                         Text="{Binding PriceText}" />
@@ -429,12 +433,13 @@
                                         VerticalAlignment="Center">
                                         <TextBlock
                                             Classes="Body"
-                                            Text="Дополнительные устройства"
+                                            Text="{loc:T Buy_AdditionalDevices}"
                                             TextWrapping="Wrap" />
                                         <TextBlock
                                             Margin="0,4,0,0"
                                             Classes="Caption"
-                                            FontFeatures="tnum"
+                                            FontFamily="{DynamicResource Font.Numeric}"
+                                            FontFeatures="tnum,lnum,zero"
                                             IsVisible="{Binding HasExtraCost}"
                                             Text="{Binding ExtraCostText}" />
                                     </StackPanel>
@@ -444,7 +449,7 @@
                                         Classes="Stepper"
                                         Command="{Binding DevMinusCmd}"
                                         IsEnabled="{Binding CanDevMinus}"
-                                        ToolTip.Tip="Убрать устройство">
+                                        ToolTip.Tip="{loc:T Buy_RemoveDevice}">
                                         <PathIcon Data="{StaticResource Geo.Buy.Minus}" />
                                     </Button>
                                     <TextBlock
@@ -453,7 +458,8 @@
                                         Margin="4,0"
                                         VerticalAlignment="Center"
                                         Classes="Title"
-                                        FontFeatures="tnum"
+                                        FontFamily="{DynamicResource Font.Numeric}"
+                                        FontFeatures="tnum,lnum,zero"
                                         Text="{Binding ExtraCountText}"
                                         TextAlignment="Center" />
                                     <Button
@@ -462,7 +468,7 @@
                                         Classes="Stepper"
                                         Command="{Binding DevPlusCmd}"
                                         IsEnabled="{Binding CanDevPlus}"
-                                        ToolTip.Tip="Добавить устройство">
+                                        ToolTip.Tip="{loc:T Buy_AddDevice}">
                                         <PathIcon Data="{StaticResource Geo.Buy.Plus}" />
                                     </Button>
                                 </Grid>
@@ -480,12 +486,13 @@
                                         VerticalAlignment="Center"
                                         Classes="Body"
                                         Foreground="{DynamicResource Brush.OnSurfaceVariant}"
-                                        Text="Итого" />
+                                        Text="{loc:T Buy_Total}" />
                                     <TextBlock
                                         Grid.Column="1"
                                         VerticalAlignment="Center"
                                         Classes="Headline"
-                                        FontFeatures="tnum"
+                                        FontFamily="{DynamicResource Font.Numeric}"
+                                        FontFeatures="tnum,lnum,zero"
                                         Foreground="{DynamicResource Brush.Accent}"
                                         Text="{Binding TotalText}" />
                                 </Grid>
@@ -528,7 +535,7 @@
                                         <TextBlock
                                             VerticalAlignment="Center"
                                             Foreground="{DynamicResource Brush.OnAccent}"
-                                            Text="Оплатить" />
+                                            Text="{loc:T Buy_Pay}" />
                                     </StackPanel>
                                 </Button>
                             </StackPanel>
@@ -563,7 +570,7 @@
                     <TextBlock
                         Margin="16,12,16,4"
                         Classes="Title"
-                        Text="Способ оплаты"
+                        Text="{loc:T Buy_PaymentMethod}"
                         TextTrimming="CharacterEllipsis" />
 
                     <ItemsControl ItemsSource="{Binding SheetMethods}">
@@ -614,7 +621,8 @@
                                                     Margin="16,0,0,0"
                                                     VerticalAlignment="Center"
                                                     Classes="Body"
-                                                    FontFeatures="tnum"
+                                                    FontFamily="{DynamicResource Font.Numeric}"
+                                                    FontFeatures="tnum,lnum,zero"
                                                     Text="{Binding Label}"
                                                     TextTrimming="CharacterEllipsis" />
                                                 <PathIcon

@@ -4,6 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:loc="clr-namespace:v2rayN.Desktop.Common"
     xmlns:vms="clr-namespace:v2rayN.Desktop.ViewModels"
     x:Name="Root"
     x:DataType="vms:DevicesViewModel"
@@ -114,7 +115,7 @@
                         Grid.Column="0"
                         Classes="BackNav"
                         Click="OnBackClick"
-                        ToolTip.Tip="Назад">
+                        ToolTip.Tip="{loc:T Common_Back}">
                         <PathIcon Data="{StaticResource Geo.ArrowBack}" />
                     </Button>
                     <TextBlock
@@ -122,7 +123,7 @@
                         Margin="12,0,0,0"
                         VerticalAlignment="Center"
                         Classes="Headline"
-                        Text="Устройства"
+                        Text="{loc:T Account_Devices}"
                         TextTrimming="CharacterEllipsis" />
                     <!--  Счётчик устройств: тихая пилюля, только когда список на экране.  -->
                     <Border
@@ -135,7 +136,8 @@
                         IsVisible="{Binding HasCount}">
                         <TextBlock
                             Classes="Chip"
-                            FontFeatures="tnum"
+                            FontFamily="{DynamicResource Font.Numeric}"
+                            FontFeatures="tnum,lnum,zero"
                             Foreground="{DynamicResource Brush.OnSurfaceVariant}"
                             Text="{Binding CountText}" />
                     </Border>
@@ -148,7 +150,7 @@
                 Margin="16,16,16,0"
                 Classes="Subtitle"
                 IsVisible="{Binding ShowSubtitle}"
-                Text="Устройства, подключённые к вашей подписке"
+                Text="{loc:T Devices_Subtitle}"
                 TextWrapping="Wrap" />
 
             <!--  ============ Контент: 5 взаимоисключающих слотов ============  -->
@@ -257,20 +259,22 @@
                                                             <TextBlock
                                                                 Classes="Chip"
                                                                 Foreground="{DynamicResource Brush.Accent}"
-                                                                Text="Это устройство" />
+                                                                Text="{loc:T Devices_ThisDevice}" />
                                                         </Border>
                                                     </Grid>
                                                     <TextBlock
                                                         Margin="0,3,0,0"
                                                         Classes="Subtitle"
-                                                        FontFeatures="tnum"
+                                                        FontFamily="{DynamicResource Font.Numeric}"
+                                                        FontFeatures="tnum,lnum,zero"
                                                         IsVisible="{Binding HasMeta}"
                                                         Text="{Binding Meta}"
                                                         TextTrimming="CharacterEllipsis" />
                                                     <TextBlock
                                                         Margin="0,3,0,0"
                                                         Classes="Caption"
-                                                        FontFeatures="tnum"
+                                                        FontFamily="{DynamicResource Font.Numeric}"
+                                                        FontFeatures="tnum,lnum,zero"
                                                         IsVisible="{Binding HasHwid}"
                                                         Text="{Binding HwidText}"
                                                         TextTrimming="CharacterEllipsis" />
@@ -287,7 +291,7 @@
                                                     Classes="IconButton"
                                                     Command="{Binding DataContext.DeleteCmd, ElementName=Root}"
                                                     CommandParameter="{Binding Dto}"
-                                                    ToolTip.Tip="Отвязать устройство">
+                                                    ToolTip.Tip="{loc:T Devices_Unlink}">
                                                     <PathIcon
                                                         Width="22"
                                                         Height="22"
@@ -368,7 +372,7 @@
                         Margin="0,16,0,0"
                         HorizontalAlignment="Center"
                         Classes="Title"
-                        Text="Нет подключённых устройств"
+                        Text="{loc:T Devices_Empty}"
                         TextAlignment="Center"
                         TextWrapping="Wrap" />
                     <TextBlock
@@ -376,7 +380,7 @@
                         MaxWidth="340"
                         HorizontalAlignment="Center"
                         Classes="Subtitle"
-                        Text="Устройства появятся здесь после первого подключения к VPN."
+                        Text="{loc:T Devices_EmptyHint}"
                         TextAlignment="Center"
                         TextWrapping="Wrap" />
                 </StackPanel>
@@ -394,7 +398,7 @@
                         Margin="0,16,0,0"
                         HorizontalAlignment="Center"
                         Classes="Title"
-                        Text="Активная подписка не найдена"
+                        Text="{loc:T Devices_NoSub}"
                         TextAlignment="Center"
                         TextWrapping="Wrap" />
                     <TextBlock
@@ -402,7 +406,7 @@
                         MaxWidth="340"
                         HorizontalAlignment="Center"
                         Classes="Subtitle"
-                        Text="Оформите подписку в разделе «Аккаунт», чтобы подключать устройства."
+                        Text="{loc:T Devices_NoSubHint}"
                         TextAlignment="Center"
                         TextWrapping="Wrap" />
                     <Button
@@ -410,7 +414,7 @@
                         HorizontalAlignment="Center"
                         Classes="Primary"
                         Click="OnBackClick"
-                        Content="Перейти в аккаунт" />
+                        Content="{loc:T Devices_GoToAccount}" />
                 </StackPanel>
 
                 <!--  Состояние ОШИБКА: hero + реальная причина + «Повторить».  -->
@@ -435,7 +439,7 @@
                         HorizontalAlignment="Center"
                         Classes="Tonal"
                         Command="{Binding LoadCmd}"
-                        Content="Повторить" />
+                        Content="{loc:T Common_Retry}" />
                 </StackPanel>
             </Panel>
         </DockPanel>
@@ -456,7 +460,7 @@
                 VerticalAlignment="Center"
                 Classes="Card ModalCard">
                 <StackPanel>
-                    <TextBlock Classes="Title" Text="Отвязать устройство?" />
+                    <TextBlock Classes="Title" Text="{loc:T Devices_UnlinkConfirm}" />
                     <TextBlock
                         Margin="0,8,0,0"
                         Classes="Body"
@@ -470,14 +474,14 @@
                             HorizontalAlignment="Stretch"
                             Classes="Tonal"
                             Command="{Binding CancelDeleteCmd}"
-                            Content="Отмена"
+                            Content="{loc:T Common_Cancel}"
                             IsEnabled="{Binding !IsDeleting}" />
                         <Button
                             Grid.Column="2"
                             HorizontalAlignment="Stretch"
                             Classes="Destructive"
                             Command="{Binding ConfirmDeleteCmd}"
-                            Content="Отвязать"
+                            Content="{loc:T Devices_UnlinkShort}"
                             IsEnabled="{Binding !IsDeleting}" />
                     </Grid>
                 </StackPanel>

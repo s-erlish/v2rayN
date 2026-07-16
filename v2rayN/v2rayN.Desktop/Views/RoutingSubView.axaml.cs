@@ -1,3 +1,6 @@
+using Avalonia.Data.Converters;
+using v2rayN.Desktop.Common;
+
 namespace v2rayN.Desktop.Views;
 
 /// <summary>
@@ -16,12 +19,14 @@ namespace v2rayN.Desktop.Views;
 /// </summary>
 public partial class RoutingSubView : UserControl, ISubPage
 {
-    // Технические значения Xray-стратегии → дружелюбные русские подписи (значение хранится «как есть»).
-    private static readonly (string Value, string Label)[] StrategyOptions =
+    // Технические значения Xray-стратегии → дружелюбные подписи (значение хранится «как есть»).
+    // Подпись берётся из локали (L.T) — суб-страница строится заново при каждом открытии, поэтому
+    // язык, выбранный в SettingsView, применяется к комбо на следующем входе.
+    private static readonly (string Value, string LabelKey)[] StrategyOptions =
     [
-        ("AsIs", "Как есть"),
-        ("IPIfNonMatch", "IP при несовпадении"),
-        ("IPOnDemand", "IP по запросу"),
+        ("AsIs", "Routing_DsAsIs"),
+        ("IPIfNonMatch", "Routing_DsIpIfNonMatch"),
+        ("IPOnDemand", "Routing_DsIpOnDemand"),
     ];
 
     private readonly Config _config;
@@ -41,7 +46,7 @@ public partial class RoutingSubView : UserControl, ISubPage
 
         listRoutings.ItemsSource = _vm.RoutingItems;
 
-        cmbStrategy.ItemsSource = StrategyOptions.Select(x => x.Label).ToList();
+        cmbStrategy.ItemsSource = StrategyOptions.Select(x => L.T(x.LabelKey)).ToList();
         var curIdx = Array.FindIndex(StrategyOptions, x => x.Value == _vm.DomainStrategy);
         cmbStrategy.SelectedIndex = curIdx < 0 ? 0 : curIdx;
         _suppressStrategy = false;
@@ -118,4 +123,18 @@ public partial class RoutingSubView : UserControl, ISubPage
 
     private static bool IsCoreRunning() =>
         AppManager.Instance.IsRunningCore(ECoreType.Xray) || AppManager.Instance.IsRunningCore(ECoreType.sing_box);
+}
+
+/// <summary>Форматирует число правил через язык-зависимый шаблон «{0} правил» / «{0} rules» (L.F).
+/// Нужен, потому что StringFormat в XAML статичен и не переключается при смене языка.</summary>
+public sealed class RuleCountConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        var n = value is int i ? i : 0;
+        return L.F("Routing_RulesCount", n);
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
 }

@@ -3,6 +3,7 @@
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:loc="clr-namespace:v2rayN.Desktop.Common"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     d:DesignWidth="400"
     mc:Ignorable="d">
@@ -118,6 +119,14 @@
             <Setter Property="RenderTransform" Value="scale(1,1)" />
         </Style>
 
+        <!--  Hover (не выбранный): затемняем ТОЛЬКО глиф/подпись (без фона), как у рейла.  -->
+        <Style Selector="Button.BottomNavItem:pointerover:not(.sel) PathIcon">
+            <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariantHover}" />
+        </Style>
+        <Style Selector="Button.BottomNavItem:pointerover:not(.sel) TextBlock.NavLabel">
+            <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariantHover}" />
+        </Style>
+
         <!--  Reduced-motion (.lite на окне): переходы мгновенны.  -->
         <Style Selector=":is(Window).lite Button.BottomNavItem">
             <Setter Property="Transitions">
@@ -149,7 +158,7 @@
                 Classes="BottomNavItem">
                 <StackPanel HorizontalAlignment="Center">
                     <PathIcon HorizontalAlignment="Center" Data="{StaticResource Geo.Nav.Home}" />
-                    <TextBlock Classes="NavLabel" Text="Главная" />
+                    <TextBlock Classes="NavLabel" Text="{loc:T Nav_Home}" />
                     <Border Classes="NavPillBottom" />
                 </StackPanel>
             </Button>
@@ -159,7 +168,7 @@
                 Classes="BottomNavItem">
                 <StackPanel HorizontalAlignment="Center">
                     <PathIcon HorizontalAlignment="Center" Data="{StaticResource Geo.Nav.Settings}" />
-                    <TextBlock Classes="NavLabel" Text="Настройки" />
+                    <TextBlock Classes="NavLabel" Text="{loc:T Nav_Settings}" />
                     <Border Classes="NavPillBottom" />
                 </StackPanel>
             </Button>
@@ -170,7 +179,7 @@
                 IsVisible="False">
                 <StackPanel HorizontalAlignment="Center">
                     <PathIcon HorizontalAlignment="Center" Data="{StaticResource Geo.Nav.Account}" />
-                    <TextBlock Classes="NavLabel" Text="Аккаунт" />
+                    <TextBlock Classes="NavLabel" Text="{loc:T Nav_Account}" />
                     <Border Classes="NavPillBottom" />
                 </StackPanel>
             </Button>

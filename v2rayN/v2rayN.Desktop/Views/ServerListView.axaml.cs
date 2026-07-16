@@ -563,113 +563,159 @@ public partial class ServerListView : UserControl
     // layout. Cancels any in-flight reveal on this container first. Instant under lite / reduced-motion.
     private async void AnimateReveal(Border reveal, bool expand)
     {
-        if (_revealCts.TryGetValue(reveal, out var prev))
-        {
-            prev.Cancel();
-            prev.Dispose();
-            _revealCts.Remove(reveal);
-        }
-
-        if (IsReducedMotion() || reveal.Child is not Control inner)
-        {
-            ApplyRevealState(reveal, expand);
-            return;
-        }
-
-        if (expand)
-        {
-            // Reserve the natural height in a SINGLE layout pass, host + clip, then fade/slide the rows in.
-            reveal.IsVisible = true;
-            reveal.Opacity = 1;
-            var target = MeasureRevealHeight(reveal);
-            reveal.Height = target > 0 ? target : double.NaN;
-        }
-        else
-        {
-            // Freeze the current height so the viewport doesn't reflow while the rows fade/slide out; the
-            // space is snapped closed once (in the finally) after the composited animation completes.
-            var current = reveal.Bounds.Height;
-            reveal.Height = current > 0 ? current : reveal.Height;
-        }
-
-        var cts = new CancellationTokenSource();
-        _revealCts[reveal] = cts;
-        var token = cts.Token;
-
-        var fromT = expand ? _revealFrom : _revealHome;
-        var toT = expand ? _revealHome : _revealFrom;
-        var fromO = expand ? 0d : 1d;
-        var toO = expand ? 1d : 0d;
-
-        // Base = start-state (matches keyframe 0) so nothing flashes before the clock ticks; FillMode.None
-        // releases the properties on completion and the finally sets the resting base immediately after.
-        inner.RenderTransform = fromT;
-        inner.Opacity = fromO;
-
-        var anim = new Animation
-        {
-            Duration = TimeSpan.FromMilliseconds(RevealSlideMs),
-            //  Ease.OutQuint (0.22,1,0.36,1) — the confident-reveal curve used across the app.
-            Easing = new SplineEasing { X1 = 0.22, Y1 = 1, X2 = 0.36, Y2 = 1 },
-            FillMode = FillMode.None,
-            Children =
-            {
-                new KeyFrame
-                {
-                    Cue = new Cue(0d),
-                    Setters =
-                    {
-                        new Setter(Visual.RenderTransformProperty, fromT),
-                        new Setter(Visual.OpacityProperty, fromO),
-                    },
-                },
-                new KeyFrame
-                {
-                    Cue = new Cue(1d),
-                    Setters =
-                    {
-                        new Setter(Visual.RenderTransformProperty, toT),
-                        new Setter(Visual.OpacityProperty, toO),
-                    },
-                },
-            },
-        };
-
+        //  CRASH-SAFETY: this is an `async void` handler fired straight off HomeServerGroup.IsExpanded,
+        //  so ANY exception that escapes it (not just cancellation) is unobserved and tears the process
+        //  down — that was the collapse crash: the reveal animation was run on the inner rows with only
+        //  an OperationCanceledException catch, so a fault from RunAsync (inner detached / no live clock
+        //  while the group is being hidden, a superseding toggle disposing the CTS, a null/again-detached
+        //  child) propagated out and killed the app. Everything below is wrapped; on any failure we fall
+        //  back to the correct INSTANT rest state so the group still ends up right, just without motion.
         try
         {
-            await anim.RunAsync(inner, token);
-        }
-        catch (OperationCanceledException)
-        {
-            //  Superseded by a newer toggle — it owns the resting state now.
-        }
-        finally
-        {
-            if (!token.IsCancellationRequested)
+            if (_revealCts.TryGetValue(reveal, out var prev))
+            {
+                prev.Cancel();
+                prev.Dispose();
+                _revealCts.Remove(reveal);
+            }
+
+            //  Instant path (no animation possible / wanted): lite / reduced-motion, no inner rows, OR
+            //  the container is no longer rooted. An Avalonia Animation needs a live visual root + clock;
+            //  running it on a detached element throws — so a detached / being-torn-down reveal snaps to
+            //  its rest state instead of animating.
+            if (IsReducedMotion() || reveal.Child is not Control inner || TopLevel.GetTopLevel(reveal) is null)
             {
                 ApplyRevealState(reveal, expand);
-                _revealCts.Remove(reveal);
+                return;
+            }
+
+            if (expand)
+            {
+                // Reserve the natural height in a SINGLE layout pass, host + clip, then fade/slide the rows in.
+                reveal.IsVisible = true;
+                reveal.Opacity = 1;
+                var target = MeasureRevealHeight(reveal);
+                reveal.Height = target > 0 ? target : double.NaN;
+            }
+            else
+            {
+                // Freeze the current height so the viewport doesn't reflow while the rows fade/slide out; the
+                // space is snapped closed once (in the finally) after the composited animation completes.
+                var current = reveal.Bounds.Height;
+                reveal.Height = current > 0 ? current : reveal.Height;
+            }
+
+            var cts = new CancellationTokenSource();
+            _revealCts[reveal] = cts;
+            var token = cts.Token;
+
+            var fromT = expand ? _revealFrom : _revealHome;
+            var toT = expand ? _revealHome : _revealFrom;
+            var fromO = expand ? 0d : 1d;
+            var toO = expand ? 1d : 0d;
+
+            // Base = start-state (matches keyframe 0) so nothing flashes before the clock ticks; FillMode.None
+            // releases the properties on completion and the finally sets the resting base immediately after.
+            inner.RenderTransform = fromT;
+            inner.Opacity = fromO;
+
+            var anim = new Animation
+            {
+                Duration = TimeSpan.FromMilliseconds(RevealSlideMs),
+                //  Ease.OutQuint (0.22,1,0.36,1) — the confident-reveal curve used across the app.
+                Easing = new SplineEasing { X1 = 0.22, Y1 = 1, X2 = 0.36, Y2 = 1 },
+                FillMode = FillMode.None,
+                Children =
+                {
+                    new KeyFrame
+                    {
+                        Cue = new Cue(0d),
+                        Setters =
+                        {
+                            new Setter(Visual.RenderTransformProperty, fromT),
+                            new Setter(Visual.OpacityProperty, fromO),
+                        },
+                    },
+                    new KeyFrame
+                    {
+                        Cue = new Cue(1d),
+                        Setters =
+                        {
+                            new Setter(Visual.RenderTransformProperty, toT),
+                            new Setter(Visual.OpacityProperty, toO),
+                        },
+                    },
+                },
+            };
+
+            try
+            {
+                await anim.RunAsync(inner, token);
+            }
+            catch (OperationCanceledException)
+            {
+                //  Superseded by a newer toggle — it owns the resting state now.
+            }
+            finally
+            {
+                //  Only settle if THIS run still owns the container's CTS — a newer toggle may have
+                //  replaced (and cancelled/disposed) it while we awaited, in which case that toggle owns
+                //  the resting state and the dictionary entry. Dispose is idempotent, so a double-dispose
+                //  from the superseding path can't throw.
+                if (_revealCts.TryGetValue(reveal, out var mine) && ReferenceEquals(mine, cts))
+                {
+                    if (!token.IsCancellationRequested)
+                    {
+                        ApplyRevealState(reveal, expand);
+                    }
+                    _revealCts.Remove(reveal);
+                }
                 cts.Dispose();
+            }
+        }
+        catch (Exception ex)
+        {
+            //  Last line of defence for the async-void handler: never let a reveal fault crash the app —
+            //  log it and force the group to its correct instant rest state.
+            Logging.SaveLog(_tag, ex);
+            try
+            {
+                ApplyRevealState(reveal, expand);
+            }
+            catch
+            {
+                //  Even the instant fallback can't be allowed to escape the handler.
             }
         }
     }
 
     // Natural height of the reveal's rows at the current column width (measured with Height cleared).
+    // Defensive: a manual Measure on a detached / mid-layout element can throw — any failure returns 0,
+    // which the caller reads as "use auto height" (double.NaN), so expand still works, just without a
+    // pre-reserved pixel height.
     private static double MeasureRevealHeight(Border reveal)
     {
-        double width = 0;
-        if (reveal.GetVisualParent() is Control parent && parent.Bounds.Width > 0)
+        try
         {
-            width = parent.Bounds.Width;
-        }
-        else if (reveal.Bounds.Width > 0)
-        {
-            width = reveal.Bounds.Width;
-        }
+            double width = 0;
+            if (reveal.GetVisualParent() is Control parent && parent.Bounds.Width > 0)
+            {
+                width = parent.Bounds.Width;
+            }
+            else if (reveal.Bounds.Width > 0)
+            {
+                width = reveal.Bounds.Width;
+            }
 
-        reveal.Height = double.NaN;
-        reveal.Measure(new Size(width > 0 ? width : double.PositiveInfinity, double.PositiveInfinity));
-        return reveal.DesiredSize.Height;
+            reveal.Height = double.NaN;
+            reveal.Measure(new Size(width > 0 ? width : double.PositiveInfinity, double.PositiveInfinity));
+            return reveal.DesiredSize.Height;
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog(_tag, ex);
+            return 0;
+        }
     }
 
     #endregion Group expand/collapse reveal

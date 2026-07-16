@@ -103,10 +103,10 @@ public class PaymentHistoryViewModel : MyReactiveObject
         _loaded = true;
         Payments = MapRows(new List<PaymentDto>
         {
-            new() { Description = "Продление подписки", Amount = 199, Currency = "RUB", Status = "paid", CreatedAt = "2026-07-10T12:00:00Z" },
-            new() { Description = "Пополнение баланса", Amount = 300, Currency = "RUB", Status = "pending", CreatedAt = "2026-06-30T09:00:00Z" },
-            new() { Description = "Тариф Base", Amount = 216.5, Currency = "RUB", Status = "failed", CreatedAt = "2026-06-10T18:30:00Z" },
-            new() { Kind = "Тариф Base", Amount = 150, Currency = "RUB", Status = "canceled", CreatedAt = "2026-05-15T10:00:00Z" },
+            new() { Description = Common.L.T("History_SampleRenewal"), Amount = 199, Currency = "RUB", Status = "paid", CreatedAt = "2026-07-10T12:00:00Z" },
+            new() { Description = Common.L.T("History_SampleTopUp"), Amount = 300, Currency = "RUB", Status = "pending", CreatedAt = "2026-06-30T09:00:00Z" },
+            new() { Description = Common.L.T("History_SamplePlan"), Amount = 216.5, Currency = "RUB", Status = "failed", CreatedAt = "2026-06-10T18:30:00Z" },
+            new() { Kind = Common.L.T("History_SamplePlan"), Amount = 150, Currency = "RUB", Status = "canceled", CreatedAt = "2026-05-15T10:00:00Z" },
         });
         Recompute();
     }
@@ -167,10 +167,10 @@ public class PaymentHistoryViewModel : MyReactiveObject
     /// <summary>Network-ish failures get the network message; everything else the generic one. Port of messageFor.</summary>
     private static string MessageFor(ApiError error) => error switch
     {
-        ApiError.NetworkError => "Ошибка сети. Проверьте подключение",
-        ApiError.TimeoutError => "Ошибка сети. Проверьте подключение",
-        ApiError.ServiceUnavailable => "Ошибка сети. Проверьте подключение",
-        _ => "Не удалось загрузить историю платежей",
+        ApiError.NetworkError => Common.L.T("Common_NetworkError"),
+        ApiError.TimeoutError => Common.L.T("Common_NetworkError"),
+        ApiError.ServiceUnavailable => Common.L.T("Common_NetworkError"),
+        _ => Common.L.T("History_ErrLoad"),
     };
 
     #endregion derive display state
@@ -217,16 +217,16 @@ public class PaymentHistoryViewModel : MyReactiveObject
         status.Trim().ToLowerInvariant() switch
         {
             "paid" or "success" or "succeeded" or "completed" or "confirmed" =>
-                ("Оплачено", StatusKind.Paid),
+                (Common.L.T("History_StatusPaid"), StatusKind.Paid),
 
             "pending" or "processing" or "new" or "created" or "waiting" or "in_progress" =>
-                ("В обработке", StatusKind.Pending),
+                (Common.L.T("History_StatusProcessing"), StatusKind.Pending),
 
             "failed" or "error" or "declined" or "rejected" =>
-                ("Ошибка", StatusKind.Failed),
+                (Common.L.T("History_StatusFailed"), StatusKind.Failed),
 
             "canceled" or "cancelled" or "expired" =>
-                ("Отменён", StatusKind.Canceled),
+                (Common.L.T("History_StatusCanceled"), StatusKind.Canceled),
 
             _ => (status.Trim(), StatusKind.Neutral),
         };

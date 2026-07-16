@@ -5,6 +5,17 @@ public class Global
     #region const
 
     public const string AppName = "v2rayN";
+
+    /// <summary>
+    /// The ONE User-Agent every subscription fetch must send. The departament / Remnawave panel keys
+    /// its managed server list off a recognised v2rayNG-family client; any other UA (blank, the
+    /// desktop "v2rayN/&lt;version&gt;" branding UA, or a browser UA) is answered with the
+    /// «Приложение не поддерживается» ("app not supported") placeholder. This is the single source of
+    /// truth shared by BOTH the manual subscription-add path (SubscriptionHandler.ResolveSubUserAgent)
+    /// and the Telegram/account-linked path (SubscriptionSyncManager) so the two can never drift.
+    /// </summary>
+    public const string SubscriptionUserAgent = "v2rayNG/1.10.6";
+
     public const string GithubUrl = "https://github.com";
     public const string GithubApiUrl = "https://api.github.com/repos";
     public const string GeoUrl = "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/{0}.dat";

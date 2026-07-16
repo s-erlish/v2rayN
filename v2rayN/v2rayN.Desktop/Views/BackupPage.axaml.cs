@@ -40,15 +40,15 @@ public partial class BackupPage : UserControl, ISubPage
             fileName += ".zip";
         }
         _busy = true;
-        txtStatus.Text = "Сохранение…";
+        txtStatus.Text = L.T("Backup_Saving");
         try
         {
             var ok = await _vm.LocalBackup(fileName);
-            txtStatus.Text = ok ? $"Копия сохранена: {fileName}" : (_vm.OperationMsg.IsNotEmpty() ? _vm.OperationMsg : "Не удалось сохранить копию.");
+            txtStatus.Text = ok ? L.F("Backup_Saved", fileName) : (_vm.OperationMsg.IsNotEmpty() ? _vm.OperationMsg : L.T("Backup_SaveFailed"));
         }
         catch (Exception ex)
         {
-            txtStatus.Text = "Ошибка экспорта: " + ex.Message;
+            txtStatus.Text = L.T("Backup_ExportError") + ex.Message;
         }
         finally
         {
@@ -68,7 +68,7 @@ public partial class BackupPage : UserControl, ISubPage
             return;
         }
         _busy = true;
-        txtStatus.Text = "Восстановление… Приложение перезапустится.";
+        txtStatus.Text = L.T("Backup_Restoring");
         try
         {
             // LocalRestore validates the zip, makes a safety backup, then extracts and reboots the app.
@@ -81,7 +81,7 @@ public partial class BackupPage : UserControl, ISubPage
         }
         catch (Exception ex)
         {
-            txtStatus.Text = "Ошибка импорта: " + ex.Message;
+            txtStatus.Text = L.T("Backup_ImportError") + ex.Message;
         }
         finally
         {

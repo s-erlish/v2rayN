@@ -3,6 +3,7 @@
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:loc="clr-namespace:v2rayN.Desktop.Common"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     d:DesignHeight="680"
     d:DesignWidth="560"
@@ -339,7 +340,7 @@
                     MaxWidth="320"
                     HorizontalAlignment="Center"
                     Classes="Title"
-                    Text="Не подключено"
+                    Text="{loc:T Home_NotConnected}"
                     TextAlignment="Center"
                     TextTrimming="CharacterEllipsis">
                     <TextBlock.Transitions>
@@ -365,7 +366,7 @@
                     Classes="Caption"
                     Foreground="{DynamicResource Brush.OnSurfaceVariant}"
                     IsVisible="False"
-                    Text="Нажмите, чтобы повторить"
+                    Text="{loc:T Home_RetryHint}"
                     TextAlignment="Center"
                     TextTrimming="CharacterEllipsis" />
 
@@ -486,7 +487,7 @@
                 HorizontalAlignment="Right"
                 VerticalAlignment="Top"
                 Classes="IconButton40"
-                ToolTip.Tip="Добавить подписку">
+                ToolTip.Tip="{loc:T Common_AddSubscription}">
                 <PathIcon
                     Width="22"
                     Height="22"
@@ -494,8 +495,8 @@
                     Foreground="{DynamicResource Brush.OnSurface}" />
                 <Button.Flyout>
                     <MenuFlyout Placement="BottomEdgeAlignedRight">
-                        <MenuItem Click="OnCornerAddClipboard" Header="Добавить из буфера обмена" />
-                        <MenuItem Click="OnCornerAddQr" Header="Добавить по QR-коду" />
+                        <MenuItem Click="OnCornerAddClipboard" Header="{loc:T Common_AddFromClipboard}" />
+                        <MenuItem Click="OnCornerAddQr" Header="{loc:T Common_AddViaQr}" />
                     </MenuFlyout>
                 </Button.Flyout>
             </Button>
@@ -515,19 +516,19 @@
                 Margin="0,0,0,12"
                 HorizontalAlignment="Center"
                 Classes="Headline"
-                Text="Приветствуем!"
+                Text="{loc:T Home_Welcome}"
                 TextAlignment="Center" />
             <Border Classes="Card">
                 <StackPanel>
                     <TextBlock
                         HorizontalAlignment="Center"
                         Classes="Title"
-                        Text="Пока нет подписок" />
+                        Text="{loc:T Home_NoSubs}" />
                     <TextBlock
                         Margin="0,8,0,0"
                         HorizontalAlignment="Center"
                         Classes="Subtitle"
-                        Text="Добавьте подписку, чтобы начать пользоваться"
+                        Text="{loc:T Home_NoSubsHint}"
                         TextAlignment="Center"
                         TextWrapping="Wrap" />
                     <Button
@@ -550,7 +551,7 @@
                             <TextBlock
                                 VerticalAlignment="Center"
                                 Foreground="{DynamicResource Brush.OnAccent}"
-                                Text="Добавить по QR-коду" />
+                                Text="{loc:T Common_AddViaQr}" />
                         </StackPanel>
                     </Button>
                     <Button
@@ -569,7 +570,7 @@
                             <TextBlock
                                 VerticalAlignment="Center"
                                 Foreground="{DynamicResource Brush.OnSurface}"
-                                Text="Добавить из буфера обмена" />
+                                Text="{loc:T Common_AddFromClipboard}" />
                         </StackPanel>
                     </Button>
                 </StackPanel>

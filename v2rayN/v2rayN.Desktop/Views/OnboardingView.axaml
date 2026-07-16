@@ -4,6 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:dd="clr-namespace:v2rayN.Desktop.DesignData"
+    xmlns:loc="clr-namespace:v2rayN.Desktop.Common"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:vms="clr-namespace:v2rayN.Desktop.ViewModels"
     d:DesignHeight="720"
@@ -36,7 +37,7 @@
             <TextBlock
                 HorizontalAlignment="Center"
                 Classes="Headline"
-                Text="Приветствуем!"
+                Text="{loc:T Home_Welcome}"
                 TextAlignment="Center" />
 
             <!--  Подзаголовок (home_empty_subtitle).  -->
@@ -44,7 +45,7 @@
                 Margin="0,8,0,0"
                 HorizontalAlignment="Center"
                 Classes="Subtitle"
-                Text="Добавьте подписку, чтобы начать пользоваться"
+                Text="{loc:T Home_NoSubsHint}"
                 TextAlignment="Center"
                 TextWrapping="Wrap" />
 
@@ -70,7 +71,7 @@
                     <TextBlock
                         VerticalAlignment="Center"
                         Foreground="{DynamicResource Brush.OnAccent}"
-                        Text="Добавить по QR-коду" />
+                        Text="{loc:T Common_AddViaQr}" />
                 </StackPanel>
             </Button>
 
@@ -96,7 +97,7 @@
                     <TextBlock
                         VerticalAlignment="Center"
                         Foreground="{DynamicResource Brush.OnSurface}"
-                        Text="Добавить из буфера обмена" />
+                        Text="{loc:T Common_AddFromClipboard}" />
                 </StackPanel>
             </Button>
 
@@ -105,7 +106,7 @@
                 Margin="0,16,0,0"
                 HorizontalAlignment="Center"
                 Classes="Caption"
-                Text="Или войдите в свой аккаунт"
+                Text="{loc:T Onboarding_OrSignIn}"
                 TextAlignment="Center" />
 
             <!--  Войти через Telegram (auth_sign_in_telegram) — глиф ic_telegram_24dp.  -->
@@ -130,7 +131,7 @@
                     <TextBlock
                         VerticalAlignment="Center"
                         Foreground="{DynamicResource Brush.OnSurface}"
-                        Text="Войти через Telegram" />
+                        Text="{loc:T Common_SignInTelegram}" />
                 </StackPanel>
             </Button>
 
@@ -156,7 +157,7 @@
                     <TextBlock
                         VerticalAlignment="Center"
                         Foreground="{DynamicResource Brush.Accent}"
-                        Text="Войти через сайт" />
+                        Text="{loc:T Common_SignInWebsite}" />
                 </StackPanel>
             </Button>
             </StackPanel>

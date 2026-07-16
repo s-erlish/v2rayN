@@ -23,13 +23,13 @@ public partial class UrlSchemesPage : UserControl, ISubPage
 
         listSchemes.ItemsSource = new List<SchemeRow>
         {
-            new("depv://connect", "Запустить туннель"),
-            new("depv://open", "Открыть приложение"),
-            new("depv://disconnect", "Остановить соединение"),
-            new("depv://close", "Остановить соединение"),
-            new("depv://toggle", "Переключить соединение"),
-            new("depv://import/{base64}", "Импорт (автоопределение типа)"),
-            new("depv://add/{url}", "Добавить по URL"),
+            new("depv://connect", L.T("UrlSchemes_StartTunnel")),
+            new("depv://open", L.T("UrlSchemes_OpenApp")),
+            new("depv://disconnect", L.T("UrlSchemes_Stop")),
+            new("depv://close", L.T("UrlSchemes_Stop")),
+            new("depv://toggle", L.T("UrlSchemes_Toggle")),
+            new("depv://import/{base64}", L.T("UrlSchemes_Import")),
+            new("depv://add/{url}", L.T("UrlSchemes_AddByUrl")),
         };
 
         btnBack.Click += (_, _) => BackRequested?.Invoke(this, EventArgs.Empty);
@@ -56,14 +56,14 @@ public partial class UrlSchemesPage : UserControl, ISubPage
     {
         if (!Utils.IsWindows())
         {
-            txtStatus.Text = "Регистрация схемы доступна только на Windows.";
+            txtStatus.Text = L.T("UrlSchemes_WindowsOnly");
             btnRegister.IsEnabled = false;
             btnUnregister.IsEnabled = false;
             return;
         }
         txtStatus.Text = IsRegistered()
-            ? "Схема зарегистрирована — ссылки depv:// открывают departament."
-            : "Схема не зарегистрирована.";
+            ? L.T("UrlSchemes_Registered")
+            : L.T("UrlSchemes_NotRegistered");
     }
 
     private static bool IsRegistered()
@@ -91,7 +91,7 @@ public partial class UrlSchemesPage : UserControl, ISubPage
             var exe = Environment.ProcessPath;
             if (exe.IsNullOrEmpty())
             {
-                txtStatus.Text = "Не удалось определить путь к программе.";
+                txtStatus.Text = L.T("UrlSchemes_NoPath");
                 return;
             }
             using var root = Registry.CurrentUser.CreateSubKey($@"Software\Classes\{Scheme}");
@@ -105,11 +105,11 @@ public partial class UrlSchemesPage : UserControl, ISubPage
             {
                 cmd.SetValue(null, $"\"{exe}\" \"%1\"");
             }
-            txtStatus.Text = "Схема зарегистрирована — ссылки depv:// открывают departament.";
+            txtStatus.Text = L.T("UrlSchemes_Registered");
         }
         catch (Exception ex)
         {
-            txtStatus.Text = "Не удалось зарегистрировать: " + ex.Message;
+            txtStatus.Text = L.T("UrlSchemes_RegisterFailed") + ex.Message;
         }
         RefreshStatusButtons();
     }
@@ -123,11 +123,11 @@ public partial class UrlSchemesPage : UserControl, ISubPage
         try
         {
             Registry.CurrentUser.DeleteSubKeyTree($@"Software\Classes\{Scheme}", throwOnMissingSubKey: false);
-            txtStatus.Text = "Схема удалена.";
+            txtStatus.Text = L.T("UrlSchemes_RemovedOk");
         }
         catch (Exception ex)
         {
-            txtStatus.Text = "Не удалось удалить: " + ex.Message;
+            txtStatus.Text = L.T("UrlSchemes_RemoveFailed") + ex.Message;
         }
         RefreshStatusButtons();
     }

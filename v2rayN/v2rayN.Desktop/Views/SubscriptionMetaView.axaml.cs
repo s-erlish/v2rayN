@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using Avalonia.Animation;
 using Avalonia.Animation.Easings;
 using Avalonia.Controls.Documents;
+using Avalonia.Layout;
 using ServiceLib.Helper;
 using v2rayN.Desktop.Common;
 using v2rayN.Desktop.ViewModels;
@@ -33,11 +34,24 @@ public partial class SubscriptionMetaView : UserControl
     //  Ширина трек-пилюли = @dimen Size.TrafficPill (160): заливка = 160 * used/total.
     private const double TrafficPillWidth = 160d;
 
+    //  Порог одной строки для трафик-ряда: ниже этой ширины пилюля-по-центру и правая дата
+    //  (обе фиксированной ширины) начали бы налезать при ~372 — поэтому дату уводим на свою
+    //  строку под пилюлю. Держим запас: центрированные 160 + правая дата требуют ~380–400.
+    private const double TrafficOneRowMinWidth = 400d;
+    private bool _trafficOneRow = true;
+
+    //  Живая ширина вида → раскладка трафик-ряда (одна строка ↔ две). Живёт, пока во дереве.
+    private IDisposable? _boundsSub;
+
     private HomeServerGroup? _group;
     private string _supportUrl = string.Empty;
     private string _webPageUrl = string.Empty;
     private string _currentSubId = string.Empty;
     private bool _refreshing;
+
+    //  Last subscription projected onto the meta-bar. Kept so a live language switch can re-render the
+    //  imperative fields (expiry / subtitle / traffic units) without re-fetching from the engine.
+    private SubItem? _boundSub;
 
     //  «Облегчённый режим» (reduced-motion): LiteMode ∨ система просит меньше анимаций (Win32 SPI).
     //  Пока true — переходы шеврона/пина СНЯТЫ (угол и цвет прыгают мгновенно). Единственный источник —
@@ -88,13 +102,79 @@ public partial class SubscriptionMetaView : UserControl
     private void OnMetaAttached(object? sender, VisualTreeAttachmentEventArgs e)
     {
         MotionState.Changed += OnMotionStateChanged;
+        //  Live language switch re-renders the imperative fields (expiry / subtitle / traffic) in place.
+        L.Instance.LanguageChanged += OnLanguageChanged;
+        //  Reactive theme: rebuild the traffic-fill gradient from the live accent when the theme
+        //  variant flips (dark ↔ light), so «бело→синий» becomes the correct per-theme перелив.
+        ActualThemeVariantChanged += OnThemeVariantChanged;
+        //  Reactive width: the traffic row switches one-line ↔ stacked so the pill and expiry
+        //  never collide in compact (~372) yet stay on one line when there is room.
+        _boundsSub = this.GetObservable(BoundsProperty).Subscribe(b => ApplyTrafficLayout(b.Width));
         ApplyMotionMode();
     }
 
     private void OnMetaDetached(object? sender, VisualTreeAttachmentEventArgs e)
     {
         MotionState.Changed -= OnMotionStateChanged;
+        L.Instance.LanguageChanged -= OnLanguageChanged;
+        ActualThemeVariantChanged -= OnThemeVariantChanged;
+        _boundsSub?.Dispose();
+        _boundsSub = null;
         Unhook();
+    }
+
+    //  Тема сменилась → пересобрать градиент заливки из НОВОГО Brush.Accent (тёмная/светлая/mono).
+    private void OnThemeVariantChanged(object? sender, EventArgs e)
+    {
+        if (_boundSub is not null)
+        {
+            TrafficFill.Background = BuildTrafficBrush();
+        }
+    }
+
+    //  Раскладка трафик-ряда по фактической ширине: широкий → дата на строке пилюли справа;
+    //  компакт → дата на своей строке по центру под пилюлей. Место зарезервировано сеткой
+    //  (RowDefinitions Auto,Auto), поэтому переключение не двигает соседей рывком.
+    private void ApplyTrafficLayout(double width)
+    {
+        if (width <= 0)
+        {
+            return;
+        }
+
+        var oneRow = width >= TrafficOneRowMinWidth;
+        if (oneRow == _trafficOneRow && ExpiryText.IsInitialized)
+        {
+            return;
+        }
+        _trafficOneRow = oneRow;
+
+        if (oneRow)
+        {
+            Grid.SetRow(ExpiryText, 0);
+            ExpiryText.HorizontalAlignment = HorizontalAlignment.Right;
+            ExpiryText.VerticalAlignment = VerticalAlignment.Center;
+            ExpiryText.TextAlignment = TextAlignment.Right;
+            ExpiryText.Margin = new Thickness(0);
+        }
+        else
+        {
+            Grid.SetRow(ExpiryText, 1);
+            ExpiryText.HorizontalAlignment = HorizontalAlignment.Center;
+            ExpiryText.VerticalAlignment = VerticalAlignment.Center;
+            ExpiryText.TextAlignment = TextAlignment.Center;
+            //  4dp по единой шкале между пилюлей и датой в компактном стеке.
+            ExpiryText.Margin = new Thickness(0, 4, 0, 0);
+        }
+    }
+
+    //  Re-project the current subscription so the localized imperative fields follow the new language.
+    private void OnLanguageChanged(object? sender, EventArgs e)
+    {
+        if (_boundSub is not null)
+        {
+            BindSub(_boundSub);
+        }
     }
 
     private void OnMotionStateChanged(object? sender, bool lite) => ApplyMotionMode();
@@ -186,6 +266,7 @@ public partial class SubscriptionMetaView : UserControl
 
         // Header baseline from the group itself (always available, even for a manual no-sub group).
         _currentSubId = string.Empty;
+        _boundSub = null;
         TitleText.Text = _group.Name;
         SubtitleText.Text = string.Empty;
         SubtitleText.IsVisible = false;
@@ -252,6 +333,7 @@ public partial class SubscriptionMetaView : UserControl
             return;
         }
         _currentSubId = sub.Id;
+        _boundSub = sub;
 
         // Title: profile-title -> remarks -> group name (never fabricated).
         var title = sub.ProfileTitle.IsNotEmpty() ? sub.ProfileTitle : (sub.Remarks ?? string.Empty);
@@ -274,12 +356,14 @@ public partial class SubscriptionMetaView : UserControl
         var total = sub.TotalTraffic;
         var unlimited = total <= 0;
         TrafficText.Text = unlimited
-            ? $"{FormatBytesRu(used)} / ∞"
-            : $"{FormatBytesRu(used)} / {FormatBytesRu(total)}";
+            ? $"{FormatBytes(used)} / ∞"
+            : $"{FormatBytes(used)} / {FormatBytes(total)}";
         // Fill width = 160 * used/total; unlimited => empty track (0), like the reference.
         TrafficFill.Width = unlimited ? 0d : TrafficPillWidth * Math.Clamp((double)used / total, 0d, 1d);
+        // Polished light→accent gradient fill (per-theme, mono-safe) — built from the live accent.
+        TrafficFill.Background = BuildTrafficBrush();
 
-        // Expiry: "∞" / "до dd.MM.yyyy" / "Просрочено" (red).
+        // Expiry: "∞" / "до dd.MM.yyyy" / "Просрочено" (red) — localized.
         ApplyExpiry(sub.Expire);
 
         // Announce banner (collapse when the provider sent none).
@@ -310,14 +394,59 @@ public partial class SubscriptionMetaView : UserControl
         // `expire` is epoch SECONDS (Remnawave/Happ), matching the header semantics.
         if (expire < DateTimeOffset.Now.ToUnixTimeSeconds())
         {
-            ExpiryText.Text = "Просрочено";
+            ExpiryText.Text = L.T("Sub_Expired");
             ExpiryText.Foreground = _red;
             return;
         }
 
         var date = DateTimeOffset.FromUnixTimeSeconds(expire).LocalDateTime;
-        ExpiryText.Text = $"до {date:dd.MM.yyyy}";
+        ExpiryText.Text = L.F("Sub_Until", date);
         ExpiryText.Foreground = _muted;
+    }
+
+    // ── Трафик-заливка: полированный градиент светлое→акцент, тема-зависимый ──────────────
+    //  Владелец: заливка пилюли должна переливаться «бело→синий». Делаем это на-бренд и
+    //  безопасно во всех 3 темах: конечная точка = ЖИВОЙ Brush.Accent (mono подменяет его на
+    //  серо-белый ⇒ синева уходит сама), стартовая = тот же акцент, осветлённый к белому.
+    //  На светлой теме трек бледный, поэтому near-white старт «растворился бы» — уводим старт
+    //  ближе к акценту (толькочастичное осветление); на тёмной уводим почти в белый. Трек
+    //  (незаполненное) остаётся тихой поверхностью SurfaceVariant из стиля Border.TrafficPill.
+    private IBrush BuildTrafficBrush()
+    {
+        var accent = (ResolveBrush("Brush.Accent", _accent) as ISolidColorBrush)?.Color ?? Color.Parse("#4C8DFF");
+        var toWhite = ActualThemeVariant == ThemeVariant.Light ? 0.45 : 0.82;
+        var start = Blend(accent, Colors.White, toWhite);
+        return new LinearGradientBrush
+        {
+            StartPoint = new RelativePoint(0d, 0.5d, RelativeUnit.Relative),
+            EndPoint = new RelativePoint(1d, 0.5d, RelativeUnit.Relative),
+            GradientStops =
+            {
+                new GradientStop(start, 0d),
+                new GradientStop(accent, 1d),
+            },
+        };
+    }
+
+    //  Линейное смешение цветов по каналам (t: 0 = a, 1 = b). Альфа держим непрозрачной.
+    private static Color Blend(Color a, Color b, double t)
+    {
+        byte Mix(byte x, byte y) => (byte)Math.Round(x + (y - x) * t);
+        return Color.FromArgb(0xFF, Mix(a.R, b.R), Mix(a.G, b.G), Mix(a.B, b.B));
+    }
+
+    //  Кисть текущей темы (подхватывает светлую И mono-оверлей), с тихим Incy-фолбэком —
+    //  зеркалит ConnectHeroView.ResolveBrush, чтобы заливка не падала из-за отсутствия ключа.
+    private IBrush ResolveBrush(string key, IBrush fallback)
+    {
+        try
+        {
+            return this.TryFindResource(key, ActualThemeVariant, out var v) && v is IBrush b ? b : fallback;
+        }
+        catch
+        {
+            return fallback;
+        }
     }
 
     private static string FormatSubtitle(SubItem sub)
@@ -330,43 +459,45 @@ public partial class SubscriptionMetaView : UserControl
         }
         if (sub.AutoUpdateInterval > 0)
         {
-            parts.Add($"Автообновление — {FormatInterval(sub.AutoUpdateInterval)}");
+            parts.Add(L.F("Sub_AutoUpdate", FormatInterval(sub.AutoUpdateInterval)));
         }
         return string.Join(" · ", parts);
     }
 
     private static string FormatInterval(int minutes)
     {
-        return minutes % 60 == 0 ? $"{minutes / 60} ч." : $"{minutes} мин.";
+        return minutes % 60 == 0 ? L.F("Common_HoursShort", minutes / 60) : L.F("Common_MinutesShort", minutes);
     }
 
-    //  RU byte formatter to match the reference pill «1,7 ТБ / ∞» (comma decimal + Cyrillic units),
-    //  since Utils.HumanFy is EN-invariant («1.7 TB»). Base 1024; 1 decimal from КБ up, trimmed.
-    private static readonly string[] _ruUnits = { "Б", "КБ", "МБ", "ГБ", "ТБ", "ПБ" };
-
-    private static string FormatBytesRu(long bytes)
+    //  Localized byte formatter to match the reference pill («1,7 ТБ / ∞» in RU, «1.7 TB» in EN):
+    //  the unit ladder + zero label come from the L table (Common_ByteUnits / Common_ZeroBytes), and the
+    //  decimal separator follows the current language (comma in RU, dot in EN). Base 1024; 1 decimal from
+    //  KB up, trimmed. Utils.HumanFy is EN-invariant, hence this local formatter.
+    private static string FormatBytes(long bytes)
     {
         if (bytes <= 0)
         {
-            return "0 Б";
+            return L.T("Common_ZeroBytes");
         }
 
+        var units = L.T("Common_ByteUnits").Split(',');
         double value = bytes;
         var unit = 0;
-        while (value >= 1024 && unit < _ruUnits.Length - 1)
+        while (value >= 1024 && unit < units.Length - 1)
         {
             value /= 1024;
             unit++;
         }
 
-        var ru = CultureInfo.GetCultureInfo("ru-RU");
+        var culture = CultureInfo.GetCultureInfo(L.Instance.CurrentLang == "en" ? "en-US" : "ru-RU");
         var digits = unit == 0 ? 0 : 1;
-        var text = value.ToString("N" + digits, ru);
-        if (digits == 1 && text.EndsWith(",0", StringComparison.Ordinal))
+        var text = value.ToString("N" + digits, culture);
+        var trailingZero = culture.NumberFormat.NumberDecimalSeparator + "0";
+        if (digits == 1 && text.EndsWith(trailingZero, StringComparison.Ordinal))
         {
-            text = text[..^2];
+            text = text[..^trailingZero.Length];
         }
-        return $"{text} {_ruUnits[unit]}";
+        return $"{text} {units[unit]}";
     }
 
     // ── Engine access (shared VM reached through the host window) ─────────────
@@ -506,7 +637,7 @@ public partial class SubscriptionMetaView : UserControl
         }
 
         // Confirm in the interface's voice («Удалить подписку?»), same yes/no affordance as row-delete.
-        if (await UI.ShowYesNo("Удалить подписку?") != ButtonResult.Yes)
+        if (await UI.ShowYesNo(L.T("Sub_DeleteConfirm")) != ButtonResult.Yes)
         {
             return;
         }
@@ -540,9 +671,11 @@ public partial class SubscriptionMetaView : UserControl
         SubtitleText.Text = "10.07.2026 17:17 · Автообновление — 1 ч.";
         SubtitleText.IsVisible = true;
         MetaBody.IsVisible = true;
-        TrafficText.Text = "1,7 ТБ / ∞";
-        TrafficFill.Width = 0;
-        ExpiryText.Text = "∞";
+        //  Ограниченный образец, чтобы превьюер показал сам градиент-заливку и не-налезающую дату.
+        TrafficText.Text = "1,7 ТБ / 3 ТБ";
+        TrafficFill.Width = TrafficPillWidth * 0.57d;
+        TrafficFill.Background = BuildTrafficBrush();
+        ExpiryText.Text = "до 24.07.2026";
         ExpiryText.Foreground = _muted;
         AnnounceText.Text = "Без рекламы на YouTube: Hybrid, Russia\nЕсли не работает, обновите подписку\n@departamentvpn";
         AnnounceText.IsVisible = true;

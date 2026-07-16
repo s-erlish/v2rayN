@@ -1,6 +1,7 @@
 using System.Reactive.Disposables;
 using System.Text.RegularExpressions;
 using v2rayN.Desktop.Account;
+using v2rayN.Desktop.Common;
 using v2rayN.Desktop.ViewModels;
 
 namespace v2rayN.Desktop.Views;
@@ -39,9 +40,10 @@ public partial class LoginView : UserControl
     // Блок 2FA видим (TwoFaTempToken != null) — спиннер занятости идёт на «Подтвердить».
     private bool _twoFaVisible;
 
-    // Текст ошибки ИМЕННО логин-потока (LoginState.Error → auth_err_*); имеет приоритет
-    // над общим AccountViewModel.ErrorText в строке под картами.
-    private string _loginError = string.Empty;
+    // Ключ ошибки ИМЕННО логин-потока (LoginState.Error → auth_err_*); имеет приоритет
+    // над общим AccountViewModel.ErrorText в строке под картами. Храним КЛЮЧ (не текст),
+    // чтобы строка переводилась вживую при смене языка.
+    private string _loginErrorKey = string.Empty;
 
     private bool _revealPassword;
 
@@ -134,6 +136,32 @@ public partial class LoginView : UserControl
             .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ => BackRequested?.Invoke(this, EventArgs.Empty))
             .DisposeWith(d);
+
+        // Живой перевод императивных строк (строка ошибки логин-потока + подсказка глаза-пароля):
+        // XAML-подписи обновляются сами через {loc:T}, эти два — по событию смены языка.
+        void OnLanguageChanged(object? s, EventArgs e) => RunOnUiLang(ApplyLanguage);
+        L.Instance.LanguageChanged += OnLanguageChanged;
+        Disposable.Create(() => L.Instance.LanguageChanged -= OnLanguageChanged).DisposeWith(d);
+    }
+
+    /// <summary>Диспетчеризует на UI-поток (событие языка может прийти не из UI).</summary>
+    private static void RunOnUiLang(Action action)
+    {
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            action();
+        }
+        else
+        {
+            Dispatcher.UIThread.Post(action);
+        }
+    }
+
+    /// <summary>Пере-применяет императивные строки под текущий язык.</summary>
+    private void ApplyLanguage()
+    {
+        UpdateErrorLine();
+        ToolTip.SetTip(TogglePasswordButton, L.T(_revealPassword ? "Login_HidePassword" : "Login_ShowPassword"));
     }
 
     private void Unbind()
@@ -170,7 +198,7 @@ public partial class LoginView : UserControl
             case LoginState.Error error:
                 SetAwaiting(false);
                 SetSiteBusy(false);
-                SetLoginError(MessageFor(error.ErrorValue));
+                SetLoginError(MessageKeyFor(error.ErrorValue));
                 break;
 
             default: // Idle. Ошибку НЕ трогаем: Idle приходит и сразу после показа
@@ -291,30 +319,31 @@ public partial class LoginView : UserControl
 
     // ── Строка ошибки (tv_error) ────────────────────────────────────────────
 
-    private void SetLoginError(string message)
+    private void SetLoginError(string messageKey)
     {
-        _loginError = message;
+        _loginErrorKey = messageKey;
         UpdateErrorLine();
     }
 
-    /// <summary>Ошибка логин-потока приоритетнее общего ErrorText VM; пусто — строка скрыта.</summary>
+    /// <summary>Ошибка логин-потока приоритетнее общего ErrorText VM; пусто — строка скрыта.
+    /// Ключ разрешается в текущий язык при каждом вызове (переводится вживую).</summary>
     private void UpdateErrorLine()
     {
-        var text = _loginError.IsNotEmpty() ? _loginError : (_vm?.ErrorText ?? string.Empty);
+        var text = _loginErrorKey.IsNotEmpty() ? L.T(_loginErrorKey) : (_vm?.ErrorText ?? string.Empty);
         ErrorLine.Text = text;
         ErrorLine.IsVisible = text.IsNotEmpty();
     }
 
-    /// <summary>RU-строки отказа 1:1 из strings_auth.xml (порт LoginActivity.messageFor).</summary>
-    private static string MessageFor(ApiError error) => error switch
+    /// <summary>Ключ строки отказа (порт LoginActivity.messageFor); текст берёт локализация.</summary>
+    private static string MessageKeyFor(ApiError error) => error switch
     {
         // 401/403 на входе через сайт — почти всегда неверные учётные данные.
-        ApiError.Unauthorized => "Неверный email или пароль",
-        ApiError.GoneError => "Ссылка устарела, начните заново",
-        ApiError.ServiceUnavailable => "Сервис временно недоступен",
-        ApiError.NetworkError or ApiError.TimeoutError => "Ошибка сети. Проверьте подключение",
-        ApiError.NotConfiguredError => "Вход недоступен",
-        _ => "Что-то пошло не так, попробуйте снова",
+        ApiError.Unauthorized => "Login_ErrBadCreds",
+        ApiError.GoneError => "Login_ErrLinkExpired",
+        ApiError.ServiceUnavailable => "Common_ServiceUnavailable",
+        ApiError.NetworkError or ApiError.TimeoutError => "Common_NetworkError",
+        ApiError.NotConfiguredError => "Login_ErrUnavailable",
+        _ => "Login_ErrRetry",
     };
 
     // ── Действия ────────────────────────────────────────────────────────────
@@ -353,7 +382,7 @@ public partial class LoginView : UserControl
         PasswordBox.RevealPassword = _revealPassword;
         EyeOnIcon.IsVisible = !_revealPassword;
         EyeOffIcon.IsVisible = _revealPassword;
-        ToolTip.SetTip(TogglePasswordButton, _revealPassword ? "Скрыть пароль" : "Показать пароль");
+        ToolTip.SetTip(TogglePasswordButton, L.T(_revealPassword ? "Login_HidePassword" : "Login_ShowPassword"));
     }
 
     // ── Клавиатура ──────────────────────────────────────────────────────────

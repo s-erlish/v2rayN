@@ -4,6 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:dd="clr-namespace:v2rayN.Desktop.DesignData"
+    xmlns:loc="clr-namespace:v2rayN.Desktop.Common"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:views="clr-namespace:v2rayN.Desktop.Views"
     xmlns:vms="clr-namespace:v2rayN.Desktop.ViewModels"
@@ -31,10 +32,13 @@
           в своей Auto-строке, см. MainWindow.ApplyLayoutMode), поэтому ScrollViewer физически
           ограничен полосой над баром и НИЧЕГО не прячется под ним. Нижний padding — лишь маленький
           зазор, чтобы последняя строка не липла к бару (не «костыль 130» под высоту нав-бара).  -->
+    <!--  Нижний padding — лишь маленький зазор для пустого/короткого состояния: клиренс под ~64px нижнюю
+          навигацию несёт сам ServerListView (его ScrollViewer, 72px снизу — последний элемент страницы),
+          поэтому здесь НЕ дублируем большой инсет (иначе хвост списка «висел» бы в воздухе).  -->
     <ScrollViewer
         x:Name="PageScroll"
         HorizontalScrollBarVisibility="Disabled"
-        Padding="0,8,0,16"
+        Padding="0,8,0,8"
         VerticalScrollBarVisibility="Auto">
         <StackPanel>
 
@@ -64,13 +68,13 @@
                     <TextBlock
                         Classes="Body"
                         Foreground="{DynamicResource Brush.OnSurfaceVariant}"
-                        Text="Режим «весь трафик» недоступен без прав администратора"
+                        Text="{loc:T Home_TunUnavailable}"
                         TextWrapping="Wrap" />
                     <Button
                         HorizontalAlignment="Left"
                         Classes="OutlinedAccent"
                         Command="{Binding StatusBar.RequestTunElevationCmd}"
-                        Content="Перезапустить с правами" />
+                        Content="{loc:T Home_RestartElevated}" />
                 </StackPanel>
             </Border>
 

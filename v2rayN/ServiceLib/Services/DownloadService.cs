@@ -207,7 +207,9 @@ public class DownloadService
             {
                 Proxy = webProxy,
                 UseProxy = webProxy != null,
-                ConnectTimeout = TimeSpan.FromSeconds(connectTimeout)
+                ConnectTimeout = TimeSpan.FromSeconds(connectTimeout),
+                // Advertise + transparently decode gzip/deflate/br like a real v2rayNG (OkHttp) client.
+                AutomaticDecompression = DecompressionMethods.All
             };
             var certificateChainPolicy = CertPemManager.Instance.BuildCertificateChainPolicy();
             if (certificateChainPolicy != null)
@@ -225,7 +227,9 @@ public class DownloadService
             {
                 userAgent = Utils.GetVersion(false);
             }
-            client.DefaultRequestHeaders.UserAgent.TryParseAdd(userAgent);
+            // Attach the UA raw/unvalidated so the exact literal is transmitted verbatim.
+            client.DefaultRequestHeaders.UserAgent.Clear();
+            client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", userAgent);
 
             Uri uri = new(url);
             //Authorization Header
@@ -267,7 +271,11 @@ public class DownloadService
             {
                 Proxy = webProxy,
                 UseProxy = webProxy != null,
-                ConnectTimeout = TimeSpan.FromSeconds(connectTimeout)
+                ConnectTimeout = TimeSpan.FromSeconds(connectTimeout),
+                // Advertise + transparently decode gzip/deflate/br, exactly like a real v2rayNG
+                // (OkHttp) client. Without this the request sends no Accept-Encoding, which a
+                // format-negotiating panel/WAF can treat as "not a real app client".
+                AutomaticDecompression = DecompressionMethods.All
             };
             var certificateChainPolicy = CertPemManager.Instance.BuildCertificateChainPolicy();
             if (certificateChainPolicy != null)
@@ -285,7 +293,11 @@ public class DownloadService
             {
                 userAgent = Utils.GetVersion(false);
             }
-            client.DefaultRequestHeaders.UserAgent.TryParseAdd(userAgent);
+            // Set the UA the same way the account API path attaches it (raw, unvalidated) so the exact
+            // literal — e.g. "v2rayNG/1.10.6" — is transmitted verbatim with no strongly-typed parsing
+            // in between. Clear first so nothing a prior line added can survive.
+            client.DefaultRequestHeaders.UserAgent.Clear();
+            client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", userAgent);
 
             Uri uri = new(url);
             //Authorization Header
@@ -293,6 +305,11 @@ public class DownloadService
             {
                 client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", Utils.Base64Encode(uri.UserInfo));
             }
+
+            // Concise, verifiable trace of what actually goes out on the subscription GET (this
+            // WithHeaders path is used ONLY by SubscriptionHandler). Confirms the manual and the
+            // account fetch send the identical User-Agent; no secrets (host only, never the token/path).
+            Logging.SaveLog($"{_tag} subscription GET UA=[{userAgent}] host={uri.Host}");
 
             using var cts = new CancellationTokenSource();
             cts.CancelAfter(TimeSpan.FromSeconds(timeout));

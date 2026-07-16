@@ -61,30 +61,14 @@ public static class ProfileDisplay
         };
     }
 
-    // ── Russian pluralization ───────────────────────────────────────────────
-    // Correct RU grammar: 1 сервер / 2 сервера / 5 серверов (teens → «-ов»).
+    // ── Count lines ─────────────────────────────────────────────────────────
+    // Locale-aware plural via the L table (RU {one, few, many}: 1 сервер / 2 сервера /
+    // 5 серверов; EN {one, other}: 1 server / 5 servers). Forms live in L.Common.cs and
+    // switch live with the UI language — the old RU-only PluralRu helper is gone.
 
-    /// <summary>«N серверов» with the correct plural form for N.</summary>
-    public static string Servers(int n) => $"{n} {PluralRu(n, "сервер", "сервера", "серверов")}";
+    /// <summary>"N servers" / «N серверов» in the current UI language.</summary>
+    public static string Servers(int n) => L.Plural("Common_ServersPlural", n);
 
-    /// <summary>«N провайдеров» with the correct plural form for N.</summary>
-    public static string Providers(int n) => $"{n} {PluralRu(n, "провайдер", "провайдера", "провайдеров")}";
-
-    /// <summary>Russian plural selector: <paramref name="one"/> (1), <paramref name="few"/> (2-4),
-    /// <paramref name="many"/> (0, 5-20, teens).</summary>
-    public static string PluralRu(int n, string one, string few, string many)
-    {
-        var abs = Math.Abs(n);
-        var mod100 = abs % 100;
-        if (mod100 is >= 11 and <= 14)
-        {
-            return many;
-        }
-        return (abs % 10) switch
-        {
-            1 => one,
-            2 or 3 or 4 => few,
-            _ => many,
-        };
-    }
+    /// <summary>"N providers" / «N провайдеров» in the current UI language.</summary>
+    public static string Providers(int n) => L.Plural("Common_ProvidersPlural", n);
 }

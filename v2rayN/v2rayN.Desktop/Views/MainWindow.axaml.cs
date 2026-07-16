@@ -1,6 +1,7 @@
 using System.Reactive.Disposables;
 using Avalonia.Animation;
 using Avalonia.Animation.Easings;
+using Avalonia.VisualTree;
 using v2rayN.Desktop.Base;
 using v2rayN.Desktop.Common;
 using v2rayN.Desktop.Manager;
@@ -48,6 +49,7 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     private AppTab _currentTab = AppTab.Home;   // ОДНО состояние вкладки на обе раскладки
     private bool _isEmpty = true;
     private bool _isSyncing;                     // E3: идёт пост-логин импорт → оверлей синхронизации
+    private bool _isStartupLoading;              // Bug4: холодный старт с сохранённой сессией → оверлей загрузки (НЕ гейт входа)
     private bool _layoutInitialized;             // C6: первый ApplyLayoutMode без кроссфейда морфинга
 
     // ОДИН экземпляр AccountViewModel на всё приложение: делится между вкладкой «Аккаунт»
@@ -69,8 +71,8 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     // Токены отмены незавершённой анимации на каждый анимируемый узел (перезапуск отменяет предыдущую).
     private CancellationTokenSource? _subPageAnim;
     private CancellationTokenSource? _shellAnim;
-    private CancellationTokenSource? _snackAnim;
     private CancellationTokenSource? _layoutAnim;
+    private CancellationTokenSource? _resizeAnim;   // Bug6: плавная анимация размера окна при тумблере раскладки
     private Control? _currentShellView;          // текущий видимый оверлей оболочки (для кроссфейда)
 
     public MainWindow()
@@ -115,11 +117,27 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
 
         // Двойной клик по навигации (рейл в широкой / нижний бар в компактной) тумблит окно через
         // брейкпоинт: компакт⇄широкая. handledEventsToo — ловим даже если кнопка «съела» тап.
-        railHost.AddHandler(InputElement.DoubleTappedEvent, (_, _) => ToggleLayoutSize(), RoutingStrategies.Bubble, handledEventsToo: true);
+        // Bug3: но двойной клик по КНОПКЕ СВЁРТКИ рейла (btnRailToggle) НЕ должен сжимать окно — раньше
+        // он «проваливался» в этот handler. Поскольку handledEventsToo:true ловит событие даже помеченным
+        // Handled, пометки Handled на кнопке недостаточно — исключаем её по источнику события.
+        railHost.AddHandler(InputElement.DoubleTappedEvent, (_, e) =>
+        {
+            if (!IsWithinRailToggle(e.Source as Visual))
+            {
+                ToggleLayoutSize();
+            }
+        }, RoutingStrategies.Bubble, handledEventsToo: true);
         bottomNav.AddHandler(InputElement.DoubleTappedEvent, (_, _) => ToggleLayoutSize(), RoutingStrategies.Bubble, handledEventsToo: true);
 
         // Drag-to-edge: тащим компактное окно к краю рабочей области → разворот в широкую.
         PositionChanged += OnPositionChanged;
+
+        // Bug4: СЕМЕНИМ cold-start-сигнал ДО первого ApplyShellVisibility. _accountVm (field-init выше)
+        // уже сконструирован, и его ctor синхронно взвёл IsStartupLoading, если есть сохранённая сессия.
+        // Считываем сейчас, чтобы первый же ApplyLayoutMode→ApplyShellVisibility нацелился сразу на оверлей
+        // загрузки (previous==null → мгновенно), а НЕ на онбординг-гейт с последующим кроссфейдом. Живые
+        // изменения ловит подписка в SetupHome. (В дизайне IsStartupLoading=false → обычный путь.)
+        _isStartupLoading = _accountVm.IsStartupLoading;
 
         // Первичная раскладка + вотчер ширины окна. Наблюдаем Bounds окна (ширина клиентской
         // области); при пересечении брейкпоинта раскладка меняется РОВНО один раз (гистерезис).
@@ -178,6 +196,11 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         {
             // Питаем скрытый StatusBarView (сохраняем интеракции/иконку трея/StatusBarViewModel).
             this.OneWayBind(ViewModel, vm => vm.StatusBarViewModel, v => v.contentStatusBarView.Content).DisposeWith(disposables);
+
+            // Live-смена языка: подсказка свёртки рейла ставится императивно (не {loc:T}), поэтому
+            // переустанавливаем её по событию L.LanguageChanged. Отписка при деактивации.
+            L.Instance.LanguageChanged += OnLanguageChanged;
+            Disposable.Create(() => L.Instance.LanguageChanged -= OnLanguageChanged).DisposeWith(disposables);
 
             ViewModel.ReadTextFromClipboardInteraction.RegisterHandler(async interaction =>
             {
@@ -327,9 +350,10 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         railHost.IsVisible = !compact;
         bottomNav.IsVisible = compact;
 
-        // A3: инлайн-уведомление держим НАД навигацией. В компакте расчищаем нижнюю нав (~64) снизу,
-        // в широкой — обычный gutter 16 (рейл слева, нижней навигации нет).
-        snackHost.Margin = compact ? new Thickness(16, 0, 16, 76) : new Thickness(16, 0, 16, 16);
+        // Bug5: мягкий градиент-скрим снизу контента ТОЛЬКО в компакте (в широкой — рейл, нижней
+        // навигации нет). Контент «растворяется» в фон под безрамочной нижней навигацией вместо
+        // резкого обрыва. Клик сквозной (IsHitTestVisible=False в разметке).
+        navScrim.IsVisible = compact;
 
         ApplyShellVisibility();
 
@@ -337,16 +361,27 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         // Смена дерева «Главной» (компактное ↔ широкое) под page-rise «дерётся» с рефлоу сетки —
         // видимый скачок «контент прыгнул и осел». Гасим переход НА ВРЕМЯ свопа контента (мгновенная
         // подмена), затем возвращаем режим-верную анимацию (lite-aware) для последующей навигации.
+        //
+        // Bug6: раньше мгновенная пересборка дерева (ShowTab) происходила при Opacity=1 — один кадр
+        // пересобранного контента ВСПЫХИВАЛ до того, как AnimateLayoutSwap ронял opacity в 0 и проявлял
+        // заново (это и был видимый «джерк»). Теперь при анимируемом свопе ПРЯЧЕМ contentArea (Opacity=0)
+        // ДО пересборки — она проходит невидимо, затем плавно проявляется. delicate-логику свопа (единый
+        // хост, отсутствие reparent, гашение перехода) не трогаем — только порядок гашения opacity.
+        var willAnimateSwap = _layoutInitialized && !MotionState.IsLite;
+        if (willAnimateSwap)
+        {
+            contentArea.Opacity = 0d;
+        }
+
         var savedTransition = contentHost.PageTransition;
         contentHost.PageTransition = null;
         ShowTab(_currentTab);
         contentHost.PageTransition = MotionState.IsLite ? null : savedTransition ?? RiseFadePageTransition.Default;
 
         // C6: мягкий кроссфейд морфинга раскладки (compact↔wide) поверх мгновенной подмены — маскирует
-        // рефлоу дерева. ТОЛЬКО opacity на contentArea (без layout/transform), ~130мс; сквозная подложка-
-        // градиент bodyRoot остаётся за ним, поэтому не мигает «белым». Пропускаем первый вызов (старт)
-        // и .lite. Не трогает delicate-логику свопа выше — чистая косметика после неё.
-        if (_layoutInitialized && !MotionState.IsLite)
+        // рефлоу дерева. ТОЛЬКО opacity на contentArea (без layout/transform); сквозная подложка-градиент
+        // bodyRoot остаётся за ним, поэтому не мигает «белым». Пропускаем первый вызов (старт) и .lite.
+        if (willAnimateSwap)
         {
             AnimateLayoutSwap();
         }
@@ -415,11 +450,16 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
             return;
         }
 
-        // 3-way gate (E3): SYNCING > EMPTY > CONTENT. Оверлей синхронизации перекрывает и пустой
-        // онбординг, и половинчатую «Главную», поэтому между закрытием «Входа» и приходом серверов
-        // НЕ мелькает пустой онбординг. Если импорт завершился без серверов — падаем в онбординг;
-        // если с серверами (_isEmpty уже false) — в заполненный bodyRoot.
-        Control target = _isSyncing ? accountSyncView : _isEmpty ? onboardingView : bodyRoot;
+        // 3-way gate (E3 + Bug4): SYNCING > EMPTY > CONTENT. Оверлей синхронизации перекрывает и пустой
+        // онбординг, и половинчатую «Главную». Его поднимают ДВА независимых сигнала загрузки:
+        //   • _isSyncing (IsImportingAccount) — пост-логин импорт: между закрытием «Входа» и приходом
+        //     серверов НЕ мелькает пустой онбординг;
+        //   • _isStartupLoading (IsStartupLoading) — ХОЛОДНЫЙ старт с сохранённой сессией: пока идёт
+        //     восстановление аккаунта/подписок/серверов при запуске, показываем загрузку, а НЕ гейт
+        //     входа (иначе у уже-вошедшего пользователя ~2с мелькал бы экран «Войдите в аккаунт»).
+        // Оба сигнала снимаются только ПОСЛЕ завершения загрузки, к тому моменту _isEmpty уже false
+        // (сервера пришли) → кадр уходит прямо в заполненный bodyRoot без промежуточного онбординга.
+        Control target = (_isSyncing || _isStartupLoading) ? accountSyncView : _isEmpty ? onboardingView : bodyRoot;
         CrossfadeShellTo(target);
     }
 
@@ -510,8 +550,15 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         {
             bodyRoot.Classes.Remove("railCollapsed");
         }
-        ToolTip.SetTip(btnRailToggle, _railCollapsed ? "Развернуть панель" : "Свернуть панель");
+        ApplyRailToggleTip();
     }
+
+    // Подсказка кнопки свёртки рейла ставится императивно (ToggleRail перебивает {loc:T}-биндинг из
+    // разметки), поэтому её нужно переустанавливать и при live-смене языка — см. OnLanguageChanged.
+    private void ApplyRailToggleTip()
+        => ToolTip.SetTip(btnRailToggle, _railCollapsed ? L.T("Nav_ExpandPanel") : L.T("Nav_CollapsePanel"));
+
+    private void OnLanguageChanged(object? sender, EventArgs e) => ApplyRailToggleTip();
 
     // Создаёт HomeViewModel поверх реального движка (ProfilesViewModel + StatusBarViewModel из
     // MainWindowViewModel) и отдаёт его «Главной». Индикатор рейла следует за IsConnected.
@@ -551,6 +598,19 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
             .Subscribe(syncing =>
             {
                 _isSyncing = syncing;
+                ApplyShellVisibility();
+            });
+
+        // Bug4: холодный старт с уже сохранённой сессией. IsStartupLoading взводится СИНХРОННО в ctor
+        // AccountViewModel (до присвоения IsLoggedIn, только при наличии persisted-сессии) и снимается в
+        // finally StartupLoad — после того как импорт аккаунта + подписки + refresh «Главной» завершились.
+        // Пока он true — держим оверлей загрузки вместо logged-out онбординга, чтобы у вернувшегося
+        // пользователя не мелькал гейт входа. Отличается от IsImportingAccount (пост-логин импорт).
+        _accountVm.WhenAnyValue(x => x.IsStartupLoading)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .Subscribe(loading =>
+            {
+                _isStartupLoading = loading;
                 ApplyShellVisibility();
             });
 
@@ -765,11 +825,89 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         }
         if (_compactMode)
         {
-            ResizeClamped(WideToggleWidth, WideToggleHeight);
+            AnimateWindowSize(WideToggleWidth, WideToggleHeight);
         }
         else
         {
-            ResizeClamped(CompactToggleWidth, CompactToggleHeight);
+            AnimateWindowSize(CompactToggleWidth, CompactToggleHeight);
+        }
+    }
+
+    // Bug3: истина, если визуал — сам btnRailToggle или его потомок (т.е. источник двойного клика попал
+    // внутрь кнопки свёртки рейла). Используется, чтобы двойной клик по кнопке НЕ тумблил размер окна.
+    private bool IsWithinRailToggle(Visual? source)
+    {
+        for (var v = source; v is not null; v = v.GetVisualParent())
+        {
+            if (ReferenceEquals(v, btnRailToggle))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // ==================== Bug6: плавная анимация размера окна (тумблер компакт⇄широкая) ====================
+    // Раньше тумблер жёстко «щёлкал» размер (ResizeClamped мгновенно), из-за чего разворот/сворачивание
+    // ощущались рывком. Теперь размер плавно интерполируется (OutQuint ~200мс), удерживая ТЕКУЩИЙ центр
+    // окна зафиксированным (тот же center-anchor + кламп в WorkingArea, что у ResizeClamped, но центр
+    // берётся ОДИН раз в начале — без дрейфа). По ходу анимации Bounds-вотчер один раз пересекает
+    // брейкпоинт и меняет раскладку (с невидимой пересборкой контента, Bug6 выше) — контент морфится
+    // синхронно с ростом окна. Под .lite (или без экрана) — мгновенно, как прежде. Перезапуск отменяет
+    // предыдущую анимацию; _edgeSnapSuspended гасит drag-to-edge на всё время прогона.
+    private async void AnimateWindowSize(double targetWidth, double targetHeight)
+    {
+        if (WindowState != WindowState.Normal)
+        {
+            WindowState = WindowState.Normal;
+        }
+
+        var screen = Screens.ScreenFromWindow(this) ?? Screens.Primary;
+        if (MotionState.IsLite || screen is null)
+        {
+            ResizeClamped(targetWidth, targetHeight);
+            return;
+        }
+
+        _resizeAnim?.Cancel();
+        var cts = new CancellationTokenSource();
+        _resizeAnim = cts;
+
+        var scaling = screen.Scaling > 0 ? screen.Scaling : 1.0;
+        // Центр фиксируем ОДНОКРАТНО на старте (физ. пиксели) → окно растёт/сжимается «на месте».
+        var centerX = Position.X + (Width * scaling / 2);
+        var centerY = Position.Y + (Height * scaling / 2);
+        var startWidth = Width;
+        var startHeight = Height;
+
+        _edgeSnapSuspended = true;
+        try
+        {
+            var startTicks = Environment.TickCount64;
+            const double durationMs = 200d;
+            while (true)
+            {
+                var t = Math.Min(1d, (Environment.TickCount64 - startTicks) / durationMs);
+                var eased = _easeOutQuint.Ease(t);
+                var w = startWidth + ((targetWidth - startWidth) * eased);
+                var h = startHeight + ((targetHeight - startHeight) * eased);
+                ApplySizeCentered(w, h, centerX, centerY, screen, scaling);
+                if (t >= 1d)
+                {
+                    break;
+                }
+                await Task.Delay(16, cts.Token);
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch { }
+        finally
+        {
+            // Снимаем подавление edge-snap только если нас не сменила новая анимация (та уже взвела его).
+            if (_resizeAnim == cts)
+            {
+                _edgeSnapSuspended = false;
+            }
         }
     }
 
@@ -823,37 +961,44 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
                 return;
             }
             var scaling = screen.Scaling > 0 ? screen.Scaling : 1.0;
-            var wa = screen.WorkingArea;
-            var maxW = wa.Width / scaling;
-            var maxH = wa.Height / scaling;
-
-            var w = Math.Clamp(width, Math.Min(MinWidth, maxW), maxW);
-            var h = Math.Clamp(height, Math.Min(MinHeight, maxH), maxH);
 
             // Якорь = текущий геометрический центр окна (физ. пиксели).
-            var oldPhysW = Width * scaling;
-            var oldPhysH = Height * scaling;
-            var centerX = Position.X + (oldPhysW / 2);
-            var centerY = Position.Y + (oldPhysH / 2);
+            var centerX = Position.X + (Width * scaling / 2);
+            var centerY = Position.Y + (Height * scaling / 2);
 
-            var physW = w * scaling;
-            var physH = h * scaling;
-
-            // Держим центр на месте, затем кламп внутрь рабочей области (окно всегда целиком на экране).
-            var x = centerX - (physW / 2);
-            var y = centerY - (physH / 2);
-            x = Math.Max(wa.X, Math.Min(x, wa.X + wa.Width - physW));
-            y = Math.Max(wa.Y, Math.Min(y, wa.Y + wa.Height - physH));
-
-            Position = new PixelPoint((int)x, (int)y);
-            Width = w;
-            Height = h;
+            ApplySizeCentered(width, height, centerX, centerY, screen, scaling);
         }
         catch { }
         finally
         {
             _edgeSnapSuspended = false;
         }
+    }
+
+    // Ставит размер и КЛАМПИТ его + позицию в WorkingArea вокруг ЗАДАННОГО центра (физ. пиксели): окно
+    // всегда целиком на экране (верх никогда не за границей). Центр передаётся явно, поэтому годится и
+    // для одиночного ResizeClamped (центр = текущий), и для покадровой анимации AnimateWindowSize
+    // (центр фиксирован на старте → без дрейфа). Позицию ставим ДО размера — без промежуточного кадра.
+    private void ApplySizeCentered(double width, double height, double centerX, double centerY, Screen screen, double scaling)
+    {
+        var wa = screen.WorkingArea;
+        var maxW = wa.Width / scaling;
+        var maxH = wa.Height / scaling;
+
+        var w = Math.Clamp(width, Math.Min(MinWidth, maxW), maxW);
+        var h = Math.Clamp(height, Math.Min(MinHeight, maxH), maxH);
+
+        var physW = w * scaling;
+        var physH = h * scaling;
+
+        var x = centerX - (physW / 2);
+        var y = centerY - (physH / 2);
+        x = Math.Max(wa.X, Math.Min(x, wa.X + wa.Width - physW));
+        y = Math.Max(wa.Y, Math.Min(y, wa.Y + wa.Height - physH));
+
+        Position = new PixelPoint((int)x, (int)y);
+        Width = w;
+        Height = h;
     }
 
     #endregion Nav & Chrome
@@ -867,65 +1012,14 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
             DispatcherPriority.Default);
     }
 
-    // ==================== Инлайн-уведомление (A3) ====================
-    // Владелец: НИКАКИХ ПЛАВАЮЩИХ OS-уведомлений — но и не терять сообщения. Раньше это был no-op
-    // сток, и все семантически значимые строки (connect-fail, оплата, копирование, отвязка устройства)
-    // глохли. Теперь — внутри-оконная пилюля (Border.Toast) внизу-по-центру над навигацией: вход
-    // translateY 12→0 + fade (OutQuint 220мс), авто-скрытие ~3.5с, выход fade (Standard 150мс); под
-    // .lite — мгновенно. Каждое новое сообщение отменяет предыдущее (перезапуск таймера). Строки
-    // приходят готовыми (sentence-case Russian) от издателей — здесь только показываем.
-    private async Task DelegateSnackMsg(string content)
-    {
-        if (string.IsNullOrWhiteSpace(content))
-        {
-            return;
-        }
-
-        snackText.Text = content.Trim();
-        _snackAnim?.Cancel();
-        var cts = new CancellationTokenSource();
-        _snackAnim = cts;
-
-        snackHost.IsVisible = true;
-
-        if (MotionState.IsLite)
-        {
-            snackHost.Opacity = 1;
-            snackHost.RenderTransform = null;
-        }
-        else
-        {
-            snackHost.Opacity = 0;
-            try { await RunTranslateFade(snackHost, TranslateTransform.YProperty, 12d, 0d, 0d, 1d, TimeSpan.FromMilliseconds(220), _easeOutQuint, cts.Token); }
-            catch { }
-            if (cts.IsCancellationRequested)
-            {
-                return;
-            }
-            snackHost.Opacity = 1;
-            snackHost.RenderTransform = null;
-        }
-
-        try { await Task.Delay(3500, cts.Token); }
-        catch (OperationCanceledException) { return; }
-        if (cts.IsCancellationRequested)
-        {
-            return;
-        }
-
-        if (!MotionState.IsLite)
-        {
-            try { await RunFade(snackHost, 1d, 0d, TimeSpan.FromMilliseconds(150), _easeStandard, cts.Token); }
-            catch { }
-            if (cts.IsCancellationRequested)
-            {
-                return;
-            }
-        }
-        snackHost.IsVisible = false;
-        snackHost.Opacity = 1;
-        snackHost.RenderTransform = null;
-    }
+    // ==================== Инлайн-уведомление ОТКЛЮЧЕНО (Bug1) ====================
+    // Владелец: НИКАКИХ нижних уведомлений вообще — ни на подключении/отключении, ни на добавлении/
+    // обновлении подписки, ни на прочих событиях. Раньше сюда приходил AppEvents.SendSnackMsgRequested
+    // и показывал пилюлю снизу (snackHost). Теперь это осознанный no-op: тост не всплывает никогда.
+    // Ошибки подключения и так отражены состоянием Error на connect-щите, поэтому ничего не теряется.
+    // Подписку на событие и сам snackHost (скрытый) оставляем на месте — чтобы не трогать проводку/
+    // разметку — но отображение полностью подавлено.
+    private Task DelegateSnackMsg(string content) => Task.CompletedTask;
 
     // ==================== Общие аниматоры оболочки (transform+opacity, §A) ====================
     // Все переходы MainWindow строятся из этих двух примитивов: чистый fade и translate+fade (две

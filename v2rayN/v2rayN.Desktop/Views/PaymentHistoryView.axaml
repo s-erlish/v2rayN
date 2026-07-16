@@ -4,6 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:loc="clr-namespace:v2rayN.Desktop.Common"
     xmlns:vms="clr-namespace:v2rayN.Desktop.ViewModels"
     x:DataType="vms:PaymentHistoryViewModel"
     mc:Ignorable="d">
@@ -41,10 +42,10 @@
             <Grid MaxWidth="560" ColumnDefinitions="Auto,*">
                 <Button
                     Grid.Column="0"
-                    AutomationProperties.Name="Назад"
+                    AutomationProperties.Name="{loc:T Common_Back}"
                     Classes="BackNav"
                     Click="OnBackClick"
-                    ToolTip.Tip="Назад">
+                    ToolTip.Tip="{loc:T Common_Back}">
                     <PathIcon Data="{StaticResource Geo.ArrowBack}" />
                 </Button>
                 <TextBlock
@@ -52,7 +53,7 @@
                     Margin="12,0,0,0"
                     VerticalAlignment="Center"
                     Classes="Headline"
-                    Text="История платежей"
+                    Text="{loc:T Common_PaymentHistory}"
                     TextTrimming="CharacterEllipsis" />
             </Grid>
         </Border>
@@ -100,7 +101,8 @@
                                         <TextBlock
                                             Margin="0,4,0,0"
                                             Classes="Caption"
-                                            FontFeatures="tnum"
+                                            FontFamily="{DynamicResource Font.Numeric}"
+                                            FontFeatures="tnum,lnum,zero"
                                             IsVisible="{Binding HasDate}"
                                             Text="{Binding Date}" />
                                     </StackPanel>
@@ -113,7 +115,8 @@
                                         <TextBlock
                                             HorizontalAlignment="Right"
                                             Classes="Body Numeric"
-                                            FontFeatures="tnum"
+                                            FontFamily="{DynamicResource Font.Numeric}"
+                                            FontFeatures="tnum,lnum,zero"
                                             FontWeight="Bold"
                                             Text="{Binding Amount}" />
                                         <Border
@@ -296,14 +299,14 @@
                     HorizontalAlignment="Center"
                     Classes="Body"
                     Foreground="{DynamicResource Brush.OnSurfaceVariant}"
-                    Text="Платежей пока нет"
+                    Text="{loc:T History_Empty}"
                     TextAlignment="Center" />
                 <Button
                     Margin="0,16,0,0"
                     HorizontalAlignment="Center"
                     Classes="Primary"
                     Click="OnBuyClick"
-                    Content="Купить подписку" />
+                    Content="{loc:T Common_BuySubscription}" />
             </StackPanel>
 
             <!--  ОШИБКА: тот же силуэт, но нейтральный тайл + причина + «Повторить» (retry).
@@ -341,7 +344,7 @@
                     HorizontalAlignment="Center"
                     Classes="Tonal"
                     Command="{Binding LoadCmd}"
-                    Content="Повторить" />
+                    Content="{loc:T Common_Retry}" />
             </StackPanel>
         </Panel>
     </DockPanel>

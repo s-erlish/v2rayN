@@ -3,6 +3,7 @@
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:loc="clr-namespace:v2rayN.Desktop.Common"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:vms="clr-namespace:v2rayN.Desktop.ViewModels"
     x:DataType="vms:SettingsViewModel"
@@ -217,7 +218,7 @@
         <StackPanel Margin="0,0,0,16">
 
             <!--  ==================== ПОДКЛЮЧЕНИЕ ====================  -->
-            <TextBlock Classes="SectionHeader SettingsSection" Text="Подключение" />
+            <TextBlock Classes="SectionHeader SettingsSection" Text="{loc:T Settings_SecConnection}" />
 
             <Border
                 Margin="16,0"
@@ -243,7 +244,7 @@
                                 Margin="16,0,0,0"
                                 VerticalAlignment="Center"
                                 Classes="Body"
-                                Text="Режим" />
+                                Text="{loc:T Settings_Mode}" />
                             <TextBlock
                                 x:Name="ValueMode"
                                 Grid.Column="2"
@@ -275,7 +276,7 @@
                                 Margin="16,0,0,0"
                                 VerticalAlignment="Center"
                                 Classes="Body"
-                                Text="Прокси по приложениям" />
+                                Text="{loc:T Settings_PerApp}" />
                             <TextBlock
                                 x:Name="ValuePerApp"
                                 Grid.Column="2"
@@ -306,11 +307,11 @@
                                 Grid.Column="1"
                                 Margin="16,0,8,0"
                                 VerticalAlignment="Center">
-                                <TextBlock Classes="Body" Text="Обход локальной сети" />
+                                <TextBlock Classes="Body" Text="{loc:T Settings_BypassLan}" />
                                 <TextBlock
                                     Margin="0,4,0,0"
                                     Classes="Subtitle"
-                                    Text="Прямой доступ к устройствам в локальной сети"
+                                    Text="{loc:T Settings_BypassLanHint}"
                                     TextWrapping="Wrap" />
                             </StackPanel>
                             <ToggleSwitch
@@ -344,7 +345,7 @@
                                 <TextBlock
                                     Margin="0,4,0,0"
                                     Classes="Subtitle"
-                                    Text="Включить IPv6-адресацию в туннеле"
+                                    Text="{loc:T Settings_Ipv6Hint}"
                                     TextWrapping="Wrap" />
                             </StackPanel>
                             <ToggleSwitch
@@ -407,7 +408,7 @@
                                 Margin="16,0,0,0"
                                 VerticalAlignment="Center"
                                 Classes="Body"
-                                Text="Пинг" />
+                                Text="{loc:T Settings_Ping}" />
                             <TextBlock
                                 x:Name="ValuePingMethod"
                                 Grid.Column="2"
@@ -438,11 +439,11 @@
                                 Grid.Column="1"
                                 Margin="16,0,8,0"
                                 VerticalAlignment="Center">
-                                <TextBlock Classes="Body" Text="Локальный прокси" />
+                                <TextBlock Classes="Body" Text="{loc:T Settings_LocalProxy}" />
                                 <TextBlock
                                     Margin="0,4,0,0"
                                     Classes="Subtitle"
-                                    Text="SOCKS5-авторизация, память, доступ по сети"
+                                    Text="{loc:T Settings_LocalProxyHint}"
                                     TextWrapping="Wrap" />
                             </StackPanel>
                             <!--  Раскрытие панели вращает шеврон 0°→90° БЕЗ CenterX/Y (code-behind ставит
@@ -467,7 +468,7 @@
                         IsVisible="False">
                         <StackPanel Spacing="12">
                             <StackPanel Spacing="6">
-                                <TextBlock Classes="Subtitle" Text="Порт" />
+                                <TextBlock Classes="Subtitle" Text="{loc:T Settings_Port}" />
                                 <TextBox
                                     x:Name="ProxyPortBox"
                                     MaxLength="5"
@@ -478,27 +479,27 @@
                                 Margin="0,4,0,0"
                                 Classes="Subtitle"
                                 Foreground="{DynamicResource Brush.OnSurface}"
-                                Text="SOCKS5-авторизация" />
+                                Text="{loc:T Settings_Socks5Auth}" />
                             <StackPanel Spacing="6">
-                                <TextBlock Classes="Subtitle" Text="Логин" />
+                                <TextBlock Classes="Subtitle" Text="{loc:T Settings_Username}" />
                                 <TextBox
                                     x:Name="ProxyUserBox"
                                     Text="{Binding ProxyUser, Mode=TwoWay}"
                                     Theme="{StaticResource TextBox.IncyField}"
-                                    Watermark="Не задан" />
+                                    Watermark="{loc:T Settings_NotSet}" />
                             </StackPanel>
                             <StackPanel Spacing="6">
-                                <TextBlock Classes="Subtitle" Text="Пароль" />
+                                <TextBlock Classes="Subtitle" Text="{loc:T Login_Password}" />
                                 <TextBox
                                     x:Name="ProxyPassBox"
                                     PasswordChar="●"
                                     Text="{Binding ProxyPass, Mode=TwoWay}"
                                     Theme="{StaticResource TextBox.IncyField}"
-                                    Watermark="Не задан" />
+                                    Watermark="{loc:T Settings_NotSet}" />
                             </StackPanel>
                             <TextBlock
                                 Classes="Subtitle"
-                                Text="Адрес: 127.0.0.1. Пустые логин и пароль отключают SOCKS5-авторизацию."
+                                Text="{loc:T Settings_Socks5Hint}"
                                 TextWrapping="Wrap" />
                         </StackPanel>
                     </Border>
@@ -507,7 +508,7 @@
             </Border>
 
             <!--  ==================== ОБХОД БЛОКИРОВОК ====================  -->
-            <TextBlock Classes="SectionHeader SettingsSection" Text="Обход блокировок" />
+            <TextBlock Classes="SectionHeader SettingsSection" Text="{loc:T Settings_SecBypass}" />
 
             <Border
                 Margin="16,0"
@@ -532,11 +533,11 @@
                                 Grid.Column="1"
                                 Margin="16,0,8,0"
                                 VerticalAlignment="Center">
-                                <TextBlock Classes="Body" Text="Мультиплексирование (Mux)" />
+                                <TextBlock Classes="Body" Text="{loc:T Settings_Mux}" />
                                 <TextBlock
                                     Margin="0,4,0,0"
                                     Classes="Subtitle"
-                                    Text="Объединяет запросы в один канал соединения"
+                                    Text="{loc:T Settings_MuxHint}"
                                     TextWrapping="Wrap" />
                             </StackPanel>
                             <ToggleSwitch
@@ -570,7 +571,7 @@
                                 Margin="16,0,0,0"
                                 VerticalAlignment="Center"
                                 Classes="Body"
-                                Text="Число соединений Mux" />
+                                Text="{loc:T Settings_MuxCount}" />
                             <TextBlock
                                 x:Name="ValueMuxConcurrency"
                                 Grid.Column="2"
@@ -604,11 +605,11 @@
                                 Grid.Column="1"
                                 Margin="16,0,8,0"
                                 VerticalAlignment="Center">
-                                <TextBlock Classes="Body" Text="Фрагментация пакетов" />
+                                <TextBlock Classes="Body" Text="{loc:T Settings_Fragment}" />
                                 <TextBlock
                                     Margin="0,4,0,0"
                                     Classes="Subtitle"
-                                    Text="Разбивает TLS-рукопожатие против DPI"
+                                    Text="{loc:T Settings_FragmentHint}"
                                     TextWrapping="Wrap" />
                             </StackPanel>
                             <ToggleSwitch
@@ -626,7 +627,7 @@
             <!--  ==================== ПРОИЗВОДИТЕЛЬНОСТЬ (наше, не из Android) ====================  -->
             <!--  Владелец просил перф-контролы. В Android/плане строк нет — минимальный
                   раздел с одним тумблером, копия — по описанию владельца.  -->
-            <TextBlock Classes="SectionHeader SettingsSection" Text="Производительность" />
+            <TextBlock Classes="SectionHeader SettingsSection" Text="{loc:T Settings_SecPerformance}" />
 
             <Border
                 Margin="16,0"
@@ -651,11 +652,11 @@
                                 Grid.Column="1"
                                 Margin="16,0,8,0"
                                 VerticalAlignment="Center">
-                                <TextBlock Classes="Body" Text="Облегчённый режим" />
+                                <TextBlock Classes="Body" Text="{loc:T Settings_LiteMode}" />
                                 <TextBlock
                                     Margin="0,4,0,0"
                                     Classes="Subtitle"
-                                    Text="Отключает анимации, снижает нагрузку"
+                                    Text="{loc:T Settings_LiteModeHint}"
                                     TextWrapping="Wrap" />
                             </StackPanel>
                             <ToggleSwitch
@@ -671,7 +672,7 @@
             </Border>
 
             <!--  ==================== ИНТЕРФЕЙС ====================  -->
-            <TextBlock Classes="SectionHeader SettingsSection" Text="Интерфейс" />
+            <TextBlock Classes="SectionHeader SettingsSection" Text="{loc:T Settings_SecInterface}" />
 
             <Border
                 Margin="16,0"
@@ -697,7 +698,7 @@
                                 Margin="16,0,0,0"
                                 VerticalAlignment="Center"
                                 Classes="Body"
-                                Text="Оформление" />
+                                Text="{loc:T Settings_Appearance}" />
                             <TextBlock
                                 x:Name="ValueAppearance"
                                 Grid.Column="2"
@@ -730,11 +731,11 @@
                                 Grid.Column="1"
                                 Margin="16,0,8,0"
                                 VerticalAlignment="Center">
-                                <TextBlock Classes="Body" Text="Чёрно-белая" />
+                                <TextBlock Classes="Body" Text="{loc:T Settings_Monochrome}" />
                                 <TextBlock
                                     Margin="0,4,0,0"
                                     Classes="Subtitle"
-                                    Text="Монохромный режим поверх тёмной или светлой темы"
+                                    Text="{loc:T Settings_MonochromeHint}"
                                     TextWrapping="Wrap" />
                             </StackPanel>
                             <ToggleSwitch
@@ -765,7 +766,7 @@
                                 Margin="16,0,0,0"
                                 VerticalAlignment="Center"
                                 Classes="Body"
-                                Text="Язык" />
+                                Text="{loc:T Settings_Language}" />
                             <TextBlock
                                 x:Name="ValueLanguage"
                                 Grid.Column="2"
@@ -796,11 +797,11 @@
                                 Grid.Column="1"
                                 Margin="16,0,8,0"
                                 VerticalAlignment="Center">
-                                <TextBlock Classes="Body" Text="Запуск при загрузке" />
+                                <TextBlock Classes="Body" Text="{loc:T Settings_Autostart}" />
                                 <TextBlock
                                     Margin="0,4,0,0"
                                     Classes="Subtitle"
-                                    Text="Открывать departament при входе в систему"
+                                    Text="{loc:T Settings_AutostartHint}"
                                     TextWrapping="Wrap" />
                             </StackPanel>
                             <ToggleSwitch
@@ -816,7 +817,7 @@
             </Border>
 
             <!--  ==================== ПОДПИСКА ====================  -->
-            <TextBlock Classes="SectionHeader SettingsSection" Text="Подписка" />
+            <TextBlock Classes="SectionHeader SettingsSection" Text="{loc:T Settings_SecSubscription}" />
 
             <Border
                 Margin="16,0"
@@ -842,7 +843,7 @@
                                 Margin="16,0,0,0"
                                 VerticalAlignment="Center"
                                 Classes="Body"
-                                Text="Автообновление подписки" />
+                                Text="{loc:T Settings_SubAutoUpdate}" />
                             <TextBlock
                                 x:Name="ValueSubAutoUpdate"
                                 Grid.Column="2"
@@ -874,7 +875,7 @@
                                 Margin="16,0,0,0"
                                 VerticalAlignment="Center"
                                 Classes="Body"
-                                Text="Маршрутизация" />
+                                Text="{loc:T Settings_Routing}" />
                             <PathIcon
                                 Grid.Column="3"
                                 Classes="Chevron"
@@ -901,7 +902,7 @@
                                 Margin="16,0,0,0"
                                 VerticalAlignment="Center"
                                 Classes="Body"
-                                Text="Файлы ресурсов" />
+                                Text="{loc:T Settings_GeoFiles}" />
                             <PathIcon
                                 Grid.Column="2"
                                 Classes="Chevron"
@@ -913,7 +914,7 @@
             </Border>
 
             <!--  ==================== О ПРИЛОЖЕНИИ ====================  -->
-            <TextBlock Classes="SectionHeader SettingsSection" Text="О приложении" />
+            <TextBlock Classes="SectionHeader SettingsSection" Text="{loc:T Settings_About}" />
 
             <Border
                 Margin="16,0"
@@ -939,7 +940,7 @@
                                 Margin="16,0,0,0"
                                 VerticalAlignment="Center"
                                 Classes="Body"
-                                Text="О приложении" />
+                                Text="{loc:T Settings_About}" />
                             <TextBlock
                                 x:Name="ValueAbout"
                                 Grid.Column="2"
@@ -971,7 +972,7 @@
                                 Margin="16,0,0,0"
                                 VerticalAlignment="Center"
                                 Classes="Body"
-                                Text="Резервное копирование" />
+                                Text="{loc:T Settings_Backup}" />
                             <PathIcon
                                 Grid.Column="2"
                                 Classes="Chevron"
@@ -997,11 +998,11 @@
                                 Grid.Column="1"
                                 Margin="16,0,8,0"
                                 VerticalAlignment="Center">
-                                <TextBlock Classes="Body" Text="Схемы URL-адресов" />
+                                <TextBlock Classes="Body" Text="{loc:T Settings_UrlSchemes}" />
                                 <TextBlock
                                     Margin="0,4,0,0"
                                     Classes="Subtitle"
-                                    Text="Быстрые команды depv://"
+                                    Text="{loc:T Settings_UrlSchemesHint}"
                                     TextWrapping="Wrap" />
                             </StackPanel>
                             <PathIcon

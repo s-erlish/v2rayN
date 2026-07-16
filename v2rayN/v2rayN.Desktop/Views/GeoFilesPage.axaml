@@ -3,6 +3,7 @@
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:loc="clr-namespace:v2rayN.Desktop.Common"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     d:DesignWidth="560"
     d:DesignHeight="480"
@@ -40,7 +41,7 @@
                 Padding="0"
                 VerticalAlignment="Center"
                 Classes="IconButton"
-                ToolTip.Tip="Назад">
+                ToolTip.Tip="{loc:T Common_Back}">
                 <PathIcon
                     Width="22"
                     Height="22"
@@ -54,14 +55,14 @@
                 Margin="16,0,0,0"
                 VerticalAlignment="Center"
                 Classes="Headline"
-                Text="Файлы ресурсов"
+                Text="{loc:T Settings_GeoFiles}"
                 TextTrimming="CharacterEllipsis" />
         </Grid>
 
         <StackPanel Margin="16,12,16,24" Spacing="8">
             <TextBlock
                 Classes="Subtitle"
-                Text="Базы geoip и geosite нужны для маршрутизации по странам и доменам. Обновляются с GitHub."
+                Text="{loc:T Geo_Intro}"
                 TextWrapping="Wrap" />
 
             <Border Classes="Card" Padding="16,4">
@@ -86,7 +87,7 @@
                 x:Name="btnUpdate"
                 HorizontalAlignment="Stretch"
                 Classes="Primary"
-                Content="Обновить сейчас" />
+                Content="{loc:T Geo_UpdateNow}" />
 
             <TextBlock
                 x:Name="txtStatus"

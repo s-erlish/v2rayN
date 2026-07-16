@@ -78,6 +78,6 @@ public partial class AccountView : UserControl
             return;
         }
         await AvaUtils.SetClipboardData(this, code);
-        AppEvents.SendSnackMsgRequested.Publish("Скопировано");
+        AppEvents.SendSnackMsgRequested.Publish(L.T("Common_Copied"));
     }
 }

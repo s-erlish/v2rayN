@@ -3,6 +3,7 @@
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:loc="clr-namespace:v2rayN.Desktop.Common"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     d:DesignWidth="560"
     d:DesignHeight="620"
@@ -40,7 +41,7 @@
                 Padding="0"
                 VerticalAlignment="Center"
                 Classes="IconButton"
-                ToolTip.Tip="Назад">
+                ToolTip.Tip="{loc:T Common_Back}">
                 <PathIcon
                     Width="22"
                     Height="22"
@@ -54,23 +55,23 @@
                 Margin="16,0,0,0"
                 VerticalAlignment="Center"
                 Classes="Headline"
-                Text="Настройки провайдеров"
+                Text="{loc:T Provider_Title}"
                 TextTrimming="CharacterEllipsis" />
         </Grid>
 
         <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
             <StackPanel Margin="16,12,16,24" Spacing="8">
 
-                <TextBlock Classes="SectionHeader" Text="Обновление" />
+                <TextBlock Classes="SectionHeader" Text="{loc:T Provider_SecUpdates}" />
                 <Border Classes="Card" Padding="16,4">
                     <StackPanel>
                         <Grid ColumnDefinitions="*,Auto" MinHeight="56">
                             <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                <TextBlock Classes="Body" Text="Автообновление" />
+                                <TextBlock Classes="Body" Text="{loc:T Provider_AutoUpdate}" />
                                 <TextBlock
                                     Margin="0,4,0,0"
                                     Classes="Subtitle"
-                                    Text="Автоматически обновлять подписки"
+                                    Text="{loc:T Provider_AutoUpdateHint}"
                                     TextWrapping="Wrap" />
                             </StackPanel>
                             <ToggleSwitch
@@ -85,7 +86,7 @@
                                 Grid.Column="0"
                                 VerticalAlignment="Center"
                                 Classes="Body"
-                                Text="Интервал обновления" />
+                                Text="{loc:T Provider_Interval}" />
                             <ComboBox
                                 x:Name="cmbInterval"
                                 Grid.Column="1"
@@ -95,12 +96,12 @@
                     </StackPanel>
                 </Border>
 
-                <TextBlock Classes="SectionHeader" Text="Сеть" />
+                <TextBlock Classes="SectionHeader" Text="{loc:T Provider_SecNetwork}" />
                 <Border Classes="Card" Padding="16,4">
                     <StackPanel>
                         <Grid ColumnDefinitions="*,Auto" MinHeight="56">
                             <StackPanel Grid.Column="0" Margin="0,0,8,0" VerticalAlignment="Center">
-                                <TextBlock Classes="Body" Text="Идентификатор устройства (HWID)" />
+                                <TextBlock Classes="Body" Text="{loc:T Provider_Hwid}" />
                                 <TextBlock
                                     x:Name="txtHwid"
                                     Margin="0,4,0,0"
@@ -112,7 +113,7 @@
                                 x:Name="btnCopyHwid"
                                 Grid.Column="1"
                                 VerticalAlignment="Center"
-                                Content="Копировать" />
+                                Content="{loc:T Common_Copy}" />
                         </Grid>
                     </StackPanel>
                 </Border>
@@ -126,7 +127,7 @@
                             Watermark="INCY/1.0" />
                         <TextBlock
                             Classes="Subtitle"
-                            Text="Отправляется ядром на исходящих соединениях."
+                            Text="{loc:T Provider_UserAgentHint}"
                             TextWrapping="Wrap" />
                     </StackPanel>
                 </Border>

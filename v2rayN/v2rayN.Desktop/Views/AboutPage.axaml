@@ -3,6 +3,7 @@
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:loc="clr-namespace:v2rayN.Desktop.Common"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     d:DesignWidth="520"
     d:DesignHeight="520"
@@ -40,7 +41,7 @@
                 Padding="0"
                 VerticalAlignment="Center"
                 Classes="IconButton"
-                ToolTip.Tip="Назад">
+                ToolTip.Tip="{loc:T Common_Back}">
                 <PathIcon
                     Width="22"
                     Height="22"
@@ -54,7 +55,7 @@
                 Margin="16,0,0,0"
                 VerticalAlignment="Center"
                 Classes="Headline"
-                Text="О приложении"
+                Text="{loc:T Settings_About}"
                 TextTrimming="CharacterEllipsis" />
         </Grid>
 
@@ -68,24 +69,24 @@
                     x:Name="txtVersion"
                     HorizontalAlignment="Center"
                     Classes="Subtitle"
-                    Text="Версия —" />
+                    Text="{loc:T About_Version}" />
             </StackPanel>
 
             <Border Classes="Card" Padding="16,4">
                 <StackPanel>
                     <Grid ColumnDefinitions="*,Auto" MinHeight="56">
-                        <TextBlock Grid.Column="0" VerticalAlignment="Center" Classes="Body" Text="Открыть сайт" />
+                        <TextBlock Grid.Column="0" VerticalAlignment="Center" Classes="Body" Text="{loc:T About_OpenSite}" />
                         <Button x:Name="btnSite" Grid.Column="1" VerticalAlignment="Center" Content="departament.site" />
                     </Grid>
                     <Border Height="1" Background="{DynamicResource Brush.OutlineVariant}" />
                     <Grid ColumnDefinitions="*,Auto" MinHeight="56">
-                        <TextBlock Grid.Column="0" VerticalAlignment="Center" Classes="Body" Text="Telegram-бот" />
-                        <Button x:Name="btnTelegram" Grid.Column="1" VerticalAlignment="Center" Content="Открыть" />
+                        <TextBlock Grid.Column="0" VerticalAlignment="Center" Classes="Body" Text="{loc:T About_TelegramBot}" />
+                        <Button x:Name="btnTelegram" Grid.Column="1" VerticalAlignment="Center" Content="{loc:T Common_Open}" />
                     </Grid>
                 </StackPanel>
             </Border>
 
-            <TextBlock Classes="SectionHeader" Text="Сведения" />
+            <TextBlock Classes="SectionHeader" Text="{loc:T About_Details}" />
             <Border Classes="Card" Padding="16,12">
                 <StackPanel Spacing="8">
                     <TextBlock
@@ -96,7 +97,7 @@
                     <Button
                         x:Name="btnCopy"
                         HorizontalAlignment="Left"
-                        Content="Копировать сведения" />
+                        Content="{loc:T About_CopyDetails}" />
                 </StackPanel>
             </Border>
         </StackPanel>

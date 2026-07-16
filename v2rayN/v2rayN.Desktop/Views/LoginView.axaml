@@ -3,6 +3,7 @@
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:loc="clr-namespace:v2rayN.Desktop.Common"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:vms="clr-namespace:v2rayN.Desktop.ViewModels"
     d:DesignHeight="760"
@@ -203,7 +204,7 @@
                     Grid.Column="0"
                     VerticalAlignment="Center"
                     Classes="IconButton BackNav"
-                    ToolTip.Tip="Назад">
+                    ToolTip.Tip="{loc:T Common_Back}">
                     <PathIcon Data="{StaticResource Geo.Login.Back}" />
                 </Button>
                 <TextBlock
@@ -211,7 +212,7 @@
                     Margin="8,0,0,0"
                     VerticalAlignment="Center"
                     Classes="Headline"
-                    Text="Вход" />
+                    Text="{loc:T Login_SignIn}" />
             </Grid>
         </Border>
 
@@ -248,7 +249,7 @@
                             Margin="0,20,0,0"
                             HorizontalAlignment="Stretch"
                             Classes="Headline"
-                            Text="Вход в departament"
+                            Text="{loc:T Login_Title}"
                             TextAlignment="Center"
                             TextWrapping="Wrap" />
                         <TextBlock
@@ -256,7 +257,7 @@
                             HorizontalAlignment="Stretch"
                             Classes="Body"
                             Foreground="{DynamicResource Brush.OnSurfaceVariant}"
-                            Text="Войдите через Telegram в один тап или по email и паролю."
+                            Text="{loc:T Login_Subtitle}"
                             TextAlignment="Center"
                             TextWrapping="Wrap" />
 
@@ -276,7 +277,7 @@
                                     Height="20"
                                     Data="{StaticResource Geo.Login.Telegram}"
                                     Foreground="{DynamicResource Brush.OnAccent}" />
-                                <TextBlock VerticalAlignment="Center" Text="Войти через Telegram" />
+                                <TextBlock VerticalAlignment="Center" Text="{loc:T Common_SignInTelegram}" />
                             </StackPanel>
                         </Button>
 
@@ -291,7 +292,7 @@
                                 Grid.Column="1"
                                 Margin="12,0"
                                 Classes="Caption"
-                                Text="или" />
+                                Text="{loc:T Login_Or}" />
                             <Border
                                 Grid.Column="2"
                                 Height="1"
@@ -305,7 +306,7 @@
                             Margin="0,20,0,0"
                             Text="{Binding LoginEmail, Mode=TwoWay}"
                             Theme="{StaticResource TextBox.Incy}"
-                            Watermark="Электронная почта" />
+                            Watermark="{loc:T Login_Email}" />
                         <!--  Живая подсказка невалидного email (auth_email_invalid), как в Android.  -->
                         <TextBlock
                             x:Name="EmailError"
@@ -313,7 +314,7 @@
                             FontSize="12"
                             Foreground="{DynamicResource Brush.Red}"
                             IsVisible="False"
-                            Text="Введите корректный email, например name@example.com"
+                            Text="{loc:T Login_EmailInvalid}"
                             TextWrapping="Wrap" />
 
                         <!--  Пароль (auth_password_hint) + глаз (password_toggle). Enter = войти.  -->
@@ -323,7 +324,7 @@
                             PasswordChar="●"
                             Text="{Binding LoginPassword, Mode=TwoWay}"
                             Theme="{StaticResource TextBox.Incy}"
-                            Watermark="Пароль">
+                            Watermark="{loc:T Login_Password}">
                             <TextBox.InnerRightContent>
                                 <Button
                                     x:Name="TogglePasswordButton"
@@ -331,7 +332,7 @@
                                     Height="36"
                                     Padding="0"
                                     Classes="IconButton"
-                                    ToolTip.Tip="Показать пароль">
+                                    ToolTip.Tip="{loc:T Login_ShowPassword}">
                                     <Panel>
                                         <PathIcon
                                             x:Name="EyeOnIcon"
@@ -358,7 +359,7 @@
                                 HorizontalAlignment="Stretch"
                                 Classes="Tonal Tall"
                                 Command="{Binding LoginSiteCmd}">
-                                <TextBlock x:Name="SiteButtonLabel" Text="Войти через сайт" />
+                                <TextBlock x:Name="SiteButtonLabel" Text="{loc:T Common_SignInWebsite}" />
                             </Button>
                             <Ellipse
                                 x:Name="SiteSpinner"
@@ -386,13 +387,14 @@
                                 HorizontalAlignment="Stretch"
                                 Classes="Body"
                                 Foreground="{DynamicResource Brush.OnSurfaceVariant}"
-                                Text="Введите 6-значный код из приложения"
+                                Text="{loc:T Login_EnterCode}"
                                 TextAlignment="Center"
                                 TextWrapping="Wrap" />
                             <TextBox
                                 x:Name="CodeBox"
                                 Margin="0,12,0,0"
-                                FontFeatures="tnum,lnum"
+                                FontFamily="{DynamicResource Font.Numeric}"
+                                FontFeatures="tnum,lnum,zero"
                                 FontSize="20"
                                 MaxLength="6"
                                 Text="{Binding TwoFaCode, Mode=TwoWay}"
@@ -406,7 +408,7 @@
                                 FontSize="12"
                                 Foreground="{DynamicResource Brush.Red}"
                                 IsVisible="False"
-                                Text="Код состоит из 6 цифр"
+                                Text="{loc:T Login_CodeIs6}"
                                 TextAlignment="Center"
                                 TextWrapping="Wrap" />
                             <Panel Margin="0,12,0,0">
@@ -415,7 +417,7 @@
                                     HorizontalAlignment="Stretch"
                                     Classes="Primary Tall"
                                     Command="{Binding Submit2FaCmd}">
-                                    <TextBlock x:Name="ConfirmButtonLabel" Text="Подтвердить" />
+                                    <TextBlock x:Name="ConfirmButtonLabel" Text="{loc:T Login_Confirm}" />
                                 </Button>
                                 <Ellipse
                                     x:Name="ConfirmSpinner"
@@ -439,7 +441,7 @@
                             Margin="0,8,0,0"
                             HorizontalAlignment="Center"
                             Classes="LinkAction"
-                            Content="Регистрация на сайте" />
+                            Content="{loc:T Login_SignUp}" />
 
                         <!--  Строка ошибки (tv_error): Red, по центру, только реальный диагностик.  -->
                         <TextBlock
@@ -493,7 +495,7 @@
                             Margin="0,20,0,0"
                             HorizontalAlignment="Stretch"
                             Classes="Title"
-                            Text="Ожидаем подтверждения в Telegram"
+                            Text="{loc:T Login_WaitingConfirm}"
                             TextAlignment="Center"
                             TextWrapping="Wrap" />
                         <TextBlock
@@ -501,7 +503,7 @@
                             HorizontalAlignment="Stretch"
                             Classes="Body"
                             Foreground="{DynamicResource Brush.OnSurfaceVariant}"
-                            Text="Подтвердите вход в открывшемся приложении и вернитесь сюда — остальное сделаем сами."
+                            Text="{loc:T Login_TelegramConfirmHint}"
                             TextAlignment="Center"
                             TextWrapping="Wrap" />
                         <Button
@@ -518,7 +520,7 @@
                                     Height="20"
                                     Data="{StaticResource Geo.Login.Telegram}"
                                     Foreground="{DynamicResource Brush.OnAccent}" />
-                                <TextBlock VerticalAlignment="Center" Text="Открыть Telegram" />
+                                <TextBlock VerticalAlignment="Center" Text="{loc:T Login_OpenTelegram}" />
                             </StackPanel>
                         </Button>
                         <Button
@@ -526,7 +528,7 @@
                             Margin="0,8,0,0"
                             HorizontalAlignment="Center"
                             Classes="LinkAction"
-                            Content="Начать заново" />
+                            Content="{loc:T Login_StartOver}" />
                     </StackPanel>
 
                 </StackPanel>

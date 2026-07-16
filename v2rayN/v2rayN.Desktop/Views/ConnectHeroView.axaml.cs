@@ -246,7 +246,7 @@ public partial class ConnectHeroView : UserControl
                 ShieldOutline.Fill = AccentBrush;
                 ShieldOutline.Opacity = 1;
                 ShieldFilled.Opacity = 0;
-                StatusText.Text = "Подключение…";
+                StatusText.Text = L.T("Status_Connecting");
                 StatusText.Foreground = AccentBrush;
                 ServerInfo.IsVisible = true;
                 SetArc(true);
@@ -258,7 +258,7 @@ public partial class ConnectHeroView : UserControl
                 ShieldOutline.Fill = AccentBrush;
                 ShieldOutline.Opacity = 0;
                 ShieldFilled.Opacity = 1;
-                StatusText.Text = "Подключено";
+                StatusText.Text = L.T("Status_Connected");
                 StatusText.Foreground = AccentBrush;
                 ServerInfo.IsVisible = true;
                 SetArc(false);
@@ -284,7 +284,7 @@ public partial class ConnectHeroView : UserControl
                 ShieldOutline.Fill = ErrorBrush;
                 ShieldOutline.Opacity = 1;
                 ShieldFilled.Opacity = 0;
-                StatusText.Text = "Не удалось подключиться";
+                StatusText.Text = L.T("Common_CouldntConnect");
                 StatusText.Foreground = ErrorBrush;
                 ServerInfo.IsVisible = hasServer;
                 SetArc(false);
@@ -299,7 +299,7 @@ public partial class ConnectHeroView : UserControl
                 ShieldOutline.Fill = ShieldIdleBrush;
                 ShieldOutline.Opacity = hasServer ? 1 : 0.38;
                 ShieldFilled.Opacity = 0;
-                StatusText.Text = hasServer ? "Не подключено" : "Выберите сервер";
+                StatusText.Text = hasServer ? L.T("Home_NotConnected") : L.T("Home_ChooseServer");
                 StatusText.Foreground = OnSurfaceBrush;
                 ServerInfo.IsVisible = hasServer;
                 SetArc(false);
@@ -355,6 +355,11 @@ public partial class ConnectHeroView : UserControl
     private void OnHeroAttached(object? sender, VisualTreeAttachmentEventArgs e)
     {
         MotionState.Changed += OnMotionStateChanged;
+
+        //  Live language switch: the status caption is set imperatively (SetConnectState), so a
+        //  {loc:T} binding can't refresh it. Re-apply the current visual state (animate:false = jump
+        //  to its end-look, no re-played sonar) whenever the language changes so the caption follows.
+        L.Instance.LanguageChanged += OnLanguageChanged;
         //  Синхронизируемся с текущим режимом на входе в дерево (без перезапуска состояния —
         //  connect-состояние подаст HomeHeroPresenter). Обновляем только флаг + видимость статы.
         ApplyLiteMode(MotionState.IsLite, reapply: false);
@@ -373,6 +378,7 @@ public partial class ConnectHeroView : UserControl
     private void OnHeroDetached(object? sender, VisualTreeAttachmentEventArgs e)
     {
         MotionState.Changed -= OnMotionStateChanged;
+        L.Instance.LanguageChanged -= OnLanguageChanged;
 
         _winStateSub?.Dispose();
         _winStateSub = null;
@@ -416,6 +422,9 @@ public partial class ConnectHeroView : UserControl
     }
 
     private void OnMotionStateChanged(object? sender, bool lite) => ApplyLiteMode(lite, reapply: true);
+
+    private void OnLanguageChanged(object? sender, EventArgs e) =>
+        SetConnectState(_visualState, hasServer: _hasServer, animate: false);
 
     private void ApplyLiteMode(bool lite, bool reapply)
     {
@@ -514,10 +523,15 @@ public partial class ConnectHeroView : UserControl
     // ── Дуга / glow / сонар ───────────────────────────────────────────────────────────
     private void SetArc(bool on)
     {
-        ConnectingArc.IsVisible = on;
+        //  В lite/reduced-motion дуги НЕТ ВООБЩЕ (не статичная, а полностью скрыта): владелец
+        //  не хочет «замёрзшую» синюю дугу в облегчённом режиме. Само состояние connecting всё
+        //  равно читается подписью «Подключение…» — кольцо/дуга существуют только ради движения.
+        //  Реактивно: MotionState.Changed → ApplyLiteMode → SetConnectState → сюда, поэтому живой
+        //  тумблер lite мгновенно прячет/возвращает дугу.
+        ConnectingArc.IsVisible = on && !ReducedMotion;
 
         //  ОДНА чистая центрированная дуга: крутится только пока реально нужно и не под
-        //  ReducedMotion/lite (тогда остаётся статичным индикатором). Второй counter-arc убран —
+        //  ReducedMotion/lite (тогда её вообще нет — см. выше). Второй counter-arc убран —
         //  он «облетал» шит, т.к. не имел RenderTransformOrigin в центре.
         if (on && !ReducedMotion && !_animationsPaused)
         {

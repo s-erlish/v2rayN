@@ -340,7 +340,7 @@ public class DevicesViewModel : MyReactiveObject, IDisposable
     private void AskDelete(DeviceDto device)
     {
         _pendingDelete = device;
-        DeleteConfirmText = $"Устройство «{DeviceRow.DisplayNameOf(device)}» будет отключено от подписки.";
+        DeleteConfirmText = Common.L.F("Devices_UnlinkBody", DeviceRow.DisplayNameOf(device));
         ShowDeleteConfirm = true;
     }
 
@@ -358,7 +358,7 @@ public class DevicesViewModel : MyReactiveObject, IDisposable
             RunOnUi(() =>
             {
                 CloseConfirm();
-                AppEvents.SendSnackMsgRequested.Publish("Не удалось отвязать устройство. Попробуйте позже.");
+                AppEvents.SendSnackMsgRequested.Publish(Common.L.T("Devices_UnlinkFailed"));
             });
             return;
         }
@@ -375,9 +375,9 @@ public class DevicesViewModel : MyReactiveObject, IDisposable
                     var updated = Devices.Select(r => r.Dto).Where(d => d.Hwid != device.Hwid).ToList();
                     AccountCache.PutDevices(uuid!, updated);
                     Render(updated);
-                    AppEvents.SendSnackMsgRequested.Publish("Устройство отвязано");
+                    AppEvents.SendSnackMsgRequested.Publish(Common.L.T("Devices_Unlinked"));
                 })
-                .OnFailure(_ => AppEvents.SendSnackMsgRequested.Publish("Не удалось отвязать устройство. Попробуйте позже."));
+                .OnFailure(_ => AppEvents.SendSnackMsgRequested.Publish(Common.L.T("Devices_UnlinkFailed")));
             IsDeleting = false;
             CloseConfirm();
             Recompute();
@@ -443,12 +443,12 @@ public class DevicesViewModel : MyReactiveObject, IDisposable
     /// <summary>Human error reason; the fallback is devices_error_generic verbatim.</summary>
     private static string MessageFor(ApiError error) => error switch
     {
-        ApiError.ServiceUnavailable => "Сервис временно недоступен",
-        ApiError.NetworkError => "Ошибка сети. Проверьте подключение",
-        ApiError.Unauthorized => "Требуется вход в аккаунт",
-        ApiError.RateLimited => "Слишком много запросов. Попробуйте позже",
-        ApiError.TimeoutError => "Превышено время ожидания",
-        _ => "Не удалось загрузить устройства. Попробуйте позже.",
+        ApiError.ServiceUnavailable => Common.L.T("Common_ServiceUnavailable"),
+        ApiError.NetworkError => Common.L.T("Common_NetworkError"),
+        ApiError.Unauthorized => Common.L.T("Common_SignInRequired"),
+        ApiError.RateLimited => Common.L.T("Common_TooManyRequests"),
+        ApiError.TimeoutError => Common.L.T("Common_Timeout"),
+        _ => Common.L.T("Devices_ErrLoad"),
     };
 
     private static void RunOnUi(Action action)
@@ -539,11 +539,11 @@ public sealed class DeviceRow
         var lastActive = FormatIsoDate(dto.LastActiveAt);
         if (lastActive.IsNotEmpty() && platform != null)
         {
-            Meta = $"{platform} · Активно: {lastActive}";
+            Meta = Common.L.F("Devices_PlatformActive", platform, lastActive);
         }
         else if (lastActive.IsNotEmpty())
         {
-            Meta = $"Активно: {lastActive}";
+            Meta = Common.L.F("Devices_Active", lastActive);
         }
         else
         {
@@ -551,12 +551,12 @@ public sealed class DeviceRow
         }
         HasMeta = Meta.IsNotEmpty();
 
-        HwidText = $"ID: {dto.Hwid}";
+        HwidText = Common.L.F("Devices_Id", dto.Hwid);
         HasHwid = dto.Hwid.IsNotEmpty();
     }
 
     public static string DisplayNameOf(DeviceDto dto) =>
-        dto.DeviceModel.NullIfEmpty() ?? dto.Platform.NullIfEmpty() ?? "Неизвестное устройство";
+        dto.DeviceModel.NullIfEmpty() ?? dto.Platform.NullIfEmpty() ?? Common.L.T("Devices_Unknown");
 
     /// <summary>ISO-8601 (or date-only) → dd.MM.yyyy; "" for blank/unparseable input.</summary>
     private static string FormatIsoDate(string? iso)

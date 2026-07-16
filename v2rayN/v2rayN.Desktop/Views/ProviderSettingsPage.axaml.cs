@@ -26,7 +26,7 @@ public partial class ProviderSettingsPage : UserControl, ISubPage
 
         _config = AppManager.Instance.Config;
 
-        cmbInterval.ItemsSource = IntervalOptions.Select(h => h == 0 ? "Выкл" : $"{h} ч.").ToList();
+        cmbInterval.ItemsSource = IntervalOptions.Select(h => h == 0 ? L.T("Common_Off") : L.F("Common_HoursShort", h)).ToList();
         var cur = _config.GuiItem.AutoUpdateInterval;
         var idx = Array.IndexOf(IntervalOptions, cur);
         cmbInterval.SelectedIndex = idx < 0 ? 0 : idx;

@@ -125,7 +125,7 @@ public partial class PerAppProxyPage : UserControl, ISubPage
         {
             AllowMultiple = false,
             FileTypeFilter = Utils.IsWindows()
-                ? new[] { new FilePickerFileType("Программа") { Patterns = new[] { "*.exe" } } }
+                ? new[] { new FilePickerFileType(L.T("PerApp_ProgramFileType")) { Patterns = new[] { "*.exe" } } }
                 : null,
         });
         var path = files?.FirstOrDefault()?.TryGetLocalPath();

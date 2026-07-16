@@ -110,7 +110,7 @@ public static class SubscriptionHandler
         {
             return ua;
         }
-        return "v2rayNG/1.10.6";
+        return Global.SubscriptionUserAgent;
     }
 
     private static async Task<string> DownloadSubscriptionContent(DownloadService downloadHandle, string url, bool blProxy, string userAgent)

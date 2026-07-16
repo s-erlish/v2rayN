@@ -3,6 +3,7 @@
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:loc="clr-namespace:v2rayN.Desktop.Common"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     d:DesignWidth="408"
     mc:Ignorable="d">
@@ -77,7 +78,7 @@
                     Classes="Title"
                     Text=""
                     TextTrimming="CharacterEllipsis" />
-                <TextBlock Classes="Caption" Text="Управление аккаунтом" />
+                <TextBlock Classes="Caption" Text="{loc:T Home_ManageAccount}" />
             </StackPanel>
             <PathIcon
                 Grid.Column="2"

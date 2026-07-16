@@ -3,6 +3,7 @@
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:loc="clr-namespace:v2rayN.Desktop.Common"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     d:DesignWidth="408"
     mc:Ignorable="d">
@@ -97,7 +98,7 @@
                     Margin="0,0,2,0"
                     Classes="IconButton40 MetaIcon"
                     Click="OnCollapseClick"
-                    ToolTip.Tip="Свернуть серверы">
+                    ToolTip.Tip="{loc:T Sub_CollapseServers}">
                     <PathIcon
                         x:Name="CollapseIcon"
                         Width="20"
@@ -116,10 +117,14 @@
                         Classes="Title"
                         Text=""
                         TextTrimming="CharacterEllipsis" />
+                    <!--  Подзаголовок несёт дату/время последнего обновления — цифрам даём
+                          Font.Numeric + tnum (табличные, слэш-ноль), буквы не затрагиваются.  -->
                     <TextBlock
                         x:Name="SubtitleText"
                         Margin="0,2,0,0"
                         Classes="Caption"
+                        FontFamily="{DynamicResource Font.Numeric}"
+                        FontFeatures="tnum,lnum,zero"
                         Text=""
                         TextTrimming="CharacterEllipsis" />
                 </StackPanel>
@@ -132,7 +137,7 @@
                     <Button
                         x:Name="PingButton"
                         Classes="IconButton40 Row Accent MetaIcon"
-                        ToolTip.Tip="Проверить задержку">
+                        ToolTip.Tip="{loc:T Common_TestLatency}">
                         <PathIcon
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center"
@@ -143,7 +148,7 @@
                     <Button
                         x:Name="RefreshButton"
                         Classes="IconButton40 Row Accent MetaIcon"
-                        ToolTip.Tip="Обновить подписку">
+                        ToolTip.Tip="{loc:T Common_UpdateSubscription}">
                         <Panel>
                             <PathIcon
                                 x:Name="RefreshIcon"
@@ -177,7 +182,7 @@
                     <Button
                         x:Name="PinButton"
                         Classes="IconButton40 Row MetaIcon"
-                        ToolTip.Tip="Закрепить">
+                        ToolTip.Tip="{loc:T Sub_Pin}">
                         <!--  Foreground = OnSurfaceVariant (не закреплено) / Accent (закреплено).  -->
                         <PathIcon
                             x:Name="PinIcon"
@@ -192,7 +197,7 @@
                     <Button
                         x:Name="DeleteButton"
                         Classes="IconButton40 Row MetaIcon MetaDanger"
-                        ToolTip.Tip="Удалить подписку">
+                        ToolTip.Tip="{loc:T Sub_Delete}">
                         <PathIcon
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center"
@@ -204,14 +209,28 @@
             <!--  ============ Тело (только у реальной подписки): трафик + announce + поддержка ============  -->
             <StackPanel x:Name="MetaBody">
 
-                <!--  Строка 2: трафик-пилюля по центру + expiry-маркер справа на той же линии.  -->
-                <Grid Margin="0,8,0,0">
-                    <!--  Слим-пилюля 160×14: трек SurfaceVariant, radius 8, с заливкой Accent под подписью.  -->
+                <!--  Строка 2: трафик-пилюля (по центру) + expiry-маркер. Две строки-слота:
+                      code-behind (ApplyTrafficLayout по фактической ширине) кладёт expiry на
+                      ОДНУ линию справа от пилюли в широком макете, а в КОМПАКТЕ (~372) уводит
+                      его на свою строку под пилюлю — так дата и пилюля НИКОГДА не налезают друг
+                      на друга и обе читаются целиком. Резервируем место сеткой (нет сдвига CLS).  -->
+                <Grid
+                    x:Name="TrafficRow"
+                    Margin="0,8,0,0"
+                    RowDefinitions="Auto,Auto">
+                    <!--  Слим-пилюля 160×14: трек SurfaceVariant, radius 8. Заливка — ПЛАВНЫЙ
+                          градиент светлое→акцент (бело→синий на тёмной), строится в code-behind
+                          из живого Brush.Accent, поэтому корректна во всех 3 темах: тёмная
+                          (near-white→синий), светлая (старт светлее трека, не «растворяется»),
+                          mono (акцент = серо-белый ⇒ серый перелив, без синевы).  -->
                     <Panel
+                        Grid.Row="0"
                         Width="{StaticResource Size.TrafficPill}"
-                        HorizontalAlignment="Center">
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center">
                         <Border Classes="TrafficPill" VerticalAlignment="Center">
-                            <!--  Заливка: Width = 160 * trafficFraction. Безлимит (∞) ⇒ 0 (пустой трек).  -->
+                            <!--  Заливка: Width = 160 * trafficFraction. Безлимит (∞) ⇒ 0 (пустой трек).
+                                  Background (градиент) назначает code-behind — тема-зависимо.  -->
                             <Border
                                 x:Name="TrafficFill"
                                 Width="0"
@@ -222,18 +241,23 @@
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center"
                             Classes="Numeric"
-                            FontFeatures="tnum"
+                            FontFamily="{DynamicResource Font.Numeric}"
+                            FontFeatures="tnum,lnum,zero"
                             FontSize="11"
                             FontWeight="Medium"
                             Text="" />
                     </Panel>
-                    <!--  Expiry: «∞» / «до dd.MM.yyyy» / «Просрочено» (красный) — привязка.  -->
+                    <!--  Expiry: «∞» / «до dd.MM.yyyy» / «Просрочено» (красный) — привязка.
+                          Строку/выравнивание назначает code-behind (широкий → Row 0 справа;
+                          компакт → Row 1 по центру под пилюлей). Цифры — Font.Numeric + tnum.  -->
                     <TextBlock
                         x:Name="ExpiryText"
+                        Grid.Row="0"
                         HorizontalAlignment="Right"
                         VerticalAlignment="Center"
                         Classes="Caption"
-                        FontFeatures="tnum"
+                        FontFamily="{DynamicResource Font.Numeric}"
+                        FontFeatures="tnum,lnum,zero"
                         Text="" />
                 </Grid>
 
@@ -265,7 +289,7 @@
                         Classes="Tonal"
                         FontSize="12"
                         Foreground="{DynamicResource Brush.OnAccentContainer}"
-                        ToolTip.Tip="Открыть поддержку">
+                        ToolTip.Tip="{loc:T Sub_OpenSupport}">
                         <StackPanel
                             VerticalAlignment="Center"
                             Orientation="Horizontal"
@@ -275,7 +299,7 @@
                                 Height="15"
                                 Data="{StaticResource Meta.Support}"
                                 Foreground="{DynamicResource Brush.OnAccentContainer}" />
-                            <TextBlock VerticalAlignment="Center" Text="Поддержка" />
+                            <TextBlock VerticalAlignment="Center" Text="{loc:T Sub_Support}" />
                         </StackPanel>
                     </Button>
 

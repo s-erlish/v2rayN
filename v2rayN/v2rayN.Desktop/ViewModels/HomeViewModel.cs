@@ -3,6 +3,7 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using ServiceLib.Handler.SysProxy;
+using v2rayN.Desktop.Common;
 
 namespace v2rayN.Desktop.ViewModels;
 
@@ -101,6 +102,10 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         Profiles.ProfileItems.CollectionChanged += OnProfileItemsChanged;
         RebuildGroups();
 
+        // Live language switch: the fallback group name ("My servers") and the servers/providers
+        // meta line are composed in code, so re-run the projection when the language changes.
+        L.Instance.LanguageChanged += OnLanguageChanged;
+
         // Live speed from the same statistics event the status bar consumes.
         _statsSub = AppEvents.DispatcherStatisticsRequested
             .AsObservable()
@@ -161,9 +166,9 @@ public class HomeViewModel : MyReactiveObject, IDisposable
             IsConnecting = false;
             _connectingUntil = null;
             // A4: surface a distinct FAILURE state instead of collapsing silently to Idle. Sticky
-            // until the next attempt / a successful connect; drives the hero's Error shield.
+            // until the next attempt / a successful connect; drives the hero's Error shield — which is
+            // the ONLY surface for connect state now (no bottom snack: the owner doesn't want it).
             ConnectFailed = true;
-            AppEvents.SendSnackMsgRequested.Publish("Не удалось подключиться");
         }
         SyncState();
     }
@@ -273,14 +278,13 @@ public class HomeViewModel : MyReactiveObject, IDisposable
             if (IsConnecting && _connectingUntil is { } until && DateTime.Now > until)
             {
                 // The connect deadline elapsed with no running core — a truthful timeout failure (A4).
+                // ConnectFailed alone drives the hero's Error shield; no bottom snack is published for
+                // connect/disconnect transitions (the owner doesn't want them, and the shield already
+                // conveys the state). Covers the fire-and-forget/server-switch connect that only fails
+                // via the deadline.
                 IsConnecting = false;
                 _connectingUntil = null;
                 ConnectFailed = true;
-                // HomeViewModel is now the SOLE publisher of connect-transition snacks (StatusBar's
-                // duplicate was removed). The direct Connect() path publishes on immediate failure;
-                // publish here too so a fire-and-forget/server-switch connect that only fails via the
-                // deadline still surfaces the same inline snack instead of silently failing.
-                AppEvents.SendSnackMsgRequested.Publish("Не удалось подключиться");
             }
         }
     }
@@ -388,7 +392,7 @@ public class HomeViewModel : MyReactiveObject, IDisposable
                 .GroupBy(i => new
                 {
                     Key = i.Subid ?? string.Empty,
-                    Name = string.IsNullOrEmpty(i.SubRemarks) ? "Мои серверы" : i.SubRemarks,
+                    Name = string.IsNullOrEmpty(i.SubRemarks) ? L.T("Home_MyServers") : i.SubRemarks,
                 })
                 .ToList();
 
@@ -419,10 +423,18 @@ public class HomeViewModel : MyReactiveObject, IDisposable
             }
         }
 
-        Subtitle = $"{count} серверов · {providers} провайдеров";
+        Subtitle = FormatServersProvidersMeta(count, providers);
     }
 
+    /// <summary>Compose the "{n} servers · {n} providers" meta line from the locale-aware plural
+    /// forms (Common_ServersPlural / Common_ProvidersPlural) and the Home_ServersProvidersMeta
+    /// template. Shared by the live list and the design-time sample so neither hardcodes the words.</summary>
+    private static string FormatServersProvidersMeta(int count, int providers) =>
+        L.F("Home_ServersProvidersMeta", L.Plural("Common_ServersPlural", count), L.Plural("Common_ProvidersPlural", providers));
+
     private void OnGroupExpandedChanged(string key, bool expanded) => _groupExpanded[key] = expanded;
+
+    private void OnLanguageChanged(object? sender, EventArgs e) => RebuildGroups();
 
     #endregion Grouped list projection
 
@@ -439,6 +451,7 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         {
             Profiles.ProfileItems.CollectionChanged -= OnProfileItemsChanged;
         }
+        L.Instance.LanguageChanged -= OnLanguageChanged;
         StopUptimeTick();
         _coreStateSub?.Dispose();
         _statsSub?.Dispose();
@@ -463,7 +476,7 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         vm.ServerGroups.Add(new HomeServerGroup("sub|import sub", "import sub", servers, true));
         vm.HasServers = true;
         vm.IsEmpty = false;
-        vm.Subtitle = "5 серверов · 1 провайдеров";
+        vm.Subtitle = FormatServersProvidersMeta(5, 1);
         return vm;
     }
 

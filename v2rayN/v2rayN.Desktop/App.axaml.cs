@@ -30,6 +30,11 @@ public partial class App : Application
                 // База Тёмная/Светлая + отдельный МОНОХРОМНЫЙ (чёрно-белый) оверлей поверх неё.
                 var cfg = AppManager.Instance.Config;
                 ApplyTheme(cfg.UiItem.CurrentTheme, cfg.UiItem.BlackTheme);
+
+                // Локализация из конфига ДО построения окна: первый кадр рисуется на нужном языке
+                // (ru/en) и все {loc:T} биндинги открываются уже правильными. Живое переключение
+                // без перезапуска — см. L.SetLanguage.
+                L.Init();
             }
 
             var mainWindowViewModel = new MainWindowViewModel();
@@ -170,8 +175,12 @@ public partial class App : Application
 
     #region Tray menu (departament: Перезапустить · Подключить/Отключить · Показать · Выход)
 
-    // Пункт-переключатель, чью подпись держим синхронной с реальным состоянием ядра.
+    // Пункты трея. Порядок из App.axaml: Перезапустить · Подключить/Отключить · Показать · Выход.
+    // Переключатель держим синхронным с реальным состоянием ядра; подписи всех — из L.T (live).
+    private NativeMenuItem? _trayRestartItem;
     private NativeMenuItem? _trayToggleItem;
+    private NativeMenuItem? _trayShowItem;
+    private NativeMenuItem? _trayExitItem;
 
     private static bool IsCoreRunning() =>
         AppManager.Instance.IsRunningCore(ECoreType.Xray) || AppManager.Instance.IsRunningCore(ECoreType.sing_box);
@@ -181,11 +190,27 @@ public partial class App : Application
         try
         {
             var icons = TrayIcon.GetIcons(this);
-            if (icons is { Count: > 0 } && icons[0].Menu is { } menu)
+            if (icons is { Count: > 0 })
             {
-                _trayToggleItem = menu.Items
-                    .OfType<NativeMenuItem>()
-                    .FirstOrDefault(i => Equals(i.CommandParameter, "toggleConnect"));
+                var trayIcon = icons[0];
+
+                // Bug2: подсказка иконки трея при наведении = ВСЕГДА «departament», а не строка статуса
+                // подключения. В App.axaml ToolTipText привязан к {Binding RunningServerToolTipText};
+                // перекрываем фиксированным именем бренда и УДЕРЖИВАЕМ его: если StatusBarViewModel
+                // перепишет строку (обновление серверов/подключение), тем же кадром возвращаем «departament».
+                trayIcon.ToolTipText = "departament";
+                trayIcon.GetObservable(TrayIcon.ToolTipTextProperty)
+                    .Where(t => t != "departament")
+                    .Subscribe(_ => Dispatcher.UIThread.Post(() => trayIcon.ToolTipText = "departament"));
+
+                if (trayIcon.Menu is { } menu)
+                {
+                    var items = menu.Items.OfType<NativeMenuItem>().ToList();
+                    _trayRestartItem = items.ElementAtOrDefault(0);
+                    _trayToggleItem = items.FirstOrDefault(i => Equals(i.CommandParameter, "toggleConnect")) ?? items.ElementAtOrDefault(1);
+                    _trayShowItem = items.ElementAtOrDefault(2);
+                    _trayExitItem = items.ElementAtOrDefault(3);
+                }
             }
         }
         catch (Exception ex)
@@ -204,13 +229,38 @@ public partial class App : Application
         AppEvents.CoreRunningStateChanged
             .AsObservable()
             .Subscribe(_ => Dispatcher.UIThread.Post(UpdateTrayToggleLabel));
+
+        // Локализация трея: применяем подписи один раз на старте и заново при смене языка (live).
+        // Родное OS-меню читает Header при открытии, так что достаточно переустановить строки.
+        LocalizeTray();
+        L.Instance.LanguageChanged += (_, _) => Dispatcher.UIThread.Post(LocalizeTray);
     }
 
+    // Ре-локализация трея: подписи всех пунктов из L.T(...) — на старте и заново при смене языка.
+    // Родное OS-меню читает Header при открытии, поэтому достаточно переустановить строки.
+    private void LocalizeTray()
+    {
+        if (_trayRestartItem is not null)
+        {
+            _trayRestartItem.Header = L.T("Tray_Restart");
+        }
+        if (_trayShowItem is not null)
+        {
+            _trayShowItem.Header = L.T("Tray_Show");
+        }
+        if (_trayExitItem is not null)
+        {
+            _trayExitItem.Header = L.T("Tray_Exit");
+        }
+        UpdateTrayToggleLabel();
+    }
+
+    // Подпись переключателя = живое состояние ядра, из L.T (Отключить/Подключить · Disconnect/Connect).
     private void UpdateTrayToggleLabel()
     {
         if (_trayToggleItem is not null)
         {
-            _trayToggleItem.Header = IsCoreRunning() ? "Отключить" : "Подключить";
+            _trayToggleItem.Header = IsCoreRunning() ? L.T("Tray_Disconnect") : L.T("Tray_Connect");
         }
     }
 

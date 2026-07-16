@@ -3,6 +3,7 @@
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:loc="clr-namespace:v2rayN.Desktop.Common"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     d:DesignWidth="560"
     d:DesignHeight="640"
@@ -40,7 +41,7 @@
                 Padding="0"
                 VerticalAlignment="Center"
                 Classes="IconButton"
-                ToolTip.Tip="Назад">
+                ToolTip.Tip="{loc:T Common_Back}">
                 <PathIcon
                     Width="22"
                     Height="22"
@@ -54,7 +55,7 @@
                 Margin="16,0,0,0"
                 VerticalAlignment="Center"
                 Classes="Headline"
-                Text="Схемы URL-адресов"
+                Text="{loc:T Settings_UrlSchemes}"
                 TextTrimming="CharacterEllipsis" />
         </Grid>
 
@@ -66,22 +67,22 @@
                     CornerRadius="{DynamicResource Radius.Card}"
                     Padding="16,12">
                     <StackPanel Spacing="4">
-                        <TextBlock Classes="Body" Text="Регистрация схемы depv://" />
+                        <TextBlock Classes="Body" Text="{loc:T UrlSchemes_Registration}" />
                         <TextBlock
                             x:Name="txtStatus"
                             Classes="Subtitle"
                             Text="—"
                             TextWrapping="Wrap" />
                         <StackPanel Margin="0,8,0,0" Orientation="Horizontal" Spacing="8">
-                            <Button x:Name="btnRegister" Classes="Primary" Content="Зарегистрировать" />
-                            <Button x:Name="btnUnregister" Content="Убрать" />
+                            <Button x:Name="btnRegister" Classes="Primary" Content="{loc:T UrlSchemes_Register}" />
+                            <Button x:Name="btnUnregister" Content="{loc:T UrlSchemes_Remove}" />
                         </StackPanel>
                     </StackPanel>
                 </Border>
 
                 <TextBlock
                     Classes="Subtitle"
-                    Text="Нажмите на схему, чтобы скопировать. Используйте их в ярлыках, скриптах или других приложениях."
+                    Text="{loc:T UrlSchemes_Hint}"
                     TextWrapping="Wrap" />
 
                 <Border Classes="Card" Padding="8,4">
@@ -100,7 +101,7 @@
                                         Grid.Column="1"
                                         VerticalAlignment="Center"
                                         Click="OnCopyClick"
-                                        Content="Копировать"
+                                        Content="{loc:T Common_Copy}"
                                         Tag="{Binding Scheme}" />
                                 </Grid>
                             </DataTemplate>

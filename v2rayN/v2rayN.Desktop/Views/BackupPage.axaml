@@ -3,6 +3,7 @@
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:loc="clr-namespace:v2rayN.Desktop.Common"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     d:DesignWidth="520"
     d:DesignHeight="440"
@@ -40,7 +41,7 @@
                 Padding="0"
                 VerticalAlignment="Center"
                 Classes="IconButton"
-                ToolTip.Tip="Назад">
+                ToolTip.Tip="{loc:T Common_Back}">
                 <PathIcon
                     Width="22"
                     Height="22"
@@ -54,32 +55,32 @@
                 Margin="16,0,0,0"
                 VerticalAlignment="Center"
                 Classes="Headline"
-                Text="Резервное копирование"
+                Text="{loc:T Settings_Backup}"
                 TextTrimming="CharacterEllipsis" />
         </Grid>
 
         <StackPanel Margin="16,12,16,24" Spacing="8">
             <TextBlock
                 Classes="Subtitle"
-                Text="Сохраните все настройки, подписки и серверы в один .zip-файл или восстановите их из ранее сохранённой копии."
+                Text="{loc:T Backup_Intro}"
                 TextWrapping="Wrap" />
 
             <Border Classes="Card" Padding="16,4">
                 <StackPanel>
                     <Grid ColumnDefinitions="*,Auto" MinHeight="64">
                         <StackPanel Grid.Column="0" Margin="0,0,8,0" VerticalAlignment="Center">
-                            <TextBlock Classes="Body" Text="Экспорт" />
-                            <TextBlock Margin="0,4,0,0" Classes="Subtitle" Text="Сохранить копию в файл" TextWrapping="Wrap" />
+                            <TextBlock Classes="Body" Text="{loc:T Backup_Export}" />
+                            <TextBlock Margin="0,4,0,0" Classes="Subtitle" Text="{loc:T Backup_ExportHint}" TextWrapping="Wrap" />
                         </StackPanel>
-                        <Button x:Name="btnExport" Grid.Column="1" VerticalAlignment="Center" Content="Сохранить…" />
+                        <Button x:Name="btnExport" Grid.Column="1" VerticalAlignment="Center" Content="{loc:T Backup_Save}" />
                     </Grid>
                     <Border Height="1" Background="{DynamicResource Brush.OutlineVariant}" />
                     <Grid ColumnDefinitions="*,Auto" MinHeight="64">
                         <StackPanel Grid.Column="0" Margin="0,0,8,0" VerticalAlignment="Center">
-                            <TextBlock Classes="Body" Text="Импорт" />
-                            <TextBlock Margin="0,4,0,0" Classes="Subtitle" Text="Восстановить из файла — приложение перезапустится" TextWrapping="Wrap" />
+                            <TextBlock Classes="Body" Text="{loc:T Backup_Import}" />
+                            <TextBlock Margin="0,4,0,0" Classes="Subtitle" Text="{loc:T Backup_ImportHint}" TextWrapping="Wrap" />
                         </StackPanel>
-                        <Button x:Name="btnImport" Grid.Column="1" VerticalAlignment="Center" Content="Восстановить…" />
+                        <Button x:Name="btnImport" Grid.Column="1" VerticalAlignment="Center" Content="{loc:T Backup_Restore}" />
                     </Grid>
                 </StackPanel>
             </Border>

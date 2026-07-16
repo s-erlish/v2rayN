@@ -177,7 +177,7 @@ public class BuyViewModel : MyReactiveObject
         UpdateTotal();
 
         ShowPending = true;
-        PendingText = "Платёж обрабатывается…";
+        PendingText = Common.L.T("Buy_Processing");
     }
 
     public static BuyViewModel CreateDesign() => new(true);
@@ -277,8 +277,8 @@ public class BuyViewModel : MyReactiveObject
         ShowEmpty = !hasAny && _catalogError == null && _loaded;
         ShowSkeleton = !hasAny && _catalogError == null && !_loaded;
 
-        ErrorText = ShowError ? "Не удалось загрузить тарифы. Проверьте соединение и повторите." : string.Empty;
-        EmptyText = ShowEmpty ? "Тарифы недоступны" : string.Empty;
+        ErrorText = ShowError ? Common.L.T("Buy_ErrLoadPlans") : string.Empty;
+        EmptyText = ShowEmpty ? Common.L.T("Buy_NoPlans") : string.Empty;
     }
 
     #endregion load / state machine
@@ -398,14 +398,14 @@ public class BuyViewModel : MyReactiveObject
         ClearPaymentNotice();
         if (_selectedTariff == null || _selectedOption == null)
         {
-            ShowNotice("Выберите срок подписки");
+            ShowNotice(Common.L.T("Buy_ChoosePeriod"));
             return;
         }
 
         var methods = _publicConfig?.PlategaMethods ?? new List<PlategaMethodDto>();
         if (methods.Count == 0)
         {
-            ShowNotice("Способы оплаты недоступны");
+            ShowNotice(Common.L.T("Buy_NoPaymentMethods"));
             return;
         }
 
@@ -415,7 +415,7 @@ public class BuyViewModel : MyReactiveObject
         if (profile != null)
         {
             var balanceLabel = FormatMoney(profile.Balance, profile.Currency);
-            rows.Add(new BuyPaymentMethodItem(this, BalanceMethodId, $"С баланса — {balanceLabel}", isBalance: true, isSbp: false));
+            rows.Add(new BuyPaymentMethodItem(this, BalanceMethodId, Common.L.F("Buy_FromBalance", balanceLabel), isBalance: true, isSbp: false));
         }
         foreach (var m in methods)
         {
@@ -487,7 +487,7 @@ public class BuyViewModel : MyReactiveObject
         var url = init.PaymentUrl;
         if (url.IsNullOrEmpty())
         {
-            ShowNotice("Не удалось открыть страницу оплаты");
+            ShowNotice(Common.L.T("Common_CouldntOpenPayment"));
             return;
         }
 
@@ -497,12 +497,12 @@ public class BuyViewModel : MyReactiveObject
         }
         catch
         {
-            ShowNotice("Не удалось открыть страницу оплаты");
+            ShowNotice(Common.L.T("Common_CouldntOpenPayment"));
             return;
         }
 
         _pendingInit = init;
-        PendingText = "Завершите оплату в браузере";
+        PendingText = Common.L.T("Common_CompletePaymentInBrowser");
         ShowPending = true;
         StartPolling();
     }
@@ -537,7 +537,7 @@ public class BuyViewModel : MyReactiveObject
             for (var i = 0; i < PollAttempts; i++)
             {
                 await Task.Delay(PollDelayMs, ct);
-                RunOnUi(() => PendingText = "Платёж обрабатывается…");
+                RunOnUi(() => PendingText = Common.L.T("Buy_Processing"));
 
                 _ = RefreshProfile();
                 var payments = await _repo.GetPayments();
@@ -682,7 +682,7 @@ public class BuyViewModel : MyReactiveObject
             _ => null,
         };
 
-        PaymentNoticeTitle = "Ошибка оплаты";
+        PaymentNoticeTitle = Common.L.T("Buy_PaymentError");
         PaymentNoticeBody = detail.IsNullOrEmpty() ? $"HTTP {code}" : $"HTTP {code}\n{detail}";
         HasPaymentNoticeBody = true;
         HasPaymentNotice = true;
@@ -724,9 +724,10 @@ public class BuyViewModel : MyReactiveObject
     {
         if (bytes <= 0L)
         {
-            return "0 Б";
+            return Common.L.T("Common_ZeroBytes");
         }
-        string[] units = { "Б", "КБ", "МБ", "ГБ", "ТБ" };
+        // Shared 6-unit ladder (Б,КБ,МБ,ГБ,ТБ,ПБ); Buy caps at the first 5 as in the Android base.
+        var units = Common.L.T("Common_ByteUnits").Split(',').Take(5).ToArray();
         var value = (double)bytes;
         var idx = 0;
         while (value >= 1024.0 && idx < units.Length - 1)
@@ -777,7 +778,7 @@ public class BuyTariffItem : ReactiveObject
         var traffic = tariff.IsUnlimitedTraffic() || (tariff.TrafficLimitBytes ?? 0L) <= 0L
             ? "∞"
             : BuyViewModel.FormatBytes(tariff.TrafficLimitBytes ?? 0L);
-        Info = $"Устройства: {tariff.IncludedDevices} · Трафик: {traffic}";
+        Info = Common.L.F("Buy_DevicesTraffic", tariff.IncludedDevices, traffic);
 
         // Options sorted by the API sort order; a tariff without options falls back to its own
         // duration/price as a single synthetic option (port of optionsOf).
@@ -808,7 +809,7 @@ public class BuyOptionItem : ReactiveObject
     public BuyOptionItem(BuyViewModel owner, BuyTariffItem parent, PriceOptionDto option, string currency)
     {
         Option = option;
-        DurationText = $"{option.DurationDays} дн.";
+        DurationText = Common.L.F("Common_DaysShort", option.DurationDays);
         PriceText = BuyViewModel.FormatMoney(option.Price, currency);
         SelectCmd = ReactiveCommand.Create(() => owner.SelectOption(parent, this));
     }

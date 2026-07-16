@@ -25,9 +25,11 @@ public sealed class SubscriptionSyncManager
     /// <summary>
     /// v2rayNG-family User-Agent stamped on every account-imported subscription. The departament
     /// panel keys its managed server list off a recognised v2rayNG client, so this must stay a
-    /// v2rayNG UA — it is passed through verbatim by <see cref="SubscriptionHandler"/>.
+    /// v2rayNG UA — it is passed through verbatim by <see cref="SubscriptionHandler"/>. Single source
+    /// of truth: <see cref="Global.SubscriptionUserAgent"/>, the SAME literal the manual-add path
+    /// forces, so the account and manual fetches send byte-identical User-Agents.
     /// </summary>
-    private const string AccountSubscriptionUserAgent = "v2rayNG/1.10.6";
+    private const string AccountSubscriptionUserAgent = Global.SubscriptionUserAgent;
 
     private readonly IDepartamentApiClient _api;
 

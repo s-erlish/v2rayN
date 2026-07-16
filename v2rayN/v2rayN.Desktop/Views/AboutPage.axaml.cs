@@ -16,7 +16,7 @@ public partial class AboutPage : UserControl, ISubPage
     {
         InitializeComponent();
 
-        txtVersion.Text = "Версия " + Utils.GetVersionInfo();
+        txtVersion.Text = L.F("About_VersionValue", Utils.GetVersionInfo());
         txtRuntime.Text = BuildRuntimeInfo();
 
         btnBack.Click += (_, _) => BackRequested?.Invoke(this, EventArgs.Empty);
@@ -24,7 +24,7 @@ public partial class AboutPage : UserControl, ISubPage
         btnTelegram.Click += (_, _) => OpenUrl($"https://t.me/{BackendConfig.BotUsername}");
         btnCopy.Click += async (_, _) =>
         {
-            await AvaUtils.SetClipboardData(this, $"departament · Версия {Utils.GetVersionInfo()}\n{txtRuntime.Text}");
+            await AvaUtils.SetClipboardData(this, $"{L.F("About_TitleVersion", Utils.GetVersionInfo())}\n{txtRuntime.Text}");
         };
     }
 
@@ -42,7 +42,7 @@ public partial class AboutPage : UserControl, ISubPage
         {
             var arch = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString();
             var os = System.Runtime.InteropServices.RuntimeInformation.OSDescription;
-            return $"ОС: {os}\nАрхитектура: {arch}\n.NET: {Environment.Version}";
+            return L.F("About_SystemInfo", os, arch, Environment.Version);
         }
         catch
         {

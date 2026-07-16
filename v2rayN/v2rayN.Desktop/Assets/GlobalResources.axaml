@@ -67,6 +67,11 @@
             <SolidColorBrush x:Key="Brush.SurfaceHighest" Color="#20242B" />
             <SolidColorBrush x:Key="Brush.OnSurface" Color="#F2F4F8" />
             <SolidColorBrush x:Key="Brush.OnSurfaceVariant" Color="#9BA1AD" />
+            <!--  Затемнённый глиф под ховером иконочной НАВИГАЦИИ: один шаг темнее
+                  OnSurfaceVariant. Мирит с прежним поведением (ховер = затемнение), но
+                  теперь темнеет САМ глиф, а не фон-плитка. Тон ≈ #9BA1AD под чёрным-0.32
+                  скримом (что и красил область глифа раньше). Серый → mono-безопасен.  -->
+            <SolidColorBrush x:Key="Brush.OnSurfaceVariantHover" Color="#6E7480" />
             <SolidColorBrush x:Key="Brush.Outline" Color="#2A2E36" />
             <SolidColorBrush x:Key="Brush.OutlineVariant" Color="#20242B" />
             <SolidColorBrush x:Key="Brush.AccentContainer" Color="#17325C" />
@@ -96,6 +101,9 @@
             <SolidColorBrush x:Key="Brush.SurfaceHighest" Color="#E3EAF4" />
             <SolidColorBrush x:Key="Brush.OnSurface" Color="#111826" />
             <SolidColorBrush x:Key="Brush.OnSurfaceVariant" Color="#54607A" />
+            <!--  Ховер иконочной НАВИГАЦИИ на светлой: глиф темнеет на шаг к чернилам
+                  (виден как усиление на светлом фоне), без фон-плитки.  -->
+            <SolidColorBrush x:Key="Brush.OnSurfaceVariantHover" Color="#3C475E" />
             <SolidColorBrush x:Key="Brush.Outline" Color="#C3CCDC" />
             <SolidColorBrush x:Key="Brush.OutlineVariant" Color="#DCE3EF" />
             <SolidColorBrush x:Key="Brush.AccentContainer" Color="#D8E4FF" />
@@ -148,6 +156,20 @@
 
     <!--  Шрифт: Space Grotesk (переменный)  -->
     <FontFamily x:Key="Font.Grotesk">avares://v2rayN/Assets/Fonts/SpaceGrotesk.ttf#Space Grotesk</FontFamily>
+
+    <!--  Шрифт для ЦИФР (баланс · скорость · пинг · цены · трафик · часы аптайма).
+          Отдельного числового .ttf в проекте НЕТ, а сеть недоступна — поэтому берём ТУ ЖЕ
+          гарнитуру Space Grotesk (никаких двух похожих сансов), но как ОТДЕЛЬНЫЙ семантический
+          токен, а огранку фигур даёт сам Space Grotesk своими OpenType-наборами. Потребители
+          ставят FontFamily="{DynamicResource Font.Numeric}" ВМЕСТЕ с
+          FontFeatures="tnum,lnum,zero":
+            · tnum — табличные (моноширинные) цифры: значения не «прыгают» при живом обновлении
+                     (трафик/скорость/пинг/часы), колонки чисел стоят ровно;
+            · lnum — прописные (lining) цифры на одной высоте — ровная строка;
+            · zero — перечёркнутый ноль (0≠O) — техничный, «крафтовый» вид, а не «сухой».
+          Вес держим Medium там, где число несёт акцент. Один источник — раскатывать этим
+          токеном по всем числовым поверхностям приложения.  -->
+    <FontFamily x:Key="Font.Numeric">avares://v2rayN/Assets/Fonts/SpaceGrotesk.ttf#Space Grotesk</FontFamily>
 
     <!-- ==================================================================== -->
     <!--  МОУШЕН-ТОКЕНЫ (§1.1–1.2 DESIGN_PLAN — порт res/values/motion.xml +     -->

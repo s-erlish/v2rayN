@@ -4,6 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:dd="clr-namespace:v2rayN.Desktop.DesignData"
+    xmlns:loc="clr-namespace:v2rayN.Desktop.Common"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:views="clr-namespace:v2rayN.Desktop.Views"
     xmlns:vms="clr-namespace:v2rayN.Desktop.ViewModels"
@@ -50,7 +51,7 @@
             Spacing="10">
             <Grid ColumnDefinitions="*,Auto,Auto,Auto" VerticalAlignment="Center">
                 <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="1">
-                    <TextBlock Classes="Headline" Text="Сервера" />
+                    <TextBlock Classes="Headline" Text="{loc:T Servers_Title}" />
                     <TextBlock Classes="Caption" Text="{Binding Subtitle}" />
                 </StackPanel>
                 <Button
@@ -58,7 +59,7 @@
                     Grid.Column="1"
                     Classes="IconButton40"
                     Command="{Binding RefreshSubscriptionCmd}"
-                    ToolTip.Tip="Обновить подписку">
+                    ToolTip.Tip="{loc:T Common_UpdateSubscription}">
                     <PathIcon Data="{StaticResource Srv.Refresh}" Foreground="{DynamicResource Brush.Accent}" />
                 </Button>
                 <Button
@@ -66,19 +67,19 @@
                     Grid.Column="2"
                     Classes="IconButton40"
                     Command="{Binding Profiles.FastRealPingCmd}"
-                    ToolTip.Tip="Проверить задержку">
+                    ToolTip.Tip="{loc:T Common_TestLatency}">
                     <PathIcon Data="{StaticResource Srv.Ping}" Foreground="{DynamicResource Brush.Accent}" />
                 </Button>
                 <Button
                     x:Name="BtnAdd"
                     Grid.Column="3"
                     Classes="IconButton40 Accent"
-                    ToolTip.Tip="Добавить">
+                    ToolTip.Tip="{loc:T Common_Add}">
                     <PathIcon Data="M11,5 H13 V11 H19 V13 H13 V19 H11 V13 H5 V11 H11 Z" />
                     <Button.Flyout>
                         <MenuFlyout Placement="BottomEdgeAlignedRight">
-                            <MenuItem Command="{Binding AddViaClipboardCmd}" Header="Добавить из буфера обмена" />
-                            <MenuItem Command="{Binding AddViaQrCmd}" Header="Добавить по QR-коду" />
+                            <MenuItem Command="{Binding AddViaClipboardCmd}" Header="{loc:T Common_AddFromClipboard}" />
+                            <MenuItem Command="{Binding AddViaQrCmd}" Header="{loc:T Common_AddViaQr}" />
                         </MenuFlyout>
                     </Button.Flyout>
                 </Button>
@@ -104,7 +105,7 @@
                         BorderThickness="0"
                         Foreground="{DynamicResource Brush.OnSurface}"
                         Text="{Binding Profiles.ServerFilter, Mode=TwoWay}"
-                        Watermark="Поиск серверов…" />
+                        Watermark="{loc:T Servers_SearchPlaceholder}" />
                 </Grid>
             </Border>
         </StackPanel>

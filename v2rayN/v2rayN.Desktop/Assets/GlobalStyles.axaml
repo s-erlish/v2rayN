@@ -259,7 +259,8 @@
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
     </Style>
     <Style Selector="TextBlock.Numeric">
-        <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Numeric}" />
+        <Setter Property="FontFeatures" Value="tnum,lnum,zero" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
     </Style>
     <!--  Заголовок секции — жирный sentence-case, НЕ мелкий ALL-CAPS eyebrow  -->
@@ -608,17 +609,28 @@
             </Transitions>
         </Setter>
     </Style>
-    <!--  Гасим стандартную заливку кнопки (нет светлого ripple темы Semi); hover =
-          НАШ единый ховер-затемнение (чуть темнеет), скруглённый под плитку рейла.  -->
+    <!--  Гасим стандартную заливку кнопки (нет светлого ripple темы Semi). У иконочной
+          НАВИГАЦИИ ФОНА НЕТ ВООБЩЕ — ни в покое, ни на ховере, ни на нажатии: владелец
+          не хочет серую плитку-фон под пунктами. Ховер-фидбек несёт САМ глиф (см. ниже:
+          глиф/подпись темнеют на шаг), плюс press-scale 0.92.  -->
     <Style Selector="Button.NavRailItem /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="CornerRadius" Value="14" />
     </Style>
     <Style Selector="Button.NavRailItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-        <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
+        <Setter Property="Background" Value="Transparent" />
     </Style>
     <Style Selector="Button.NavRailItem:pressed /template/ ContentPresenter#PART_ContentPresenter">
-        <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <!--  Ховер-фидбек = затемнение ГЛИФА (и подписи) на шаг, БЕЗ фона. Только для НЕактивных
+          пунктов (:not(.active)) — у активного глиф остаётся Accent (синий) и не темнеет.
+          Плавно через уже заданный BrushTransition Foreground (200мс Ease.Standard).  -->
+    <Style Selector="Button.NavRailItem:pointerover:not(.active) PathIcon">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariantHover}" />
+    </Style>
+    <Style Selector="Button.NavRailItem:pointerover:not(.active) TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariantHover}" />
     </Style>
     <Style Selector="Button.NavRailItem:pressed">
         <Setter Property="RenderTransform" Value="scale(0.92)" />

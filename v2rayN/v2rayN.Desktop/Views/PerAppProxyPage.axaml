@@ -3,6 +3,7 @@
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:loc="clr-namespace:v2rayN.Desktop.Common"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     d:DesignWidth="560"
     d:DesignHeight="760"
@@ -41,7 +42,7 @@
                 Padding="0"
                 VerticalAlignment="Center"
                 Classes="IconButton"
-                ToolTip.Tip="Назад">
+                ToolTip.Tip="{loc:T Common_Back}">
                 <PathIcon
                     Width="22"
                     Height="22"
@@ -55,7 +56,7 @@
                 Margin="16,0,0,0"
                 VerticalAlignment="Center"
                 Classes="Headline"
-                Text="Прокси по приложениям"
+                Text="{loc:T Settings_PerApp}"
                 TextTrimming="CharacterEllipsis" />
         </Grid>
 
@@ -70,11 +71,11 @@
                                 Grid.Column="0"
                                 Margin="0,0,8,0"
                                 VerticalAlignment="Center">
-                                <TextBlock Classes="Body" Text="Раздельное туннелирование" />
+                                <TextBlock Classes="Body" Text="{loc:T PerApp_SplitTunnel}" />
                                 <TextBlock
                                     Margin="0,4,0,0"
                                     Classes="Subtitle"
-                                    Text="Выберите, какие программы идут через VPN"
+                                    Text="{loc:T PerApp_SplitTunnelHint}"
                                     TextWrapping="Wrap" />
                             </StackPanel>
                             <ToggleSwitch
@@ -92,13 +93,13 @@
                         <RadioButton
                             x:Name="rbBypass"
                             MinHeight="56"
-                            Content="Кроме выбранных — идут напрямую, минуя VPN"
+                            Content="{loc:T PerApp_BypassHint}"
                             Foreground="{DynamicResource Brush.OnSurface}"
                             GroupName="perAppMode" />
                         <RadioButton
                             x:Name="rbInclude"
                             MinHeight="56"
-                            Content="Только выбранные — через VPN идут лишь они"
+                            Content="{loc:T PerApp_OnlyHint}"
                             Foreground="{DynamicResource Brush.OnSurface}"
                             GroupName="perAppMode" />
                     </StackPanel>
@@ -108,7 +109,7 @@
                 <TextBlock
                     Margin="4,10,4,4"
                     Classes="SectionHeader"
-                    Text="Приложения" />
+                    Text="{loc:T PerApp_Apps}" />
 
                 <Grid ColumnDefinitions="*,Auto,Auto">
                     <TextBox
@@ -116,16 +117,16 @@
                         Grid.Column="0"
                         Margin="0,0,8,0"
                         VerticalContentAlignment="Center"
-                        Watermark="Поиск…" />
+                        Watermark="{loc:T Common_SearchPlaceholder}" />
                     <Button
                         x:Name="btnRefresh"
                         Grid.Column="1"
                         Margin="0,0,8,0"
-                        Content="Обновить" />
+                        Content="{loc:T Common_Refresh}" />
                     <Button
                         x:Name="btnAddExe"
                         Grid.Column="2"
-                        Content="Добавить .exe" />
+                        Content="{loc:T PerApp_AddExe}" />
                 </Grid>
 
                 <Border Classes="Card" Padding="8,4">
@@ -153,7 +154,7 @@
                 <TextBlock
                     Margin="4,4,4,0"
                     Classes="Subtitle"
-                    Text="Работает в режиме TUN (sing-box). Правила применяются при следующем подключении."
+                    Text="{loc:T PerApp_TunHint}"
                     TextWrapping="Wrap" />
 
             </StackPanel>

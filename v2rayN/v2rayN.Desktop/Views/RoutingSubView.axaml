@@ -3,7 +3,9 @@
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:loc="clr-namespace:v2rayN.Desktop.Common"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:v="clr-namespace:v2rayN.Desktop.Views"
     d:DesignWidth="560"
     d:DesignHeight="680"
     Background="{DynamicResource Brush.Bg}"
@@ -12,6 +14,8 @@
     <UserControl.Resources>
         <StreamGeometry x:Key="Geo.Sub.Back">M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z</StreamGeometry>
         <StreamGeometry x:Key="Geo.Sub.Check">M9,16.17 4.83,12l-1.42,1.41L9,19 21,7l-1.41,-1.41z</StreamGeometry>
+        <!--  «{0} правил» — язык-зависимый формат (L.F) поверх целочисленного RuleNum.  -->
+        <v:RuleCountConverter x:Key="RuleCountConverter" />
     </UserControl.Resources>
 
     <UserControl.Styles>
@@ -60,7 +64,7 @@
                 Padding="0"
                 VerticalAlignment="Center"
                 Classes="IconButton"
-                ToolTip.Tip="Назад">
+                ToolTip.Tip="{loc:T Common_Back}">
                 <PathIcon
                     Width="22"
                     Height="22"
@@ -74,7 +78,7 @@
                 Margin="16,0,0,0"
                 VerticalAlignment="Center"
                 Classes="Headline"
-                Text="Маршрутизация"
+                Text="{loc:T Settings_Routing}"
                 TextTrimming="CharacterEllipsis" />
         </Grid>
 
@@ -83,10 +87,10 @@
 
                 <TextBlock
                     Classes="Subtitle"
-                    Text="Наборы правил определяют, какой трафик идёт через VPN, а какой — напрямую. Выберите активный набор."
+                    Text="{loc:T Routing_Intro}"
                     TextWrapping="Wrap" />
 
-                <TextBlock Margin="0,6,0,0" Classes="SectionHeader" Text="Наборы правил" />
+                <TextBlock Margin="0,6,0,0" Classes="SectionHeader" Text="{loc:T Routing_RuleSets}" />
                 <Border Classes="Card" Padding="8,6">
                     <ItemsControl x:Name="listRoutings">
                         <ItemsControl.ItemTemplate>
@@ -114,7 +118,7 @@
                                             <TextBlock
                                                 Margin="0,3,0,0"
                                                 Classes="Subtitle"
-                                                Text="{Binding RuleNum, StringFormat='{}{0} правил'}" />
+                                                Text="{Binding RuleNum, Converter={StaticResource RuleCountConverter}}" />
                                         </StackPanel>
                                         <Border
                                             Grid.Column="2"
@@ -127,7 +131,7 @@
                                             <TextBlock
                                                 Classes="Chip"
                                                 Foreground="{DynamicResource Brush.OnSurfaceVariant}"
-                                                Text="Активен" />
+                                                Text="{loc:T Routing_Active}" />
                                         </Border>
                                     </Grid>
                                 </Border>
@@ -136,15 +140,15 @@
                     </ItemsControl>
                 </Border>
 
-                <TextBlock Margin="0,6,0,0" Classes="SectionHeader" Text="Стратегия доменов" />
+                <TextBlock Margin="0,6,0,0" Classes="SectionHeader" Text="{loc:T Routing_DomainStrategy}" />
                 <Border Classes="Card" Padding="16,4">
                     <Grid ColumnDefinitions="*,Auto" MinHeight="56">
                         <StackPanel Grid.Column="0" Margin="0,0,8,0" VerticalAlignment="Center">
-                            <TextBlock Classes="Body" Text="Разрешение доменов" />
+                            <TextBlock Classes="Body" Text="{loc:T Routing_DomainResolution}" />
                             <TextBlock
                                 Margin="0,4,0,0"
                                 Classes="Subtitle"
-                                Text="Как ядро сопоставляет домены с правилами"
+                                Text="{loc:T Routing_DomainHint}"
                                 TextWrapping="Wrap" />
                         </StackPanel>
                         <ComboBox
@@ -155,22 +159,22 @@
                     </Grid>
                 </Border>
 
-                <TextBlock Margin="0,6,0,0" Classes="SectionHeader" Text="Обслуживание" />
+                <TextBlock Margin="0,6,0,0" Classes="SectionHeader" Text="{loc:T Routing_Maintenance}" />
                 <Border Classes="Card" Padding="16,4">
                     <Grid ColumnDefinitions="*,Auto" MinHeight="56">
                         <StackPanel Grid.Column="0" Margin="0,0,8,0" VerticalAlignment="Center">
-                            <TextBlock Classes="Body" Text="Стандартные правила" />
+                            <TextBlock Classes="Body" Text="{loc:T Routing_DefaultRules}" />
                             <TextBlock
                                 Margin="0,4,0,0"
                                 Classes="Subtitle"
-                                Text="Пересоздать встроенные наборы правил"
+                                Text="{loc:T Routing_DefaultRulesHint}"
                                 TextWrapping="Wrap" />
                         </StackPanel>
                         <Button
                             x:Name="btnResetRules"
                             Grid.Column="1"
                             VerticalAlignment="Center"
-                            Content="Сбросить" />
+                            Content="{loc:T Routing_Reset}" />
                     </Grid>
                 </Border>
 

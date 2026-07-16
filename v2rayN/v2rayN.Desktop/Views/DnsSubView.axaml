@@ -3,6 +3,7 @@
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:loc="clr-namespace:v2rayN.Desktop.Common"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     d:DesignWidth="560"
     d:DesignHeight="640"
@@ -72,7 +73,7 @@
                 Padding="0"
                 VerticalAlignment="Center"
                 Classes="IconButton"
-                ToolTip.Tip="Назад">
+                ToolTip.Tip="{loc:T Common_Back}">
                 <PathIcon
                     Width="22"
                     Height="22"
@@ -95,14 +96,14 @@
 
                 <TextBlock
                     Classes="Subtitle"
-                    Text="DNS-сервер, через который приложение разрешает домены при подключении. По умолчанию используется встроенный резолвер."
+                    Text="{loc:T Dns_Intro}"
                     TextWrapping="Wrap" />
 
-                <TextBlock Margin="0,6,0,0" Classes="SectionHeader" Text="Провайдер" />
+                <TextBlock Margin="0,6,0,0" Classes="SectionHeader" Text="{loc:T Dns_Provider}" />
                 <Border Classes="Card" Padding="16,16">
                     <WrapPanel x:Name="chipPanel">
                         <Border x:Name="chipDefault" Classes="DnsChip" Margin="0,0,8,8">
-                            <TextBlock Text="По умолчанию" />
+                            <TextBlock Text="{loc:T Common_Default}" />
                         </Border>
                         <Border x:Name="chipCloudflare" Classes="DnsChip" Margin="0,0,8,8">
                             <TextBlock Text="Cloudflare" />
@@ -114,14 +115,14 @@
                             <TextBlock Text="AdGuard" />
                         </Border>
                         <Border x:Name="chipCustom" Classes="DnsChip" Margin="0,0,8,8">
-                            <TextBlock Text="Свой" />
+                            <TextBlock Text="{loc:T Common_Custom}" />
                         </Border>
                     </WrapPanel>
                 </Border>
 
                 <!--  Раскрывается только для «Свой»: поле DoH-адреса.  -->
                 <StackPanel x:Name="customPanel" IsVisible="False" Spacing="8">
-                    <TextBlock Margin="0,6,0,0" Classes="SectionHeader" Text="Свой DNS-адрес" />
+                    <TextBlock Margin="0,6,0,0" Classes="SectionHeader" Text="{loc:T Dns_CustomAddress}" />
                     <Border Classes="Card" Padding="16,12">
                         <StackPanel Spacing="8">
                             <TextBox
@@ -130,13 +131,13 @@
                                 Watermark="https://example.com/dns-query" />
                             <TextBlock
                                 Classes="Subtitle"
-                                Text="DoH-адрес (https://…/dns-query), DoT или обычный IP: 1.1.1.1"
+                                Text="{loc:T Dns_CustomHint}"
                                 TextWrapping="Wrap" />
                         </StackPanel>
                     </Border>
                 </StackPanel>
 
-                <TextBlock Margin="0,6,0,0" Classes="SectionHeader" Text="Дополнительно" />
+                <TextBlock Margin="0,6,0,0" Classes="SectionHeader" Text="{loc:T Dns_Advanced}" />
                 <Border Classes="Card" Padding="16,4">
                     <Grid ColumnDefinitions="*,Auto" MinHeight="56">
                         <StackPanel Grid.Column="0" Margin="0,0,8,0" VerticalAlignment="Center">
@@ -144,7 +145,7 @@
                             <TextBlock
                                 Margin="0,4,0,0"
                                 Classes="Subtitle"
-                                Text="Ускоряет соединение, отвечая на DNS-запросы локально (sing-box)"
+                                Text="{loc:T Dns_AdvancedHint}"
                                 TextWrapping="Wrap" />
                         </StackPanel>
                         <ToggleSwitch

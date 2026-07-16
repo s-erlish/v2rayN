@@ -1,4 +1,5 @@
 using ServiceLib.Services;
+using v2rayN.Desktop.Common;
 
 namespace v2rayN.Desktop.Views;
 
@@ -40,11 +41,11 @@ public partial class GeoFilesPage : UserControl, ISubPage
             var path = Utils.GetBinPath(name);
             if (!File.Exists(path))
             {
-                return "Не загружен";
+                return L.T("Geo_NotDownloaded");
             }
             var fi = new FileInfo(path);
             var mb = fi.Length / 1024d / 1024d;
-            return $"{mb:0.0} МБ · обновлён {fi.LastWriteTime:dd.MM.yyyy HH:mm}";
+            return L.F("Geo_SizeUpdated", mb.ToString("0.0", CultureInfo.CurrentUICulture), fi.LastWriteTime.ToString("dd.MM.yyyy HH:mm", CultureInfo.CurrentUICulture));
         }
         catch
         {
@@ -60,8 +61,8 @@ public partial class GeoFilesPage : UserControl, ISubPage
         }
         _busy = true;
         btnUpdate.IsEnabled = false;
-        btnUpdate.Content = "Обновление…";
-        txtStatus.Text = "Загрузка баз…";
+        btnUpdate.Content = L.T("Geo_Updating");
+        txtStatus.Text = L.T("Geo_Downloading");
 
         try
         {
@@ -81,16 +82,16 @@ public partial class GeoFilesPage : UserControl, ISubPage
                 return Task.CompletedTask;
             });
             await svc.UpdateGeoFileAll();
-            txtStatus.Text = "Готово — базы обновлены.";
+            txtStatus.Text = L.T("Geo_Done");
         }
         catch (Exception ex)
         {
-            txtStatus.Text = "Не удалось обновить: " + ex.Message;
+            txtStatus.Text = L.T("Geo_Failed") + ex.Message;
         }
         finally
         {
             RefreshFileInfo();
-            btnUpdate.Content = "Обновить сейчас";
+            btnUpdate.Content = L.T("Geo_UpdateNow");
             btnUpdate.IsEnabled = true;
             _busy = false;
         }

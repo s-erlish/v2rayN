@@ -1,5 +1,6 @@
 using v2rayN.Desktop.Account;
 using v2rayN.Desktop.Account.Dto;
+using v2rayN.Desktop.Common;
 
 namespace v2rayN.Desktop.ViewModels;
 
@@ -53,6 +54,20 @@ public class AccountViewModel : MyReactiveObject
     /// hidden behind the sync overlay on launch.
     /// </summary>
     [Reactive] public bool IsImportingAccount { get; set; }
+
+    /// <summary>
+    /// [Cold-start gate] True from the very first synchronous line of the constructor when a persisted
+    /// session/token exists — raised BEFORE <see cref="IsLoggedIn"/> is first assigned and before any
+    /// await — and cleared in the <see cref="StartupLoad"/> finally, only AFTER the returning-user
+    /// account import + subscription fetch + Home server refresh have ALL completed (success or failure).
+    /// The MainWindow shell consumes this to keep the loading/sync surface up on launch instead of
+    /// flashing the logged-out onboarding/login gate during the ~2s cold-start restore. Distinct from
+    /// <see cref="IsImportingAccount"/> (which gates only the FRESH post-login import): a returning user
+    /// never triggers IsImportingAccount, so without this flag their launch would briefly render the
+    /// empty login gate. A genuinely logged-out user (no persisted session) leaves this false and sees
+    /// the login gate immediately — no loading state.
+    /// </summary>
+    [Reactive] public bool IsStartupLoading { get; set; }
 
     [Reactive] public PublicConfigDto? PublicConfig { get; set; }
 
@@ -140,8 +155,15 @@ public class AccountViewModel : MyReactiveObject
         _repo = new AccountRepository();
         _authManager = new AuthManager();
 
-        IsLoggedIn = AccountSession.IsLoggedIn();
-        if (IsLoggedIn)
+        // Evaluate the persisted session ONCE. When a session exists, raise the cold-start gate BEFORE
+        // IsLoggedIn is first assigned (and before any await), so the shell never gets a chance to paint
+        // the logged-out onboarding/login gate between construction and the cold-start restore landing.
+        // A genuinely logged-out user (no persisted session) keeps IsStartupLoading false and sees the
+        // login gate immediately.
+        var hasSession = AccountSession.IsLoggedIn();
+        IsStartupLoading = hasSession;
+        IsLoggedIn = hasSession;
+        if (hasSession)
         {
             Profile = AuthTokenStore.GetUser();
         }
@@ -179,21 +201,44 @@ public class AccountViewModel : MyReactiveObject
 
         AccountSession.StateChanged += OnSessionStateChanged;
 
+        // Live language switch: re-derive every display string (balance caption, «Действует до …»,
+        // device counts, referral line, error text) so open bindings pick up the new language.
+        L.Instance.LanguageChanged += (_, _) => RunOnUi(Recompute);
+
         Recompute();
 
         if (IsLoggedIn)
         {
             // Returning user: re-import the account subscriptions (parity with the Android startup path
             // in MainActivity) so a sub bought/changed on another device shows up, then load the tab.
-            _ = StartupLoad();
+            // Run the whole restore on the thread pool (Task.Run) so NONE of its synchronous prefix —
+            // token-store reads, subscription import, server download, account fetch — executes on the
+            // UI-thread launch path: the window paints immediately and every UI mutation marshals back
+            // via RunOnUi. (Previously the fire-and-forget `_ = StartupLoad()` ran its synchronous
+            // prefix + first network round-trips on the UI thread, delaying first paint.)
+            _ = Task.Run(StartupLoad);
         }
     }
 
     /// <summary>Returning-user startup: auto-import subscriptions (→ refresh Home) then load the tab.</summary>
     private async Task StartupLoad()
     {
-        await AutoImportAndRefreshHome();
-        await LoadAll();
+        try
+        {
+            await AutoImportAndRefreshHome();
+            await LoadAll();
+        }
+        finally
+        {
+            // Clear the cold-start gate only AFTER import + Home refresh + account/subscription load
+            // resolve (success OR failure), so the loading surface hands directly to the populated
+            // Home/Account instead of the empty login gate.
+            RunOnUi(() =>
+            {
+                IsStartupLoading = false;
+                Recompute();
+            });
+        }
     }
 
     /// <summary>Design-time constructor: sample logged-in active state so the previewer renders.</summary>
@@ -672,7 +717,7 @@ public class AccountViewModel : MyReactiveObject
                  || double.TryParse(raw, NumberStyles.Any, CultureInfo.CurrentCulture, out amount))
             || amount <= 0)
         {
-            AppEvents.SendSnackMsgRequested.Publish("Введите сумму больше 0");
+            AppEvents.SendSnackMsgRequested.Publish(L.T("Account_AmountGtZero"));
             return;
         }
 
@@ -686,13 +731,13 @@ public class AccountViewModel : MyReactiveObject
                     var url = init.PaymentUrl;
                     if (url.IsNullOrEmpty())
                     {
-                        AppEvents.SendSnackMsgRequested.Publish("Не удалось открыть страницу оплаты");
+                        AppEvents.SendSnackMsgRequested.Publish(L.T("Common_CouldntOpenPayment"));
                         return;
                     }
                     try
                     {
                         ProcUtils.ProcessStart(url);
-                        AppEvents.SendSnackMsgRequested.Publish("Завершите оплату в браузере");
+                        AppEvents.SendSnackMsgRequested.Publish(L.T("Common_CompletePaymentInBrowser"));
                         // The top-up completes in the external browser with no in-app return callback, so
                         // re-poll the profile until the balance lands — BalanceText updates without a
                         // manual retry.
@@ -700,7 +745,7 @@ public class AccountViewModel : MyReactiveObject
                     }
                     catch
                     {
-                        AppEvents.SendSnackMsgRequested.Publish("Не удалось открыть страницу оплаты");
+                        AppEvents.SendSnackMsgRequested.Publish(L.T("Common_CouldntOpenPayment"));
                     }
                 })
                 .OnFailure(err => AppEvents.SendSnackMsgRequested.Publish(MessageFor(err)));
@@ -814,7 +859,7 @@ public class AccountViewModel : MyReactiveObject
             HasBalance = true;
             HasReferral = profile.ReferralCode.IsNotEmpty();
             ReferralCode = HasReferral ? profile.ReferralCode : string.Empty;
-            ReferralText = HasReferral ? $"Реф-код {profile.ReferralCode}" : string.Empty;
+            ReferralText = HasReferral ? L.F("Account_ReferralCode", profile.ReferralCode) : string.Empty;
         }
 
         // Active subscription block (first/root of the merged list)
@@ -832,19 +877,19 @@ public class AccountViewModel : MyReactiveObject
         }
         else
         {
-            SubName = FirstNonBlank(sub.DisplayName, sub.TariffDisplayName, sub.DefaultLabel, "Мои подписки");
+            SubName = FirstNonBlank(sub.DisplayName, sub.TariffDisplayName, sub.DefaultLabel, L.T("Account_MySubs"));
 
             var badge = TariffNameFor(sub.TariffId) ?? TariffNameForPriceOptionId(sub.TariffPriceOptionId) ?? sub.TariffBadgeName();
             HasTariffBadge = badge.IsNotEmpty();
             TariffBadge = badge ?? string.Empty;
 
             HasSubExpiry = sub.ExpireAtIso.IsNotEmpty();
-            SubExpiry = HasSubExpiry ? $"Действует до {FormatIsoDate(sub.ExpireAtIso)}" : string.Empty;
+            SubExpiry = HasSubExpiry ? L.F("Account_ValidUntil", FormatIsoDate(sub.ExpireAtIso)) : string.Empty;
 
             var unlimited = sub.Subscription?.Raw()?.IsUnlimitedDevices() == true;
             var totalStr = unlimited ? "∞" : sub.TotalDevices.ToString();
             var used = DeviceCount ?? 0;
-            SubDevicesText = $"Устройства: {used} / {totalStr}";
+            SubDevicesText = L.F("Account_DevicesCount", used, totalStr);
             DevicesRowValue = $"{used} / {totalStr}";
             HasDevicesRowValue = true;
         }
@@ -958,12 +1003,12 @@ public class AccountViewModel : MyReactiveObject
 
     private static string MessageFor(ApiError error) => error switch
     {
-        ApiError.ServiceUnavailable => "Сервис временно недоступен",
-        ApiError.NetworkError => "Ошибка сети. Проверьте подключение",
-        ApiError.Unauthorized => "Требуется вход в аккаунт",
-        ApiError.RateLimited => "Слишком много запросов. Попробуйте позже",
-        ApiError.TimeoutError => "Превышено время ожидания",
-        _ => "Что-то пошло не так",
+        ApiError.ServiceUnavailable => L.T("Common_ServiceUnavailable"),
+        ApiError.NetworkError => L.T("Common_NetworkError"),
+        ApiError.Unauthorized => L.T("Common_SignInRequired"),
+        ApiError.RateLimited => L.T("Common_TooManyRequests"),
+        ApiError.TimeoutError => L.T("Common_Timeout"),
+        _ => L.T("Common_SomethingWrong"),
     };
 
     private static string FirstNonBlank(params string?[] values)

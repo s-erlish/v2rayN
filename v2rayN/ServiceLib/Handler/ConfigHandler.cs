@@ -1984,7 +1984,13 @@ public static class ConfigHandler
         SubItem subItem = new()
         {
             Id = string.Empty,
-            Url = url
+            Url = url,
+            // Stamp the recognised v2rayNG-family UA on manually-added subs (paste / clipboard / QR)
+            // exactly as the Telegram/account path does. Without it the row carries a blank UA and any
+            // fetch that reads item.UserAgent directly (i.e. does not route through
+            // SubscriptionHandler.ResolveSubUserAgent) would send a blank/branding UA and get the
+            // «Приложение не поддерживается» placeholder instead of the real server list.
+            UserAgent = Global.SubscriptionUserAgent
         };
 
         var uri = Utils.TryUri(url);
