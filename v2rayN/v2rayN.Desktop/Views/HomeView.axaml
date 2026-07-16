@@ -11,31 +11,6 @@
     Design.DataContext="{x:Static dd:DesignData.Home}"
     mc:Ignorable="d">
 
-    <UserControl.Styles>
-        <!--  Чип аккаунта: строка-поверхность, hover = subtle darken (SurfaceHigh), НЕ белый glow.
-              Локальный стиль (нет общего класса «строка-карточка» в GlobalStyles). Press scale 0.99.  -->
-        <Style Selector="Border.AccountChip">
-            <Setter Property="Background" Value="{DynamicResource Brush.Surface}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineVariant}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="{DynamicResource Radius.Card}" />
-            <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
-            <Setter Property="Transitions">
-                <Transitions>
-                    <BrushTransition Property="Background" Duration="0:0:0.15" />
-                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" />
-                </Transitions>
-            </Setter>
-        </Style>
-        <Style Selector="Border.AccountChip:pointerover">
-            <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
-        </Style>
-        <Style Selector="Border.AccountChip.pressed">
-            <Setter Property="RenderTransform" Value="scale(0.99)" />
-        </Style>
-    </UserControl.Styles>
-
     <!--  Фон Главной — радиальный градиент (bg_home_gradient).  -->
     <Border Background="{DynamicResource Brush.HomeGradient}">
 
@@ -47,58 +22,13 @@
                   бесшовно продолжается в свои серверы. Никакого «Сервера»-заголовка / тулбара / «+».  -->
             <Grid Grid.Column="0" RowDefinitions="Auto,*" MinWidth="380">
 
-                <!--  Чип аккаунта: email/@telegram + «Управление аккаунтом» + аватар + шеврон.
-                      Виден ТОЛЬКО при входе (AccountSession.State), заполняется data-driven в code-behind;
-                      клик → вкладка «Аккаунт». Скрыт по умолчанию (logged-out).  -->
-                <Border
+                <!--  Чип аккаунта (CA-1): ОДНО определение (HomeAccountChip), общее с CompactHomeView.
+                      Виден только при входе (сам управляет видимостью по AccountSession); тап → событие
+                      AccountRequested, здесь превращаем в клик по «Аккаунт» рейла.  -->
+                <views:HomeAccountChip
                     x:Name="AccountChip"
                     Grid.Row="0"
-                    Height="64"
-                    Margin="16,16,16,4"
-                    Classes="AccountChip"
-                    IsVisible="False"
-                    Padding="10,8,16,8"
-                    PointerExited="OnAccountChipExited"
-                    PointerPressed="OnAccountChipPressed"
-                    PointerReleased="OnAccountChipReleased"
-                    Tapped="OnAccountChipTapped">
-                    <Grid ColumnDefinitions="Auto,*,Auto">
-                        <Border
-                            Grid.Column="0"
-                            Width="40"
-                            Height="40"
-                            Classes="Avatar">
-                            <TextBlock
-                                x:Name="AccountInitial"
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Center"
-                                FontFamily="{DynamicResource Font.Grotesk}"
-                                FontSize="18"
-                                FontWeight="Bold"
-                                Foreground="{DynamicResource Brush.Accent}"
-                                Text="" />
-                        </Border>
-                        <StackPanel
-                            Grid.Column="1"
-                            Margin="12,0,0,0"
-                            VerticalAlignment="Center"
-                            Spacing="1">
-                            <TextBlock
-                                x:Name="AccountName"
-                                Classes="Title"
-                                Text=""
-                                TextTrimming="CharacterEllipsis" />
-                            <TextBlock Classes="Caption" Text="Управление аккаунтом" />
-                        </StackPanel>
-                        <PathIcon
-                            Grid.Column="2"
-                            Width="18"
-                            Height="18"
-                            VerticalAlignment="Center"
-                            Data="{StaticResource Geo.ChevronRight}"
-                            Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
-                    </Grid>
-                </Border>
+                    Margin="16,16,16,4" />
 
                 <!--  Единый список подписок→серверов (мета-бар каждой подписки = её header).  -->
                 <views:ServerListView x:Name="ServerList" Grid.Row="1" />

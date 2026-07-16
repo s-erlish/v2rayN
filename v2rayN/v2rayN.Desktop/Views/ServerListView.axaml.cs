@@ -229,9 +229,17 @@ public partial class ServerListView : UserControl
     {
         if (SelectTargetRow() is { } profiles)
         {
-            _ = profiles.ServerSpeedtest(ESpeedActionType.Realping);
+            _ = profiles.ServerSpeedtest(ResolvePingAction());
         }
     }
+
+    // Map the user-selected ping method (Настройки → Пинг → SpeedTestItem.PingMethod) to the engine
+    // probe. The core supports Tcping + Realping; Httping/Icmping (Android parity) fall back to the
+    // real latency probe until the engine gains those probes.
+    private static ESpeedActionType ResolvePingAction()
+        => AppManager.Instance.Config.SpeedTestItem.PingMethod == "Tcping"
+            ? ESpeedActionType.Tcping
+            : ESpeedActionType.Realping;
 
     private void OnRowEdit(object? sender, RoutedEventArgs e)
     {

@@ -1,0 +1,178 @@
+<UserControl
+    x:Class="v2rayN.Desktop.Views.BottomNavBar"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    d:DesignWidth="400"
+    mc:Ignorable="d">
+
+    <!--  ================================================================================
+          НИЖНЯЯ НАВИГАЦИЯ (CA-2) — компактная раскладка, 1:1 с Android bottom_nav.
+          Пункты: Главная · Сервера · Настройки (всегда) + Аккаунт (только при входе, тогда
+          столбец разворачивается из 0 в равную долю — три оставшихся держат равные трети).
+          Каждый пункт: глиф 24 + подпись 11 + короткая синяя пилюля 34×3 (видна у выбранного).
+          Выбранный: глиф/подпись серый→accent, вес 500→700, пилюля fade-in. Press: scale 0.92.
+          Под панелью — лёгкий градиент-скрим (frameless-вид), а не сплошная заливка.
+          =================================================================================  -->
+
+    <UserControl.Resources>
+        <!--  Тонкий скрим под баром: контент «уходит» под безрамочную панель.  -->
+        <LinearGradientBrush x:Key="Nav.Scrim" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0.0" Color="#00000000" />
+            <GradientStop Offset="1.0" Color="#33000000" />
+        </LinearGradientBrush>
+    </UserControl.Resources>
+
+    <UserControl.Styles>
+        <!--  Пункт нав-бара: прозрачная borderless-кнопка, press-scale 0.92, без ripple/glow.  -->
+        <Style Selector="Button.BottomNavItem">
+            <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
+            <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0,8,0,6" />
+            <Setter Property="MinHeight" Value="56" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.1" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Button.BottomNavItem /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="Button.BottomNavItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="Button.BottomNavItem:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="Button.BottomNavItem:pressed">
+            <Setter Property="RenderTransform" Value="scale(0.92)" />
+        </Style>
+
+        <!--  Глиф/подпись — неактивные (серый), плавный переход цвета.  -->
+        <Style Selector="Button.BottomNavItem PathIcon">
+            <Setter Property="Width" Value="24" />
+            <Setter Property="Height" Value="24" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Foreground" Duration="0:0:0.2" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Button.BottomNavItem TextBlock.NavLabel">
+            <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="Medium" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="0,3,0,0" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Foreground" Duration="0:0:0.2" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <!--  Активная пилюля (bg_nav_dot): 34×3, скрыта в покое.  -->
+        <Style Selector="Button.BottomNavItem Border.NavPillBottom">
+            <Setter Property="Width" Value="34" />
+            <Setter Property="Height" Value="3" />
+            <Setter Property="Margin" Value="0,3,0,0" />
+            <Setter Property="CornerRadius" Value="2" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="Background" Value="{DynamicResource Brush.Accent}" />
+            <Setter Property="Opacity" Value="0" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Opacity" Duration="0:0:0.2" />
+                </Transitions>
+            </Setter>
+        </Style>
+
+        <!--  Выбранный пункт (класс .sel): глиф+подпись accent, подпись bold, пилюля видна.  -->
+        <Style Selector="Button.BottomNavItem.sel PathIcon">
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+        </Style>
+        <Style Selector="Button.BottomNavItem.sel TextBlock.NavLabel">
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+            <Setter Property="FontWeight" Value="Bold" />
+        </Style>
+        <Style Selector="Button.BottomNavItem.sel Border.NavPillBottom">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+
+        <!--  Reduced-motion (.lite на окне): переходы мгновенны.  -->
+        <Style Selector=":is(Window).lite Button.BottomNavItem">
+            <Setter Property="Transitions">
+                <Transitions />
+            </Setter>
+        </Style>
+        <Style Selector=":is(Window).lite Button.BottomNavItem PathIcon">
+            <Setter Property="Transitions">
+                <Transitions />
+            </Setter>
+        </Style>
+        <Style Selector=":is(Window).lite Button.BottomNavItem TextBlock.NavLabel">
+            <Setter Property="Transitions">
+                <Transitions />
+            </Setter>
+        </Style>
+        <Style Selector=":is(Window).lite Button.BottomNavItem Border.NavPillBottom">
+            <Setter Property="Transitions">
+                <Transitions />
+            </Setter>
+        </Style>
+    </UserControl.Styles>
+
+    <Panel Background="{StaticResource Nav.Scrim}">
+        <Grid x:Name="NavGrid" ColumnDefinitions="*,*,*,*">
+            <Button
+                x:Name="ItemHome"
+                Grid.Column="0"
+                Classes="BottomNavItem">
+                <StackPanel HorizontalAlignment="Center">
+                    <PathIcon HorizontalAlignment="Center" Data="{StaticResource Geo.Nav.Home}" />
+                    <TextBlock Classes="NavLabel" Text="Главная" />
+                    <Border Classes="NavPillBottom" />
+                </StackPanel>
+            </Button>
+            <Button
+                x:Name="ItemServers"
+                Grid.Column="1"
+                Classes="BottomNavItem">
+                <StackPanel HorizontalAlignment="Center">
+                    <PathIcon HorizontalAlignment="Center" Data="{StaticResource Geo.Nav.Servers}" />
+                    <TextBlock Classes="NavLabel" Text="Сервера" />
+                    <Border Classes="NavPillBottom" />
+                </StackPanel>
+            </Button>
+            <Button
+                x:Name="ItemSettings"
+                Grid.Column="2"
+                Classes="BottomNavItem">
+                <StackPanel HorizontalAlignment="Center">
+                    <PathIcon HorizontalAlignment="Center" Data="{StaticResource Geo.Nav.Settings}" />
+                    <TextBlock Classes="NavLabel" Text="Настройки" />
+                    <Border Classes="NavPillBottom" />
+                </StackPanel>
+            </Button>
+            <Button
+                x:Name="ItemAccount"
+                Grid.Column="3"
+                Classes="BottomNavItem"
+                IsVisible="False">
+                <StackPanel HorizontalAlignment="Center">
+                    <PathIcon HorizontalAlignment="Center" Data="{StaticResource Geo.Nav.Account}" />
+                    <TextBlock Classes="NavLabel" Text="Аккаунт" />
+                    <Border Classes="NavPillBottom" />
+                </StackPanel>
+            </Button>
+        </Grid>
+    </Panel>
+</UserControl>

@@ -1,0 +1,91 @@
+<UserControl
+    x:Class="v2rayN.Desktop.Views.HomeAccountChip"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    d:DesignWidth="408"
+    mc:Ignorable="d">
+
+    <!--  ================================================================================
+          ЧИП АККАУНТА — ЕДИНОЕ определение (CA-1). Раньше жил инлайном в HomeView; вынесен
+          сюда, чтобы широкая («Главная») и компактная (CompactHomeView) раскладки делили ОДНУ
+          разметку и поведение (аватар-инициал + @handle + «Управление аккаунтом» + шеврон).
+
+          Виден ТОЛЬКО при входе (AccountSession.State, read-only): управляет своей видимостью
+          сам (this.IsVisible), поэтому пустой слот в родителе схлопывается. Тап → событие
+          AccountRequested, которое хост превращает в открытие вкладки «Аккаунт» (рейл в широкой,
+          нижняя навигация в компактной). Данные не выдумываем — только реальная сессия.
+          =================================================================================  -->
+
+    <UserControl.Styles>
+        <!--  Строка-поверхность: hover = subtle darken (SurfaceHigh), НЕ белый glow. Press scale 0.99.  -->
+        <Style Selector="Border.AccountChip">
+            <Setter Property="Background" Value="{DynamicResource Brush.Surface}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineVariant}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{DynamicResource Radius.Card}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Background" Duration="0:0:0.15" />
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Border.AccountChip:pointerover">
+            <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
+        </Style>
+        <Style Selector="Border.AccountChip.pressed">
+            <Setter Property="RenderTransform" Value="scale(0.99)" />
+        </Style>
+    </UserControl.Styles>
+
+    <Border
+        x:Name="ChipRoot"
+        Height="64"
+        Classes="AccountChip"
+        Padding="10,8,16,8"
+        PointerExited="OnChipExited"
+        PointerPressed="OnChipPressed"
+        PointerReleased="OnChipReleased"
+        Tapped="OnChipTapped">
+        <Grid ColumnDefinitions="Auto,*,Auto">
+            <Border
+                Grid.Column="0"
+                Width="40"
+                Height="40"
+                Classes="Avatar">
+                <TextBlock
+                    x:Name="AccountInitial"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    FontFamily="{DynamicResource Font.Grotesk}"
+                    FontSize="18"
+                    FontWeight="Bold"
+                    Foreground="{DynamicResource Brush.Accent}"
+                    Text="" />
+            </Border>
+            <StackPanel
+                Grid.Column="1"
+                Margin="12,0,0,0"
+                VerticalAlignment="Center"
+                Spacing="1">
+                <TextBlock
+                    x:Name="AccountName"
+                    Classes="Title"
+                    Text=""
+                    TextTrimming="CharacterEllipsis" />
+                <TextBlock Classes="Caption" Text="Управление аккаунтом" />
+            </StackPanel>
+            <PathIcon
+                Grid.Column="2"
+                Width="18"
+                Height="18"
+                VerticalAlignment="Center"
+                Data="{StaticResource Geo.ChevronRight}"
+                Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+        </Grid>
+    </Border>
+</UserControl>

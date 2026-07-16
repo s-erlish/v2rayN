@@ -19,6 +19,19 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     private readonly Button[] _navButtons;
     private HomeViewModel? _homeViewModel;
 
+    // Компактная (телефонная) раскладка: свои экземпляры «Главной» и «Серверов» (широкая и
+    // компактная делят ОДИН HomeViewModel, но каждая держит своё дерево — см. ApplyLayoutMode).
+    private readonly CompactHomeView _compactHome = new();
+    private readonly CompactServersView _compactServers = new();
+
+    // Брейкпоинт адаптива: ширина < 760 → компакт, ≥ 760 → широкая. Гистерезис 24 (назад в компакт
+    // только < 736), чтобы окно, «припаркованное» на границе, не мигало между деревьями при драге.
+    private const double CompactBreakpointWidth = 760.0;
+    private const double LayoutHysteresis = 24.0;
+    private bool _compactMode = true;          // старт компактный (дефолт 400×820 < 760)
+    private AppTab _currentTab = AppTab.Home;   // ОДНО состояние вкладки на обе раскладки
+    private bool _isEmpty = true;
+
     // ОДИН экземпляр AccountViewModel на всё приложение: делится между вкладкой «Аккаунт»
     // (AccountView) и суб-страницей «Вход» (LoginView), поэтому состояние входа распространяется
     // на оба (P0-8). Ctor VM безопасен на этапе инициализации полей (без AppManager).
@@ -46,6 +59,7 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         {
             Classes.Add("lite");
             contentHost.PageTransition = null;
+            compactContentHost.PageTransition = null;
         }
 
         KeyDown += MainWindow_KeyDown;
@@ -62,12 +76,19 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         // гасится под .lite). railStatusDot и сама кнопка остаются видны в слим-полосе.
         btnRailToggle.Click += (_, _) => ToggleRail();
 
-        // Нав-рейл: переключение вкладок (Главная · Настройки · Аккаунт).
+        // Единое состояние вкладки для ОБЕИХ раскладок: рейл (широкая) и нижняя навигация
+        // (компактная) пишут в ОДИН ShowTab, который кладёт контент в текущий видимый хост.
         _navButtons = [navHome, navSettings, navAccount];
-        navHome.Click += (_, _) => SelectTab(navHome, _homeView);
-        navSettings.Click += (_, _) => SelectTab(navSettings, _settingsView);
-        navAccount.Click += (_, _) => SelectTab(navAccount, _accountView);
-        SelectTab(navHome, _homeView);
+        navHome.Click += (_, _) => ShowTab(AppTab.Home);
+        navSettings.Click += (_, _) => ShowTab(AppTab.Settings);
+        navAccount.Click += (_, _) => ShowTab(AppTab.Account);
+        bottomNav.TabSelected += (_, tab) => ShowTab(tab);
+        _compactHome.AccountRequested += (_, _) => ShowTab(AppTab.Account);
+
+        // Первичная раскладка + вотчер ширины окна. Наблюдаем Bounds окна (ширина клиентской
+        // области); при пересечении брейкпоинта дерево меняется РОВНО один раз (гистерезис).
+        ApplyLayoutMode(_compactMode);
+        this.GetObservable(BoundsProperty).Subscribe(b => UpdateLayoutMode(b.Width));
 
         // Общий AccountViewModel на вкладку «Аккаунт» (в рантайме DataContext ставит MainWindow,
         // не сама вью — тот же экземпляр уедет в LoginView). «Управление»-строки и CTA входа
@@ -84,8 +105,8 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         // DEV screenshot hook: INITIAL_TAB=settings|account opens that tab on launch.
         switch (Environment.GetEnvironmentVariable("INITIAL_TAB"))
         {
-            case "settings": SelectTab(navSettings, _settingsView); break;
-            case "account": SelectTab(navAccount, _accountView); break;
+            case "settings": ShowTab(AppTab.Settings); break;
+            case "account": ShowTab(AppTab.Account); break;
         }
 
         // DEV screenshot hook: PREVIEW_VIEW=buy|login|devices|history renders that (still
@@ -182,14 +203,114 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
 
     #region Nav & Chrome
 
-    private void SelectTab(Button active, Control view)
+    // ==================== Единая смена вкладки (обе раскладки) ====================
+    // ОДИН источник истины (_currentTab). Кладёт контент в ВИДИМЫЙ хост (широкий contentHost или
+    // компактный compactContentHost). Настройки/Аккаунт — общие экземпляры (перецепляются между
+    // хостами при смене раскладки); «Главная» и «Сервера» имеют своё дерево в каждой раскладке.
+    // Широкая раскладка не имеет вкладки «Сервера» — там серверы в левой колонке «Главной»,
+    // поэтому Servers отображается как Home в рейле/широком хосте (состояние вкладки сохраняется).
+    private void ShowTab(AppTab tab)
+    {
+        _currentTab = tab;
+        var wideTab = tab == AppTab.Servers ? AppTab.Home : tab;
+
+        SetRailActive(wideTab);
+        bottomNav.SetSelected(tab);
+
+        if (_compactMode)
+        {
+            compactContentHost.Content = CompactViewFor(tab);
+        }
+        else
+        {
+            contentHost.Content = WideViewFor(wideTab);
+        }
+    }
+
+    private Control CompactViewFor(AppTab tab) => tab switch
+    {
+        AppTab.Servers => _compactServers,
+        AppTab.Settings => _settingsView,
+        AppTab.Account => _accountView,
+        _ => _compactHome,
+    };
+
+    private Control WideViewFor(AppTab tab) => tab switch
+    {
+        AppTab.Settings => _settingsView,
+        AppTab.Account => _accountView,
+        _ => _homeView,
+    };
+
+    private void SetRailActive(AppTab tab)
     {
         foreach (var b in _navButtons)
         {
             b.Classes.Remove("active");
         }
+        var active = tab switch
+        {
+            AppTab.Settings => navSettings,
+            AppTab.Account => navAccount,
+            _ => navHome,
+        };
         active.Classes.Add("active");
-        contentHost.Content = view;
+    }
+
+    // ==================== Адаптивный своп (ширина окна ↔ раскладка) ====================
+    // Гистерезис: из компакта в широкую при ширине ≥ 760, обратно в компакт при < 736.
+    private void UpdateLayoutMode(double width)
+    {
+        if (width <= 0)
+        {
+            return;
+        }
+        var compact = _compactMode
+            ? width < CompactBreakpointWidth
+            : width < CompactBreakpointWidth - LayoutHysteresis;
+        if (compact != _compactMode)
+        {
+            ApplyLayoutMode(compact);
+        }
+    }
+
+    // Чистая видимость + класс раскладки на окне; VM не пересоздаём. Освобождаем общие экраны из
+    // скрытого хоста, чтобы ShowTab чисто перецепил их в видимый (контрол = один родитель).
+    private void ApplyLayoutMode(bool compact)
+    {
+        _compactMode = compact;
+
+        Classes.Remove(compact ? "wide" : "compact");
+        if (!Classes.Contains(compact ? "compact" : "wide"))
+        {
+            Classes.Add(compact ? "compact" : "wide");
+        }
+
+        if (compact)
+        {
+            contentHost.Content = null;
+        }
+        else
+        {
+            compactContentHost.Content = null;
+        }
+
+        ApplyShellVisibility();
+        ShowTab(_currentTab);
+    }
+
+    // Онбординг/суб-страницы — mode-agnostic оверлеи. Пусто (нет подписок) → только онбординг на всю
+    // ширину. Есть подписки → видим ровно одно дерево по текущей раскладке.
+    private void ApplyShellVisibility()
+    {
+        // Не трогаем видимость в режиме превью суб-экрана (DEV screenshot hook).
+        if (Environment.GetEnvironmentVariable("PREVIEW_VIEW") is not null)
+        {
+            return;
+        }
+        onboardingView.IsVisible = _isEmpty;
+        shellRoot.IsVisible = !_isEmpty && !_compactMode;
+        compactRoot.IsVisible = !_isEmpty && _compactMode;
     }
 
     // Свёртка/разворот левого нав-рейла. Всё движение (navItems Width/Opacity, поворот шеврона)
@@ -217,7 +338,11 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     private void SetupHome(MainWindowViewModel vm)
     {
         _homeViewModel = new HomeViewModel(vm);
+        // ОДИН HomeViewModel питает ОБЕ раскладки (широкую «Главную» и компактные Home/Servers),
+        // поэтому connect-состояние, выбранный сервер, скорости и таймер одинаковы при любой ширине.
         _homeView.DataContext = _homeViewModel;
+        _compactHome.DataContext = _homeViewModel;
+        _compactServers.DataContext = _homeViewModel;
         onboardingView.DataContext = _homeViewModel;
 
         // Индикатор рейла: серый в покое, синий при подключении И в процессе подключения (P1-3).
@@ -225,16 +350,14 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
             .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(active => railStatusDot.Fill = active ? _dotOn : _dotOff);
 
-        // Пустой старт (нет подписок): показываем ТОЛЬКО онбординг на всю ширину под chrome —
-        // рейл и контент скрыты. После добавления подписки (IsEmpty=false) — обычный шелл.
+        // Пустой старт (нет подписок): показываем ТОЛЬКО онбординг на всю ширину под chrome — оба
+        // дерева скрыты. После добавления подписки (IsEmpty=false) — дерево по текущей раскладке.
         _homeViewModel.WhenAnyValue(x => x.IsEmpty)
             .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(empty =>
             {
-                // Не трогаем видимость в режиме превью суб-экрана (DEV screenshot hook).
-                if (Environment.GetEnvironmentVariable("PREVIEW_VIEW") is not null) return;
-                onboardingView.IsVisible = empty;
-                shellRoot.IsVisible = !empty;
+                _isEmpty = empty;
+                ApplyShellVisibility();
             });
     }
 

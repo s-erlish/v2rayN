@@ -33,11 +33,14 @@ public class WindowBase<TViewModel> : ReactiveWindow<TViewModel> where TViewMode
             var scaling = screen.Scaling > 0 ? screen.Scaling : 1.0;
             var workingArea = screen.WorkingArea;
 
-            // Верхняя граница = проектный дефолт окна (1120×760), а не вся рабочая область:
-            // на большом мониторе сохранённый (в т.ч. когда-то развёрнутый) размер не должен
-            // раздувать окно. На малых экранах всё равно ужимаемся под workingArea.
-            var maxWidth = Math.Min(1120.0, workingArea.Width / scaling);
-            var maxHeight = Math.Min(760.0, workingArea.Height / scaling);
+            // Верхняя граница = рабочая область экрана. Раскладка адаптивна (компакт 400×820 ↔
+            // широкая), поэтому НЕ навязываем проектный потолок 1120×760: он обрезал бы компактную
+            // высоту 820 до 760. Развёрнутый/максимизированный размер и так не персистится
+            // (OnClosed сохраняет только Normal), так что клампа под workingArea достаточно.
+            // Когда сохранённого размера нет (sizeItem == null, выход выше) — берут верх дефолты XAML
+            // (компакт 400×820), т.е. свежий запуск открывается компактным.
+            var maxWidth = workingArea.Width / scaling;
+            var maxHeight = workingArea.Height / scaling;
             var width = Math.Min(sizeItem.Width, maxWidth);
             var height = Math.Min(sizeItem.Height, maxHeight);
             var x = workingArea.X + ((workingArea.Width - (width * scaling)) / 2);

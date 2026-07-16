@@ -9,10 +9,10 @@
     xmlns:views="clr-namespace:v2rayN.Desktop.Views"
     xmlns:vms="clr-namespace:ServiceLib.ViewModels;assembly=ServiceLib"
     Title="departament VPN"
-    Width="1120"
-    Height="760"
-    MinWidth="1000"
-    MinHeight="680"
+    Width="400"
+    Height="820"
+    MinWidth="360"
+    MinHeight="640"
     x:DataType="vms:MainWindowViewModel"
     Background="{DynamicResource Brush.Bg}"
     Design.DataContext="{x:Static dd:DesignData.MainWindow}"
@@ -381,6 +381,25 @@
                             </TransitioningContentControl.PageTransition>
                         </TransitioningContentControl>
                     </Panel>
+                    </Grid>
+
+                    <!--  ==================== Компактная (телефонная) раскладка ====================
+                          Sibling of shellRoot: при ширине окна < брейкпоинта (760, с гистерезисом
+                          736) виден compactRoot, а shellRoot скрыт — и наоборот. Оба дерева живут
+                          одновременно, но одномоментно показано ровно одно (ApplyLayoutMode). Общий
+                          Incy-градиент рисуется ОДИН раз под compactContentHost — каждая компактная
+                          вкладка наследует его сквозь прозрачный фон. Строка 0 = контент по вкладке
+                          (кроссфейд как в широком contentHost), строка 1 = нижняя навигация.  -->
+                    <Grid x:Name="compactRoot" IsVisible="False" RowDefinitions="*,Auto">
+                        <Panel Grid.Row="0">
+                            <Border Background="{DynamicResource Brush.HomeGradient}" />
+                            <TransitioningContentControl x:Name="compactContentHost" Background="Transparent">
+                                <TransitioningContentControl.PageTransition>
+                                    <CrossFade Duration="0:0:0.18" />
+                                </TransitioningContentControl.PageTransition>
+                            </TransitioningContentControl>
+                        </Panel>
+                        <views:BottomNavBar x:Name="bottomNav" Grid.Row="1" />
                     </Grid>
 
                     <!--  Онбординг на всю ширину Row 1 (без рейла/панелей). Виден, пока нет подписок.  -->

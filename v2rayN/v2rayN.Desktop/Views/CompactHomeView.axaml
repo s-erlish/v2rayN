@@ -1,0 +1,116 @@
+<UserControl
+    x:Class="v2rayN.Desktop.Views.CompactHomeView"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:dd="clr-namespace:v2rayN.Desktop.DesignData"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:views="clr-namespace:v2rayN.Desktop.Views"
+    xmlns:vms="clr-namespace:v2rayN.Desktop.ViewModels"
+    d:DesignHeight="820"
+    d:DesignWidth="400"
+    x:DataType="vms:HomeViewModel"
+    Design.DataContext="{x:Static dd:DesignData.Home}"
+    mc:Ignorable="d">
+
+    <!--  ================================================================================
+          КОМПАКТНАЯ «ГЛАВНАЯ» (CA-3) — 1:1 с Android activity_main.xml (телефонный Home).
+          ОДИН вертикальный скролл (mirrors NestedScrollView), сверху вниз:
+            1) стата-строка ↑скорость · аптайм · ↓скорость + «+» (тот же импорт-меню);
+            2) чип аккаунта (HomeAccountChip, общий с широкой раскладкой);
+            3) большой центр-щит (ConnectHeroView — переиспользуем; его внутренняя стата-строка
+               скрыта в code-behind, чтобы не дублировать нашу верхнюю);
+            4) подпись состояния/сервера — внутри ConnectHeroView под щитом;
+            5) мета-карта(ы) подписки + одноколоночный список серверов — ServerListView
+               (его внутренний скролл инертен внутри страничного скролла → одна область прокрутки).
+          Нижний padding = высота нав-бара, чтобы последняя строка не пряталась под баром.
+          DataContext = ОДИН HomeViewModel (тот же, что широкая раскладка).
+          =================================================================================  -->
+
+    <ScrollViewer
+        HorizontalScrollBarVisibility="Disabled"
+        Padding="0,0,0,88"
+        VerticalScrollBarVisibility="Auto">
+        <StackPanel>
+
+            <!--  (1) Стата-строка: 42 спейсер | [↑ · аптайм · ↓] | «+» 42 — таймер строго по центру.  -->
+            <Grid Margin="16,6,10,4" ColumnDefinitions="42,*,Auto">
+                <Grid Grid.Column="1" ColumnDefinitions="*,*,*">
+                    <StackPanel
+                        Grid.Column="0"
+                        HorizontalAlignment="Center"
+                        Orientation="Horizontal"
+                        Spacing="4">
+                        <TextBlock
+                            VerticalAlignment="Center"
+                            Classes="Caption"
+                            Foreground="{DynamicResource Brush.Accent}"
+                            Text="↑" />
+                        <TextBlock
+                            Classes="Numeric"
+                            FontSize="13"
+                            FontWeight="Bold"
+                            Text="{Binding UpSpeed}" />
+                    </StackPanel>
+                    <TextBlock
+                        Grid.Column="1"
+                        HorizontalAlignment="Center"
+                        Classes="Numeric"
+                        FontSize="14"
+                        FontWeight="Bold"
+                        Foreground="{DynamicResource Brush.OnSurfaceVariant}"
+                        Text="{Binding Uptime}" />
+                    <StackPanel
+                        Grid.Column="2"
+                        HorizontalAlignment="Center"
+                        Orientation="Horizontal"
+                        Spacing="4">
+                        <TextBlock
+                            VerticalAlignment="Center"
+                            Classes="Caption"
+                            Foreground="{DynamicResource Brush.Accent}"
+                            Text="↓" />
+                        <TextBlock
+                            Classes="Numeric"
+                            FontSize="13"
+                            FontWeight="Bold"
+                            Text="{Binding DownSpeed}" />
+                    </StackPanel>
+                </Grid>
+
+                <!--  «+» — тот же импорт (буфер / QR), что и в широкой раскладке (команды VM).  -->
+                <Button
+                    Grid.Column="2"
+                    Classes="IconButton40"
+                    ToolTip.Tip="Добавить">
+                    <PathIcon
+                        Width="22"
+                        Height="22"
+                        Data="M11,5 H13 V11 H19 V13 H13 V19 H11 V13 H5 V11 H11 Z"
+                        Foreground="{DynamicResource Brush.OnSurface}" />
+                    <Button.Flyout>
+                        <MenuFlyout Placement="BottomEdgeAlignedRight">
+                            <MenuItem Command="{Binding AddViaClipboardCmd}" Header="Добавить из буфера обмена" />
+                            <MenuItem Command="{Binding AddViaQrCmd}" Header="Добавить по QR-коду" />
+                        </MenuFlyout>
+                    </Button.Flyout>
+                </Button>
+            </Grid>
+
+            <!--  (2) Чип аккаунта — общий HomeAccountChip (сам показывается при входе).  -->
+            <views:HomeAccountChip x:Name="AccountChip" Margin="16,8,16,0" />
+
+            <!--  (3+4) Герой: щит + подпись + идентичность сервера + пустое состояние (переиспользуем
+                  ConnectHeroView, связываем общим HomeHeroPresenter в code-behind). MinHeight держит
+                  вертикальный воздух вокруг щита, как на телефоне.  -->
+            <views:ConnectHeroView
+                x:Name="ConnectHero"
+                MinHeight="440"
+                Margin="0,4,0,0" />
+
+            <!--  (5) Мета-карта(ы) подписки + список серверов (ServerListView). Внутренний скролл
+                  инертен внутри страничного (одна область прокрутки; последняя строка достижима).  -->
+            <views:ServerListView x:Name="ServerList" Margin="0,4,0,0" />
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
