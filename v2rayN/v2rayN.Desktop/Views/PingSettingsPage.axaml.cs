@@ -2,19 +2,18 @@ namespace v2rayN.Desktop.Views;
 
 /// <summary>
 /// «Пинг» — in-app суб-страница (раньше отдельное окно). Экран выбирает МЕТОД измерения задержки
-/// серверов (как в Android: реальная задержка через ядро / TCP / HTTP / ICMP) и хранит параметры
-/// проверки: адрес (<c>SpeedTestItem.SpeedPingTestUrl</c>) + тайм-аут (<c>SpeedTestItem.SpeedTestTimeout</c>).
+/// серверов и хранит параметры проверки: адрес (<c>SpeedTestItem.SpeedPingTestUrl</c>) +
+/// тайм-аут (<c>SpeedTestItem.SpeedTestTimeout</c>).
+/// Ядро поддерживает только реальную задержку (Realping) и TCP (Tcping); прочие методы (Httping/Icmping)
+/// в движке отсутствуют, поэтому не предлагаются, а ранее сохранённое значение сводится к Realping.
 /// Выбранный метод пишется в <c>SpeedTestItem.PingMethod</c>. Persist only.
 /// Уход со страницы сохраняет и поднимает <see cref="BackRequested"/>.
 /// </summary>
 public partial class PingSettingsPage : UserControl, ISubPage
 {
-    // Ключи метода, совпадающие с ESpeedActionType там, где ядро их поддерживает (Realping/Tcping);
-    // Httping/Icmping — паритет с Android (движок honorит их по мере поддержки).
+    // Ключи метода, совпадающие с ESpeedActionType. Ядро поддерживает только Realping/Tcping.
     private const string MethodReal = "Realping";
     private const string MethodTcp = "Tcping";
-    private const string MethodHttp = "Httping";
-    private const string MethodIcmp = "Icmping";
 
     private readonly Config _config;
     private string _method = MethodReal;
@@ -28,9 +27,11 @@ public partial class PingSettingsPage : UserControl, ISubPage
 
         _config = AppManager.Instance.Config;
 
-        _method = _config.SpeedTestItem.PingMethod.IsNullOrEmpty()
-            ? MethodReal
-            : _config.SpeedTestItem.PingMethod!;
+        // Только Realping/Tcping реально измеряются; всё остальное (в т.ч. старые Httping/Icmping)
+        // сводим к Realping — движок и так мапит неподдержанные методы на реальную задержку.
+        _method = _config.SpeedTestItem.PingMethod == MethodTcp
+            ? MethodTcp
+            : MethodReal;
 
         txtPingUrl.Text = _config.SpeedTestItem.SpeedPingTestUrl ?? string.Empty;
         txtTimeout.Text = _config.SpeedTestItem.SpeedTestTimeout > 0
@@ -39,8 +40,6 @@ public partial class PingSettingsPage : UserControl, ISubPage
 
         RowReal.Tapped += (_, _) => SelectMethod(MethodReal);
         RowTcp.Tapped += (_, _) => SelectMethod(MethodTcp);
-        RowHttp.Tapped += (_, _) => SelectMethod(MethodHttp);
-        RowIcmp.Tapped += (_, _) => SelectMethod(MethodIcmp);
 
         UpdateChecks();
 
@@ -57,8 +56,6 @@ public partial class PingSettingsPage : UserControl, ISubPage
     {
         CheckReal.IsVisible = _method == MethodReal;
         CheckTcp.IsVisible = _method == MethodTcp;
-        CheckHttp.IsVisible = _method == MethodHttp;
-        CheckIcmp.IsVisible = _method == MethodIcmp;
     }
 
     private async Task SaveAndBackAsync()

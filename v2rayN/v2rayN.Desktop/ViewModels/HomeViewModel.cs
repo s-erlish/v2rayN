@@ -25,7 +25,7 @@ namespace v2rayN.Desktop.ViewModels;
 /// taps connect or picks a server — never on startup (the startup auto-connect is gated in
 /// <see cref="MainWindowViewModel.Init"/>).
 /// </summary>
-public class HomeViewModel : MyReactiveObject
+public class HomeViewModel : MyReactiveObject, IDisposable
 {
     private readonly MainWindowViewModel? _main;
 
@@ -39,7 +39,11 @@ public class HomeViewModel : MyReactiveObject
     public ObservableCollection<HomeServerGroup> ServerGroups { get; } = new();
 
     private readonly Dictionary<string, bool> _groupExpanded = new();
-    private readonly DispatcherTimer? _stateTimer;
+    // Event-driven core state (B1/B3): no permanent 1s poll. The uptime tick below exists ONLY while
+    // connected. Both are torn down in Dispose.
+    private readonly IDisposable? _coreStateSub;
+    private readonly IDisposable? _statsSub;
+    private DispatcherTimer? _uptimeTimer;
     private DateTime? _connectedSince;
     private DateTime? _connectingUntil;
     private ServerSpeedItem? _lastSpeed;
@@ -49,6 +53,15 @@ public class HomeViewModel : MyReactiveObject
     [Reactive] public bool IsConnected { get; set; }
 
     [Reactive] public bool IsConnecting { get; set; }
+
+    /// <summary>
+    /// True after a TRUTHFUL connect failure (core failed to start / reload returned failed / the
+    /// connect deadline elapsed) — the attempt collapsed back to disconnected. Sticky until the next
+    /// connect attempt (<see cref="BeginConnecting"/>) or a successful connect clears it. Drives the
+    /// hero's Error shield state (A4) via HomeHeroPresenter; NOT set for a plain user-initiated
+    /// disconnect or an invalid server pick.
+    /// </summary>
+    [Reactive] public bool ConnectFailed { get; set; }
 
     [Reactive] public bool HasServers { get; set; }
 
@@ -89,17 +102,24 @@ public class HomeViewModel : MyReactiveObject
         RebuildGroups();
 
         // Live speed from the same statistics event the status bar consumes.
-        AppEvents.DispatcherStatisticsRequested
+        _statsSub = AppEvents.DispatcherStatisticsRequested
             .AsObservable()
             .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(update => _lastSpeed = update);
 
-        // 1s state sync keeps the shield / uptime / speed honest regardless of who started or
-        // stopped the core (shield tap, server-row click, or the core dying).
-        _stateTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-        _stateTimer.Tick += (_, _) => SyncState();
-        _stateTimer.Start();
+        // Core state is now event-driven (B1/B3): CoreRunningStateChanged fires ONLY on a true/false
+        // transition and ON A BACKGROUND THREAD, so we marshal to the UI thread before touching
+        // reactive state. This replaces the old permanent 1s poller — nothing wakes at idle. The
+        // per-second UPTIME clock still needs a tick while connected: it is started on the "true"
+        // transition and stopped+disposed on "false" (see UpdateStateTick).
+        _coreStateSub = AppEvents.CoreRunningStateChanged
+            .AsObservable()
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .Subscribe(OnCoreRunningStateChanged);
+
+        // Reflect whatever the core is doing right now (it may already be running when this VM builds).
         SyncState();
+        UpdateStateTick();
     }
 
     /// <summary>Design-time constructor: sample groups only, no engine, no timers.</summary>
@@ -140,6 +160,9 @@ public class HomeViewModel : MyReactiveObject
         {
             IsConnecting = false;
             _connectingUntil = null;
+            // A4: surface a distinct FAILURE state instead of collapsing silently to Idle. Sticky
+            // until the next attempt / a successful connect; drives the hero's Error shield.
+            ConnectFailed = true;
             AppEvents.SendSnackMsgRequested.Publish("Не удалось подключиться");
         }
         SyncState();
@@ -149,6 +172,8 @@ public class HomeViewModel : MyReactiveObject
     {
         IsConnecting = false;
         _connectingUntil = null;
+        // A deliberate user disconnect is not a failure — clear any lingering error shield.
+        ConnectFailed = false;
         await CoreManager.Instance.CoreStop();
         // Clear the Windows system proxy so the user keeps internet after disconnecting. Without
         // this the OS keeps routing through the now-dead 127.0.0.1:port and every browser breaks
@@ -158,27 +183,60 @@ public class HomeViewModel : MyReactiveObject
         SyncState();
     }
 
-    /// <summary>Server-row click: make it the default server (engine reloads → connects).</summary>
+    /// <summary>Server-row click: make it the default server, then connect per the W1d contract.</summary>
     public async Task SelectServer(string? indexId)
     {
         if (Profiles == null || indexId.IsNullOrEmpty())
         {
             return;
         }
-        // SetDefaultServer only reloads when the pick actually changes the active server.
-        if (indexId != _config?.IndexId && !IsConnected)
+
+        // Capture BEFORE the call (SetDefaultServer mutates _config.IndexId):
+        //   changed      — does this pick move the active default? (its Reload connects)
+        //   wasConnected — was a core already running? (an in-place switch, no spinner)
+        // W1d SetDefaultServer contract: returns true = ready to connect; when the pick is ALREADY
+        // the default it returns true WITHOUT reloading (the caller must Connect); when the pick
+        // CHANGES it persists + Reload()s (which connects, incl. while disconnected); false = do not
+        // connect. So: any server tap while disconnected is a connect intent — spin the shield now.
+        var changed = indexId != _config?.IndexId;
+        var wasConnected = IsConnected;
+        if (!wasConnected)
         {
             BeginConnecting();
         }
-        await Profiles.SetDefaultServer(indexId);
-        SyncState();
+
+        if (!await Profiles.SetDefaultServer(indexId))
+        {
+            // Invalid / failed pick — abort the spinner, do not connect.
+            IsConnecting = false;
+            _connectingUntil = null;
+            SyncState();
+            return;
+        }
+
+        // Re-tapping the ALREADY-active server while disconnected does not reload (nothing changed),
+        // so connect explicitly — this is the A5 fix (that tap used to be dead). When the pick changed,
+        // SetDefaultServer's Reload already connects, so a second Connect() here would double-connect.
+        if (!changed && !wasConnected)
+        {
+            await Connect();
+        }
+        else
+        {
+            SyncState();
+        }
     }
 
     private void BeginConnecting()
     {
         IsConnecting = true;
+        // A new attempt clears the previous failure (A4): the hero leaves Error for Connecting.
+        ConnectFailed = false;
         // Safety deadline so a failed connect can't leave the shield spinning forever.
         _connectingUntil = DateTime.Now.AddSeconds(12);
+        // Run the transient tick while pending so the deadline is actually evaluated even when the
+        // connect came from a fire-and-forget Reload (server switch) that raises no failure event.
+        UpdateStateTick();
     }
 
     private static bool IsCoreRunning() =>
@@ -193,6 +251,8 @@ public class HomeViewModel : MyReactiveObject
             IsConnected = true;
             IsConnecting = false;
             _connectingUntil = null;
+            // A successful connect clears any error shield (A4).
+            ConnectFailed = false;
             Uptime = FormatUptime(DateTime.Now - _connectedSince.Value);
 
             var s = _lastSpeed;
@@ -212,14 +272,71 @@ public class HomeViewModel : MyReactiveObject
 
             if (IsConnecting && _connectingUntil is { } until && DateTime.Now > until)
             {
+                // The connect deadline elapsed with no running core — a truthful timeout failure (A4).
                 IsConnecting = false;
                 _connectingUntil = null;
+                ConnectFailed = true;
+                // HomeViewModel is now the SOLE publisher of connect-transition snacks (StatusBar's
+                // duplicate was removed). The direct Connect() path publishes on immediate failure;
+                // publish here too so a fire-and-forget/server-switch connect that only fails via the
+                // deadline still surfaces the same inline snack instead of silently failing.
+                AppEvents.SendSnackMsgRequested.Publish("Не удалось подключиться");
             }
         }
     }
 
     private static string FormatUptime(TimeSpan t) =>
         $"{(int)t.TotalHours:D2}:{t.Minutes:D2}:{t.Seconds:D2}";
+
+    /// <summary>
+    /// Core start/stop transition (already marshalled to the UI thread). Sync the shield/uptime once
+    /// and (re)evaluate the transient 1s tick.
+    /// </summary>
+    private void OnCoreRunningStateChanged(bool running)
+    {
+        SyncState();
+        UpdateStateTick();
+    }
+
+    /// <summary>
+    /// The transient 1s tick exists ONLY while connected (to advance the uptime clock) OR while a
+    /// connect is pending (to enforce the connect deadline now that the permanent 1s poll is gone —
+    /// the disconnected-idle app has no timer at all). It stops itself the moment neither holds.
+    /// </summary>
+    private void UpdateStateTick()
+    {
+        if (IsCoreRunning() || IsConnecting)
+        {
+            if (_uptimeTimer == null)
+            {
+                _uptimeTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+                _uptimeTimer.Tick += OnUptimeTick;
+            }
+            _uptimeTimer.Start();
+        }
+        else
+        {
+            StopUptimeTick();
+        }
+    }
+
+    private void OnUptimeTick(object? sender, EventArgs e)
+    {
+        SyncState();
+        // Stop once neither connected nor still attempting — covers a normal disconnect, a
+        // self-healed silent core crash, and a connect that timed out (SyncState flips the flags).
+        UpdateStateTick();
+    }
+
+    private void StopUptimeTick()
+    {
+        if (_uptimeTimer != null)
+        {
+            _uptimeTimer.Stop();
+            _uptimeTimer.Tick -= OnUptimeTick;
+            _uptimeTimer = null;
+        }
+    }
 
     #endregion Connect / disconnect
 
@@ -281,11 +398,24 @@ public class HomeViewModel : MyReactiveObject
                 providers = grouped.Count;
             }
 
-            foreach (var g in grouped)
+            // A9: pinned subscriptions float to the top. SubItem.Pinned is read from the in-memory
+            // sub cache (Profiles.SubItems, keyed by Subid == the group key). OrderByDescending is a
+            // stable sort, so unpinned groups keep their existing order underneath the pinned ones.
+            var ordered = grouped
+                .Select(g => new
+                {
+                    Group = g,
+                    Pinned = Profiles?.SubItems.FirstOrDefault(s => s.Id == g.Key.Key)?.Pinned ?? false,
+                })
+                .OrderByDescending(x => x.Pinned)
+                .ToList();
+
+            foreach (var x in ordered)
             {
+                var g = x.Group;
                 var key = $"{g.Key.Key}|{g.Key.Name}";
                 var expanded = !_groupExpanded.TryGetValue(key, out var ex) || ex;
-                ServerGroups.Add(new HomeServerGroup(key, g.Key.Name, g.ToList(), expanded, OnGroupExpandedChanged));
+                ServerGroups.Add(new HomeServerGroup(key, g.Key.Name, g.ToList(), expanded, x.Pinned, OnGroupExpandedChanged));
             }
         }
 
@@ -295,6 +425,26 @@ public class HomeViewModel : MyReactiveObject
     private void OnGroupExpandedChanged(string key, bool expanded) => _groupExpanded[key] = expanded;
 
     #endregion Grouped list projection
+
+    #region Teardown
+
+    /// <summary>
+    /// Tear down the event-driven core-state subscription, the live-speed subscription, the
+    /// per-second uptime tick, and the ProfileItems change hook (B3). HomeViewModel is a plain
+    /// app-lifetime VM (no view-activation lifecycle), so disposal runs when the shell disposes it.
+    /// </summary>
+    public void Dispose()
+    {
+        if (Profiles != null)
+        {
+            Profiles.ProfileItems.CollectionChanged -= OnProfileItemsChanged;
+        }
+        StopUptimeTick();
+        _coreStateSub?.Dispose();
+        _statsSub?.Dispose();
+    }
+
+    #endregion Teardown
 
     #region Design-time
 
@@ -329,18 +479,22 @@ public sealed class HomeServerGroup : INotifyPropertyChanged
     private readonly Action<string, bool>? _onExpandedChanged;
     private bool _isExpanded;
 
-    public HomeServerGroup(string key, string name, IList<ProfileItemModel> servers, bool isExpanded, Action<string, bool>? onExpandedChanged = null)
+    public HomeServerGroup(string key, string name, IList<ProfileItemModel> servers, bool isExpanded, bool pinned = false, Action<string, bool>? onExpandedChanged = null)
     {
         Key = key;
         Name = name;
         Servers = servers;
         _isExpanded = isExpanded;
+        Pinned = pinned;
         _onExpandedChanged = onExpandedChanged;
     }
 
     public string Key { get; }
     public string Name { get; }
     public IList<ProfileItemModel> Servers { get; }
+
+    /// <summary>True when this subscription is pinned — pinned groups are ordered first (A9).</summary>
+    public bool Pinned { get; }
 
     public int Count => Servers.Count;
     public string CountText => Count.ToString();

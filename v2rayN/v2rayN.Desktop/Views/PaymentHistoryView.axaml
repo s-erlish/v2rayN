@@ -26,133 +26,26 @@
     <UserControl.Resources>
         <!--  Глиф истории (порт Android drawable/ic_acc_history, Material history 24dp).  -->
         <StreamGeometry x:Key="Geo.Pay.History">M13,3c-4.97,0 -9,4.03 -9,9H1l3.89,3.89 0.07,0.14L9,12H6c0,-3.87 3.13,-7 7,-7s7,3.13 7,7 -3.13,7 -7,7c-1.93,0 -3.68,-0.79 -4.94,-2.06l-1.42,1.42C8.27,19.99 10.51,21 13,21c4.97,0 9,-4.03 9,-9s-4.03,-9 -9,-9zM12,8v5l4.28,2.54 0.72,-1.21 -3.5,-2.08V8H12z</StreamGeometry>
-        <!--  Стрелка «назад» (Material arrow_back 24dp) — как home-as-up в Android-тулбаре.  -->
-        <StreamGeometry x:Key="Geo.Pay.Back">M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z</StreamGeometry>
     </UserControl.Resources>
 
-    <UserControl.Styles>
-
-        <!--  [PROMOTE → GlobalStyles] Иконочная кнопка тулбара (§0.1 Button.IconButton 40×40):
-              прозрачная, круглая, глиф 22, hover SurfaceHigh, pressed scale 0.92, БЕЗ ripple.
-              Локально, т.к. глобальный Button.IconButton занят легаси-стилем 32×32.  -->
-        <Style Selector="Button.ToolbarIcon">
-            <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
-            <Setter Property="Width" Value="40" />
-            <Setter Property="Height" Value="40" />
-            <Setter Property="MinWidth" Value="0" />
-            <Setter Property="Padding" Value="0" />
-            <Setter Property="CornerRadius" Value="100" />
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="HorizontalContentAlignment" Value="Center" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
-            <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="Transitions">
-                <Transitions>
-                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" />
-                </Transitions>
-            </Setter>
-        </Style>
-        <Style Selector="Button.ToolbarIcon /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="CornerRadius" Value="100" />
-        </Style>
-        <Style Selector="Button.ToolbarIcon:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
-        </Style>
-        <Style Selector="Button.ToolbarIcon:pressed /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
-        </Style>
-        <Style Selector="Button.ToolbarIcon:pressed">
-            <Setter Property="RenderTransform" Value="scale(0.92)" />
-        </Style>
-        <Style Selector="Button.ToolbarIcon PathIcon">
-            <Setter Property="Width" Value="22" />
-            <Setter Property="Height" Value="22" />
-            <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
-        </Style>
-
-        <!--  [PROMOTE → GlobalStyles] Статус-чип (порт bg_acc_chip + логики тинта PaymentsAdapter):
-              радиус 12, паддинг 8,2 (оптический вертикальный 2 — санкционированное исключение чипа,
-              §0.3). База = неизвестный статус: нейтральная поверхность + приглушённый текст. Вариант
-              несёт цвет статуса: текст полного цвета, фон — тот же цвет @18% (#2E = 18% альфы).  -->
-        <Style Selector="Border.StatusChip">
-            <Setter Property="Background" Value="{DynamicResource Brush.SurfaceVariant}" />
-            <Setter Property="CornerRadius" Value="{StaticResource Radius.Chip}" />
-            <Setter Property="Padding" Value="8,2" />
-        </Style>
-        <Style Selector="Border.StatusChip TextBlock">
-            <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
-        </Style>
-        <!--  «Оплачено» — зелёный (icon_green #22C55E).  -->
-        <Style Selector="Border.StatusChip.paid">
-            <Setter Property="Background" Value="#2E22C55E" />
-        </Style>
-        <Style Selector="Border.StatusChip.paid TextBlock">
-            <Setter Property="Foreground" Value="{DynamicResource Brush.Green}" />
-        </Style>
-        <!--  «В обработке» — оранжевый (icon_orange #FB923C, как плитки Tile.Orange).  -->
-        <Style Selector="Border.StatusChip.pending">
-            <Setter Property="Background" Value="#2EFB923C" />
-        </Style>
-        <Style Selector="Border.StatusChip.pending TextBlock">
-            <Setter Property="Foreground" Value="{DynamicResource Brush.Icon.Orange}" />
-        </Style>
-        <!--  «Ошибка» — красный (icon_red #F04452).  -->
-        <Style Selector="Border.StatusChip.failed">
-            <Setter Property="Background" Value="#2EF04452" />
-        </Style>
-        <Style Selector="Border.StatusChip.failed TextBlock">
-            <Setter Property="Foreground" Value="{DynamicResource Brush.Red}" />
-        </Style>
-        <!--  «Отменён» — жёлтый (icon_yellow #EAB308).  -->
-        <Style Selector="Border.StatusChip.canceled">
-            <Setter Property="Background" Value="#2EEAB308" />
-        </Style>
-        <Style Selector="Border.StatusChip.canceled TextBlock">
-            <Setter Property="Foreground" Value="{DynamicResource Brush.Icon.Yellow}" />
-        </Style>
-
-        <!--  [PROMOTE → GlobalStyles, дубль AccountView] Плейсхолдер-полоса скелета.  -->
-        <Style Selector="Border.SkelBar">
-            <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHighest}" />
-            <Setter Property="CornerRadius" Value="{StaticResource Radius.Chip}" />
-            <Setter Property="Height" Value="16" />
-        </Style>
-
-        <!--  [PROMOTE → GlobalStyles, дубль AccountView] Пульс скелета: alpha 0.45…1.0, 900мс,
-              реверс, бесконечно (AccountFragment.startSkeletonPulse). Без шиммера и градиента.  -->
-        <Style Selector="Border.Skeleton">
-            <Style.Animations>
-                <Animation
-                    Duration="0:0:0.9"
-                    Easing="SineEaseInOut"
-                    IterationCount="Infinite"
-                    PlaybackDirection="Alternate">
-                    <KeyFrame Cue="0%">
-                        <Setter Property="Opacity" Value="0.45" />
-                    </KeyFrame>
-                    <KeyFrame Cue="100%">
-                        <Setter Property="Opacity" Value="1.0" />
-                    </KeyFrame>
-                </Animation>
-            </Style.Animations>
-        </Style>
-    </UserControl.Styles>
+    <!--  Тулбар (Border.SubToolbar + Button.BackNav), статус-чипы (Border.StatusChip +
+          варианты) и скелет (Border.SkelBar + пульс .SkeletonPulse) — всё из GlobalStyles.
+          Локальные копии удалены: чипы больше не держат #2E-литералы, а пульс скелета теперь
+          :not(.lite)-gated (не анимируется в Облегчённом режиме).  -->
 
     <DockPanel Background="{DynamicResource Brush.Bg}">
 
         <!--  Бесшовный тулбар суб-экрана: шеврон «назад» + Headline, фон окна, без границы и тени.
               Колонка выровнена с контентом (MaxWidth 560, gutter 16).  -->
-        <Border DockPanel.Dock="Top" Padding="16,16,16,4">
+        <Border DockPanel.Dock="Top" Classes="SubToolbar">
             <Grid MaxWidth="560" ColumnDefinitions="Auto,*">
                 <Button
                     Grid.Column="0"
                     AutomationProperties.Name="Назад"
-                    Classes="ToolbarIcon"
+                    Classes="BackNav"
                     Click="OnBackClick"
                     ToolTip.Tip="Назад">
-                    <PathIcon Data="{StaticResource Geo.Pay.Back}" />
+                    <PathIcon Data="{StaticResource Geo.ArrowBack}" />
                 </Button>
                 <TextBlock
                     Grid.Column="1"
@@ -250,7 +143,7 @@
                 VerticalAlignment="Top"
                 IsVisible="{Binding ShowLoading}">
 
-                <Border Classes="Card Skeleton" Margin="0,0,0,12">
+                <Border Classes="Card SkeletonPulse" Margin="0,0,0,12">
                     <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
                         <Border
                             Grid.Column="0"
@@ -292,7 +185,7 @@
                     </Grid>
                 </Border>
 
-                <Border Classes="Card Skeleton" Margin="0,0,0,12">
+                <Border Classes="Card SkeletonPulse" Margin="0,0,0,12">
                     <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
                         <Border
                             Grid.Column="0"
@@ -334,7 +227,7 @@
                     </Grid>
                 </Border>
 
-                <Border Classes="Card Skeleton" Margin="0,0,0,12">
+                <Border Classes="Card SkeletonPulse" Margin="0,0,0,12">
                     <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
                         <Border
                             Grid.Column="0"

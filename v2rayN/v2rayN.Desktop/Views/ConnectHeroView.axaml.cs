@@ -31,6 +31,12 @@ public partial class ConnectHeroView : UserControl
         Idle,
         Connecting,
         Connected,
+
+        //  Неудачное подключение (§A4): щит тонируется Brush.Red + подпись «Не удалось подключиться»
+        //  + подсказка-ретрай. Отличим от штатного отключения (то падает в Idle) — иначе провал
+        //  «молча» выглядел как обычный disconnect. Само-сбрасывается в Idle при следующей попытке
+        //  подключения (HomeViewModel гонит Connecting → ветка Error затирается).
+        Error,
     }
 
     //  Fallbacks (Incy dark defaults) — used ONLY when a theme-resource lookup fails. The LIVE
@@ -41,6 +47,7 @@ public partial class ConnectHeroView : UserControl
     private static readonly IBrush ShieldGrayFallback = new SolidColorBrush(Color.Parse("#9BA1AD"));
     private static readonly IBrush AccentFallback = new SolidColorBrush(Color.Parse("#4C8DFF"));
     private static readonly IBrush OnSurfaceFallback = new SolidColorBrush(Color.Parse("#F2F4F8"));
+    private static readonly IBrush ErrorFallback = new SolidColorBrush(Color.Parse("#F04452"));
 
     //  Resolve a theme brush for the CURRENT theme variant (so it picks up the light theme AND the
     //  merged mono overlay), never throwing out of the connect path — any failure silently returns
@@ -67,6 +74,10 @@ public partial class ConnectHeroView : UserControl
     //  Idle status text → Brush.OnSurface (theme ink), readable on light/mono, not fixed near-white.
     private IBrush OnSurfaceBrush => ResolveBrush("Brush.OnSurface", OnSurfaceFallback);
 
+    //  Error shield/status tint → Brush.Red (dark #F04452 / light #C42B32; mono keeps a readable
+    //  warning red). Destructive/warning is the ONLY non-blue accent allowed (CLAUDE.md).
+    private IBrush ErrorBrush => ResolveBrush("Brush.Red", ErrorFallback);
+
     //  Кривые зеркалят токены GlobalResources Ease.* 1:1 (ease_out_quart/_quint/_standard) —
     //  для императивных частей (press, перекл. длительностей). Декларативный XAML берёт токены.
     private static readonly Easing EaseOutQuart = new SplineEasing(0.25, 1, 0.5, 1);
@@ -78,6 +89,17 @@ public partial class ConnectHeroView : UserControl
 
     private bool _pressing;
     private ConnectVisualState _visualState = ConnectVisualState.Idle;
+
+    //  Visibility pause (§C3 / idle B5): while the window is minimized OR hidden-to-tray the hero is
+    //  off-screen, yet the connecting arc / glow-breathe / shield-breathe keep ticking the compositor
+    //  clock. We strip those infinite loops when the window goes invisible and re-attach them on
+    //  restore (if still connecting/connected) — pure start/stop, no curve/duration change. Guarded so
+    //  a state change ARRIVING while hidden (e.g. connect completes in tray) never starts a loop
+    //  off-screen; the loop is (re)attached only on the restore re-apply.
+    private bool _animationsPaused;
+    private Window? _heroWindow;
+    private IDisposable? _winStateSub;
+    private IDisposable? _winVisibleSub;
 
     //  Last hasServer passed to SetConnectState — remembered so a runtime lite toggle can re-apply
     //  the CURRENT visual state (jump to its end-look) without the presenter re-driving it.
@@ -209,8 +231,9 @@ public partial class ConnectHeroView : UserControl
         _hasServer = hasServer;
         var motion = animate && !ReducedMotion;
 
-        //  Idle — «остывающая» цель ⇒ реверс-темп (165/225); connecting/connected — forward (220/300).
-        PrepareStateTiming(reverse: state == ConnectVisualState.Idle);
+        //  Idle/Error — «остывающая» цель ⇒ реверс-темп (165/225); connecting/connected — forward (220/300).
+        //  Error приходит из Connecting как провал (мягко «оседает»), поэтому идёт по реверс-темпу.
+        PrepareStateTiming(reverse: state is ConnectVisualState.Idle or ConnectVisualState.Error);
 
         //  Вторичный connecting-сигнал: щит «дышит» акцентом в УНИСОН с glow (см. SetShieldPulse).
         //  Ставим/снимаем ДО switch — на connected/idle класс снят прежде, чем ветка выставит
@@ -240,7 +263,9 @@ public partial class ConnectHeroView : UserControl
                 ServerInfo.IsVisible = true;
                 SetArc(false);
                 SetGlow(connecting: false, connected: true);
-                if (motion)
+                //  Сонар — одноразовый confirm; не проигрываем, пока окно скрыто (никто не увидит,
+                //  а на восстановлении re-apply идёт с animate:false — повтор сонара не нужен).
+                if (motion && !_animationsPaused)
                 {
                     PlaySonar();
                 }
@@ -249,6 +274,25 @@ public partial class ConnectHeroView : UserControl
                     HideSonar();
                 }
 
+                break;
+
+            case ConnectVisualState.Error:
+                //  Провал подключения: тот же контур-щит, но тонирован Red (crossfade синий→красный
+                //  по реверс-темпу), подпись + подсказка-ретрай красным. Диск остаётся кнопкой —
+                //  тап = ConnectToggleRequested = повторная попытка (тогда HomeVM гонит Connecting и
+                //  ветка Error сама затирается). Никаких петель/сонара — статичный конечный вид.
+                ShieldOutline.Fill = ErrorBrush;
+                ShieldOutline.Opacity = 1;
+                ShieldFilled.Opacity = 0;
+                StatusText.Text = "Не удалось подключиться";
+                StatusText.Foreground = ErrorBrush;
+                ServerInfo.IsVisible = hasServer;
+                SetArc(false);
+                SetGlow(connecting: false, connected: false);
+                HideSonar();
+                UpSpeed.Text = "0 KB/s";
+                DownSpeed.Text = "0 KB/s";
+                Uptime.Text = "00:00:00";
                 break;
 
             default: // Idle
@@ -266,6 +310,9 @@ public partial class ConnectHeroView : UserControl
                 Uptime.Text = "00:00:00";
                 break;
         }
+
+        //  Подсказка-ретрай видна ТОЛЬКО в Error — тихая аффорданс «тапни щит, чтобы повторить».
+        RetryHint.IsVisible = state == ConnectVisualState.Error;
 
         _visualState = state;
     }
@@ -311,11 +358,61 @@ public partial class ConnectHeroView : UserControl
         //  Синхронизируемся с текущим режимом на входе в дерево (без перезапуска состояния —
         //  connect-состояние подаст HomeHeroPresenter). Обновляем только флаг + видимость статы.
         ApplyLiteMode(MotionState.IsLite, reapply: false);
+
+        //  §C3: пауза петель, пока окно свёрнуто/скрыто-в-трей. Наблюдаем WindowState (свёрнуто) и
+        //  IsVisible (Hide() в трей не меняет WindowState). GetObservable сразу отдаёт текущее
+        //  значение → начальное состояние паузы выставится корректно на входе в дерево.
+        _heroWindow = TopLevel.GetTopLevel(this) as Window;
+        if (_heroWindow is not null)
+        {
+            _winStateSub = _heroWindow.GetObservable(Window.WindowStateProperty).Subscribe(_ => UpdateVisibilityPause());
+            _winVisibleSub = _heroWindow.GetObservable(Visual.IsVisibleProperty).Subscribe(_ => UpdateVisibilityPause());
+        }
     }
 
     private void OnHeroDetached(object? sender, VisualTreeAttachmentEventArgs e)
     {
         MotionState.Changed -= OnMotionStateChanged;
+
+        _winStateSub?.Dispose();
+        _winStateSub = null;
+        _winVisibleSub?.Dispose();
+        _winVisibleSub = null;
+        _heroWindow = null;
+        //  Сброс флага: следующий attach заново оценит видимость окна (priming-эмиссия наблюдений).
+        _animationsPaused = false;
+    }
+
+    // ── §C3: пауза/возобновление бесконечных петель по видимости окна ─────────────────────
+    //  Скрыто == окно свёрнуто ЛИБО спрятано (Hide() в трей: IsVisible=false, WindowState не
+    //  меняется). Простой Deactivated (окно видимо, но не в фокусе) НЕ ставит паузу намеренно —
+    //  иначе петля «замерла» бы прямо на экране у пользователя, переключившего окно.
+    private void UpdateVisibilityPause()
+    {
+        var hidden = _heroWindow is not null
+            && (_heroWindow.WindowState == WindowState.Minimized || !_heroWindow.IsVisible);
+        if (hidden == _animationsPaused)
+        {
+            return;
+        }
+
+        if (hidden)
+        {
+            //  Тот же teardown, что и при выходе из connecting/connected — снимаем ВСЕ петли.
+            _animationsPaused = true;
+            ConnectingArc.Classes.Remove("spinning");
+            GlowHalo.Classes.Remove("breathing");
+            ShieldOutline.Classes.Remove("shieldbreathe");
+            HideSonar();
+        }
+        else
+        {
+            //  Восстановление: снимаем флаг ПЕРЕД re-apply, чтобы петли снова навесились. animate:false
+            //  — прыгаем в конечный вид текущего состояния (без повторного сонара), поэтому щит не
+            //  может «залипнуть» в неверном визуале после разворачивания.
+            _animationsPaused = false;
+            SetConnectState(_visualState, hasServer: _hasServer, animate: false);
+        }
     }
 
     private void OnMotionStateChanged(object? sender, bool lite) => ApplyLiteMode(lite, reapply: true);
@@ -422,7 +519,7 @@ public partial class ConnectHeroView : UserControl
         //  ОДНА чистая центрированная дуга: крутится только пока реально нужно и не под
         //  ReducedMotion/lite (тогда остаётся статичным индикатором). Второй counter-arc убран —
         //  он «облетал» шит, т.к. не имел RenderTransformOrigin в центре.
-        if (on && !ReducedMotion)
+        if (on && !ReducedMotion && !_animationsPaused)
         {
             ConnectingArc.Classes.Add("spinning");
         }
@@ -438,7 +535,7 @@ public partial class ConnectHeroView : UserControl
     //  подключения остаются читаемыми и без движения).
     private void SetShieldPulse(bool on)
     {
-        if (on && !ReducedMotion)
+        if (on && !ReducedMotion && !_animationsPaused)
         {
             ShieldOutline.Classes.Add("shieldbreathe");
         }
@@ -462,7 +559,11 @@ public partial class ConnectHeroView : UserControl
 
             GlowHalo.IsVisible = true;
             GlowHalo.Opacity = 0.6; //  база под «дыханием» (0.3↔0.6) → плавный хэндофф к reveal
-            GlowHalo.Classes.Add("breathing");
+            //  Пауза (окно скрыто): держим статичный halo без петли — она вернётся на восстановлении.
+            if (!_animationsPaused)
+            {
+                GlowHalo.Classes.Add("breathing");
+            }
         }
         else if (connected)
         {

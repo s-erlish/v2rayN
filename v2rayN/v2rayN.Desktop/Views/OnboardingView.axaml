@@ -24,41 +24,16 @@
           =================================================================================  -->
 
     <Border Background="{DynamicResource Brush.HomeGradient}">
-        <StackPanel
-            Width="440"
-            HorizontalAlignment="Center"
-            VerticalAlignment="Center">
-
-            <!--  Брендовый знак departament (эмблема-акцент + вордмарк Space Grotesk).  -->
-            <StackPanel HorizontalAlignment="Center">
-                <Border
-                    Width="44"
-                    Height="44"
-                    HorizontalAlignment="Center"
-                    Background="{DynamicResource Brush.Accent}"
-                    CornerRadius="13">
-                    <TextBlock
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        FontFamily="{DynamicResource Font.Grotesk}"
-                        FontSize="22"
-                        FontWeight="Bold"
-                        Foreground="{DynamicResource Brush.OnAccent}"
-                        Text="d" />
-                </Border>
-                <TextBlock
-                    Margin="0,8,0,0"
-                    HorizontalAlignment="Center"
-                    FontFamily="{DynamicResource Font.Grotesk}"
-                    FontSize="16"
-                    FontWeight="Medium"
-                    Foreground="{DynamicResource Brush.OnSurface}"
-                    Text="departament" />
-            </StackPanel>
+        <!--  16px screen gutter + MaxWidth: колонка заполняет компактное окно (за вычетом
+              gutter) и центрируется-обрезается на широком — тот же приём, что в LoginView.  -->
+        <Panel Margin="16,0">
+            <StackPanel
+                MaxWidth="400"
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Center">
 
             <!--  Приветствие (home_welcome_title).  -->
             <TextBlock
-                Margin="0,24,0,0"
                 HorizontalAlignment="Center"
                 Classes="Headline"
                 Text="Приветствуем!"
@@ -106,7 +81,7 @@
                 HorizontalAlignment="Stretch"
                 HorizontalContentAlignment="Center"
                 VerticalContentAlignment="Center"
-                Classes="OutlinedAccent">
+                Classes="Tonal">
                 <StackPanel
                     Orientation="Horizontal"
                     Spacing="8"
@@ -116,11 +91,11 @@
                         Height="20"
                         VerticalAlignment="Center"
                         Data="F1 M16,1L4,1c-1.1,0 -2,0.9 -2,2v14h2L4,3h12L16,1zM19,5L8,5c-1.1,0 -2,0.9 -2,2v14c0,1.1 0.9,2 2,2h11c1.1,0 2,-0.9 2,-2L21,7c0,-1.1 -0.9,-2 -2,-2zM19,21L8,21L8,7h11v14z"
-                        Fill="{DynamicResource Brush.Accent}"
+                        Fill="{DynamicResource Brush.OnSurface}"
                         Stretch="Uniform" />
                     <TextBlock
                         VerticalAlignment="Center"
-                        Foreground="{DynamicResource Brush.Accent}"
+                        Foreground="{DynamicResource Brush.OnSurface}"
                         Text="Добавить из буфера обмена" />
                 </StackPanel>
             </Button>
@@ -184,6 +159,7 @@
                         Text="Войти через сайт" />
                 </StackPanel>
             </Button>
-        </StackPanel>
+            </StackPanel>
+        </Panel>
     </Border>
 </UserControl>

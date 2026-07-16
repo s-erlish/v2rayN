@@ -114,6 +114,9 @@ public class CoreManager
             // stays blank, and (b) wrongly flip the app into Clash UI mode. So mark the app as
             // running under the MAIN core's type.
             AppManager.Instance.RunningCoreType = mainContext.RunCoreType;
+            // idle/perf B1: broadcast the running transition so the tray label, status-bar tray icon
+            // and Home shield update event-driven instead of busy-polling IsRunningCore every second.
+            AppEvents.CoreRunningStateChanged.Publish(true);
             await UpdateFunc(true, $"{node.GetSummary()}");
         }
         else
@@ -215,6 +218,13 @@ public class CoreManager
         // from IsRunningCore; without this reset RunningCoreType stays sticky and a disconnect
         // never registers. LoadCore re-assigns it on the next connect.
         AppManager.Instance.RunningCoreType = ECoreType.v2rayN;
+
+        // idle/perf B1: broadcast the stopped transition (mirror of the start-side publish in LoadCore)
+        // so every connect-state subscriber settles to "disconnected" without a poll. CoreStop is also
+        // called as the stop-before-start step inside LoadCore and on a failed connect; a transient
+        // false→true (reconnect) or false→false (failed connect) is harmless — subscribers dedupe by
+        // state and, during a reload, StatusBarView still shows "Connecting" via BlReloadEnabled.
+        AppEvents.CoreRunningStateChanged.Publish(false);
     }
 
     #region Private

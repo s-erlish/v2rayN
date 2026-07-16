@@ -1,9 +1,9 @@
 using System.ComponentModel;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Avalonia.Animation;
 using Avalonia.Animation.Easings;
 using Avalonia.Data.Converters;
-using Avalonia.Layout;
 using Avalonia.Media.Transformation;
 using Avalonia.VisualTree;
 using DialogHostAvalonia;
@@ -55,8 +55,14 @@ public partial class ServerListView : UserControl
             if (!ReferenceEquals(DataContext, _revealBoundContext))
             {
                 _revealBoundContext = DataContext;
-                _revealStarted = false;
-                _revealFinished = false;
+                // G1: the reveal is one-shot PER VIEW-MODEL, not per view instance. Leaving Home and
+                // returning tears down + re-creates this view (or re-attaches it), which used to reset
+                // these instance fields and REPLAY the stagger on every show. The static weak table
+                // remembers which VM instances have already played, so a re-shown / re-attached list
+                // stays settled; only a genuinely new VM (e.g. after re-login) plays once more.
+                var alreadyRevealed = DataContext is { } ctx && _revealedContexts.TryGetValue(ctx, out _);
+                _revealStarted = alreadyRevealed;
+                _revealFinished = alreadyRevealed;
                 _revealIndex = 0;
             }
         };
@@ -235,6 +241,21 @@ public partial class ServerListView : UserControl
     private bool _revealFinished; //  first population done → no further reveals this bind
     private int _revealIndex; //  running per-row index within the first-population batch
 
+    //  G1: which HomeViewModel instances have already played their one-shot reveal. STATIC so the
+    //  guard survives this view being torn down / re-created / re-attached when the Home tab is
+    //  re-shown (the source of the residual replay). Weak keys → a discarded VM is collected and a
+    //  genuinely new VM (re-login) reveals once more; harmless if the view instance is reused.
+    private static readonly ConditionalWeakTable<object, object> _revealedContexts = new();
+
+    //  Latch the current VM as "revealed" so a later re-show / re-attach can't replay the stagger.
+    private void MarkContextRevealed()
+    {
+        if (DataContext is { } ctx)
+        {
+            _revealedContexts.AddOrUpdate(ctx, ctx);
+        }
+    }
+
     // Each server row raises Loaded when its container is realized. On the FIRST population we
     // stagger the first ≤8 rows in; every later realization (refresh / re-expand) is skipped so
     // rows simply appear at their visible rest.
@@ -259,10 +280,12 @@ public partial class ServerListView : UserControl
         }
 
         // Lite / reduced-motion: no stagger. Rows are visible by default, so nothing to do but
-        // close the window so no row in this population animates.
+        // close the window so no row in this population animates. Latch the VM so re-enabling
+        // motion + re-showing later doesn't retro-stagger an already-populated list.
         if (IsReducedMotion())
         {
             _revealFinished = true;
+            MarkContextRevealed();
             return;
         }
 
@@ -270,6 +293,8 @@ public partial class ServerListView : UserControl
         {
             _revealStarted = true;
             _revealIndex = 0;
+            // Latch this VM as revealed so re-showing / re-attaching Home never replays the stagger (G1).
+            MarkContextRevealed();
             // Close the first-population window once this layout batch drains. Loaded callbacks run
             // at a higher dispatcher priority than Background, so every row realized in this pass is
             // indexed before the window closes; later (refresh) rows fall under _revealFinished.
@@ -429,20 +454,30 @@ public partial class ServerListView : UserControl
 
     #endregion List-reveal stagger
 
-    #region Group expand/collapse slide (fast height+opacity reveal; instant under lite)
+    #region Group expand/collapse reveal (smooth composited crossfade; instant under lite)
 
-    //  The meta-bar chevron flips HomeServerGroup.IsExpanded. Instead of snapping the rows in/out
-    //  (IsVisible), each group's rows live in a clipped GroupReveal Border whose Height + Opacity we
-    //  SLIDE (~200ms OutQuint) on toggle — a fast, smooth reveal that matches the chevron rotate.
-    //  Under lite / reduced-motion the toggle is INSTANT (same gate as the list-reveal stagger).
+    //  The meta-bar chevron flips HomeServerGroup.IsExpanded. Each group's rows live in a clipped
+    //  reveal Border. We do NOT animate the Border's layout Height per-frame — that thrashes layout
+    //  (every tick re-measures/arranges the rows) and stutters badly. Instead the reveal is a SMOOTH,
+    //  COMPOSITED crossfade: inside the ClipToBounds viewport we animate ONLY the inner rows'
+    //  RenderTransform (a small translateY, TransformOperations — same vocabulary as the row press-scale
+    //  and the list-reveal stagger) + Opacity, which run off the layout path and never jitter. The
+    //  viewport Height is touched EXACTLY ONCE per toggle (reserve natural height on expand / snap to 0
+    //  on collapse), so there is a single layout pass, not one per frame.
     //
+    //  Under lite / reduced-motion the toggle is INSTANT (same gate as the list-reveal stagger).
     //  Rows stay UN-hosted while collapsed (IsVisible=false at rest), so a collapsed group never
     //  realizes its rows — this preserves the one-shot list-reveal stagger (it keys off row Loaded,
-    //  which only fires for expanded groups). The outer groups ItemsControl uses a non-virtualizing
-    //  StackPanel, so each GroupReveal container is stable; we hook its group on Loaded, unhook on
-    //  Unloaded, and cancel any in-flight slide when a new toggle arrives.
+    //  which only fires for expanded groups) and the chevron rotate is unaffected. The outer groups
+    //  ItemsControl uses a non-virtualizing StackPanel, so each reveal container is stable; we hook its
+    //  group on Loaded, unhook on Unloaded, and cancel any in-flight reveal when a new toggle arrives.
 
-    private const double RevealSlideMs = 200; //  fast slide (rows in/out) — OutQuint
+    private const double RevealSlideMs = 190; //  fast reveal — OutQuint
+
+    //  Small translateY (composited) — a subtle slide that reads as a reveal regardless of list length,
+    //  paired with the opacity crossfade. Full-height slides would whoosh on long lists; 12px stays crisp.
+    private static readonly ITransform _revealFrom = TransformOperations.Parse("translateY(-12px)");
+    private static readonly ITransform _revealHome = TransformOperations.Parse("translateY(0px)");
 
     private readonly Dictionary<Border, (HomeServerGroup group, PropertyChangedEventHandler handler)> _revealHooks = new();
     private readonly Dictionary<Border, CancellationTokenSource> _revealCts = new();
@@ -499,9 +534,16 @@ public partial class ServerListView : UserControl
         }
     }
 
-    // Instant rest state: expanded → auto height, fully visible; collapsed → height 0, hidden (rows un-hosted).
+    // Instant rest state: expanded → auto height, rows settled + visible; collapsed → height 0, hidden
+    // (rows un-hosted). Also normalises the inner rows' transform/opacity so no reveal frame is stranded.
     private static void ApplyRevealState(Border reveal, bool expanded)
     {
+        if (reveal.Child is Control inner)
+        {
+            inner.RenderTransform = null;
+            inner.Opacity = 1;
+        }
+
         if (expanded)
         {
             reveal.IsVisible = true;
@@ -516,7 +558,9 @@ public partial class ServerListView : UserControl
         }
     }
 
-    // Fast height + opacity slide. Cancels any in-flight slide on this container first. Instant under lite.
+    // Smooth reveal: the ClipToBounds viewport Height is set ONCE (reserve on expand / snap on collapse),
+    // and only the inner rows' RenderTransform (translateY) + Opacity animate — composited, no per-frame
+    // layout. Cancels any in-flight reveal on this container first. Instant under lite / reduced-motion.
     private async void AnimateReveal(Border reveal, bool expand)
     {
         if (_revealCts.TryGetValue(reveal, out var prev))
@@ -526,48 +570,41 @@ public partial class ServerListView : UserControl
             _revealCts.Remove(reveal);
         }
 
-        if (IsReducedMotion())
+        if (IsReducedMotion() || reveal.Child is not Control inner)
         {
             ApplyRevealState(reveal, expand);
             return;
         }
 
-        double fromH, toH, fromO, toO;
         if (expand)
         {
-            // Host the rows, measure their natural height at the current width, then grow 0 → target.
+            // Reserve the natural height in a SINGLE layout pass, host + clip, then fade/slide the rows in.
             reveal.IsVisible = true;
+            reveal.Opacity = 1;
             var target = MeasureRevealHeight(reveal);
-            if (target <= 0)
-            {
-                ApplyRevealState(reveal, true);
-                return;
-            }
-            (fromH, toH, fromO, toO) = (0, target, 0, 1);
+            reveal.Height = target > 0 ? target : double.NaN;
         }
         else
         {
-            var from = reveal.Bounds.Height;
-            if (from <= 0)
-            {
-                from = MeasureRevealHeight(reveal);
-            }
-            if (from <= 0)
-            {
-                ApplyRevealState(reveal, false);
-                return;
-            }
-            (fromH, toH, fromO, toO) = (from, 0, 1, 0);
+            // Freeze the current height so the viewport doesn't reflow while the rows fade/slide out; the
+            // space is snapped closed once (in the finally) after the composited animation completes.
+            var current = reveal.Bounds.Height;
+            reveal.Height = current > 0 ? current : reveal.Height;
         }
 
         var cts = new CancellationTokenSource();
         _revealCts[reveal] = cts;
         var token = cts.Token;
 
+        var fromT = expand ? _revealFrom : _revealHome;
+        var toT = expand ? _revealHome : _revealFrom;
+        var fromO = expand ? 0d : 1d;
+        var toO = expand ? 1d : 0d;
+
         // Base = start-state (matches keyframe 0) so nothing flashes before the clock ticks; FillMode.None
         // releases the properties on completion and the finally sets the resting base immediately after.
-        reveal.Height = fromH;
-        reveal.Opacity = fromO;
+        inner.RenderTransform = fromT;
+        inner.Opacity = fromO;
 
         var anim = new Animation
         {
@@ -582,7 +619,7 @@ public partial class ServerListView : UserControl
                     Cue = new Cue(0d),
                     Setters =
                     {
-                        new Setter(Layoutable.HeightProperty, fromH),
+                        new Setter(Visual.RenderTransformProperty, fromT),
                         new Setter(Visual.OpacityProperty, fromO),
                     },
                 },
@@ -591,7 +628,7 @@ public partial class ServerListView : UserControl
                     Cue = new Cue(1d),
                     Setters =
                     {
-                        new Setter(Layoutable.HeightProperty, toH),
+                        new Setter(Visual.RenderTransformProperty, toT),
                         new Setter(Visual.OpacityProperty, toO),
                     },
                 },
@@ -600,7 +637,7 @@ public partial class ServerListView : UserControl
 
         try
         {
-            await anim.RunAsync(reveal, token);
+            await anim.RunAsync(inner, token);
         }
         catch (OperationCanceledException)
         {
@@ -635,7 +672,7 @@ public partial class ServerListView : UserControl
         return reveal.DesiredSize.Height;
     }
 
-    #endregion Group expand/collapse slide
+    #endregion Group expand/collapse reveal
 
     #region Server-row context actions (§2.13)
 
@@ -677,8 +714,12 @@ public partial class ServerListView : UserControl
     }
 
     // Map the user-selected ping method (Настройки → Пинг → SpeedTestItem.PingMethod) to the engine
-    // probe. The core supports Tcping + Realping; Httping/Icmping (Android parity) fall back to the
-    // real latency probe until the engine gains those probes.
+    // probe. A8(b): the core's ESpeedActionType has NO Httping/Icmping probe — those two are not
+    // implementable without a core change, so they are dead options. This resolver therefore only
+    // ever yields the two working probes (Tcping / Realping); any other persisted value (incl. a
+    // stale «Httping»/«Icmping» left by an earlier build) safely falls back to Realping so ping still
+    // works. The dead HTTP/ICMP rows must be removed from the picker — see PingSettingsPage.axaml
+    // (RowHttp/RowIcmp), which this wave does not own; flagged for the settings owner.
     private static ESpeedActionType ResolvePingAction()
         => AppManager.Instance.Config.SpeedTestItem.PingMethod == "Tcping"
             ? ESpeedActionType.Tcping
@@ -770,6 +811,76 @@ public sealed class DelayTestingConverter : IValueConverter
     {
         var s = value?.ToString();
         return !string.IsNullOrEmpty(s) && !int.TryParse(s, out _);
+    }
+
+    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => null;
+}
+
+/// <summary>
+/// Ping display text (A8): a real reading renders its millisecond number; a failed / timed-out probe
+/// (the core writes «-1») renders an em-dash «—», never the raw «-1». Only reached for numeric results
+/// (visibility is gated by <see cref="DelayResultConverter"/>; a test in flight shows the spinner), so
+/// this converter only decides the failure marker vs. the number. Local to ServerListView.
+/// </summary>
+public sealed class DelayDisplayConverter : IValueConverter
+{
+    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        var s = value?.ToString();
+        if (int.TryParse(s, out var ms) && ms <= 0)
+        {
+            return "—"; //  timeout / failure — no number, no latency ink (see DelayInkConverter)
+        }
+        return s;
+    }
+
+    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => null;
+}
+
+/// <summary>
+/// Ping value ink (A8): a real reading uses the theme reading-ink (blue on light / white on dark, the
+/// same single tone as the old DelayColorConverter — no green/red good-bad signal); a failed / timed-out
+/// probe (<c>Delay &lt;= 0</c>) renders its em-dash in the MUTED variant tone so it reads as «no result»,
+/// not as a latency. Theme-resolved via the active <see cref="ThemeVariant"/> (honours the mono overlay),
+/// with literal Incy-token fallbacks so the binding never drops. Local to ServerListView.
+/// </summary>
+public sealed class DelayInkConverter : IValueConverter
+{
+    private static readonly IBrush _mutedFallback = new SolidColorBrush(Color.Parse("#9BA1AD")); // Brush.OnSurfaceVariant
+    private static readonly IBrush _blueFallback = new SolidColorBrush(Color.Parse("#4C8DFF"));   // Brush.Accent (Light)
+    private static readonly IBrush _whiteFallback = new SolidColorBrush(Color.Parse("#F2F4F8"));  // Brush.OnSurface (Dark)
+
+    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        // Failed / timeout → muted «no result» ink (not a latency colour).
+        if (value is int ms && ms <= 0)
+        {
+            return Resolve("Brush.OnSurfaceVariant", _mutedFallback);
+        }
+        // Real reading → single theme ink: blue on light, white on dark (mono maps via tokens).
+        var light = Application.Current?.ActualThemeVariant == ThemeVariant.Light;
+        return light
+            ? Resolve("Brush.Accent", _blueFallback)
+            : Resolve("Brush.OnSurface", _whiteFallback);
+    }
+
+    private static IBrush Resolve(string key, IBrush fallback)
+    {
+        try
+        {
+            var app = Application.Current;
+            if (app is not null
+                && app.TryFindResource(key, app.ActualThemeVariant, out var res)
+                && res is IBrush brush)
+            {
+                return brush;
+            }
+        }
+        catch
+        {
+            //  fall through to the literal token fallback
+        }
+        return fallback;
     }
 
     public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => null;

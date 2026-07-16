@@ -19,7 +19,6 @@ public partial class StatusBarView : ReactiveUserControl<StatusBarViewModel>
 
     private ConnState _connState = ConnState.Idle;
     private bool _seenReloadEnabled;
-    private DispatcherTimer? _stateTimer;
 
     // Shields are immutable — load once, reuse for the app lifetime (cheap on weak PCs).
     private static WindowIcon? _iconIdle;
@@ -66,23 +65,25 @@ public partial class StatusBarView : ReactiveUserControl<StatusBarViewModel>
                 interaction.SetOutput(Unit.Default);
             }).DisposeWith(disposables);
 
-            // One cheap 1s poll of the engine drives every connect-state signal (icon + toasts).
-            // The engine exposes no start/stop event, so a low-priority disposable timer is the
-            // lightest honest way to observe transitions. Disposed on deactivation.
-            _stateTimer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(1) };
-            _stateTimer.Tick += OnConnectStateTick;
-            _stateTimer.Start();
-            OnConnectStateTick(null, EventArgs.Empty);
-            Disposable.Create(() =>
+            // idle/perf B1: connect state is event-driven now — NO 1 s poll. It can only change on two
+            // signals: (1) the core actually starting/stopping (AppEvents.CoreRunningStateChanged, raised
+            // by CoreManager), and (2) a reload going in/out of flight (MainWindowViewModel.BlReloadEnabled
+            // → the "Connecting" sub-state / failed-connect toast). Subscribe to both, marshal to the UI
+            // thread (the core event fires on a background thread) and dispose on deactivation.
+            AppEvents.CoreRunningStateChanged
+                .AsObservable()
+                .Subscribe(_ => Dispatcher.UIThread.Post(EvaluateConnectState))
+                .DisposeWith(disposables);
+
+            if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desk
+                && desk.MainWindow?.DataContext is MainWindowViewModel mainVm)
             {
-                if (_stateTimer is null)
-                {
-                    return;
-                }
-                _stateTimer.Stop();
-                _stateTimer.Tick -= OnConnectStateTick;
-                _stateTimer = null;
-            }).DisposeWith(disposables);
+                mainVm.WhenAnyValue(x => x.BlReloadEnabled)
+                    .Subscribe(_ => Dispatcher.UIThread.Post(EvaluateConnectState))
+                    .DisposeWith(disposables);
+            }
+
+            EvaluateConnectState();
         });
 
         //spEnableTun.IsVisible = (Utils.IsWindows() || AppHandler.Instance.IsAdministrator);
@@ -98,7 +99,7 @@ public partial class StatusBarView : ReactiveUserControl<StatusBarViewModel>
 
     #region Connect-state tray icon + transition toasts
 
-    private void OnConnectStateTick(object? sender, EventArgs e)
+    private void EvaluateConnectState()
     {
         var running = AppManager.Instance.IsRunningCore(ECoreType.Xray)
                    || AppManager.Instance.IsRunningCore(ECoreType.sing_box);
@@ -114,11 +115,13 @@ public partial class StatusBarView : ReactiveUserControl<StatusBarViewModel>
             return;
         }
 
-        var prev = _connState;
         _connState = next;
 
         RefreshIcon();
-        PublishTransition(prev, next);
+        // Connect-state transition snacks are published solely by HomeViewModel (the single owner
+        // of the connect pipeline) — see AppEvents.SendSnackMsgRequested in HomeViewModel.Connect /
+        // SyncState. StatusBar used to publish the same transitions too, producing a DOUBLE inline
+        // snack, so it no longer raises them here; it still owns only the tray/window icon.
     }
 
     // "Connecting" == a core reload is in progress. MainWindowViewModel.BlReloadEnabled flips false
@@ -146,32 +149,6 @@ public partial class StatusBarView : ReactiveUserControl<StatusBarViewModel>
         }
 
         return false;
-    }
-
-    private void PublishTransition(ConnState prev, ConnState next)
-    {
-        // Verbatim Russian, sentence-case, matching Android. Fired once per transition (no spam).
-        var msg = next switch
-        {
-            ConnState.Connecting => "Подключение…",
-            ConnState.Connected => ConnectedMessage(),
-            ConnState.Idle when prev == ConnState.Connected => "Отключено",
-            // Connecting → Idle without ever reaching Connected = the core failed to start.
-            // Verbatim Android string (values-ru/strings.xml toast_status_failed).
-            ConnState.Idle when prev == ConnState.Connecting => "Не удалось подключиться",
-            _ => null
-        };
-
-        if (msg is { Length: > 0 })
-        {
-            AppEvents.SendSnackMsgRequested.Publish(msg);
-        }
-    }
-
-    private string ConnectedMessage()
-    {
-        var server = ViewModel?.RunningServerDisplay?.Trim();
-        return server.IsNullOrEmpty() ? "Подключено" : $"Подключено · {server}";
     }
 
     private void RefreshIcon()

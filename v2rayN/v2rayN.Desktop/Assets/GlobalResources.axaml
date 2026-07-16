@@ -410,4 +410,90 @@
             <Setter Property="Opacity" Value="0.38" />
         </Style>
     </ControlTheme>
+
+    <!-- ====================================================================== -->
+    <!--  Компактное поле ввода Incy (promoted из SettingsView TextBox.IncyField). -->
+    <!--  Осознанный вариант ПЛОТНОСТИ рядом с TextBox.Incy (52h): recessed        -->
+    <!--  SurfaceHigh, высота 44, паддинг 12,0. Радиус СВЕДЁН 12→14 (Radius.Search) -->
+    <!--  к единой шкале полей ввода (SearchPill / PriceOption / TextBox.Incy = 14) -->
+    <!--  — конец дрейфа radius 12 vs 14 (REVIEW_VISUAL L9). Добавлен :disabled     -->
+    <!--  (opacity 0.38) как у TextBox.Incy — раньше у поля его не было. Полная      -->
+    <!--  ControlTheme, чтобы Semi не перекрашивал фон/фокус. Применять:            -->
+    <!--  Theme="{StaticResource TextBox.IncyField}".                              -->
+    <!-- ====================================================================== -->
+    <ControlTheme x:Key="TextBox.IncyField" TargetType="TextBox">
+        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineVariant}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Search}" />
+        <Setter Property="MinHeight" Value="44" />
+        <Setter Property="Padding" Value="12,0" />
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
+        <Setter Property="CaretBrush" Value="{DynamicResource Brush.Accent}" />
+        <Setter Property="SelectionBrush" Value="#334C8DFF" />
+        <Setter Property="SelectionForegroundBrush" Value="{DynamicResource Brush.OnSurface}" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Cursor" Value="IBeam" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border
+                    x:Name="PART_BorderElement"
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="{TemplateBinding CornerRadius}">
+                    <Border.Transitions>
+                        <Transitions>
+                            <BrushTransition Property="BorderBrush" Duration="0:0:0.15" />
+                        </Transitions>
+                    </Border.Transitions>
+                    <Grid Margin="{TemplateBinding Padding}" ColumnDefinitions="*,Auto">
+                        <Panel Grid.Column="0" VerticalAlignment="{TemplateBinding VerticalContentAlignment}">
+                            <TextBlock
+                                x:Name="PART_Watermark"
+                                VerticalAlignment="Center"
+                                Foreground="{DynamicResource Brush.OnSurfaceVariant}"
+                                IsVisible="{TemplateBinding Text, Converter={x:Static StringConverters.IsNullOrEmpty}}"
+                                Text="{TemplateBinding Watermark}"
+                                TextAlignment="{TemplateBinding TextAlignment}"
+                                TextWrapping="NoWrap" />
+                            <ScrollViewer
+                                x:Name="PART_ScrollViewer"
+                                HorizontalScrollBarVisibility="Hidden"
+                                VerticalScrollBarVisibility="Disabled">
+                                <TextPresenter
+                                    x:Name="PART_TextPresenter"
+                                    VerticalAlignment="Center"
+                                    CaretBrush="{TemplateBinding CaretBrush}"
+                                    CaretIndex="{TemplateBinding CaretIndex}"
+                                    PasswordChar="{TemplateBinding PasswordChar}"
+                                    RevealPassword="{TemplateBinding RevealPassword}"
+                                    SelectionBrush="{TemplateBinding SelectionBrush}"
+                                    SelectionEnd="{TemplateBinding SelectionEnd}"
+                                    SelectionForegroundBrush="{TemplateBinding SelectionForegroundBrush}"
+                                    SelectionStart="{TemplateBinding SelectionStart}"
+                                    Text="{TemplateBinding Text, Mode=TwoWay}"
+                                    TextAlignment="{TemplateBinding TextAlignment}"
+                                    TextWrapping="{TemplateBinding TextWrapping}" />
+                            </ScrollViewer>
+                        </Panel>
+                        <ContentPresenter
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
+                            Content="{TemplateBinding InnerRightContent}" />
+                    </Grid>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+        <Style Selector="^:pointerover /template/ Border#PART_BorderElement">
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Outline}" />
+        </Style>
+        <Style Selector="^:focus /template/ Border#PART_BorderElement">
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+        </Style>
+        <Style Selector="^:disabled">
+            <Setter Property="Opacity" Value="0.38" />
+        </Style>
+    </ControlTheme>
 </ResourceDictionary>

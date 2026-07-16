@@ -27,6 +27,10 @@ public class AccountViewModel : MyReactiveObject
 
     private CancellationTokenSource? _telegramCts;
 
+    // Bounded post-top-up profile re-poll (a Platega top-up completes in the external browser with no
+    // in-app return callback). Cancelled on logout or a subsequent top-up.
+    private CancellationTokenSource? _topUpRefreshCts;
+
     #region reactive state (raw)
 
     [Reactive] public UserProfileDto? Profile { get; set; }
@@ -37,6 +41,19 @@ public class AccountViewModel : MyReactiveObject
     [Reactive] public bool IsLoading { get; set; }
     [Reactive] public ApiError? Error { get; set; }
     [Reactive] public bool IsLoggedIn { get; set; }
+
+    /// <summary>
+    /// [Wave 2a signal] True from the instant a login succeeds — set in the SAME UI tick as
+    /// <see cref="IsLoggedIn"/> flips true, BEFORE the first import await — and cleared only after the
+    /// post-login account import + subscription fetch + Home server refresh have ALL completed
+    /// (success or failure). MainWindow's shell gate (Wave 2a) shows the account-sync overlay while this
+    /// is true so no empty onboarding frame flashes between the login page closing and the imported
+    /// servers landing on Home. Only wraps the fresh-login (<see cref="OnAuthenticated"/>) path — the
+    /// returning-user cold-start path is intentionally NOT gated, so an already-populated Home is never
+    /// hidden behind the sync overlay on launch.
+    /// </summary>
+    [Reactive] public bool IsImportingAccount { get; set; }
+
     [Reactive] public PublicConfigDto? PublicConfig { get; set; }
 
     #endregion reactive state (raw)
@@ -442,6 +459,27 @@ public class AccountViewModel : MyReactiveObject
         await _authManager.BeginTelegramLogin(state => RunOnUi(() => ApplyLoginState(state)), cts.Token);
     }
 
+    /// <summary>
+    /// Cancels an in-flight Telegram login poll and resets the login flow to idle. The poll loop
+    /// (<see cref="AuthManager.BeginTelegramLogin"/>) honours the token and returns immediately on
+    /// cancel, so this stops the ≤3-minute background poll that otherwise keeps running after the login
+    /// sub-page is dismissed. The host (LoginView back/close → MainWindow.PopSubPage) must call this on
+    /// dismiss. Idempotent and safe to call when no login is in flight; never disturbs an already
+    /// successful login (guarded by <see cref="IsLoggedIn"/>).
+    /// </summary>
+    public void CancelLogin()
+    {
+        _telegramCts?.Cancel();
+        _telegramCts = null;
+        RunOnUi(() =>
+        {
+            if (!IsLoggedIn)
+            {
+                CurrentLoginState = new LoginState.Idle();
+            }
+        });
+    }
+
     private async Task LoginSite()
     {
         _telegramCts?.Cancel();
@@ -511,6 +549,9 @@ public class AccountViewModel : MyReactiveObject
         RunOnUi(() =>
         {
             IsLoggedIn = true;
+            // Raise the sync signal in the SAME tick as IsLoggedIn (before the first await below), so the
+            // Wave 2a overlay is already up when LoginView closes on IsLoggedIn — no empty onboarding flash.
+            IsImportingAccount = true;
             Profile = profile;
             _pendingFirstLoad = true;
             IsLoading = true;
@@ -518,14 +559,23 @@ public class AccountViewModel : MyReactiveObject
             Recompute();
         });
 
-        await AutoImportAndRefreshHome();
-        await FetchAndApplySubscriptions();
-        await LoadAll();
-        RunOnUi(() =>
+        try
         {
-            IsLoading = false;
-            Recompute();
-        });
+            await AutoImportAndRefreshHome();   // import + RefreshServers (flips Home IsEmpty=false)
+            await FetchAndApplySubscriptions();
+            await LoadAll();
+        }
+        finally
+        {
+            // Clear the sync signal only AFTER import + fetch + Home refresh resolve (success OR failure),
+            // so the overlay hands directly to the populated Home instead of a half-empty frame.
+            RunOnUi(() =>
+            {
+                IsLoading = false;
+                IsImportingAccount = false;
+                Recompute();
+            });
+        }
     }
 
     /// <summary>
@@ -570,6 +620,7 @@ public class AccountViewModel : MyReactiveObject
     private async Task Logout()
     {
         _telegramCts?.Cancel();
+        _topUpRefreshCts?.Cancel();
         // Wipe stops the VPN and DELETES the account-imported subscriptions + their servers (tracked by
         // AuthTokenStore.ManagedGuids — a user's OWN manually-added subs are never in that set, so they
         // survive logout). Refresh the Home server list afterwards so the removed servers disappear and
@@ -642,6 +693,10 @@ public class AccountViewModel : MyReactiveObject
                     {
                         ProcUtils.ProcessStart(url);
                         AppEvents.SendSnackMsgRequested.Publish("Завершите оплату в браузере");
+                        // The top-up completes in the external browser with no in-app return callback, so
+                        // re-poll the profile until the balance lands — BalanceText updates without a
+                        // manual retry.
+                        SchedulePostTopUpBalanceRefresh();
                     }
                     catch
                     {
@@ -649,6 +704,40 @@ public class AccountViewModel : MyReactiveObject
                     }
                 })
                 .OnFailure(err => AppEvents.SendSnackMsgRequested.Publish(MessageFor(err)));
+        });
+    }
+
+    /// <summary>
+    /// After a balance top-up checkout is opened externally, the payment settles in the browser with no
+    /// in-app return signal. Re-fetch the profile a few times (bailing as soon as the balance changes) so
+    /// <see cref="BalanceText"/> refreshes on its own. Data-driven: every poll is a real /profile fetch —
+    /// nothing is fabricated. Cancelled on logout or a subsequent top-up.
+    /// </summary>
+    private void SchedulePostTopUpBalanceRefresh()
+    {
+        _topUpRefreshCts?.Cancel();
+        var cts = new CancellationTokenSource();
+        _topUpRefreshCts = cts;
+        var startingBalance = Profile?.Balance;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                for (var attempt = 0; attempt < 12 && !cts.IsCancellationRequested; attempt++)
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(5), cts.Token);
+                    await RefreshProfile();
+                    if (Profile?.Balance is { } current && current != startingBalance)
+                    {
+                        break;
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Cancelled by logout / a newer top-up — stop quietly.
+            }
         });
     }
 

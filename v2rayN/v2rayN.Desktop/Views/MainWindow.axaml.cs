@@ -47,6 +47,8 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     private bool _edgeExpandRequested;
     private AppTab _currentTab = AppTab.Home;   // ОДНО состояние вкладки на обе раскладки
     private bool _isEmpty = true;
+    private bool _isSyncing;                     // E3: идёт пост-логин импорт → оверлей синхронизации
+    private bool _layoutInitialized;             // C6: первый ApplyLayoutMode без кроссфейда морфинга
 
     // ОДИН экземпляр AccountViewModel на всё приложение: делится между вкладкой «Аккаунт»
     // (AccountView) и суб-страницей «Вход» (LoginView), поэтому состояние входа распространяется
@@ -58,9 +60,18 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     // верхнюю; когда стек пуст — хост скрыт и снова видна вкладка/онбординг под ним.
     private readonly List<Control> _subStack = new();
 
-    // Индикатор подключения в рейле: серый (idle) ↔ синий (connected).
-    private static readonly IBrush _dotOff = new SolidColorBrush(Color.Parse("#9BA1AD"));
-    private static readonly IBrush _dotOn = new SolidColorBrush(Color.Parse("#4C8DFF"));
+    // Моушен-токены оболочки (§A, 1:1 с RiseFadePageTransition): reveal/press = OutQuint,
+    // двусторонние состояния/кроссфейды = Standard. Индикатор подключения в рейле теперь красится
+    // ТЕМА-токенами через класс .on (см. Ellipse.ConnDot в разметке), а не хардкод-hex.
+    private static readonly Easing _easeOutQuint = new SplineEasing(0.22, 1, 0.36, 1);
+    private static readonly Easing _easeStandard = new SplineEasing(0.2, 0, 0, 1);
+
+    // Токены отмены незавершённой анимации на каждый анимируемый узел (перезапуск отменяет предыдущую).
+    private CancellationTokenSource? _subPageAnim;
+    private CancellationTokenSource? _shellAnim;
+    private CancellationTokenSource? _snackAnim;
+    private CancellationTokenSource? _layoutAnim;
+    private Control? _currentShellView;          // текущий видимый оверлей оболочки (для кроссфейда)
 
     public MainWindow()
     {
@@ -316,6 +327,10 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         railHost.IsVisible = !compact;
         bottomNav.IsVisible = compact;
 
+        // A3: инлайн-уведомление держим НАД навигацией. В компакте расчищаем нижнюю нав (~64) снизу,
+        // в широкой — обычный gutter 16 (рейл слева, нижней навигации нет).
+        snackHost.Margin = compact ? new Thickness(16, 0, 16, 76) : new Thickness(16, 0, 16, 16);
+
         ApplyShellVisibility();
 
         // ==================== Плавный своп раскладки (без джанка) ====================
@@ -326,6 +341,32 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         contentHost.PageTransition = null;
         ShowTab(_currentTab);
         contentHost.PageTransition = MotionState.IsLite ? null : savedTransition ?? RiseFadePageTransition.Default;
+
+        // C6: мягкий кроссфейд морфинга раскладки (compact↔wide) поверх мгновенной подмены — маскирует
+        // рефлоу дерева. ТОЛЬКО opacity на contentArea (без layout/transform), ~130мс; сквозная подложка-
+        // градиент bodyRoot остаётся за ним, поэтому не мигает «белым». Пропускаем первый вызов (старт)
+        // и .lite. Не трогает delicate-логику свопа выше — чистая косметика после неё.
+        if (_layoutInitialized && !MotionState.IsLite)
+        {
+            AnimateLayoutSwap();
+        }
+        _layoutInitialized = true;
+    }
+
+    private async void AnimateLayoutSwap()
+    {
+        _layoutAnim?.Cancel();
+        var cts = new CancellationTokenSource();
+        _layoutAnim = cts;
+
+        contentArea.Opacity = 0d;
+        try { await RunFade(contentArea, 0d, 1d, TimeSpan.FromMilliseconds(130), _easeStandard, cts.Token); }
+        catch { }
+        if (cts.IsCancellationRequested)
+        {
+            return;
+        }
+        contentArea.Opacity = 1d;
     }
 
     // ==================== Реактивный «Облегчённый режим» (lite) ====================
@@ -373,8 +414,83 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         {
             return;
         }
-        onboardingView.IsVisible = _isEmpty;
-        bodyRoot.IsVisible = !_isEmpty;
+
+        // 3-way gate (E3): SYNCING > EMPTY > CONTENT. Оверлей синхронизации перекрывает и пустой
+        // онбординг, и половинчатую «Главную», поэтому между закрытием «Входа» и приходом серверов
+        // НЕ мелькает пустой онбординг. Если импорт завершился без серверов — падаем в онбординг;
+        // если с серверами (_isEmpty уже false) — в заполненный bodyRoot.
+        Control target = _isSyncing ? accountSyncView : _isEmpty ? onboardingView : bodyRoot;
+        CrossfadeShellTo(target);
+    }
+
+    // C4/E3: тихий кроссфейд (200мс Ease.Standard, opacity-only) между тремя оверлеями оболочки
+    // (accountSyncView / onboardingView / bodyRoot). Первый показ и .lite — мгновенно (без анимации
+    // на старте, чтобы окно не «проявлялось» при запуске).
+    private void CrossfadeShellTo(Control target)
+    {
+        var previous = _currentShellView;
+        if (previous == target)
+        {
+            target.IsVisible = true;
+            target.Opacity = 1;
+            return;
+        }
+        _currentShellView = target;
+
+        if (MotionState.IsLite || previous is null)
+        {
+            accountSyncView.IsVisible = target == accountSyncView;
+            onboardingView.IsVisible = target == onboardingView;
+            bodyRoot.IsVisible = target == bodyRoot;
+            target.Opacity = 1;
+            return;
+        }
+
+        // Мгновенно прячем третий оверлей (ни target, ни previous) — страхует от прерванного кроссфейда,
+        // чтобы никогда не остались видны сразу три поверхности.
+        foreach (var v in new Control[] { accountSyncView, onboardingView, bodyRoot })
+        {
+            if (v != target && v != previous)
+            {
+                v.IsVisible = false;
+                v.Opacity = 1;
+            }
+        }
+
+        _shellAnim?.Cancel();
+        var cts = new CancellationTokenSource();
+        _shellAnim = cts;
+
+        target.Opacity = 0;
+        target.IsVisible = true;
+        FadeShellIn(target, cts.Token);
+        FadeShellOutThenHide(previous, cts.Token);
+    }
+
+    private async void FadeShellIn(Control c, CancellationToken ct)
+    {
+        try { await RunFade(c, 0d, 1d, TimeSpan.FromMilliseconds(200), _easeStandard, ct); }
+        catch { }
+        if (!ct.IsCancellationRequested)
+        {
+            c.Opacity = 1;
+        }
+    }
+
+    private async void FadeShellOutThenHide(Control c, CancellationToken ct)
+    {
+        try { await RunFade(c, c.Opacity, 0d, TimeSpan.FromMilliseconds(200), _easeStandard, ct); }
+        catch { }
+        if (ct.IsCancellationRequested)
+        {
+            return;
+        }
+        // Прячем ушедший оверлей ТОЛЬКО если он не стал снова целевым (быстрый обратный своп).
+        if (c != _currentShellView)
+        {
+            c.IsVisible = false;
+            c.Opacity = 1;
+        }
     }
 
     // Свёртка/разворот левого нав-рейла. Всё движение (navItems Width/Opacity, поворот шеврона)
@@ -409,9 +525,34 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         onboardingView.DataContext = _homeViewModel;
 
         // Индикатор рейла: серый в покое, синий при подключении И в процессе подключения (P1-3).
+        // Цвет ведёт класс .on (C5): BrushTransition OnSurfaceVariant↔Accent из тема-токенов.
         _homeViewModel.WhenAnyValue(x => x.IsConnected, x => x.IsConnecting, (connected, connecting) => connected || connecting)
             .ObserveOn(RxSchedulers.MainThreadScheduler)
-            .Subscribe(active => railStatusDot.Fill = active ? _dotOn : _dotOff);
+            .Subscribe(active =>
+            {
+                if (active)
+                {
+                    if (!railStatusDot.Classes.Contains("on"))
+                    {
+                        railStatusDot.Classes.Add("on");
+                    }
+                }
+                else
+                {
+                    railStatusDot.Classes.Remove("on");
+                }
+            });
+
+        // E3: пока идёт пост-логин импорт (AccountViewModel.IsImportingAccount) — показываем оверлей
+        // синхронизации, а НЕ пустой онбординг. Флаг взводится в тот же UI-тик, что и IsLoggedIn (до
+        // первого await), поэтому оверлей уже стоит в момент закрытия LoginView — пустой кадр не мелькает.
+        _accountVm.WhenAnyValue(x => x.IsImportingAccount)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .Subscribe(syncing =>
+            {
+                _isSyncing = syncing;
+                ApplyShellVisibility();
+            });
 
         // Пустой старт (нет подписок): показываем ТОЛЬКО онбординг на всю ширину под chrome — оба
         // дерева скрыты. После добавления подписки (IsEmpty=false) — дерево по текущей раскладке.
@@ -426,30 +567,93 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
 
     #region Sub-page host (Buy / Login / Devices / History)
 
-    // Кладёт суб-страницу поверх контента/онбординга и показывает хост.
+    // Кладёт суб-страницу поверх контента/онбординга и показывает хост с направленным slide+fade (C2).
     private void PushSubPage(Control view)
     {
         _subStack.Add(view);
         subPageHost.Content = view;
         subPageHost.IsVisible = true;
+        AnimateSubPageIn();
     }
 
-    // Снимает верхнюю суб-страницу: показываем предыдущую из стека либо прячем хост целиком
-    // (тогда снова виден шелл-контент или онбординг, смотря по IsEmpty).
+    // Снимает верхнюю суб-страницу: анимирует уход текущей (translateX 0→16 + fade-out), затем
+    // показывает предыдущую из стека (тем же slide+fade) либо прячет хост целиком (тогда снова виден
+    // шелл-контент или онбординг, смотря по IsEmpty/IsSyncing).
     private void PopSubPage()
     {
         if (_subStack.Count > 0)
         {
             _subStack.RemoveAt(_subStack.Count - 1);
         }
-        if (_subStack.Count > 0)
+        var next = _subStack.Count > 0 ? _subStack[^1] : null;
+        AnimateSubPageOut(next);
+    }
+
+    // ==================== Направленный slide+fade суб-страниц (C2) ====================
+    // Push (вперёд, вглубь) = входящая translateX 16→0 + opacity 0→1, 300мс Ease.OutQuint.
+    // Pop (назад)          = уходящая translateX 0→16 + opacity 1→0, 200мс Ease.Standard (выход
+    // быстрее входа). ТОЛЬКО translate+opacity (никаких scale/rotate — страница не «улетает» из угла).
+    // Под .lite — мгновенно (как contentHost). subPageHost перекрывает шелл непрозрачным Brush.Bg,
+    // поэтому «под» уходящей страницей аккуратно проступает шелл/онбординг.
+    private async void AnimateSubPageIn()
+    {
+        if (MotionState.IsLite)
         {
-            subPageHost.Content = _subStack[^1];
+            subPageHost.Opacity = 1;
+            subPageHost.RenderTransform = null;
+            return;
+        }
+        _subPageAnim?.Cancel();
+        var cts = new CancellationTokenSource();
+        _subPageAnim = cts;
+
+        subPageHost.Opacity = 0;
+        try { await RunTranslateFade(subPageHost, TranslateTransform.XProperty, 16d, 0d, 0d, 1d, TimeSpan.FromMilliseconds(300), _easeOutQuint, cts.Token); }
+        catch { }
+        if (cts.IsCancellationRequested)
+        {
+            return;
+        }
+        subPageHost.Opacity = 1;
+        subPageHost.RenderTransform = null;
+    }
+
+    private async void AnimateSubPageOut(Control? next)
+    {
+        if (MotionState.IsLite)
+        {
+            ApplySubPageResult(next);
+            return;
+        }
+        _subPageAnim?.Cancel();
+        var cts = new CancellationTokenSource();
+        _subPageAnim = cts;
+
+        try { await RunTranslateFade(subPageHost, TranslateTransform.XProperty, 0d, 16d, 1d, 0d, TimeSpan.FromMilliseconds(200), _easeStandard, cts.Token); }
+        catch { }
+        if (cts.IsCancellationRequested)
+        {
+            return;
+        }
+        ApplySubPageResult(next);
+        if (next != null)
+        {
+            AnimateSubPageIn();   // предыдущая страница въезжает тем же slide+fade
+        }
+    }
+
+    private void ApplySubPageResult(Control? next)
+    {
+        if (next != null)
+        {
+            subPageHost.Content = next;
         }
         else
         {
             subPageHost.Content = null;
             subPageHost.IsVisible = false;
+            subPageHost.Opacity = 1;
+            subPageHost.RenderTransform = null;
         }
     }
 
@@ -484,7 +688,18 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     public void OpenLogin()
     {
         var view = new LoginView { DataContext = _accountVm };
-        view.BackRequested += (_, _) => PopSubPage();
+        view.BackRequested += (_, _) =>
+        {
+            // A10: настоящее закрытие «Входа» (кнопка «назад» / бэк) — отменяем опрос Telegram-логина,
+            // иначе он тикает до ~3 мин на снятой странице и поздний Confirmed/Error ещё дёргает UI.
+            // При УСПЕХЕ (IsLoggedIn) НЕ отменяем: опрос уже завершился, а дальше кадр ведёт оверлей
+            // синхронизации (IsImportingAccount) — CancelLogin тут был бы лишним.
+            if (!_accountVm.IsLoggedIn)
+            {
+                _accountVm.CancelLogin();
+            }
+            PopSubPage();
+        };
         PushSubPage(view);
     }
 
@@ -591,6 +806,10 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
 
     // Ставит размер и КЛАМПИТ его + позицию в WorkingArea текущего экрана: окно (и кастомный
     // заголовок) всегда целиком на экране — верх никогда не уходит за границу (y ≥ wa.Y).
+    // Растёт/сжимается НА МЕСТЕ: держим ТЕКУЩИЙ центр окна фиксированным, а не «телепортируем» рамку
+    // в центр экрана (владелец: при разворачивании окно «улетало в угол, потом расширялось»). Позицию
+    // ставим ДО размера, обе в одном синхронном проходе (до следующего кадра) → без промежуточной
+    // отрисовки крупной рамки в старом углу.
     private void ResizeClamped(double width, double height)
     {
         _edgeSnapSuspended = true;
@@ -610,16 +829,25 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
 
             var w = Math.Clamp(width, Math.Min(MinWidth, maxW), maxW);
             var h = Math.Clamp(height, Math.Min(MinHeight, maxH), maxH);
-            Width = w;
-            Height = h;
+
+            // Якорь = текущий геометрический центр окна (физ. пиксели).
+            var oldPhysW = Width * scaling;
+            var oldPhysH = Height * scaling;
+            var centerX = Position.X + (oldPhysW / 2);
+            var centerY = Position.Y + (oldPhysH / 2);
 
             var physW = w * scaling;
             var physH = h * scaling;
-            var x = wa.X + Math.Max(0, (wa.Width - physW) / 2);
-            var y = wa.Y + Math.Max(0, (wa.Height - physH) / 2);
+
+            // Держим центр на месте, затем кламп внутрь рабочей области (окно всегда целиком на экране).
+            var x = centerX - (physW / 2);
+            var y = centerY - (physH / 2);
             x = Math.Max(wa.X, Math.Min(x, wa.X + wa.Width - physW));
             y = Math.Max(wa.Y, Math.Min(y, wa.Y + wa.Height - physH));
+
             Position = new PixelPoint((int)x, (int)y);
+            Width = w;
+            Height = h;
         }
         catch { }
         finally
@@ -639,11 +867,112 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
             DispatcherPriority.Default);
     }
 
-    // Владелец: НИКАКИХ плавающих уведомлений. Раньше здесь жил TopRight
-    // WindowNotificationManager — все снек-сообщения (connect/fail/disconnect/refresh/copy)
-    // теперь глухо гасятся в единственном стоке. Ни один издатель не трогаем: конечный
-    // автомат подключения лишь публикует строки, статус показывает сам щит.
-    private Task DelegateSnackMsg(string content) => Task.CompletedTask;
+    // ==================== Инлайн-уведомление (A3) ====================
+    // Владелец: НИКАКИХ ПЛАВАЮЩИХ OS-уведомлений — но и не терять сообщения. Раньше это был no-op
+    // сток, и все семантически значимые строки (connect-fail, оплата, копирование, отвязка устройства)
+    // глохли. Теперь — внутри-оконная пилюля (Border.Toast) внизу-по-центру над навигацией: вход
+    // translateY 12→0 + fade (OutQuint 220мс), авто-скрытие ~3.5с, выход fade (Standard 150мс); под
+    // .lite — мгновенно. Каждое новое сообщение отменяет предыдущее (перезапуск таймера). Строки
+    // приходят готовыми (sentence-case Russian) от издателей — здесь только показываем.
+    private async Task DelegateSnackMsg(string content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            return;
+        }
+
+        snackText.Text = content.Trim();
+        _snackAnim?.Cancel();
+        var cts = new CancellationTokenSource();
+        _snackAnim = cts;
+
+        snackHost.IsVisible = true;
+
+        if (MotionState.IsLite)
+        {
+            snackHost.Opacity = 1;
+            snackHost.RenderTransform = null;
+        }
+        else
+        {
+            snackHost.Opacity = 0;
+            try { await RunTranslateFade(snackHost, TranslateTransform.YProperty, 12d, 0d, 0d, 1d, TimeSpan.FromMilliseconds(220), _easeOutQuint, cts.Token); }
+            catch { }
+            if (cts.IsCancellationRequested)
+            {
+                return;
+            }
+            snackHost.Opacity = 1;
+            snackHost.RenderTransform = null;
+        }
+
+        try { await Task.Delay(3500, cts.Token); }
+        catch (OperationCanceledException) { return; }
+        if (cts.IsCancellationRequested)
+        {
+            return;
+        }
+
+        if (!MotionState.IsLite)
+        {
+            try { await RunFade(snackHost, 1d, 0d, TimeSpan.FromMilliseconds(150), _easeStandard, cts.Token); }
+            catch { }
+            if (cts.IsCancellationRequested)
+            {
+                return;
+            }
+        }
+        snackHost.IsVisible = false;
+        snackHost.Opacity = 1;
+        snackHost.RenderTransform = null;
+    }
+
+    // ==================== Общие аниматоры оболочки (transform+opacity, §A) ====================
+    // Все переходы MainWindow строятся из этих двух примитивов: чистый fade и translate+fade (две
+    // параллельные анимации на одном визуале — opacity и translate идут разными аниматорами Avalonia,
+    // ровно как в RiseFadePageTransition). FillMode.Forward держит конечный кадр до явного сброса.
+    private static Task RunFade(Visual target, double fromO, double toO, TimeSpan duration, Easing easing, CancellationToken ct)
+    {
+        var fade = new Animation
+        {
+            Duration = duration,
+            Easing = easing,
+            FillMode = FillMode.Forward,
+            Children =
+            {
+                new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(Visual.OpacityProperty, fromO) } },
+                new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(Visual.OpacityProperty, toO) } },
+            },
+        };
+        return fade.RunAsync(target, ct);
+    }
+
+    private static Task RunTranslateFade(Visual target, AvaloniaProperty axis, double fromT, double toT, double fromO, double toO, TimeSpan duration, Easing easing, CancellationToken ct)
+    {
+        var fade = new Animation
+        {
+            Duration = duration,
+            Easing = easing,
+            FillMode = FillMode.Forward,
+            Children =
+            {
+                new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(Visual.OpacityProperty, fromO) } },
+                new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(Visual.OpacityProperty, toO) } },
+            },
+        };
+        var slide = new Animation
+        {
+            Duration = duration,
+            Easing = easing,
+            FillMode = FillMode.Forward,
+            Children =
+            {
+                new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(axis, fromT) } },
+                new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(axis, toT) } },
+            },
+        };
+        return Task.WhenAll(fade.RunAsync(target, ct), slide.RunAsync(target, ct));
+    }
 
     private void OnHotkeyHandler(EGlobalHotkey e)
     {

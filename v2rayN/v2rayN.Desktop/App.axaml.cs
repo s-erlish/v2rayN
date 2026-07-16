@@ -37,6 +37,14 @@ public partial class App : Application
             mainWindow.ViewModel = mainWindowViewModel;
             desktop.MainWindow = mainWindow;
 
+            // idle/perf B5: пометить UI как скрытый, пока окно свёрнуто, чтобы простаивающие защиты
+            // (циклы статистики и любые проверки по ShowInTaskbar) считали «свёрнуто в панель задач»
+            // тем же, что «скрыто в трей». Наблюдение живёт всё время работы приложения (одно окно);
+            // GetObservable сразу отдаёт текущее состояние и далее — изменения.
+            mainWindow
+                .GetObservable(Window.WindowStateProperty)
+                .Subscribe(state => AppManager.Instance.IsWindowMinimized = state == WindowState.Minimized);
+
             if (!Design.IsDesignMode)
             {
                 SetupTrayMenu();
@@ -164,7 +172,6 @@ public partial class App : Application
 
     // Пункт-переключатель, чью подпись держим синхронной с реальным состоянием ядра.
     private NativeMenuItem? _trayToggleItem;
-    private DispatcherTimer? _trayStateTimer;
 
     private static bool IsCoreRunning() =>
         AppManager.Instance.IsRunningCore(ECoreType.Xray) || AppManager.Instance.IsRunningCore(ECoreType.sing_box);
@@ -188,12 +195,15 @@ public partial class App : Application
 
         UpdateTrayToggleLabel();
 
-        // Native-меню трея читается ОС только в момент открытия, поэтому лёгкий опрос (2с)
-        // достаточен и дёшев, чтобы подпись «Подключить/Отключить» всегда совпадала с ядром,
-        // как бы состояние ни менялось (щит, горячие клавиши, падение ядра).
-        _trayStateTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
-        _trayStateTimer.Tick += (_, _) => UpdateTrayToggleLabel();
-        _trayStateTimer.Start();
+        // idle/perf B1: подпись «Подключить/Отключить» теперь обновляется ПО СОБЫТИЮ старта/останова
+        // ядра (AppEvents.CoreRunningStateChanged из CoreManager), а не опросом каждые 2с. Событие
+        // приходит с фонового потока (ядро стартует в Task.Run), поэтому обновление NativeMenuItem
+        // маршалим в UI-поток. Подписка живёт всё время работы приложения (один трей).
+        // Subscription lives for the whole app lifetime (single tray, like the old never-stopped poll);
+        // the static EventChannel keeps the observer alive, so no field/dispose is needed.
+        AppEvents.CoreRunningStateChanged
+            .AsObservable()
+            .Subscribe(_ => Dispatcher.UIThread.Post(UpdateTrayToggleLabel));
     }
 
     private void UpdateTrayToggleLabel()

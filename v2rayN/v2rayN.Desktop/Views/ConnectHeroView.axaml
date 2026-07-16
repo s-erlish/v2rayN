@@ -353,6 +353,22 @@
                     </TextBlock.Transitions>
                 </TextBlock>
 
+                <!--  Подсказка-ретрай: видна ТОЛЬКО в состоянии Error (§A4). Тихая аффорданс —
+                      сам диск-щит остаётся кнопкой connect, поэтому тап по нему = повторная попытка.
+                      Приглушённый OnSurfaceVariant, sentence-case, активный глагол. Скрыта по умолчанию;
+                      видимость ведёт code-behind (RetryHint.IsVisible = state == Error).  -->
+                <TextBlock
+                    x:Name="RetryHint"
+                    Margin="24,4,24,0"
+                    MaxWidth="320"
+                    HorizontalAlignment="Center"
+                    Classes="Caption"
+                    Foreground="{DynamicResource Brush.OnSurfaceVariant}"
+                    IsVisible="False"
+                    Text="Нажмите, чтобы повторить"
+                    TextAlignment="Center"
+                    TextTrimming="CharacterEllipsis" />
+
                 <!--  Стата-строка ПОД щитом, НАД именем сервера: ↑ отдача · аптайм · ↓ приём.
                       Компактный центрированный ряд (spacing 20) — телеметрия жмётся к щиту, как на
                       телефоне. Скрывается целиком в «Облегчённом режиме» (code-behind по ReducedMotion:

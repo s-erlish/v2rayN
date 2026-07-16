@@ -34,6 +34,18 @@ public sealed class AppManager
 
     public bool ShowInTaskbar { get; set; }
 
+    // departament (idle/perf B5): true while the main window is minimized to the taskbar/tray.
+    // ShowInTaskbar alone only flips false when the window is HIDDEN to tray, never on a plain
+    // minimize, so idle guards keyed on ShowInTaskbar kept doing work for a window the user cannot
+    // see. This flag is set from App (which observes Window.WindowStateProperty) and lets the idle
+    // guards treat "minimized" as "hidden": effective-hidden == (!ShowInTaskbar || IsWindowMinimized).
+    // Additive + defaults false, so nothing regresses if it is never written.
+    public bool IsWindowMinimized { get; set; }
+
+    // departament (idle/perf B5): the app UI is effectively invisible when hidden to tray OR minimized.
+    // Idle work (stats fetch/parse) can safely skip while this is true.
+    public bool IsUiHidden => !ShowInTaskbar || IsWindowMinimized;
+
     public ECoreType RunningCoreType { get; set; }
 
     public bool IsRunningCore(ECoreType type)

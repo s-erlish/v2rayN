@@ -2,7 +2,6 @@
     x:Class="v2rayN.Desktop.Views.ServerListView"
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:conv="clr-namespace:v2rayN.Desktop.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:dd="clr-namespace:v2rayN.Desktop.DesignData"
     xmlns:local="clr-namespace:v2rayN.Desktop.Views"
@@ -37,8 +36,10 @@
         <!--  A test is in flight for this row: DelayVal holds the engine's non-numeric «Testing…»
               placeholder → show a spinner in the ping slot, never the placeholder text.  -->
         <local:DelayTestingConverter x:Key="DelayTesting" />
-        <!--  Ping value color by latency: green (good) / red (timeout·bad) — Android signal, not grey.  -->
-        <conv:DelayColorConverter x:Key="DelayColor" />
+        <!--  A8: real reading → its ms number; a failed / timed-out probe («-1») → em-dash «—».  -->
+        <local:DelayDisplayConverter x:Key="DelayDisplay" />
+        <!--  A8: real reading → theme ink (blue/light, white/dark); failure («—») → muted variant tone.  -->
+        <local:DelayInkConverter x:Key="DelayInk" />
     </UserControl.Resources>
 
     <UserControl.Styles>
@@ -71,10 +72,11 @@
                             <local:SubscriptionMetaView Margin="16,16,16,8" />
 
                             <!--  Group rows reveal (collapse with the group via the meta-bar chevron).
-                                  The chevron flips HomeServerGroup.IsExpanded; the code-behind SLIDES this
-                                  clipped container's Height + Opacity (~200ms OutQuint) instead of snapping
-                                  IsVisible. Gated: under lite / reduced-motion the toggle is instant. The
-                                  ClipToBounds hides the rows cleanly as the height animates.  -->
+                                  The chevron flips HomeServerGroup.IsExpanded; the code-behind reveals the
+                                  rows with a SMOOTH composited crossfade — inside this ClipToBounds viewport
+                                  only the inner rows' RenderTransform (small translateY) + Opacity animate
+                                  (~190ms OutQuint), while the viewport Height is set once per toggle (no
+                                  per-frame layout, no jitter). Gated: under lite the toggle is instant.  -->
                             <Border
                                 ClipToBounds="True"
                                 Loaded="OnGroupRevealLoaded"
@@ -204,9 +206,9 @@
                                                             VerticalAlignment="Center"
                                                             Classes="Numeric"
                                                             FontWeight="Bold"
-                                                            Foreground="{Binding Delay, Converter={StaticResource DelayColor}}"
+                                                            Foreground="{Binding Delay, Converter={StaticResource DelayInk}}"
                                                             IsVisible="{Binding DelayVal, Converter={StaticResource DelayResult}}"
-                                                            Text="{Binding DelayVal}"
+                                                            Text="{Binding DelayVal, Converter={StaticResource DelayDisplay}}"
                                                             TextAlignment="Right" />
                                                     </Panel>
                                                 </Grid>

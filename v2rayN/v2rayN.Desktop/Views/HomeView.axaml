@@ -38,11 +38,42 @@
             <Border Grid.Column="1" Background="{DynamicResource Brush.OutlineVariant}" />
 
             <!--  ПРАВАЯ колонка: connect-щит (стата-строка + кольца + диск + щит + подпись сервера + пустое состояние).
-                  Управляется из code-behind по состоянию HomeViewModel (idle/connecting/connected/empty).  -->
-            <views:ConnectHeroView
-                x:Name="ConnectHero"
-                Grid.Column="2"
-                Margin="16" />
+                  Управляется из code-behind по состоянию HomeViewModel (idle/connecting/connected/empty).
+                  Сверху — честный баннер режима маршрутизации (A6): виден, только когда запрошен TUN
+                  «весь трафик», но нет прав, поэтому трафик реально идёт через системный прокси. Скрытый
+                  StatusBarView в MainWindow (0×0) этот баннер не показывал — переносим его сюда, в поле
+                  зрения. Единый тёмный Incy-стиль: полная рамка (без side-stripe), один акцент (CTA).  -->
+            <DockPanel Grid.Column="2" Margin="16">
+                <Border
+                    DockPanel.Dock="Top"
+                    Margin="0,0,0,12"
+                    Padding="14,12"
+                    Background="{DynamicResource Brush.SurfaceHighest}"
+                    BorderBrush="{DynamicResource Brush.OutlineVariant}"
+                    BorderThickness="1"
+                    CornerRadius="{DynamicResource Radius.Chip}"
+                    IsVisible="{Binding StatusBar.TunRequestedButUnavailable}">
+                    <StackPanel Spacing="10">
+                        <TextBlock
+                            Classes="Body"
+                            FontWeight="Medium"
+                            Text="{Binding StatusBar.RoutingModeDisplay}"
+                            TextWrapping="Wrap" />
+                        <TextBlock
+                            Classes="Body"
+                            Foreground="{DynamicResource Brush.OnSurfaceVariant}"
+                            Text="Режим «весь трафик» недоступен без прав администратора"
+                            TextWrapping="Wrap" />
+                        <Button
+                            HorizontalAlignment="Left"
+                            Classes="OutlinedAccent"
+                            Command="{Binding StatusBar.RequestTunElevationCmd}"
+                            Content="Перезапустить с правами" />
+                    </StackPanel>
+                </Border>
+
+                <views:ConnectHeroView x:Name="ConnectHero" />
+            </DockPanel>
         </Grid>
     </Border>
 </UserControl>

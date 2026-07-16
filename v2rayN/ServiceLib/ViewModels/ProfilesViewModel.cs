@@ -595,28 +595,40 @@ public class ProfilesViewModel : MyReactiveObject
         await SetDefaultServer(SelectedProfile.IndexId);
     }
 
-    public async Task SetDefaultServer(string? indexId)
+    // Returns TRUE when <paramref name="indexId"/> is the active default and is ready to be
+    // connected; FALSE on an invalid / missing / failed pick. See the A5 contract below.
+    public async Task<bool> SetDefaultServer(string? indexId)
     {
         if (indexId.IsNullOrEmpty())
         {
-            return;
+            return false;
         }
+        // A5: tapping the ALREADY-active server must not be a dead action. This previously
+        // early-returned with no signal, which blocked the connect path (a disconnected user
+        // tapping the active server got nothing). Now we report success WITHOUT reloading:
+        // the default is already correct, so there is nothing to persist and a running core
+        // must not be bounced. The connect decision belongs to the caller —
+        // HomeViewModel.SelectServer connects when it is disconnected. Callers that only set
+        // the default (status-bar picker / context-menu «Сделать основным») ignore the result,
+        // so their behaviour is unchanged (still a no-op in this branch).
         if (indexId == _config.IndexId)
         {
-            return;
+            return true;
         }
         var item = await AppManager.Instance.GetProfileItem(indexId);
         if (item is null)
         {
             NoticeManager.Instance.Enqueue(ResUI.PleaseSelectServer);
-            return;
+            return false;
         }
 
         if (await ConfigHandler.SetDefaultServerIndex(_config, indexId) == 0)
         {
             await RefreshServers();
             Reload();
+            return true;
         }
+        return false;
     }
 
     public async Task ShareServerAsync()

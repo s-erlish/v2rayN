@@ -138,7 +138,8 @@
         </Style>
 
         <!--  Строка настроек (setting row): minHeight 56, паддинг 16/12, прямоугольный
-              hover→SurfaceHigh внутри скруглённой карты (карта клипует углы).  -->
+              hover-ЗАТЕМНЕНИЕ (Brush.Hover) внутри скруглённой карты (карта клипует углы) —
+              единый жест наведения с Home/аккаунтом/навигацией (не подъём к SurfaceHigh).  -->
         <Style Selector="Border.SettingRow">
             <Setter Property="MinHeight" Value="{DynamicResource Size.Row}" />
             <Setter Property="Padding" Value="16,12" />
@@ -147,7 +148,7 @@
                   подсвечивается ровно одна строка, а не две «затухающих» одновременно.  -->
         </Style>
         <Style Selector="Border.SettingRow:pointerover">
-            <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
+            <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
         </Style>
 
         <!--  Поле ввода локального прокси: одна высота 44, recessed SurfaceHigh, синий каретка.  -->

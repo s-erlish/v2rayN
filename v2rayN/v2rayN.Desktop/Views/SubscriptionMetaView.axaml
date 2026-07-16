@@ -62,8 +62,14 @@
             <Setter Property="Width" Value="20" />
             <Setter Property="Height" Value="20" />
         </Style>
-        <!--  «Удалить подписку» — деструктив: глиф красный (Brush.Red), hover как у прочих иконок.  -->
-        <Style Selector="Button.MetaDanger PathIcon">
+        <!--  «Удалить подписку» — деструктив, но ТИХИЙ в покое: глиф нейтральный (Brush.OnSurfaceVariant,
+              как ping/refresh/pin — задаётся базовым IconButton40) и краснеет (Brush.Red) ТОЛЬКО на
+              наведении/нажатии, сигнализируя разрушительность лишь при намерении. Тема (тёмная/светлая/mono)
+              соблюдается: в покое иконка сливается с прочими действиями, а не «кричит» красным везде.  -->
+        <Style Selector="Button.MetaDanger:pointerover PathIcon">
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Red}" />
+        </Style>
+        <Style Selector="Button.MetaDanger:pressed PathIcon">
             <Setter Property="Foreground" Value="{DynamicResource Brush.Red}" />
         </Style>
         <!--  Компактная трафик-пилюля: трек/заливка 14 (плотнее базовых 16) под узкую карту.  -->

@@ -16,50 +16,63 @@
     <!--  ================================================================================
           КОМПАКТНАЯ «ГЛАВНАЯ» (CA-3) — 1:1 с Android activity_main.xml (телефонный Home).
           ОДИН вертикальный скролл (mirrors NestedScrollView), сверху вниз:
-            1) шапка с «+» (добавить подписку) в правом-верхнем углу — импорт-меню (буфер / QR);
-            2) чип аккаунта (HomeAccountChip, общий с широкой раскладкой);
-            3) большой центр-щит (ConnectHeroView — переиспользуем; стата-строка ↑/аптайм/↓ теперь
+            1) чип аккаунта (HomeAccountChip, общий с широкой раскладкой) — БЕЗ «+»;
+            2) большой центр-щит (ConnectHeroView — переиспользуем; стата-строка ↑/аптайм/↓ теперь
                ВНУТРИ него, под щитом — переехала с верха, где косила на старте);
-            4) подпись состояния/сервера — внутри ConnectHeroView под щитом;
-            5) мета-карта(ы) подписки + одноколоночный список серверов — ServerListView
+            3) подпись состояния/сервера — внутри ConnectHeroView под щитом;
+            4) мета-карта(ы) подписки + одноколоночный список серверов — ServerListView
                (его внутренний скролл инертен внутри страничного скролла → одна область прокрутки).
-          Нижний padding = высота нав-бара, чтобы последняя строка не пряталась под баром.
+          В компакте «+» (добавить подписку) НЕ показываем вовсе — он живёт только в углу широкой
+          connect-панели. Скролл ограничен *-строкой над нижней навигацией (структурно, не padding-ом).
           DataContext = ОДИН HomeViewModel (тот же, что широкая раскладка).
           =================================================================================  -->
 
-    <!--  Нижний padding = высота нижней навигации (нав-бар ≥56 + скрим) + комфортный зазор (~24),
-          чтобы ПОСЛЕДНЯЯ строка сервера полностью читалась над баром и не пряталась под ним
-          (владелец: последний сервер обрезался). 130 гарантирует зазор над баром.  -->
+    <!--  Анти-перекрытие структурно: контент живёт в *-строке НАД нижней навигацией (BottomNavBar —
+          в своей Auto-строке, см. MainWindow.ApplyLayoutMode), поэтому ScrollViewer физически
+          ограничен полосой над баром и НИЧЕГО не прячется под ним. Нижний padding — лишь маленький
+          зазор, чтобы последняя строка не липла к бару (не «костыль 130» под высоту нав-бара).  -->
     <ScrollViewer
+        x:Name="PageScroll"
         HorizontalScrollBarVisibility="Disabled"
-        Padding="0,0,0,130"
+        Padding="0,8,0,16"
         VerticalScrollBarVisibility="Auto">
         <StackPanel>
 
-            <!--  (1) Шапка: «+» (добавить подписку) в правом-верхнем углу приложения. Показатели
-                  скорости/аптайма переехали ПОД щит (см. ConnectHeroView) — тут их больше нет, поэтому
-                  верхний ряд не «косит» на старте. «+» — тот же импорт (буфер / QR), команды VM.  -->
-            <Grid Margin="16,6,10,4">
-                <Button
-                    HorizontalAlignment="Right"
-                    Classes="IconButton40"
-                    ToolTip.Tip="Добавить подписку">
-                    <PathIcon
-                        Width="22"
-                        Height="22"
-                        Data="M11,5 H13 V11 H19 V13 H13 V19 H11 V13 H5 V11 H11 Z"
-                        Foreground="{DynamicResource Brush.OnSurface}" />
-                    <Button.Flyout>
-                        <MenuFlyout Placement="BottomEdgeAlignedRight">
-                            <MenuItem Command="{Binding AddViaClipboardCmd}" Header="Добавить из буфера обмена" />
-                            <MenuItem Command="{Binding AddViaQrCmd}" Header="Добавить по QR-коду" />
-                        </MenuFlyout>
-                    </Button.Flyout>
-                </Button>
-            </Grid>
-
-            <!--  (2) Чип аккаунта — общий HomeAccountChip (сам показывается при входе).  -->
+            <!--  (1) Чип аккаунта — общий HomeAccountChip (сам показывается при входе). Углового «+»
+                  в компакте НЕТ (владелец: пустой «+» вверху выглядел плохо) — добавление подписки
+                  живёт в углу ТОЛЬКО широкой connect-панели (hero corner «+»).  -->
             <views:HomeAccountChip x:Name="AccountChip" Margin="16,8,16,0" />
+
+            <!--  (1b) Честный баннер режима маршрутизации (A6): виден, только когда запрошен TUN
+                  «весь трафик», но нет прав → трафик реально идёт через системный прокси. Скрытый
+                  StatusBarView (0×0) его не показывал — переносим сюда, в поле зрения. Единый Incy-стиль:
+                  полная рамка (без side-stripe), один акцент (CTA), sentence-case Russian.  -->
+            <Border
+                Margin="16,8,16,0"
+                Padding="14,12"
+                Background="{DynamicResource Brush.SurfaceHighest}"
+                BorderBrush="{DynamicResource Brush.OutlineVariant}"
+                BorderThickness="1"
+                CornerRadius="{DynamicResource Radius.Chip}"
+                IsVisible="{Binding StatusBar.TunRequestedButUnavailable}">
+                <StackPanel Spacing="10">
+                    <TextBlock
+                        Classes="Body"
+                        FontWeight="Medium"
+                        Text="{Binding StatusBar.RoutingModeDisplay}"
+                        TextWrapping="Wrap" />
+                    <TextBlock
+                        Classes="Body"
+                        Foreground="{DynamicResource Brush.OnSurfaceVariant}"
+                        Text="Режим «весь трафик» недоступен без прав администратора"
+                        TextWrapping="Wrap" />
+                    <Button
+                        HorizontalAlignment="Left"
+                        Classes="OutlinedAccent"
+                        Command="{Binding StatusBar.RequestTunElevationCmd}"
+                        Content="Перезапустить с правами" />
+                </StackPanel>
+            </Border>
 
             <!--  (3+4) Герой: щит + подпись + идентичность сервера + пустое состояние (переиспользуем
                   ConnectHeroView, связываем общим HomeHeroPresenter в code-behind). MinHeight держит

@@ -46,9 +46,9 @@ public partial class AccountView : UserControl
         // «Войти через Telegram» биндится прямо на LoginTelegramCmd в разметке (deep-link).
         LoginSiteButton.Click += (_, _) => LoginRequested?.Invoke(this, EventArgs.Empty);
 
-        // Реф-строка: копирует код в буфер + тост «Скопировано» (clipboard живёт на TopLevel, поэтому
-        // это чисто view-действие; сам код берём из VM).
-        ReferralRow.Tapped += OnCopyReferral;
+        // Копирование реф-кода: кнопка IconButton40 справа копирует код в буфер + тост «Скопировано»
+        // (clipboard живёт на TopLevel, поэтому это чисто view-действие; сам код берём из VM).
+        CopyReferralButton.Click += OnCopyReferral;
 
         // «Выйти из аккаунта» → LogoutCmd (AccountSession.Wipe → возврат к гейту входа).
         LogoutRow.Tapped += (_, _) => (DataContext as AccountViewModel)?.LogoutCmd.Execute().Subscribe();
@@ -70,7 +70,7 @@ public partial class AccountView : UserControl
         }
     }
 
-    private async void OnCopyReferral(object? sender, TappedEventArgs e)
+    private async void OnCopyReferral(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         var code = (DataContext as AccountViewModel)?.ReferralCode;
         if (code.IsNullOrEmpty())

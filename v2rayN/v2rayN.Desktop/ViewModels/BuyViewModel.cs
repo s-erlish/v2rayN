@@ -1,4 +1,5 @@
 using System.Globalization;
+using Avalonia.VisualTree;
 using v2rayN.Desktop.Account;
 using v2rayN.Desktop.Account.Dto;
 
@@ -579,6 +580,72 @@ public class BuyViewModel : MyReactiveObject
         IsSheetOpen = false;
         ShowSuccess = true;
         RenderState();
+
+        // A confirmed purchase must behave exactly like a fresh login: import the just-bought
+        // subscription's servers and refresh Home + Account. Buy owns a SEPARATE VM from the shared
+        // AccountViewModel, so this reruns the login-path steps (import → RefreshServers) itself and
+        // routes the Account-tab reload through the shared VM instance (public RetryCmd).
+        _ = RefreshAfterPurchase();
+    }
+
+    /// <summary>
+    /// Post-purchase sync (mirror of the login path AccountViewModel.AutoImportAndRefreshHome + LoadAll):
+    /// 1) auto-import the account subscriptions so the new servers land in the DB;
+    /// 2) reload the engine server list on the running MainWindow (RefreshServers only re-reads the DB —
+    ///    it NEVER starts the core, so this can't silently connect);
+    /// 3) run the shared AccountViewModel's public full reload so its balance/subscription reflect the buy.
+    /// A transient import failure is swallowed here (the success state still stands); the shared refresh
+    /// re-reports any real API error on the Account tab.
+    /// </summary>
+    private async Task RefreshAfterPurchase()
+    {
+        if (_repo == null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _repo.AutoImportSubscriptions();
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog("BuyAutoImport", ex);
+        }
+
+        RunOnUi(() =>
+        {
+            try
+            {
+                if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop
+                    || desktop.MainWindow is not { } window)
+                {
+                    return;
+                }
+
+                // Home: repopulate ProfilesViewModel.ProfileItems so the imported servers appear and the
+                // empty/onboarding state flips off (same call the login path uses via IViewFor).
+                if (window is IViewFor<MainWindowViewModel> { ViewModel: { } main })
+                {
+                    _ = main.ProfilesViewModel.RefreshServers();
+                }
+
+                // Account tab: the ONE shared AccountViewModel is the DataContext of the account view in
+                // the running window; run its public full reload (RetryCmd → LoadAll) so profile balance
+                // and the subscription list reflect the purchase without editing AccountViewModel.
+                var accountVm = (window as Visual)?
+                    .GetVisualDescendants()
+                    .OfType<Control>()
+                    .Select(c => c.DataContext)
+                    .OfType<AccountViewModel>()
+                    .FirstOrDefault();
+                accountVm?.RetryCmd.Execute().Subscribe();
+            }
+            catch (Exception ex)
+            {
+                Logging.SaveLog("BuyRefreshAfterPurchase", ex);
+            }
+        });
     }
 
     #endregion checkout

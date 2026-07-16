@@ -27,14 +27,14 @@
             <Setter Property="RenderTransform" Value="scale(0.92)" />
         </Style>
 
-        <!--  Строка выбора метода пинга: minHeight 56, hover→SurfaceHigh внутри клипующей карты.  -->
+        <!--  Строка выбора метода пинга: minHeight 56, hover→Hover (затемнение) внутри клипующей карты.  -->
         <Style Selector="Border.MethodRow">
             <Setter Property="MinHeight" Value="{DynamicResource Size.Row}" />
             <Setter Property="Padding" Value="16,12" />
             <Setter Property="Background" Value="Transparent" />
         </Style>
         <Style Selector="Border.MethodRow:pointerover">
-            <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
+            <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
         </Style>
         <!--  Галочка выбранного метода: 22, акцент, по правому краю.  -->
         <Style Selector="PathIcon.MethodCheck">
@@ -126,44 +126,6 @@
                             </StackPanel>
                             <PathIcon
                                 x:Name="CheckTcp"
-                                Grid.Column="1"
-                                Classes="MethodCheck"
-                                Data="{StaticResource Geo.Sub.Check}" />
-                        </Grid>
-                    </Border>
-
-                    <Border Classes="MethodDivider" />
-
-                    <Border x:Name="RowHttp" Classes="MethodRow">
-                        <Grid ColumnDefinitions="*,Auto">
-                            <StackPanel Grid.Column="0" Spacing="2">
-                                <TextBlock Classes="Body" Text="HTTP" />
-                                <TextBlock
-                                    Classes="Subtitle"
-                                    Text="HTTP-запрос через прокси"
-                                    TextWrapping="Wrap" />
-                            </StackPanel>
-                            <PathIcon
-                                x:Name="CheckHttp"
-                                Grid.Column="1"
-                                Classes="MethodCheck"
-                                Data="{StaticResource Geo.Sub.Check}" />
-                        </Grid>
-                    </Border>
-
-                    <Border Classes="MethodDivider" />
-
-                    <Border x:Name="RowIcmp" Classes="MethodRow">
-                        <Grid ColumnDefinitions="*,Auto">
-                            <StackPanel Grid.Column="0" Spacing="2">
-                                <TextBlock Classes="Body" Text="ICMP" />
-                                <TextBlock
-                                    Classes="Subtitle"
-                                    Text="ICMP-эхо (ping) до сервера"
-                                    TextWrapping="Wrap" />
-                            </StackPanel>
-                            <PathIcon
-                                x:Name="CheckIcmp"
                                 Grid.Column="1"
                                 Classes="MethodCheck"
                                 Data="{StaticResource Geo.Sub.Check}" />

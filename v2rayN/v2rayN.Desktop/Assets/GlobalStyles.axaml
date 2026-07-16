@@ -458,6 +458,9 @@
     <!-- ==================================================================== -->
 
     <!--  Цветные варианты плитки иконки 40 (к базовому Border.Tile + .Blue)  -->
+    <Style Selector="Border.Tile.Green">
+        <Setter Property="Background" Value="{DynamicResource Brush.Tile.Green}" />
+    </Style>
     <Style Selector="Border.Tile.Orange">
         <Setter Property="Background" Value="{DynamicResource Brush.Tile.Orange}" />
     </Style>

@@ -94,24 +94,23 @@ public static class SubscriptionHandler
     /// <summary>
     /// Resolves the User-Agent to send for a subscription fetch.
     ///
-    /// Any explicit value is honoured verbatim — this covers BOTH a manually-added sub carrying the
-    /// user's own UA AND an account-imported (Remnawave) sub, which the account sync stamps with an
-    /// explicit v2rayNG-family UA because the departament panel serves its managed server list only
-    /// for a recognised v2rayNG client (a branding/other UA yields an "app not supported" placeholder).
-    ///
-    /// A blank UA means a plain manually-added sub. Here we send the STANDARD desktop v2rayN UA
-    /// (<c>Utils.GetVersion(false)</c> => "v2rayN/&lt;version&gt;"), which generic panels accept.
-    /// Previously this path forced the Android "v2rayNG/1.10.6" UA, which made some providers reject
-    /// a user's own subscription with «Приложение не поддерживается» — that was the manual-add bug.
+    /// The departament / Remnawave panel serves its real managed server list ONLY for a recognised
+    /// v2rayNG-family client; any other UA (a browser/branding UA, or the desktop's own
+    /// "v2rayN/&lt;version&gt;") is answered with an "app not supported" placeholder — the panel returns a
+    /// single fake VLESS node named «Приложение не поддерживается». This affects BOTH account-imported
+    /// subs AND a user's OWN manually-added subscription (which arrives with a blank UA), so we force
+    /// the SAME v2rayNG UA the working account path uses for every fetch. An item that already carries
+    /// an explicit v2rayNG-family UA is honoured verbatim. 1:1 with the Android client
+    /// (HttpUtil.getUrlContentWithUserAgentEx).
     /// </summary>
     private static string ResolveSubUserAgent(string? userAgent)
     {
         var ua = userAgent?.Trim();
-        if (ua.IsNotEmpty())
+        if (ua.IsNotEmpty() && ua!.Contains("v2rayng", StringComparison.OrdinalIgnoreCase))
         {
-            return ua!;
+            return ua;
         }
-        return Utils.GetVersion(false);
+        return "v2rayNG/1.10.6";
     }
 
     private static async Task<string> DownloadSubscriptionContent(DownloadService downloadHandle, string url, bool blProxy, string userAgent)

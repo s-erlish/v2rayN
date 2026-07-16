@@ -37,50 +37,39 @@
     </UserControl.Resources>
 
     <UserControl.Styles>
-        <!--  Реф-строка целиком кликабельна: фон задаём в стиле, чтобы :pointerover переопределил.  -->
+        <!--  ПРОБЛЕМА 1: реф-строка БОЛЬШЕ не подсвечивается целиком. Контейнер —
+              просто раскладка (без фона/курсора/ховера). Единственный элемент с
+              hover-откликом — кнопка копирования (Button.IconButton40) справа; чип
+              с кодом не подсвечивается. Клик по коду копирует его через кнопку.  -->
         <Style Selector="Border.RefRow">
             <Setter Property="Background" Value="Transparent" />
-            <Setter Property="CornerRadius" Value="{StaticResource Radius.Chip}" />
-            <Setter Property="Padding" Value="6" />
-            <Setter Property="Cursor" Value="Hand" />
             <Setter Property="HorizontalAlignment" Value="Left" />
         </Style>
-        <Style Selector="Border.RefRow:pointerover">
-            <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
+
+        <!--  ПРОБЛЕМА 2: «Пополнить» на ховере НЕ уезжает в другой синий (глобальный
+              Semi-hover #5F9AFF светлее), а чуть ТЕМНЕЕТ (Accent → #3D7EF0, press
+              #3877E0). Покой = Accent (класс Button.Primary). Фон закреплён на
+              ContentPresenter, иначе тема Semi подменяет его своим hover-цветом.  -->
+        <Style Selector="Button#TopUpButton:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#3D7EF0" />
+        </Style>
+        <Style Selector="Button#TopUpButton:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#3877E0" />
         </Style>
 
-        <!--  Плейсхолдер-полоса скелета: нейтральная поверхность, скруглённая.  -->
-        <Style Selector="Border.SkelBar">
-            <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHighest}" />
-            <Setter Property="CornerRadius" Value="{StaticResource Radius.Chip}" />
-            <Setter Property="Height" Value="16" />
-        </Style>
-
-        <!--  Заголовок строки «Управление»: одна строка, обрезается многоточием — на ~360px
-              «История платежей» / «Купить подписку» деградируют в «…», а не режутся и не
-              наезжают на значение/шеврон.  -->
+        <!--  ПРОБЛЕМА 3: заголовок строки «Управление» — вес Medium (не Bold),
+              Space Grotesk. Строки читаются как остальной интерфейс, а не тяжело.
+              Плюс одна строка + эллипсис: на ~360px «История платежей» / «Купить
+              подписку» деградируют в «…», а не режутся и не наезжают на значение.  -->
         <Style Selector="Border.Row TextBlock.Title">
+            <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+            <Setter Property="FontWeight" Value="Medium" />
             <Setter Property="TextWrapping" Value="NoWrap" />
             <Setter Property="TextTrimming" Value="CharacterEllipsis" />
         </Style>
 
-        <!--  Пульс скелета: alpha 0.45 to 1.0, 900ms, реверс, бесконечно (передаёт «загрузка»).  -->
-        <Style Selector="Border.Skeleton">
-            <Style.Animations>
-                <Animation
-                    Duration="0:0:0.9"
-                    Easing="SineEaseInOut"
-                    IterationCount="Infinite"
-                    PlaybackDirection="Alternate">
-                    <KeyFrame Cue="0%">
-                        <Setter Property="Opacity" Value="0.45" />
-                    </KeyFrame>
-                    <KeyFrame Cue="100%">
-                        <Setter Property="Opacity" Value="1.0" />
-                    </KeyFrame>
-                </Animation>
-            </Style.Animations>
-        </Style>
+        <!--  Скелет-примитивы (полоса SkelBar, пульс SkeletonPulse) — общие из
+              GlobalStyles: один источник, корректно гаснут в lite-режиме.  -->
     </UserControl.Styles>
 
     <!--  Прозрачный фон: общий Incy-градиент рисуется под хостом страниц (MainWindow), показываем его.
@@ -202,15 +191,20 @@
                         </Button>
                     </Grid>
 
-                    <!--  Реф-код: вся строка копирует код в буфер (чип + завершающий глиф).  -->
+                    <!--  Реф-код: чип с кодом + кнопка копирования. Копирует код в буфер
+                          (тост «Скопировано»). Подсвечивается ТОЛЬКО кнопка на своём ховере.  -->
                     <Border
                         x:Name="ReferralRow"
                         Margin="0,12,0,0"
                         Classes="RefRow"
                         IsVisible="{Binding HasReferral}">
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <StackPanel
+                            Orientation="Horizontal"
+                            Spacing="8"
+                            VerticalAlignment="Center">
                             <Border
                                 Padding="12,8"
+                                VerticalAlignment="Center"
                                 Background="{DynamicResource Brush.SurfaceVariant}"
                                 CornerRadius="{StaticResource Radius.Chip}">
                                 <TextBlock
@@ -220,13 +214,16 @@
                                     TextWrapping="NoWrap"
                                     TextTrimming="CharacterEllipsis" />
                             </Border>
-                            <PathIcon
-                                Width="18"
-                                Height="18"
-                                Margin="8,0,0,0"
+                            <!--  Кнопка копирования: канонический IconButton40 (40 круг,
+                                  прозрачный, hover = мягкое затемнение, press scale 0.92,
+                                  глиф 20). Единственный элемент реф-строки с hover-откликом.  -->
+                            <Button
+                                x:Name="CopyReferralButton"
+                                Classes="IconButton40 Row"
                                 VerticalAlignment="Center"
-                                Data="{StaticResource Geo.Acc.Copy}"
-                                Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+                                ToolTip.Tip="Скопировать код">
+                                <PathIcon Data="{StaticResource Geo.Acc.Copy}" />
+                            </Button>
                         </StackPanel>
                     </Border>
                 </StackPanel>
@@ -234,9 +231,10 @@
 
             <!-- ============ HERO: карточка подписки (сосед, не вложенная) — 4 состояния ============ -->
 
-            <!--  Состояние СКЕЛЕТ: пульсирующие плейсхолдеры пока идёт первая загрузка.  -->
+            <!--  Состояние СКЕЛЕТ: пульсирующие плейсхолдеры пока идёт первая загрузка.
+                  Класс SkeletonPulse — общий пульс из GlobalStyles (гаснет в lite-режиме).  -->
             <Border
-                Classes="Card Skeleton"
+                Classes="Card SkeletonPulse"
                 Margin="0,12,0,0"
                 MinHeight="152"
                 IsVisible="{Binding ShowSkeleton}">

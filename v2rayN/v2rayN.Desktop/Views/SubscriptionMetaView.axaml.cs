@@ -1,6 +1,8 @@
 using System.ComponentModel;
+using System.Runtime.InteropServices;
 using Avalonia.Animation;
 using Avalonia.Animation.Easings;
+using Avalonia.Controls.Documents;
 using ServiceLib.Helper;
 using v2rayN.Desktop.Common;
 using v2rayN.Desktop.ViewModels;
@@ -37,6 +39,11 @@ public partial class SubscriptionMetaView : UserControl
     private string _currentSubId = string.Empty;
     private bool _refreshing;
 
+    //  «Облегчённый режим» (reduced-motion): LiteMode ∨ система просит меньше анимаций (Win32 SPI).
+    //  Пока true — переходы шеврона/пина СНЯТЫ (угол и цвет прыгают мгновенно). Единственный источник —
+    //  MotionState (рантайм-переключение без рестарта), синхронизируемся на входе в визуальное дерево.
+    private bool _reducedMotion;
+
     //  Шеврон сворачивания: явный RotateTransform, угол меняем плавно через собственный переход
     //  (0° раскрыто / −90° свёрнуто). Центр вращения задаётся РОВНО ОДИН раз — через
     //  RenderTransformOrigin="50%,50%" на самом CollapseIcon (ОТНОСИТЕЛЬНЫЙ центр = 10,10 у 20px-глифа).
@@ -49,16 +56,10 @@ public partial class SubscriptionMetaView : UserControl
     {
         InitializeComponent();
 
-        _chevronRotate.Transitions = new Transitions
-        {
-            new DoubleTransition
-            {
-                Property = RotateTransform.AngleProperty,
-                Duration = TimeSpan.FromMilliseconds(220),
-                Easing = new SplineEasing(0.2, 0, 0, 1), // Ease.Standard
-            },
-        };
         CollapseIcon.RenderTransform = _chevronRotate;
+        //  Наводим переходы (шеврон-угол + пин-цвет) под ТЕКУЩИЙ режим движения. В lite они сняты —
+        //  инстанс-переходы шеврона селекторные .lite-рычаги погасить не могут, поэтому гнём их сами.
+        ApplyMotionMode();
 
         if (Design.IsDesignMode)
         {
@@ -74,9 +75,83 @@ public partial class SubscriptionMetaView : UserControl
         DeleteButton.Click += OnDeleteSubClick;
 
         DataContextChanged += (_, _) => Rebind();
-        DetachedFromVisualTree += (_, _) => Unhook();
+        //  Реактивный lite: подписка на MotionState живёт, пока вид в визуальном дереве (как ConnectHeroView).
+        AttachedToVisualTree += OnMetaAttached;
+        DetachedFromVisualTree += OnMetaDetached;
 
         Rebind();
+    }
+
+    // ── Реактивный «Облегчённый режим» (runtime, без рестарта) ───────────────────────────
+    //  Зеркалит ConnectHeroView: подписываемся на MotionState.Changed, пока во визуальном дереве, и
+    //  синхронизируем переходы шеврона/пина на входе (lite могли переключить, пока вид был откреплён).
+    private void OnMetaAttached(object? sender, VisualTreeAttachmentEventArgs e)
+    {
+        MotionState.Changed += OnMotionStateChanged;
+        ApplyMotionMode();
+    }
+
+    private void OnMetaDetached(object? sender, VisualTreeAttachmentEventArgs e)
+    {
+        MotionState.Changed -= OnMotionStateChanged;
+        Unhook();
+    }
+
+    private void OnMotionStateChanged(object? sender, bool lite) => ApplyMotionMode();
+
+    //  Ставим/снимаем ИНСТАНС-переходы. В lite: Transitions = null → угол шеврона и цвет пина меняются
+    //  МГНОВЕННО (snap), уважая reduced-motion-контракт. Вне lite: 220мс Ease.Standard шеврону,
+    //  ~200мс Ease.Standard пину (как тон nav). Угол/кривая/длительности прежние; центр — origin 50%,50%.
+    private void ApplyMotionMode()
+    {
+        _reducedMotion = MotionState.IsLite || !SystemAnimationsEnabled();
+
+        _chevronRotate.Transitions = _reducedMotion ? null : new Transitions
+        {
+            new DoubleTransition
+            {
+                Property = RotateTransform.AngleProperty,
+                Duration = TimeSpan.FromMilliseconds(220),
+                Easing = new SplineEasing(0.2, 0, 0, 1), // Ease.Standard
+            },
+        };
+
+        //  Пин-глиф (OnSurfaceVariant ↔ Accent) плавно перетекает как прочие статус-поверхности; в lite — мгновенно.
+        PinIcon.Transitions = _reducedMotion ? null : new Transitions
+        {
+            new BrushTransition
+            {
+                Property = TextElement.ForegroundProperty,
+                Duration = TimeSpan.FromMilliseconds(200),
+                Easing = new SplineEasing(0.2, 0, 0, 1), // Ease.Standard
+            },
+        };
+    }
+
+    // ── Reduced-motion: Win32 SPI_GETCLIENTAREAANIMATION («Показывать анимации в Windows») ──
+    private const uint SPI_GETCLIENTAREAANIMATION = 0x1042;
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SystemParametersInfo(uint uiAction, uint uiParam, ref bool pvParam, uint fWinIni);
+
+    private static bool SystemAnimationsEnabled()
+    {
+        //  Нет прямого сигнала вне Windows → считаем движение включённым.
+        if (!OperatingSystem.IsWindows())
+        {
+            return true;
+        }
+
+        try
+        {
+            var enabled = true;
+            return !SystemParametersInfo(SPI_GETCLIENTAREAANIMATION, 0, ref enabled, 0) || enabled;
+        }
+        catch
+        {
+            return true;
+        }
     }
 
     // ── Bind the owning group ────────────────────────────────────────────────

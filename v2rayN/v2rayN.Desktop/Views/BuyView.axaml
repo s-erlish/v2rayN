@@ -43,9 +43,10 @@
 
     <UserControl.Styles>
 
-        <!--  ЛОКАЛЬНЫЕ классы (кандидаты на подъём в GlobalStyles, см. отчёт агента).
-              Токены — только Incy: Accent #4C8DFF, selected #1F4C8DFF + 1.5px Accent,
-              радиусы chip 12 / option 14 / button 16 / card 20 / sheet 24, шкала 4/8/12/16/24/32.  -->
+        <!--  ЛОКАЛЬНЫЕ классы (только то, чему нет глобального аналога: TariffCard/TariffHeader,
+              Flat, PayTile.balance, оверлей-шит). Общее — из GlobalStyles: SubToolbar/BackNav,
+              PriceOption, SkelCard/.SkeletonPulse, SheetTop/SheetHandle, EmptyIcon; цвета — токены
+              (Brush.SelectedFill / Brush.Hover / Brush.Scrim), без hex-литералов.  -->
 
         <!--  Плоская кнопка-хит (шапка тарифа, опция цены, строка шита): без хрома темы,
               единственный отклик — press scale 0.96 (press_scale). Hover рисует ВНУТРЕННИЙ Border.  -->
@@ -79,21 +80,11 @@
             <Setter Property="RenderTransform" Value="scale(0.96)" />
         </Style>
 
-        <!--  Back-шеврон бесшовного тулбара: 40×40, press scale 0.92, БЕЗ ripple/glow.  -->
-        <Style Selector="Button.BackNav">
-            <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="Transitions">
-                <Transitions>
-                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" />
-                </Transitions>
-            </Setter>
-        </Style>
-        <Style Selector="Button.BackNav:pressed">
-            <Setter Property="RenderTransform" Value="scale(0.92)" />
-        </Style>
+        <!--  Тулбар (Border.SubToolbar) и back-кнопка (Button.BackNav) — глобальные классы
+              (GlobalStyles): 56h, фон Bg, gutter 16 / 40 круг, hover Brush.Hover, press 0.92.  -->
 
         <!--  Карта тарифа: грамматика Border.Card (поверхность, радиус 20, без тени), но рамка
-              ПОСТОЯННО 1.5px (§0.6 — выбор не сдвигает раскладку); selected = #1F4C8DFF + Accent.  -->
+              ПОСТОЯННО 1.5px (§0.6 — выбор не сдвигает раскладку); selected = Brush.SelectedFill + Accent.  -->
         <Style Selector="Border.TariffCard">
             <Setter Property="Background" Value="{DynamicResource Brush.Surface}" />
             <Setter Property="CornerRadius" Value="{StaticResource Radius.Card}" />
@@ -109,11 +100,11 @@
             </Setter>
         </Style>
         <Style Selector="Border.TariffCard.selected">
-            <Setter Property="Background" Value="#1F4C8DFF" />
+            <Setter Property="Background" Value="{DynamicResource Brush.SelectedFill}" />
             <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
         </Style>
 
-        <!--  Шапка-строка тарифа: minHeight 56, паддинг 16, hover SurfaceHigh (клипается картой).  -->
+        <!--  Шапка-строка тарифа: minHeight 56, паддинг 16, hover ЗАТЕМНЯЕТ (Brush.Hover, клипается картой).  -->
         <Style Selector="Border.TariffHeader">
             <Setter Property="MinHeight" Value="{StaticResource Size.Row}" />
             <Setter Property="Padding" Value="16" />
@@ -125,7 +116,7 @@
             </Setter>
         </Style>
         <Style Selector="Border.TariffHeader:pointerover">
-            <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
+            <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
         </Style>
 
         <!--  Галочка выбранного тарифа: место зарезервировано всегда, появление — мягкий fade.  -->
@@ -141,56 +132,10 @@
             <Setter Property="Opacity" Value="1" />
         </Style>
 
-        <!--  Опция срока/цены [кандидат Border.PriceOption]: радиус 14 (шкала §0.2), minHeight 48,
-              рамка постоянно 1.5px (в покое OutlineVariant); selected = #1F4C8DFF + Accent.  -->
-        <Style Selector="Border.OptionRow">
-            <Setter Property="MinHeight" Value="48" />
-            <Setter Property="CornerRadius" Value="14" />
-            <Setter Property="Padding" Value="12" />
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineVariant}" />
-            <Setter Property="BorderThickness" Value="1.5" />
-            <Setter Property="Transitions">
-                <Transitions>
-                    <BrushTransition Property="Background" Duration="0:0:0.15" />
-                    <BrushTransition Property="BorderBrush" Duration="0:0:0.15" />
-                </Transitions>
-            </Setter>
-        </Style>
-        <Style Selector="Border.OptionRow:not(.selected):pointerover">
-            <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
-        </Style>
-        <Style Selector="Border.OptionRow.selected">
-            <Setter Property="Background" Value="#1F4C8DFF" />
-            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
-        </Style>
-
-        <!--  Скелет загрузки: 3 статичных силуэта-карты 76/радиус 20/SurfaceVariant + пульс альфы
-              (0.45↔1.0, как скелет Аккаунта) [кандидаты Border.SkeletonCard + общий пульс].  -->
-        <Style Selector="Border.SkeletonCard">
-            <Setter Property="Height" Value="76" />
-            <Setter Property="CornerRadius" Value="{StaticResource Radius.Card}" />
-            <Setter Property="Background" Value="{DynamicResource Brush.SurfaceVariant}" />
-        </Style>
-        <!--  «Облегчённый режим»: под lite-окном пульс НЕ аттачится (селектор :is(Window):not(.lite)
-              не совпадает → статичная непрозрачность). Конкурирующий стиль в Avalonia не отменяет уже
-              запущенную анимацию — поэтому гасим на уровне СЕЛЕКТОРА, как глобальный SkeletonPulse.  -->
-        <Style Selector=":is(Window):not(.lite) StackPanel.SkeletonPulse">
-            <Style.Animations>
-                <Animation
-                    Duration="0:0:0.9"
-                    Easing="SineEaseInOut"
-                    IterationCount="Infinite"
-                    PlaybackDirection="Alternate">
-                    <KeyFrame Cue="0%">
-                        <Setter Property="Opacity" Value="0.45" />
-                    </KeyFrame>
-                    <KeyFrame Cue="100%">
-                        <Setter Property="Opacity" Value="1.0" />
-                    </KeyFrame>
-                </Animation>
-            </Style.Animations>
-        </Style>
+        <!--  Опция срока/цены — глобальный Border.PriceOption (радиус 14, minHeight 48, рамка 1.5px;
+              hover ЗАТЕМНЯЕТ Brush.Hover; selected = Brush.SelectedFill + Accent). Локальная копия снята.
+              Скелет — глобальный Border.SkelCard (76/радиус 20/SurfaceVariant) + общий .SkeletonPulse
+              (гасится под lite глобальным селектором). Локальные копии сняты.  -->
 
         <!--  Один рецепт входа состояния (ошибка/пусто/успех/контент): fade 220мс ease-out-quart.
               Заменяет андроидный cross-fade skeleton→контент без жёсткого «попа».
@@ -212,23 +157,11 @@
             </Style.Animations>
         </Style>
 
-        <!--  Шит «Способ оплаты» [кандидаты Border.SheetTop / Border.SheetHandle]: тёмная верх-
-              поверхность 24,24,0,0 без rim-линии + grab-handle 36×4.  -->
-        <Style Selector="Border.SheetTop">
-            <Setter Property="Background" Value="{DynamicResource Brush.Surface}" />
-            <Setter Property="CornerRadius" Value="{StaticResource Radius.Sheet}" />
-            <Setter Property="Padding" Value="0,0,0,16" />
-            <Setter Property="ClipToBounds" Value="True" />
-        </Style>
-        <Style Selector="Border.SheetHandle">
-            <Setter Property="Width" Value="36" />
-            <Setter Property="Height" Value="4" />
-            <Setter Property="CornerRadius" Value="2" />
-            <Setter Property="Background" Value="{DynamicResource Brush.OutlineVariant}" />
-            <Setter Property="HorizontalAlignment" Value="Center" />
-        </Style>
+        <!--  Шит «Способ оплаты» — глобальные Border.SheetTop (Surface, радиус 24,24,0,0, 1px верх-rim)
+              + Border.SheetHandle (36×4 SurfaceHighest, pill). Локальные копии сняты; отступ/клип шита
+              заданы на элементе Sheet в разметке.  -->
 
-        <!--  Плоская строка способа оплаты (не карта-в-шите): minHeight 56, hover SurfaceHigh.  -->
+        <!--  Плоская строка способа оплаты (не карта-в-шите): minHeight 56, hover ЗАТЕМНЯЕТ (Brush.Hover).  -->
         <Style Selector="Border.SheetRow">
             <Setter Property="MinHeight" Value="{StaticResource Size.Row}" />
             <Setter Property="Padding" Value="16,12" />
@@ -240,7 +173,7 @@
             </Setter>
         </Style>
         <Style Selector="Border.SheetRow:pointerover">
-            <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
+            <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
         </Style>
 
         <!--  Тайл способа оплаты: синий по умолчанию; «С баланса» — намеренный зелёный дифференциатор.  -->
@@ -279,59 +212,47 @@
     <Panel Background="{DynamicResource Brush.Bg}">
         <DockPanel>
 
-            <!--  ============ Бесшовный тулбар суб-страницы: back-шеврон + Headline ============  -->
-            <Grid
-                MaxWidth="560"
-                Margin="16,12,16,4"
-                ColumnDefinitions="Auto,*"
-                DockPanel.Dock="Top">
-                <Button
-                    x:Name="BtnBack"
-                    Grid.Column="0"
-                    Width="40"
-                    Height="40"
-                    VerticalAlignment="Center"
-                    Classes="IconButton BackNav"
-                    Click="OnBackClick"
-                    ToolTip.Tip="Назад">
-                    <PathIcon
-                        Width="22"
-                        Height="22"
-                        HorizontalAlignment="Center"
+            <!--  ============ Бесшовный тулбар суб-страницы (глобальный Border.SubToolbar) ============  -->
+            <Border Classes="SubToolbar" DockPanel.Dock="Top">
+                <Grid
+                    MaxWidth="560"
+                    ColumnDefinitions="Auto,*">
+                    <Button
+                        x:Name="BtnBack"
+                        Grid.Column="0"
                         VerticalAlignment="Center"
-                        Data="{StaticResource Geo.Buy.Back}"
-                        Foreground="{DynamicResource Brush.OnSurface}" />
-                </Button>
-                <TextBlock
-                    Grid.Column="1"
-                    Margin="8,0,0,0"
-                    VerticalAlignment="Center"
-                    Classes="Headline"
-                    Text="Купить подписку"
-                    TextTrimming="CharacterEllipsis" />
-            </Grid>
+                        Classes="IconButton BackNav"
+                        Click="OnBackClick"
+                        ToolTip.Tip="Назад">
+                        <PathIcon Data="{StaticResource Geo.Buy.Back}" />
+                    </Button>
+                    <TextBlock
+                        Grid.Column="1"
+                        Margin="8,0,0,0"
+                        VerticalAlignment="Center"
+                        Classes="Headline"
+                        Text="Купить подписку"
+                        TextTrimming="CharacterEllipsis" />
+                </Grid>
+            </Border>
 
             <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
                 <StackPanel MaxWidth="560" Margin="16,8,16,24">
 
                     <!--  ============ Состояние СКЕЛЕТ: силуэт и есть сигнал загрузки ============  -->
                     <StackPanel Classes="SkeletonPulse" IsVisible="{Binding ShowSkeleton}">
-                        <Border Margin="0,0,0,12" Classes="SkeletonCard" />
-                        <Border Margin="0,0,0,12" Classes="SkeletonCard" />
-                        <Border Classes="SkeletonCard" />
+                        <Border Margin="0,0,0,12" Classes="SkelCard" />
+                        <Border Margin="0,0,0,12" Classes="SkelCard" />
+                        <Border Classes="SkelCard" />
                     </StackPanel>
 
-                    <!--  ============ Состояние ОШИБКА: глиф 48 + текст + «Повторить» ============  -->
+                    <!--  ============ Состояние ОШИБКА: hero-тайл 64/радиус 20 + текст + «Повторить» ============  -->
                     <StackPanel Classes="reveal" IsVisible="{Binding ShowError}">
-                        <PathIcon
-                            Width="48"
-                            Height="48"
-                            Margin="0,32,0,0"
-                            HorizontalAlignment="Center"
-                            Data="{StaticResource Geo.Buy.Info}"
-                            Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+                        <Border Margin="0,32,0,0" Classes="EmptyIcon">
+                            <PathIcon Data="{StaticResource Geo.Buy.Info}" />
+                        </Border>
                         <TextBlock
-                            Margin="0,8,0,0"
+                            Margin="0,12,0,0"
                             Padding="16"
                             HorizontalAlignment="Center"
                             Classes="Body"
@@ -347,17 +268,13 @@
                             Content="Повторить" />
                     </StackPanel>
 
-                    <!--  ============ Состояние ПУСТО ============  -->
+                    <!--  ============ Состояние ПУСТО: hero-тайл 64/радиус 20 + текст ============  -->
                     <StackPanel Classes="reveal" IsVisible="{Binding ShowEmpty}">
-                        <PathIcon
-                            Width="48"
-                            Height="48"
-                            Margin="0,32,0,0"
-                            HorizontalAlignment="Center"
-                            Data="{StaticResource Geo.Buy.Info}"
-                            Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+                        <Border Margin="0,32,0,0" Classes="EmptyIcon">
+                            <PathIcon Data="{StaticResource Geo.Buy.Info}" />
+                        </Border>
                         <TextBlock
-                            Margin="0,8,0,0"
+                            Margin="0,12,0,0"
                             Padding="16"
                             HorizontalAlignment="Center"
                             Classes="Body"
@@ -367,21 +284,25 @@
                             TextWrapping="Wrap" />
                     </StackPanel>
 
-                    <!--  ============ Состояние УСПЕХ: «Подписка оплачена» ============  -->
+                    <!--  ============ Состояние УСПЕХ: hero-тайл 64/радиус 20 + «Подписка оплачена» ============  -->
                     <StackPanel Classes="reveal" IsVisible="{Binding ShowSuccess}">
-                        <PathIcon
-                            Width="48"
-                            Height="48"
-                            Margin="0,32,0,0"
-                            HorizontalAlignment="Center"
-                            Data="{StaticResource Geo.Buy.Check}"
-                            Foreground="{DynamicResource Brush.Accent}" />
+                        <Border Margin="0,32,0,0" Classes="EmptyIcon">
+                            <PathIcon Data="{StaticResource Geo.Buy.Check}" />
+                        </Border>
                         <TextBlock
                             Margin="0,12,0,0"
                             HorizontalAlignment="Center"
                             Classes="Title"
                             Text="Подписка оплачена"
                             TextAlignment="Center" />
+                        <TextBlock
+                            Margin="0,4,0,0"
+                            HorizontalAlignment="Center"
+                            Classes="Subtitle"
+                            Foreground="{DynamicResource Brush.OnSurfaceVariant}"
+                            Text="Серверы уже добавлены — можно подключаться"
+                            TextAlignment="Center"
+                            TextWrapping="Wrap" />
                     </StackPanel>
 
                     <!--  Post-checkout hint: виден при ре-поллинге после оплаты в браузере.  -->
@@ -452,7 +373,7 @@
                                                             Margin="0,8,0,0"
                                                             Classes="Flat"
                                                             Command="{Binding SelectCmd}">
-                                                            <Border Classes="OptionRow" Classes.selected="{Binding IsSelected}">
+                                                            <Border Classes="PriceOption" Classes.selected="{Binding IsSelected}">
                                                                 <Grid VerticalAlignment="Center" ColumnDefinitions="*,Auto">
                                                                     <TextBlock
                                                                         Grid.Column="0"
@@ -623,18 +544,20 @@
             Classes.open="{Binding IsSheetOpen}"
             IsHitTestVisible="{Binding IsSheetOpen}">
 
-            <!--  Скрим: тап закрывает шит.  -->
+            <!--  Скрим: тап закрывает шит (общий токен Brush.Scrim, ~60%).  -->
             <Border
                 x:Name="SheetScrim"
-                Background="#99000000"
+                Background="{DynamicResource Brush.Scrim}"
                 Tapped="OnScrimTapped" />
 
             <!--  Поверхность шита: grab-handle 36×4 + заголовок + плоские строки методов.  -->
             <Border
                 x:Name="Sheet"
                 MaxWidth="560"
+                Padding="0,0,0,16"
                 VerticalAlignment="Bottom"
-                Classes="SheetTop">
+                Classes="SheetTop"
+                ClipToBounds="True">
                 <StackPanel>
                     <Border Margin="0,8,0,0" Classes="SheetHandle" />
                     <TextBlock

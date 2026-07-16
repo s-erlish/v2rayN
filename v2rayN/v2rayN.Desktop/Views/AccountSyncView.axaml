@@ -1,0 +1,69 @@
+<UserControl
+    x:Class="v2rayN.Desktop.Views.AccountSyncView"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    d:DesignHeight="630"
+    d:DesignWidth="372"
+    mc:Ignorable="d">
+
+    <!--
+        Экран синхронизации аккаунта (E3): показывается СРАЗУ после успешного входа и держится,
+        пока идёт импорт подписок + первичное обновление серверов (AccountViewModel.IsImportingAccount).
+        Так между закрытием «Входа» и появлением заполненной «Главной» НЕ мелькает пустой онбординг.
+
+        Полноэкранный, на фирменном радиальном фоне «Главной» (Brush.HomeGradient), центрированная
+        колонка (gutter 16 + MaxWidth 400) — та же дисциплина, что у Онбординга/Входа. Спиннер —
+        дуга ~25% окружности поверх статичного кольца (тот же приём, что LoginView AwaitingBlock):
+        крутится классом .spinning (глобальный стиль Ellipse.Spinner.spinning, авто-гашение под .lite).
+        Вращение навешивается code-behind ТОЛЬКО пока оверлей виден — не тикаем анимацию за кадром.
+    -->
+
+    <Border Background="{DynamicResource Brush.HomeGradient}">
+        <Panel Margin="16,0">
+            <StackPanel
+                MaxWidth="400"
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Center">
+
+                <!--  Спиннер: статичное кольцо OutlineVariant + дуга Accent (крутится .spinning).  -->
+                <Panel
+                    Width="64"
+                    Height="64"
+                    HorizontalAlignment="Center">
+                    <Ellipse
+                        Width="64"
+                        Height="64"
+                        Stroke="{DynamicResource Brush.OutlineVariant}"
+                        StrokeThickness="3" />
+                    <Ellipse
+                        x:Name="SyncSpinner"
+                        Width="64"
+                        Height="64"
+                        Classes="Spinner"
+                        RenderTransformOrigin="50%,50%"
+                        Stroke="{DynamicResource Brush.Accent}"
+                        StrokeDashArray="16.75,50.25"
+                        StrokeLineCap="Round"
+                        StrokeThickness="3" />
+                </Panel>
+
+                <TextBlock
+                    Margin="0,24,0,0"
+                    HorizontalAlignment="Stretch"
+                    Classes="Headline"
+                    Text="Добавляем аккаунт"
+                    TextAlignment="Center"
+                    TextWrapping="Wrap" />
+                <TextBlock
+                    Margin="0,8,0,0"
+                    HorizontalAlignment="Stretch"
+                    Classes="Subtitle"
+                    Text="Загружаем подписки…"
+                    TextAlignment="Center"
+                    TextWrapping="Wrap" />
+            </StackPanel>
+        </Panel>
+    </Border>
+</UserControl>

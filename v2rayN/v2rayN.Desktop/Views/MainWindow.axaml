@@ -76,7 +76,10 @@
         <!--  Кнопка-переключатель рейла: слим 30×30, круглый hover, press-scale.  -->
         <Style Selector="Button.RailToggle">
             <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
-            <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
+            <!--  Центр press-scale ОБЯЗАН быть относительным «50%,50%». «0.5,0.5» в этой сборке =
+                  0.5px ≈ левый-верхний угол → масштаб «проваливался» из угла (та же ловушка, что у
+                  диска/nav-пилюль).  -->
+            <Setter Property="RenderTransformOrigin" Value="50%,50%" />
             <Setter Property="Width" Value="30" />
             <Setter Property="Height" Value="30" />
             <Setter Property="MinWidth" Value="0" />
@@ -103,9 +106,11 @@
             <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
         </Style>
 
-        <!--  Шеврон переключателя: по умолчанию ‹ (свернуть). Крутится вокруг своего центра.  -->
+        <!--  Шеврон переключателя: по умолчанию ‹ (свернуть). Крутится вокруг своего центра.
+              Центр — относительный «50%,50%»: «0.5,0.5» в этой сборке трактуется как 0.5px ≈ угол,
+              и разворот на 180° уводил глиф ЗА пределы кнопки → шеврон «исчезал» в свёрнутом виде.  -->
         <Style Selector="Path.RailToggleGlyph">
-            <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
+            <Setter Property="RenderTransformOrigin" Value="50%,50%" />
             <Setter Property="RenderTransform" Value="rotate(0deg)" />
             <Setter Property="Transitions">
                 <Transitions>
@@ -154,6 +159,33 @@
             </Setter>
         </Style>
         <Style Selector=":is(Window).lite Button.RailToggle">
+            <Setter Property="Transitions">
+                <Transitions />
+            </Setter>
+        </Style>
+
+        <!--  ==================== Индикатор подключения в рейле (C5) ====================
+              Серый (покой) ↔ синий (подключение/подключено). Цвет берётся из ТЕМА-ТОКЕНОВ
+              (Brush.OnSurfaceVariant / Brush.Accent), а НЕ из хардкод-hex, поэтому следует за
+              темой (тёмная/светлая/моно). Смена цвета плавная — BrushTransition 200мс Ease.Standard;
+              класс .on ставит code-behind по IsConnected||IsConnecting. Под .lite переход обнуляется
+              (состояние переключается мгновенно, как остальная свёртка рейла).  -->
+        <Style Selector="Ellipse.ConnDot">
+            <Setter Property="Fill" Value="{DynamicResource Brush.OnSurfaceVariant}" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Fill" Duration="0:0:0.2">
+                        <BrushTransition.Easing>
+                            <SplineEasing X1="0.2" Y1="0" X2="0" Y2="1" />
+                        </BrushTransition.Easing>
+                    </BrushTransition>
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Ellipse.ConnDot.on">
+            <Setter Property="Fill" Value="{DynamicResource Brush.Accent}" />
+        </Style>
+        <Style Selector=":is(Window).lite Ellipse.ConnDot">
             <Setter Property="Transitions">
                 <Transitions />
             </Setter>
@@ -276,11 +308,26 @@
                           свёрткой рейла (стили выше по Grid.railCollapsed).  -->
                     <Grid x:Name="bodyRoot" IsVisible="False">
 
-                        <!--  Левый icon-рейл (широкая раскладка). Фон = Bg (сливается с окном).  -->
+                        <!--  Сквозная (full-bleed) подложка Главной ПОД рейлом и контентом сразу: рейл
+                              больше НЕ красит собственный плоский прямоугольник (на светлой теме плоский
+                              Bg #F4F7FC был светлее края градиента #DFE6F1 → читался «белым блоком» при
+                              свёрнутом рейле). Теперь свёрнутая полоса делит ТОТ ЖЕ градиент, что и
+                              контент: на тёмной теме край градиента == Bg (изменение невидимо), на светлой
+                              «белый блок» исчезает. Span на обе раскладки; клик сквозной.  -->
+                        <Border
+                            Grid.Row="0"
+                            Grid.Column="0"
+                            Grid.RowSpan="2"
+                            Grid.ColumnSpan="2"
+                            Background="{DynamicResource Brush.HomeGradient}"
+                            IsHitTestVisible="False" />
+
+                        <!--  Левый icon-рейл (широкая раскладка). Фон прозрачный → берёт сквозную
+                              подложку выше (в свёрнутом виде НЕ остаётся плоского блока ни в одной теме).  -->
                         <Border
                             x:Name="railHost"
                             Grid.Column="0"
-                            Background="{DynamicResource Brush.Bg}">
+                            Background="Transparent">
                             <DockPanel LastChildFill="False">
 
                                 <!--  3 вкладки (Главная · Настройки · Аккаунт). Список серверов живёт
@@ -351,7 +398,7 @@
                                         Width="8"
                                         Height="8"
                                         HorizontalAlignment="Center"
-                                        Fill="{DynamicResource Brush.OnSurfaceVariant}" />
+                                        Classes="ConnDot" />
                                     <Button
                                         x:Name="btnRailToggle"
                                         Classes="RailToggle"
@@ -393,14 +440,48 @@
                     <!--  Онбординг на всю ширину Row 1 (без рейла/панелей). Виден, пока нет подписок.  -->
                     <views:OnboardingView x:Name="onboardingView" />
 
+                    <!--  ==================== Оверлей синхронизации аккаунта (E3) ====================
+                          Полноэкранный экран загрузки «Добавляем аккаунт / Загружаем подписки…» — z-выше
+                          онбординга, но НИЖЕ суб-страниц: пока открыт LoginView, он сверху; как только вход
+                          закрывает суб-страницу, виден ЭТОТ оверлей (а НЕ пустой онбординг), пока идёт импорт.
+                          Гейт — ApplyShellVisibility (3-way: syncing > empty > content). Появление/уход —
+                          кроссфейд (C4). По завершении импорта передаёт кадр прямо заполненной «Главной».  -->
+                    <views:AccountSyncView x:Name="accountSyncView" IsVisible="False" />
+
                     <!--  ==================== Хост суб-страниц (Buy/Login/Devices/History) ====================
                           Поверх контента И онбординга: суб-вью — полноэкранные, каждая со своим бесшовным
                           back-тулбаром (Brush.Bg фон полностью перекрывает низлежащее). Стек «назад» ведёт
-                          MainWindow.PushSubPage/PopSubPage; скрыт, пока стек пуст.  -->
+                          MainWindow.PushSubPage/PopSubPage; скрыт, пока стек пуст. Открытие/закрытие —
+                          направленный slide+fade (C2) в PushSubPage/PopSubPage.  -->
                     <ContentControl
                         x:Name="subPageHost"
                         Background="{DynamicResource Brush.Bg}"
-                        IsVisible="False" />
+                        IsVisible="False"
+                        RenderTransformOrigin="50%,50%" />
+
+                    <!--  ==================== Инлайн-уведомление (A3) ====================
+                          НЕ плавающий OS-тост: внутри-оконная пилюля внизу-по-центру (Border.Toast),
+                          НАД навигацией (нижний margin выставляет ApplyLayoutMode под раскладку). Это
+                          единственный видимый сток AppEvents.SendSnackMsgRequested (connect-fail, оплата,
+                          копирование, отвязка устройства) — раньше все сообщения глухо гасились. Появление
+                          translateY 12→0 + fade (OutQuint 220), авто-скрытие ~3.5с, выход fade (Standard
+                          150); под .lite — мгновенно. Поверх ВСЕГО (в т.ч. суб-страниц), чтобы сообщения из
+                          Buy/Devices были видны. Клик сквозной (IsHitTestVisible=False).  -->
+                    <Border
+                        x:Name="snackHost"
+                        Margin="16,0,16,16"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Bottom"
+                        Classes="Toast"
+                        IsHitTestVisible="False"
+                        IsVisible="False"
+                        RenderTransformOrigin="50%,50%">
+                        <TextBlock
+                            x:Name="snackText"
+                            MaxWidth="420"
+                            TextAlignment="Center"
+                            TextWrapping="Wrap" />
+                    </Border>
                 </Panel>
             </Grid>
 

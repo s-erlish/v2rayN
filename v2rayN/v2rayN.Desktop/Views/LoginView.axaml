@@ -123,32 +123,9 @@
     </UserControl.Resources>
 
     <UserControl.Styles>
-        <!--
-            [ЛОКАЛЬНО, к продвижению] Кнопка «назад» тулбара: 40×40 круг, глиф 22,
-            hover SurfaceHigh, pressed scale 0.92, БЕЗ ripple/glow (§0.1 IconButton).
-        -->
-        <Style Selector="Button.BackButton">
-            <Setter Property="Width" Value="40" />
-            <Setter Property="Height" Value="40" />
-            <Setter Property="MinWidth" Value="40" />
-            <Setter Property="Padding" Value="0" />
-            <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill}" />
-            <Setter Property="Transitions">
-                <Transitions>
-                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" />
-                </Transitions>
-            </Setter>
-        </Style>
-        <Style Selector="Button.BackButton /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill}" />
-        </Style>
-        <Style Selector="Button.BackButton:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
-        </Style>
-        <Style Selector="Button.BackButton:pressed">
-            <Setter Property="RenderTransform" Value="scale(0.92)" />
-        </Style>
+        <!--  Кнопка «назад» тулбара — глобальный Button.BackNav (см. GlobalStyles): 40 круг,
+              глиф 22, hover-затемнение Brush.Hover, pressed scale 0.92, БЕЗ ripple/glow.
+              Локального стиля больше нет — тулбар унифицирован с остальными суб-страницами.  -->
 
         <!--
             [ЛОКАЛЬНО, к продвижению] Линк-действие («Начать заново» / «Регистрация на сайте»):
@@ -215,31 +192,28 @@
 
     <Grid Background="{DynamicResource Brush.Bg}" RowDefinitions="Auto,*">
 
-        <!--  ============ Бесшовный тулбар суб-страницы: «← Вход» ============  -->
-        <Grid
-            Grid.Row="0"
-            Height="56"
-            Margin="8,0,16,0"
-            ColumnDefinitions="Auto,*">
-            <Button
-                x:Name="BackButton"
-                Grid.Column="0"
-                VerticalAlignment="Center"
-                Classes="IconButton BackButton"
-                ToolTip.Tip="Назад">
-                <PathIcon
-                    Width="22"
-                    Height="22"
-                    Data="{StaticResource Geo.Login.Back}"
-                    Foreground="{DynamicResource Brush.OnSurface}" />
-            </Button>
-            <TextBlock
-                Grid.Column="1"
-                Margin="8,0,0,0"
-                VerticalAlignment="Center"
-                Classes="Headline"
-                Text="Вход" />
-        </Grid>
+        <!--  ============ Бесшовный тулбар суб-страницы: «← Вход» ============
+              Глобальные Border.SubToolbar (56h, фон Bg, gutter 16) + Button.BackNav
+              (40 круг, глиф 22, hover-затемнение Brush.Hover, press scale 0.92) —
+              единый тулбар со всеми суб-страницами оболочки.  -->
+        <Border Grid.Row="0" Classes="SubToolbar">
+            <Grid ColumnDefinitions="Auto,*">
+                <Button
+                    x:Name="BackButton"
+                    Grid.Column="0"
+                    VerticalAlignment="Center"
+                    Classes="IconButton BackNav"
+                    ToolTip.Tip="Назад">
+                    <PathIcon Data="{StaticResource Geo.Login.Back}" />
+                </Button>
+                <TextBlock
+                    Grid.Column="1"
+                    Margin="8,0,0,0"
+                    VerticalAlignment="Center"
+                    Classes="Headline"
+                    Text="Вход" />
+            </Grid>
+        </Border>
 
         <!--  ============ Контент: скролл, gutter 16, центрированная колонка ≤440 ============  -->
         <ScrollViewer
@@ -519,7 +493,7 @@
                             Margin="0,20,0,0"
                             HorizontalAlignment="Stretch"
                             Classes="Title"
-                            Text="Ожидаем подтверждения"
+                            Text="Ожидаем подтверждения в Telegram"
                             TextAlignment="Center"
                             TextWrapping="Wrap" />
                         <TextBlock
@@ -527,7 +501,7 @@
                             HorizontalAlignment="Stretch"
                             Classes="Body"
                             Foreground="{DynamicResource Brush.OnSurfaceVariant}"
-                            Text="Подтвердите вход в приложении Telegram и вернитесь сюда."
+                            Text="Подтвердите вход в открывшемся приложении и вернитесь сюда — остальное сделаем сами."
                             TextAlignment="Center"
                             TextWrapping="Wrap" />
                         <Button

@@ -65,8 +65,12 @@ internal sealed class HomeHeroPresenter
             .Subscribe(empty => hero.ShowEmptyState(empty))
             .DisposeWith(d);
 
-        // ── Connect visual state (idle / connecting / connected) ───────────
-        vm.WhenAnyValue(x => x.IsConnected, x => x.IsConnecting, x => x.HasServers)
+        // ── Connect visual state (idle / connecting / connected / error) ───
+        //  ConnectFailed is observed alongside the other connect signals so a failed attempt
+        //  paints the Error shield on BOTH hero instances (each has its own presenter over the
+        //  shared VM). The VM auto-clears ConnectFailed on the next attempt/success/disconnect,
+        //  so ApplyConnectState just reads it — no manual reset here.
+        vm.WhenAnyValue(x => x.IsConnected, x => x.IsConnecting, x => x.HasServers, x => x.ConnectFailed)
             .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ => ApplyConnectState())
             .DisposeWith(d);
@@ -107,11 +111,16 @@ internal sealed class HomeHeroPresenter
     private void ApplyConnectState()
     {
         var vm = _vm;
+        //  Error wins over idle: a failed connect leaves IsConnected/IsConnecting false, so without
+        //  this guard the shield would silently fall back to Idle (the A4 bug). Connecting/Connected
+        //  still take precedence — ConnectFailed is only latched while genuinely stopped.
         var state = vm.IsConnected
             ? ConnectHeroView.ConnectVisualState.Connected
             : vm.IsConnecting
                 ? ConnectHeroView.ConnectVisualState.Connecting
-                : ConnectHeroView.ConnectVisualState.Idle;
+                : vm.ConnectFailed
+                    ? ConnectHeroView.ConnectVisualState.Error
+                    : ConnectHeroView.ConnectVisualState.Idle;
 
         // Play the connect-confirm sonar only on the transition INTO connected.
         var animate = state == ConnectHeroView.ConnectVisualState.Connected

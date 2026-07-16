@@ -360,18 +360,29 @@ public class MainWindowViewModel : MyReactiveObject
             var indexIdOld = _config.IndexId;
             await RefreshServersDispatcherAsync();
 
-            // If indexId changed or subIndexId is empty, directly reload.
-            if (indexIdOld != _config.IndexId || _config.SubIndexId.IsNullOrEmpty())
+            // OFF-model guard (A2): a subscription refresh/update must NEVER auto-connect the VPN.
+            // The servers/profiles are already refreshed above; only reload (which restarts the
+            // core with the updated config) when a core was ALREADY running before the refresh, so
+            // an active tunnel picks up the new server list. When disconnected we stop here — no
+            // Reload, no core start. Without this guard the reload below fired on every Home refresh
+            // (SubIndexId is empty on the Home shell), silently connecting a disconnected user.
+            var wasRunning = AppManager.Instance.IsRunningCore(ECoreType.Xray)
+                || AppManager.Instance.IsRunningCore(ECoreType.sing_box);
+            if (wasRunning)
             {
-                await Reload();
-            }
-            else
-            {
-                // The activity config belongs to the current group.
-                var profile = await AppManager.Instance.GetProfileItem(_config.IndexId);
-                if (profile != null && profile.Subid == _config.SubIndexId)
+                // If indexId changed or subIndexId is empty, directly reload.
+                if (indexIdOld != _config.IndexId || _config.SubIndexId.IsNullOrEmpty())
                 {
                     await Reload();
+                }
+                else
+                {
+                    // The activity config belongs to the current group.
+                    var profile = await AppManager.Instance.GetProfileItem(_config.IndexId);
+                    if (profile != null && profile.Subid == _config.SubIndexId)
+                    {
+                        await Reload();
+                    }
                 }
             }
 
@@ -384,7 +395,10 @@ public class MainWindowViewModel : MyReactiveObject
 
     private async Task UpdateStatisticsHandler(ServerSpeedItem update)
     {
-        if (!AppManager.Instance.ShowInTaskbar)
+        // Idle guard (B5): don't publish stats when the UI can't display them. IsUiHidden covers
+        // both hidden-to-tray (ShowInTaskbar == false) AND minimized, so the whole 3-subscriber
+        // fan-out is skipped for a window the user cannot see (previously only paused when tray-hidden).
+        if (AppManager.Instance.IsUiHidden)
         {
             return;
         }
