@@ -72,13 +72,14 @@
     <Grid Background="Transparent">
 
         <!--  SCROLL: subscription sections (meta-bar header + its rows), bound to real ServerGroups.
-              Bottom padding 72 (was 40): the last row carries a 2px margin + a 1px divider, and — this is
-              the real cutoff — the compact layout floats the ~64px bottom navigation over the tail of this
-              list, so 40 left the final server (e.g. «Приложение не поддерживается») only half visible even
-              scrolled fully down. 72 = ~64 nav + an 8px gap (plus the row's own margin/divider), so the last
-              server clears the nav with breathing room. ServerListView hosts BOTH layouts, so fixing the
-              inset here covers widescreen and compact from one place.  -->
-        <ScrollViewer IsVisible="{Binding HasServers}" Padding="0,0,0,72">
+              Bottom padding 88 (was 72): in compact the tail of this list is overlaid by MainWindow's
+              72px `navScrim` (a fade-to-background band above the bottom nav) AND the ~64px nav sits just
+              below it. 72 left the final server flush against the scrim, so its lower half still dissolved
+              into the fade («bottom border clips the final server»). 88 = 72 scrim + 16 gap (which also
+              swallows the row's own 2px margin + 1px divider), lifting the LAST row's full height clear of
+              the scrim/nav with breathing room. Widescreen has no nav/scrim, so the extra inset there is
+              just harmless tail space. ServerListView hosts BOTH layouts → one inset covers both.  -->
+        <ScrollViewer IsVisible="{Binding HasServers}" Padding="0,0,0,88">
             <ItemsControl ItemsSource="{Binding ServerGroups}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vms:HomeServerGroup">
@@ -175,7 +176,12 @@
                                                             VerticalAlignment="Center"
                                                             Orientation="Horizontal">
                                                             <Border Classes="ProtocolChip">
+                                                                <!--  BUG 2: center the glyph INSIDE the padded chip. Without this the chip
+                                                                      text drew at the top of its stretched box, so «VLESS» sat higher than
+                                                                      the vertically-centred «· TCP · REALITY» caption (mismatched baselines).
+                                                                      Centred, the chip's optical middle matches the caption's → one line.  -->
                                                                 <TextBlock
+                                                                    VerticalAlignment="Center"
                                                                     Classes="Chip"
                                                                     Foreground="{DynamicResource Brush.Accent}"
                                                                     Text="{Binding Converter={StaticResource ConfigTypeToProtocol}}" />

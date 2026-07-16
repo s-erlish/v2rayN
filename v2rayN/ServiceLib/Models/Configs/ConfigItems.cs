@@ -197,8 +197,11 @@ public class SpeedTestItem
 
     // departament: selected latency-probe method for the server list, mirroring Android
     // (Realping = реальная задержка через ядро / Tcping = TCP / Httping = HTTP / Icmping = ICMP).
-    // Persisted as the method key; default "Realping". Read by the ping trigger + Settings «Пинг» row.
-    public string? PingMethod { get; set; }
+    // Persisted as the method key. Default = Tcping so a FRESH install pings successfully out of the box
+    // (a TCP handshake needs no running core — Realping-through-the-core returns «—» while disconnected).
+    // Read by the ping trigger + Settings «Пинг» row. (Realping additionally falls back to a TCP probe
+    // when the core can't be started — see SpeedtestService.RunRealPingAsync.)
+    public string? PingMethod { get; set; } = nameof(ESpeedActionType.Tcping);
 }
 
 [Serializable]

@@ -40,6 +40,11 @@ public sealed partial class L : INotifyPropertyChanged
     // Guards the "log a missing key only once" behaviour.
     private readonly HashSet<string> _missingLogged = new(StringComparer.Ordinal);
 
+    // Live observers created by {loc:T} bindings — one per open binding. Held by WEAK reference so the
+    // long-lived singleton never pins a control (see the Observe(...) region for the full rationale).
+    private readonly List<(string Key, WeakReference<IObserver<string>> Ref)> _observers = new();
+    private readonly object _observersLock = new();
+
     /// <summary>Current UI language code (<c>ru</c>/<c>en</c>). Initialized from the saved config.</summary>
     public string CurrentLang { get; private set; } = "ru";
 
@@ -203,7 +208,15 @@ public sealed partial class L : INotifyPropertyChanged
             // Unknown culture name — leave the current UI culture unchanged.
         }
 
-        // "Item[]" is the WPF/Avalonia convention that invalidates every indexer binding.
+        // Push the new translation to every open {loc:T} binding. This is the mechanism that makes the
+        // static XAML labels re-render live — see the Observe(...) region for why an observable is used
+        // instead of the (Avalonia-inert) "Item[]" indexer-invalidation convention.
+        PushToObservers();
+
+        // Kept for backward compatibility with any INotifyPropertyChanged consumer. Note: Avalonia 12's
+        // binding system does NOT act on the WPF-era "Item[]" indexer-refresh convention (its INPC
+        // accessor only matches the exact property name, or an empty/null name), so this alone never
+        // refreshed the {loc:T} bindings — that is what PushToObservers() above now fixes.
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs("Item[]"));
         LanguageChanged?.Invoke(this, EventArgs.Empty);
     }
@@ -211,6 +224,112 @@ public sealed partial class L : INotifyPropertyChanged
     /// <summary>Ensure the singleton exists (constructs it from config). Call once at startup,
     /// before the first window builds, so the first frame renders in the persisted language.</summary>
     public static void Init() => _ = Instance;
+
+    // ──────────────────────────── Live per-key observable ────────────────────────────
+    //
+    // ROOT CAUSE of the "English switch leaves labels in Russian" bug:
+    // The old {loc:T Key} bound to L.Instance[Key] (a reflection indexer binding) and SetLanguage raised
+    // PropertyChanged("Item[]"). That is the WPF convention for "all indexers changed", but Avalonia 12's
+    // INPC accessor (InpcPropertyAccessorPlugin) only re-reads when the raised property name is empty/null
+    // or exactly matches the accessor's name ("Item") — it does NOT special-case "Item[]". So the open
+    // indexer bindings never re-pulled, and every static {loc:T} label stayed frozen in the startup
+    // language. (Strings re-applied imperatively via LanguageChanged updated fine, matching the report.)
+    //
+    // FIX: {loc:T Key} now binds to a per-key IObservable<string> (via the LocExtension stream binding).
+    // The observable emits the current translation on subscribe and again on every SetLanguage, and
+    // Avalonia natively pushes each emitted value straight to the target property (Text, Header, Content,
+    // ToolTip.Tip, Watermark, …) with zero per-view wiring.
+    //
+    // LEAK SAFETY: the singleton is long-lived and there are hundreds of bindings, so it must never hold a
+    // strong reference to a binding/control. Each subscriber is stored by WeakReference; SetLanguage
+    // prunes dead entries, and disposing the subscription (which Avalonia does when a binding is replaced)
+    // unregisters it eagerly. Net effect: controls stay collectable and the registry self-cleans.
+
+    /// <summary>
+    /// A per-key live string stream: emits <c>this[key]</c> immediately on subscribe and again on every
+    /// <see cref="SetLanguage"/>. Consumed by the <see cref="T"/> markup extension so every open
+    /// <c>{loc:T Key}</c> binding updates the instant the language changes.
+    /// </summary>
+    public IObservable<string> Observe(string key) => new KeyObservable(this, key);
+
+    private void RegisterObserver(string key, IObserver<string> observer)
+    {
+        lock (_observersLock)
+        {
+            _observers.Add((key, new WeakReference<IObserver<string>>(observer)));
+        }
+    }
+
+    private void UnregisterObserver(IObserver<string> observer)
+    {
+        lock (_observersLock)
+        {
+            _observers.RemoveAll(o => !o.Ref.TryGetTarget(out var t) || ReferenceEquals(t, observer));
+        }
+    }
+
+    private void PushToObservers()
+    {
+        List<(string Key, WeakReference<IObserver<string>> Ref)> snapshot;
+        lock (_observersLock)
+        {
+            // Drop entries whose control/binding has been collected, then snapshot so we can notify
+            // outside the lock (observer callbacks re-enter the target property setters).
+            _observers.RemoveAll(o => !o.Ref.TryGetTarget(out _));
+            snapshot = _observers.ToList();
+        }
+
+        foreach (var (key, weak) in snapshot)
+        {
+            if (weak.TryGetTarget(out var observer))
+            {
+                observer.OnNext(this[key]);
+            }
+        }
+    }
+
+    /// <summary>Per-key observable. Kept tiny and allocation-light — one instance per <c>{loc:T}</c> binding.</summary>
+    private sealed class KeyObservable : IObservable<string>
+    {
+        private readonly L _owner;
+        private readonly string _key;
+
+        public KeyObservable(L owner, string key)
+        {
+            _owner = owner;
+            _key = key;
+        }
+
+        public IDisposable Subscribe(IObserver<string> observer)
+        {
+            // Immediate value so the target renders correctly on first layout, then track it (weakly)
+            // for future language switches.
+            observer.OnNext(_owner[_key]);
+            _owner.RegisterObserver(_key, observer);
+            return new Unsubscriber(_owner, observer);
+        }
+
+        private sealed class Unsubscriber : IDisposable
+        {
+            private readonly L _owner;
+            private IObserver<string>? _observer;
+
+            public Unsubscriber(L owner, IObserver<string> observer)
+            {
+                _owner = owner;
+                _observer = observer;
+            }
+
+            public void Dispose()
+            {
+                if (_observer is not null)
+                {
+                    _owner.UnregisterObserver(_observer);
+                    _observer = null;
+                }
+            }
+        }
+    }
 
     private void LogMissing(string key)
     {

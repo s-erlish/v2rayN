@@ -24,7 +24,30 @@
     WindowStartupLocation="CenterScreen"
     mc:Ignorable="d">
 
-    <!--  Кнопки окна (min/max/close) в стиле Incy: прозрачные, hover SurfaceHigh; close hover красный.  -->
+    <!--  Мягкая close-заливка (тема-верная). Ховер «крестика» больше НЕ заливается неон-акцентом
+          Brush.Red (#F04452) на всю пилюлю — это и был «ужасный красный бокс». Вместо него приглушённый
+          ГЛУБОКИЙ красный, вписанный в chrome (как caption-close в Win11), с белым глифом; pressed на шаг
+          темнее. В покое фон прозрачный (как min/max). Ключи резолвятся по ThemeVariant → dark/light/mono
+          корректны (mono/AMOLED строится поверх Dark).  -->
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="Brush.CloseHover" Color="#C43843" />
+                    <SolidColorBrush x:Key="Brush.ClosePressed" Color="#A62C36" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="Brush.CloseHover" Color="#C42B32" />
+                    <SolidColorBrush x:Key="Brush.ClosePressed" Color="#A31F26" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+            <!--  Глиф «X» поверх красной заливки — чистый белый в обеих темах (заливка достаточно тёмная).  -->
+            <SolidColorBrush x:Key="Brush.OnClose" Color="#FFFFFF" />
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <!--  Кнопки окна (min/max/close) в стиле Incy: прозрачные, hover — min/max subtle darken, close —
+          мягкая глубокая-красная заливка + белый глиф (см. Window.Resources выше).  -->
     <Window.Styles>
         <Style Selector="Button.WinBtn">
             <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
@@ -59,8 +82,29 @@
         <Style Selector="Button.WinBtn:pointerover Border.WinBtnBg">
             <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
         </Style>
+        <!--  Close: мягкая глубокая-красная заливка на ховере, на шаг темнее на нажатии.  -->
         <Style Selector="Button.WinBtn.close:pointerover Border.WinBtnBg">
-            <Setter Property="Background" Value="{DynamicResource Brush.Red}" />
+            <Setter Property="Background" Value="{DynamicResource Brush.CloseHover}" />
+        </Style>
+        <Style Selector="Button.WinBtn.close:pressed Border.WinBtnBg">
+            <Setter Property="Background" Value="{DynamicResource Brush.ClosePressed}" />
+        </Style>
+        <!--  Глиф «X»: в покое приглушён (как min/max), на ховере/нажатии — белый поверх красного.
+              Стиль (а не local value), поэтому у Path НЕ должно быть инлайн-Stroke — иначе он победит.
+              BrushTransition гасит любое мерцание при смене цвета глифа.  -->
+        <Style Selector="Path.CloseGlyph">
+            <Setter Property="Stroke" Value="{DynamicResource Brush.OnSurfaceVariant}" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Stroke" Duration="0:0:0.12" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Button.WinBtn.close:pointerover Path.CloseGlyph">
+            <Setter Property="Stroke" Value="{DynamicResource Brush.OnClose}" />
+        </Style>
+        <Style Selector="Button.WinBtn.close:pressed Path.CloseGlyph">
+            <Setter Property="Stroke" Value="{DynamicResource Brush.OnClose}" />
         </Style>
 
         <!--  ==================== Свёртка нав-рейла ====================
@@ -74,12 +118,13 @@
                   на месте, без смещения.
               В .lite (reduced-motion) переходы обнуляются — состояние переключается мгновенно.  -->
 
-        <!--  Кнопка-переключатель рейла: слим 30×30, круглый hover, press-scale.
-              Bug3 (мерцание на hover): press-scale и его transition ПЕРЕНЕСЕНЫ на ВНУТРЕННИЙ Border
-              (чисто визуальная подложка), а НЕ на саму кнопку. Раньше scale(0.92) на самой кнопке менял
-              её хит-бокс, из-за чего :pointerover у границы «дребезжал» (то входит, то выходит → hover-
-              фон мигал). Теперь хит-область кнопки фиксирована 30×30 (Background=Transparent, хит-тестится),
-              а сжимается только подложка — состояние hover стабильно, без мерцания.  -->
+        <!--  Кнопка-переключатель рейла: слим 30×30. БЕЗ ФОНА ВООБЩЕ — ни в покое, ни на ховере,
+              ни на нажатии (владелец: никакого фон-бокса под шевроном).
+              Bug3 (мерцание на hover) устранено полностью: hover больше НЕ красит никакой фон —
+              единственная реакция на ховер = ГЛИФ ТЕМНЕЕТ (Stroke → Brush.OnSurfaceVariantHover, см. ниже).
+              Смена цвета глифа не трогает границы элемента, поэтому :pointerover у края НЕ «дребезжит»
+              (нет входа/выхода хит-теста → нет мигания). Press-scale живёт на ВНУТРЕННЕЙ подложке
+              (Border.WinBtnBg, фикс. 30×30), а не на самой кнопке — хит-область кнопки неизменна.  -->
         <Style Selector="Button.RailToggle">
             <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
             <Setter Property="Width" Value="30" />
@@ -93,22 +138,32 @@
             <Setter Property="VerticalContentAlignment" Value="Stretch" />
             <Setter Property="Cursor" Value="Hand" />
         </Style>
-        <!--  Подложка: круглый hover + press-scale ОТ ЦЕНТРА. Origin «50%,50%» = 0.5·W,0.5·H (относительный);
-              «0.5,0.5» в этой сборке трактуется как 0.5px ≈ угол → масштаб «проваливался» из угла. Обе
-              анимации (RenderTransform press + Background hover) держим ЗДЕСЬ, плавные, не конфликтуют с
-              хит-тестом кнопки (эта styled-строка перекрывает Transitions базового Border.WinBtnBg).  -->
+        <!--  Гасим hover-тинт темы Semi: ContentPresenter прозрачен в КАЖДОМ состоянии (rest/hover/press).
+              Без этого BorderlessButton рисовал серый бокс-фон на ховере (как у Button.NavRailItem).  -->
+        <Style Selector="Button.RailToggle /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="Button.RailToggle:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="Button.RailToggle:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <!--  Внутренняя подложка: НЕСЁТ ТОЛЬКО press-scale ОТ ЦЕНТРА (origin 50%,50% = 0.5·W,0.5·H).
+              Фон всегда прозрачен (никакого hover-бокса). Транзишен ТОЛЬКО на RenderTransform —
+              нет BrushTransition фона, который мог бы осциллировать/мигать.  -->
         <Style Selector="Button.RailToggle Border.WinBtnBg">
+            <Setter Property="Background" Value="Transparent" />
             <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill}" />
             <Setter Property="RenderTransformOrigin" Value="50%,50%" />
             <Setter Property="Transitions">
                 <Transitions>
                     <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" />
-                    <BrushTransition Property="Background" Duration="0:0:0.12" />
                 </Transitions>
             </Setter>
         </Style>
         <Style Selector="Button.RailToggle:pointerover Border.WinBtnBg">
-            <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
+            <Setter Property="Background" Value="Transparent" />
         </Style>
         <Style Selector="Button.RailToggle:pressed Border.WinBtnBg">
             <Setter Property="RenderTransform" Value="scale(0.92)" />
@@ -116,8 +171,11 @@
 
         <!--  Шеврон переключателя: по умолчанию ‹ (свернуть). Крутится вокруг своего центра.
               Центр — относительный «50%,50%»: «0.5,0.5» в этой сборке трактуется как 0.5px ≈ угол,
-              и разворот на 180° уводил глиф ЗА пределы кнопки → шеврон «исчезал» в свёрнутом виде.  -->
+              и разворот на 180° уводил глиф ЗА пределы кнопки → шеврон «исчезал» в свёрнутом виде.
+              Цвет глифа задаётся ЗДЕСЬ (не инлайном на Path), чтобы :pointerover-стиль мог его
+              перекрыть — локальное значение на Path перебивало бы стилевой сеттер ховера.  -->
         <Style Selector="Path.RailToggleGlyph">
+            <Setter Property="Stroke" Value="{DynamicResource Brush.OnSurfaceVariant}" />
             <Setter Property="RenderTransformOrigin" Value="50%,50%" />
             <Setter Property="RenderTransform" Value="rotate(0deg)" />
             <Setter Property="Transitions">
@@ -127,8 +185,14 @@
                             <SplineEasing X1="0.22" Y1="1" X2="0.36" Y2="1" />
                         </TransformOperationsTransition.Easing>
                     </TransformOperationsTransition>
+                    <BrushTransition Property="Stroke" Duration="0:0:0.12" />
                 </Transitions>
             </Setter>
+        </Style>
+        <!--  ЕДИНСТВЕННАЯ реакция на hover: глиф темнеет на шаг (Stroke → OnSurfaceVariantHover).
+              Меняется только цвет — границы Path неизменны, hover стабилен, без мерцания.  -->
+        <Style Selector="Button.RailToggle:pointerover Path.RailToggleGlyph">
+            <Setter Property="Stroke" Value="{DynamicResource Brush.OnSurfaceVariantHover}" />
         </Style>
         <!--  Свёрнуто → шеврон 180° = › (развернуть).  -->
         <Style Selector="Grid.railCollapsed Path.RailToggleGlyph">
@@ -290,9 +354,9 @@
                                     Height="11"
                                     HorizontalAlignment="Center"
                                     VerticalAlignment="Center"
+                                    Classes="CloseGlyph"
                                     Data="M0.5,0.5 L10.5,10.5 M10.5,0.5 L0.5,10.5"
                                     Stretch="None"
-                                    Stroke="{DynamicResource Brush.OnSurface}"
                                     StrokeLineCap="Round"
                                     StrokeThickness="1.4" />
                             </Border>
@@ -421,7 +485,6 @@
                                                 Classes="RailToggleGlyph"
                                                 Data="M13,4 L7,10 L13,16"
                                                 Stretch="None"
-                                                Stroke="{DynamicResource Brush.OnSurfaceVariant}"
                                                 StrokeJoin="Round"
                                                 StrokeLineCap="Round"
                                                 StrokeThickness="1.6" />
@@ -436,10 +499,12 @@
                               поэтому фон не «рвётся» на кроссфейде.  -->
                         <Panel x:Name="contentArea">
                             <Border Background="{DynamicResource Brush.HomeGradient}" />
-                            <!--  PageTransition назначается в code-behind: RiseFadePageTransition
-                                  (§A.4 — кроссфейд + подъём входящей страницы translateY 8→0, OutQuint);
-                                  под .lite ставится null (мгновенный своп). Один источник — без инлайна.  -->
-                            <TransitioningContentControl x:Name="contentHost" Background="Transparent" />
+                            <!--  Keep-alive хост вкладок: ВСЕ вкладки живут детьми этого Panel постоянно
+                                  (measured/arranged), а смена = дешёвая композитная анимация Opacity+
+                                  TranslateY на УЖЕ разложенной вью — БЕЗ detach/reattach и first-layout
+                                  под кадром перехода (корень лага смены вкладок). Rise+fade §A.4 крутит
+                                  code-behind (SwapContent); под .lite — мгновенный своп.  -->
+                            <Panel x:Name="contentHost" Background="Transparent" />
 
                             <!--  ==================== Bug5: скрим низа контента (компакт) ====================
                                   Компактная раскладка: контент раньше обрывался резкой линией над нижней

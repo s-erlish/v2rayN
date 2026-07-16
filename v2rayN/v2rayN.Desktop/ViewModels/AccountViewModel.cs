@@ -499,7 +499,24 @@ public class AccountViewModel : MyReactiveObject
         var cts = new CancellationTokenSource();
         _telegramCts = cts;
         TwoFaTempToken = null;
-        CurrentLoginState = new LoginState.Idle();
+
+        // Enter the awaiting-confirmation state SYNCHRONOUSLY — before the first LoginView render and
+        // before the CreateTelegramLoginToken network round-trip below — so the Telegram login path never
+        // paints the method-select/credentials block. The MainWindow Telegram entry runs OpenLogin()
+        // (creates + shows LoginView) and this command back-to-back with no dispatcher yield; because the
+        // view observes CurrentLoginState inline on the UI thread, the awaiting state set here lands before
+        // the sub-page's first layout, so LoginView shows the AwaitingBlock (spinner + «Ожидаем
+        // подтверждения…») from the very first frame — never the MethodBlock. Previously this set
+        // LoginState.Idle here, so the method block stayed on screen for the whole ~round-trip until the
+        // real AwaitingTelegram arrived, which is the flash the owner reported.
+        //
+        // Placeholder = Polling with an EMPTY deep link: it maps to the same awaiting UI as AwaitingTelegram
+        // (LoginView treats AwaitingTelegram and Polling identically) but carries no link, so no browser tab
+        // opens before the real token/deep link is ready. We also clear TelegramDeepLink so the now-visible
+        // «Открыть Telegram» button cannot reopen a stale link from a previous attempt until the fresh link
+        // lands (the real AwaitingTelegram → ApplyLoginState sets TelegramDeepLink and opens the browser once).
+        TelegramDeepLink = null;
+        CurrentLoginState = new LoginState.Polling(string.Empty);
 
         await _authManager.BeginTelegramLogin(state => RunOnUi(() => ApplyLoginState(state)), cts.Token);
     }

@@ -16,12 +16,14 @@
         <CornerRadius x:Key="Radius.Button">16</CornerRadius>
 
         <!-- ==================================================================== -->
-        <!--  Incy-скроллбар (замена уродливого дефолта Semi). Тонкая оверлей-      -->
-        <!--  полоса: пилюля-ползунок 6px в покое → 8px при наведении на полосу,    -->
-        <!--  цвет muted OnSurfaceVariant с низкой альфой → ярче на ховере →         -->
-        <!--  Accent при перетаскивании. Без чанковых кнопок-стрелок (line-up/down  -->
-        <!--  не включены в шаблон — они null-safe в ScrollBar.OnApplyTemplate).     -->
-        <!--  Плавность width/opacity 150мс Ease.Standard, мгновенно под .lite.      -->
+        <!--  Incy-скроллбар (замена уродливого дефолта Semi). АВТО-СКРЫТИЕ оверлей: -->
+        <!--  в покое ползунок НЕВИДИМ (opacity 0). При наведении курсора на область -->
+        <!--  скролла / прокрутке ScrollBar получает :expanded (ScrollViewer.Allow-   -->
+        <!--  AutoHide=True, глобальный стиль ниже) → проявляется пилюля-ползунок 6px -->
+        <!--  @ alpha 0.45; прямое наведение на полосу → 8px, ярче (0.8); Accent при  -->
+        <!--  перетаскивании. Без чанковых кнопок-стрелок (line-up/down не включены   -->
+        <!--  в шаблон — они null-safe в ScrollBar.OnApplyTemplate). Плавность width/  -->
+        <!--  opacity 150мс Ease.Standard, мгновенно под .lite (гасится ниже).        -->
         <!--  Тема-зависимо через DynamicResource; применяется глобально ключом       -->
         <!--  {x:Type ScrollBar} (GlobalStyles подключён ПОСЛЕ SemiTheme).            -->
         <!-- ==================================================================== -->
@@ -44,7 +46,8 @@
         <ControlTheme x:Key="Incy.ScrollBarThumb" TargetType="Thumb">
             <Setter Property="Background" Value="{DynamicResource Brush.OnSurfaceVariant}" />
             <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill}" />
-            <Setter Property="Opacity" Value="0.45" />
+            <!--  Покой = невидим; :expanded/ховер/drag проявляют (стили ScrollBar ниже).  -->
+            <Setter Property="Opacity" Value="0" />
             <Setter Property="Template">
                 <ControlTemplate>
                     <Border Background="{TemplateBinding Background}"
@@ -123,6 +126,14 @@
                 <Setter Property="Margin" Value="0,0,0,2" />
             </Style>
 
+            <!--  АВТО-СКРЫТИЕ: :expanded ставит ScrollViewer (AllowAutoHide=True) при
+                  наведении на область скролла ИЛИ прокрутке → пилюля проявляется до alpha
+                  0.45. Свёрнут (нет :expanded) → базовая opacity 0 (ползунок скрыт).
+                  Если вью форсит AllowAutoHide=False, ScrollBar коэрсит IsExpanded=True →
+                  :expanded всегда активен → ползунок постоянно виден (штатный override).  -->
+            <Style Selector="^:expanded /template/ Thumb#thumb">
+                <Setter Property="Opacity" Value="0.45" />
+            </Style>
             <!--  Наведение на полосу → ползунок ярче (более непрозрачный).  -->
             <Style Selector="^:pointerover /template/ Thumb#thumb">
                 <Setter Property="Opacity" Value="0.8" />
@@ -147,7 +158,7 @@
 
     <Style Selector="DataGrid">
         <Setter Property="RowHeight" Value="24" />
-        <Setter Property="ScrollViewer.AllowAutoHide" Value="False" />
+        <Setter Property="ScrollViewer.AllowAutoHide" Value="True" />
     </Style>
 
     <Style Selector="PathIcon">
@@ -157,11 +168,15 @@
     </Style>
 
     <Style Selector="TextBox">
-        <Setter Property="ScrollViewer.AllowAutoHide" Value="False" />
+        <Setter Property="ScrollViewer.AllowAutoHide" Value="True" />
     </Style>
 
+    <!--  Глобально: авто-скрытие для ВСЕХ областей скролла (список серверов,
+          настройки, аккаунт, покупка и т.д.). Ползунок скрыт в покое, проявляется
+          на hover/scroll (оверлей-поведение). Отдельная вью может переопределить
+          локально (AllowAutoHide=False → постоянный ползунок).  -->
     <Style Selector="ScrollViewer">
-        <Setter Property="AllowAutoHide" Value="False" />
+        <Setter Property="AllowAutoHide" Value="True" />
     </Style>
 
     <Style Selector="TabControl">

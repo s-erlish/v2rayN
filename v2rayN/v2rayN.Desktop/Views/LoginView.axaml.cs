@@ -95,9 +95,26 @@ public partial class LoginView : UserControl
         _subscriptions = d;
 
         // Машина состояний входа: idle / awaiting-TG / loading-site / success / error.
+        // ВАЖНО (без-мельканья Telegram-пути): доставляем состояние СИНХРОННО, когда мы уже на UI-потоке,
+        // а не через отложенный ObserveOn. CurrentLoginState всегда меняется на UI-потоке (команды входа
+        // выполняются с UI, а колбэки VM идут через RunOnUi), поэтому инлайн-применение безопасно и
+        // ГАРАНТИРУЕТ, что состояние «ожидание», выставленное СИНХРОННО во время входа через Telegram
+        // (OpenLogin → LoginTelegramCmd в MainWindow, без уступки диспетчеру), применится ДО первой
+        // раскладки/отрисовки суб-страницы — первый кадр уже «ожидание», а не MethodBlock. Отложенный
+        // ObserveOn мог бы позволить XAML-дефолтному MethodBlock отрисоваться на кадр раньше, чем прилетит
+        // «ожидание». Если событие всё же придёт не с UI-потока — маршалим на него (без падения).
         _vm.WhenAnyValue(x => x.CurrentLoginState)
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
-            .Subscribe(ApplyLoginState)
+            .Subscribe(state =>
+            {
+                if (Dispatcher.UIThread.CheckAccess())
+                {
+                    ApplyLoginState(state);
+                }
+                else
+                {
+                    Dispatcher.UIThread.Post(() => ApplyLoginState(state));
+                }
+            })
             .DisposeWith(d);
 
         // Блок 2FA виден, пока бэкенд держит tempToken (паритет onTwoFactor).

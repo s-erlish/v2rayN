@@ -62,18 +62,28 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     // верхнюю; когда стек пуст — хост скрыт и снова видна вкладка/онбординг под ним.
     private readonly List<Control> _subStack = new();
 
-    // Моушен-токены оболочки (§A, 1:1 с RiseFadePageTransition): reveal/press = OutQuint,
+    // Моушен-токены оболочки (§A, общие для смены вкладок и кроссфейдов): reveal/press = OutQuint,
     // двусторонние состояния/кроссфейды = Standard. Индикатор подключения в рейле теперь красится
     // ТЕМА-токенами через класс .on (см. Ellipse.ConnDot в разметке), а не хардкод-hex.
     private static readonly Easing _easeOutQuint = new SplineEasing(0.22, 1, 0.36, 1);
     private static readonly Easing _easeStandard = new SplineEasing(0.2, 0, 0, 1);
+
+    // Токены смены вкладки (§A.4): вход = подъём translateY 8→0 + fade-in (OutQuint 300мс) поверх
+    // выхода = быстрый fade-out (Standard 150мс, короче входа). Только translate+opacity — центр
+    // вращения не при чём, страница не «улетает» из угла.
+    private const double ContentRiseFrom = 8.0;
+    private static readonly TimeSpan ContentEnterDuration = TimeSpan.FromMilliseconds(300);
+    private static readonly TimeSpan ContentExitDuration = TimeSpan.FromMilliseconds(150);
 
     // Токены отмены незавершённой анимации на каждый анимируемый узел (перезапуск отменяет предыдущую).
     private CancellationTokenSource? _subPageAnim;
     private CancellationTokenSource? _shellAnim;
     private CancellationTokenSource? _layoutAnim;
     private CancellationTokenSource? _resizeAnim;   // Bug6: плавная анимация размера окна при тумблере раскладки
+    private CancellationTokenSource? _contentAnim;  // смена вкладки в едином contentHost (rise+fade)
     private Control? _currentShellView;          // текущий видимый оверлей оболочки (для кроссфейда)
+    private Control? _currentContentView;        // текущая видимая вкладка в contentHost (keep-alive своп)
+    private int _contentZ;                       // ZIndex-счётчик: входящая вкладка всегда поверх уходящей
 
     public MainWindow()
     {
@@ -84,10 +94,10 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         // «Облегчённый режим» (reduced-motion) теперь РЕАКТИВЕН: единый источник — MotionState.
         // MainWindow сеет его из конфига и подписывается на изменения; SettingsViewModel двигает флаг
         // live (без рестарта). ApplyMotionMode вешает/снимает класс .lite (обнуляет press/hover/reveal
-        // оболочки через :is(Window).lite + свёртку рейла) и переключает page-transition единого
-        // contentHost: null = мгновенный своп, иначе rise/fade §A.4. Хореографию connect-щита гасит
-        // сам ConnectHeroView по тому же MotionState. Итог: тумблер lite мгновенно ГЛУШИТ ВСЁ движение
-        // (щит, переходы вкладок, page-rise) и так же мгновенно оживляет обратно.
+        // оболочки через :is(Window).lite + свёртку рейла); смену вкладок keep-alive-хоста глушит/оживляет
+        // сам SwapContent по MotionState.IsLite (мгновенный своп vs rise/fade §A.4). Хореографию connect-
+        // щита гасит сам ConnectHeroView по тому же MotionState. Итог: тумблер lite мгновенно ГЛУШИТ ВСЁ
+        // движение (щит, переходы вкладок, page-rise) и так же мгновенно оживляет обратно.
         MotionState.Initialize(_config.UiItem.LiteMode);
         ApplyMotionMode(MotionState.IsLite);
         MotionState.Changed += OnMotionStateChanged;
@@ -139,6 +149,18 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         // изменения ловит подписка в SetupHome. (В дизайне IsStartupLoading=false → обычный путь.)
         _isStartupLoading = _accountVm.IsStartupLoading;
 
+        // Keep-alive: ВСЕ вкладки — постоянные дети contentHost (широкая/компактная «Главная»,
+        // Настройки, Аккаунт). Они всегда в дереве (measured/arranged), скрыты через Opacity/hit-test
+        // (НЕ IsVisible — тот бы гнал повторный layout при показе). Смена вкладки = дешёвый композитный
+        // Opacity+TranslateY на уже разложенной вью → без detach/reattach и без first-layout под кадром
+        // перехода (это и был лаг переключения). ZIndex ставит SwapContent (входящая поверх уходящей).
+        foreach (var v in new Control[] { _homeView, _compactHome, _settingsView, _accountView })
+        {
+            v.Opacity = 0d;
+            v.IsHitTestVisible = false;
+            contentHost.Children.Add(v);
+        }
+
         // Первичная раскладка + вотчер ширины окна. Наблюдаем Bounds окна (ширина клиентской
         // области); при пересечении брейкпоинта раскладка меняется РОВНО один раз (гистерезис).
         ApplyLayoutMode(_compactMode);
@@ -180,7 +202,8 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
             {
                 onboardingView.IsVisible = false;
                 bodyRoot.IsVisible = true;
-                contentHost.Content = preview;
+                contentHost.Children.Add(preview);
+                SwapContent(preview, animate: false);
             }
         }
 
@@ -267,16 +290,83 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     // общие экземпляры, которые ВСЕГДА живут в этом ЕДИНОМ хосте, поэтому смена ширины физически
     // не «перецепляет» живой контрол в другой хост (был краш компакт→Настройки→расширение).
     // «Главная» имеет своё дерево на раскладку (компактное одностолбцовое vs широкое двухколоночное);
-    // ViewFor выбирает нужное по _compactMode — это просто смена Content ОДНОГО хоста, без переноса
-    // между родителями. Отдельной вкладки «Сервера» нет: серверы — часть «Главной».
-    private void ShowTab(AppTab tab)
+    // ViewFor выбирает нужное по _compactMode. Все вкладки — постоянные keep-alive дети ЕДИНОГО хоста;
+    // смена = переключение ВИДИМОЙ поверхности (SwapContent), без переноса между родителями и без
+    // detach/reattach. Отдельной вкладки «Сервера» нет: серверы — часть «Главной».
+    private void ShowTab(AppTab tab, bool animate = true)
     {
         _currentTab = tab;
 
         SetRailActive(tab);
         bottomNav.SetSelected(tab);
 
-        contentHost.Content = ViewFor(tab);
+        SwapContent(ViewFor(tab), animate);
+    }
+
+    // ==================== Keep-alive своп вкладок (rise+fade §A.4) ====================
+    // Все вкладки постоянно реализованы детьми contentHost; здесь только меняем ВИДИМУЮ поверхность
+    // дешёвой композитной анимацией (Opacity + TranslateY) на уже разложенной вью — без detach/reattach
+    // и first-layout под кадром перехода. animate:false — мгновенно (первый показ, своп раскладки);
+    // под .lite — тоже мгновенно (reduced-motion). Rise+fade идентичен прежнему page-transition.
+    private void SwapContent(Control target, bool animate)
+    {
+        var previous = _currentContentView;
+        if (previous == target)
+        {
+            target.Opacity = 1d;
+            target.IsHitTestVisible = true;
+            target.RenderTransform = null;
+            return;
+        }
+        _currentContentView = target;
+
+        target.ZIndex = ++_contentZ;   // входящая ВСЕГДА поверх уходящей → подъём читается корректно
+        target.IsHitTestVisible = true;
+        if (previous != null)
+        {
+            previous.IsHitTestVisible = false;
+        }
+
+        // Мгновенный своп: первый показ (previous == null), reduced-motion (.lite) или своп раскладки.
+        if (!animate || previous is null || MotionState.IsLite)
+        {
+            _contentAnim?.Cancel();
+            target.Opacity = 1d;
+            target.RenderTransform = null;
+            if (previous != null)
+            {
+                previous.Opacity = 0d;
+                previous.RenderTransform = null;
+            }
+            return;
+        }
+
+        _contentAnim?.Cancel();
+        var cts = new CancellationTokenSource();
+        _contentAnim = cts;
+        AnimateContentSwap(target, previous, cts.Token);
+    }
+
+    private async void AnimateContentSwap(Control target, Control previous, CancellationToken ct)
+    {
+        target.Opacity = 0d;
+        // Вход (подъём 8→0 + fade-in, OutQuint) поверх выхода (быстрый fade-out, Standard) — параллельно.
+        var enter = RunTranslateFade(target, TranslateTransform.YProperty, ContentRiseFrom, 0d, 0d, 1d, ContentEnterDuration, _easeOutQuint, ct);
+        var exit = RunFade(previous, previous.Opacity, 0d, ContentExitDuration, _easeStandard, ct);
+        try { await Task.WhenAll(enter, exit); }
+        catch { }
+        if (ct.IsCancellationRequested)
+        {
+            return;
+        }
+        target.Opacity = 1d;
+        target.RenderTransform = null;
+        // Гасим уходящую и чистим transform — только если её снова не выбрали (быстрый обратный своп).
+        if (previous != _currentContentView)
+        {
+            previous.Opacity = 0d;
+            previous.RenderTransform = null;
+        }
     }
 
     // Home разный на раскладку (компакт vs широкая); Настройки/Аккаунт — единые экземпляры.
@@ -373,10 +463,10 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
             contentArea.Opacity = 0d;
         }
 
-        var savedTransition = contentHost.PageTransition;
-        contentHost.PageTransition = null;
-        ShowTab(_currentTab);
-        contentHost.PageTransition = MotionState.IsLite ? null : savedTransition ?? RiseFadePageTransition.Default;
+        // Своп раскладки крутит ТОЛЬКО кроссфейд contentArea (AnimateLayoutSwap); смену дерева «Главной»
+        // делаем мгновенно (animate:false) под уже спрятанным contentArea — без гонки rise/fade вкладки
+        // с рефлоу сетки (Bug6). Keep-alive дети остаются в дереве, переносов родителя по-прежнему нет.
+        ShowTab(_currentTab, animate: false);
 
         // C6: мягкий кроссфейд морфинга раскладки (compact↔wide) поверх мгновенной подмены — маскирует
         // рефлоу дерева. ТОЛЬКО opacity на contentArea (без layout/transform); сквозная подложка-градиент
@@ -429,15 +519,13 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
             {
                 Classes.Add("lite");
             }
-            contentHost.PageTransition = null;
         }
         else
         {
             Classes.Remove("lite");
-            // Смена вкладок «оживает»: входящая страница всплывает (translateY 8→0) с fade-in поверх
-            // кроссфейда (§A.4) — только translate, ничего не «улетает».
-            contentHost.PageTransition = RiseFadePageTransition.Default;
         }
+        // Смену вкладок «оживляет»/глушит сам SwapContent по MotionState.IsLite (rise+fade §A.4 vs
+        // мгновенный своп) — отдельный page-transition единому contentHost больше не нужен (keep-alive).
     }
 
     // Онбординг/суб-страницы — mode-agnostic оверлеи. Пусто (нет подписок) → только онбординг на всю
@@ -1024,7 +1112,7 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     // ==================== Общие аниматоры оболочки (transform+opacity, §A) ====================
     // Все переходы MainWindow строятся из этих двух примитивов: чистый fade и translate+fade (две
     // параллельные анимации на одном визуале — opacity и translate идут разными аниматорами Avalonia,
-    // ровно как в RiseFadePageTransition). FillMode.Forward держит конечный кадр до явного сброса.
+    // ровно как в SwapContent-переходе вкладок). FillMode.Forward держит конечный кадр до сброса.
     private static Task RunFade(Visual target, double fromO, double toO, TimeSpan duration, Easing easing, CancellationToken ct)
     {
         var fade = new Animation
@@ -1230,111 +1318,4 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     }
 
     #endregion UI
-}
-
-// ==================== Переход вкладок: crossfade + подъём 8→0 (§A.4) ====================
-// Кастомный IPageTransition для ЕДИНОГО contentHost: входящая страница всплывает
-// (translateY 8→0) с fade-in ~300мс Ease.OutQuint ПОВЕРХ обычного кроссфейда, а исходящая
-// гаснет быстрее (fade-out 150мс Ease.Standard — выход всегда быстрее входа). Анимируется
-// ТОЛЬКО translate + opacity (никаких scale/rotate) → центр вращения не при чём, страница
-// физически не может «улететь» из угла. Тот же путь, что у встроенного PageSlide
-// (TranslateTransform.Y через keyframes). Под .lite не назначается (MainWindow ctor ставит
-// PageTransition=null) → своп мгновенный, движение полностью выключено.
-internal sealed class RiseFadePageTransition : IPageTransition
-{
-    // Кривые = моушен-токены §A.0 (SplineEasing 1:1 с GlobalResources Ease.OutQuint/Ease.Standard).
-    private static readonly Easing EaseOutQuint = new SplineEasing(0.22, 1, 0.36, 1);
-    private static readonly Easing EaseStandard = new SplineEasing(0.2, 0, 0, 1);
-
-    // Вход (in-fade + подъём) = Dur.Reveal 300мс; выход (out-fade) = 150мс (короче входа).
-    private static readonly TimeSpan EnterDuration = TimeSpan.FromMilliseconds(300);
-    private static readonly TimeSpan ExitDuration = TimeSpan.FromMilliseconds(150);
-    private const double RiseFrom = 8.0;
-
-    public static readonly RiseFadePageTransition Default = new();
-
-    public async Task Start(Visual? from, Visual? to, bool forward, CancellationToken cancellationToken)
-    {
-        if (cancellationToken.IsCancellationRequested)
-        {
-            return;
-        }
-
-        var tasks = new List<Task>();
-
-        // Исходящая: быстрый fade-out (Ease.Standard) — короче входа, без сдвига.
-        if (from != null)
-        {
-            var fadeOut = new Animation
-            {
-                Duration = ExitDuration,
-                Easing = EaseStandard,
-                FillMode = FillMode.Forward,
-                Children =
-                {
-                    new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(Visual.OpacityProperty, 1d) } },
-                    new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(Visual.OpacityProperty, 0d) } },
-                },
-            };
-            tasks.Add(fadeOut.RunAsync(from, cancellationToken));
-        }
-
-        // Входящая: fade-in + подъём translateY 8→0 (OutQuint). Opacity и translate — РАЗДЕЛЬНЫЕ
-        // анимации (разные аниматоры Avalonia), запускаются параллельно на одном визуале.
-        if (to != null)
-        {
-            to.IsVisible = true;
-            to.Opacity = 0d; // known clean start → fade/rise ВСЕГДА видимы, даже для кэш-вью
-
-            var fadeIn = new Animation
-            {
-                Duration = EnterDuration,
-                Easing = EaseOutQuint,
-                FillMode = FillMode.Forward,
-                Children =
-                {
-                    new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(Visual.OpacityProperty, 0d) } },
-                    new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(Visual.OpacityProperty, 1d) } },
-                },
-            };
-
-            var rise = new Animation
-            {
-                Duration = EnterDuration,
-                Easing = EaseOutQuint,
-                FillMode = FillMode.Forward,
-                Children =
-                {
-                    new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(TranslateTransform.YProperty, RiseFrom) } },
-                    new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(TranslateTransform.YProperty, 0d) } },
-                },
-            };
-
-            tasks.Add(fadeIn.RunAsync(to, cancellationToken));
-            tasks.Add(rise.RunAsync(to, cancellationToken));
-        }
-
-        await Task.WhenAll(tasks);
-
-        if (cancellationToken.IsCancellationRequested)
-        {
-            return;
-        }
-
-        // Settle the incoming page fully opaque.
-        if (to != null)
-        {
-            to.Opacity = 1d;
-        }
-
-        // Hide the outgoing page AND restore it to a clean visible state (Opacity 1). Without this a
-        // cached tab left at Opacity 0 by its fade-out would render BLANK the next time it is shown
-        // WITHOUT a transition (e.g. during a layout swap, where we suspend the transition). Restoring
-        // it here is what keeps EVERY tab switch — including the return to «Главная» — consistent.
-        if (from != null)
-        {
-            from.IsVisible = false;
-            from.Opacity = 1d;
-        }
-    }
 }

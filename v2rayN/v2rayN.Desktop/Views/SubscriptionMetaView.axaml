@@ -38,7 +38,7 @@
         <StreamGeometry x:Key="Meta.Support">M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2zM13,19h-2v-2h2v2zM15.07,11.25l-0.9,0.92C13.45,12.9 13,13.5 13,15h-2v-0.5c0,-1.1 0.45,-2.1 1.17,-2.83l1.24,-1.26c0.37,-0.36 0.59,-0.86 0.59,-1.41 0,-1.1 -0.9,-2 -2,-2s-2,0.9 -2,2H8c0,-2.21 1.79,-4 4,-4s4,1.79 4,4c0,0.88 -0.36,1.68 -0.93,2.25z</StreamGeometry>
         <!--  Telegram — бумажный самолётик (send). Устойчивый all-line путь (без арок).  -->
         <StreamGeometry x:Key="Meta.Telegram">M2.01,21L23,12 2.01,3 2,10l15,2 -15,2z</StreamGeometry>
-        <!--  Корзина (ic_delete_24dp) — удалить ЭТУ подписку (деструктив, красный).  -->
+        <!--  Корзина (ic_delete_24dp) — удалить ЭТУ подписку (тихий нейтральный глиф, темнеет на ховере).  -->
         <StreamGeometry x:Key="Meta.Trash">M6,19c0,1.1 0.9,2 2,2h8c1.1,0 2,-0.9 2,-2V7H6v12zM19,4h-3.5l-1,-1h-5l-1,1H5v2h14V4z</StreamGeometry>
     </UserControl.Resources>
 
@@ -63,15 +63,23 @@
             <Setter Property="Width" Value="20" />
             <Setter Property="Height" Value="20" />
         </Style>
-        <!--  «Удалить подписку» — деструктив, но ТИХИЙ в покое: глиф нейтральный (Brush.OnSurfaceVariant,
-              как ping/refresh/pin — задаётся базовым IconButton40) и краснеет (Brush.Red) ТОЛЬКО на
-              наведении/нажатии, сигнализируя разрушительность лишь при намерении. Тема (тёмная/светлая/mono)
-              соблюдается: в покое иконка сливается с прочими действиями, а не «кричит» красным везде.  -->
+        <!--  «Удалить подписку» — деструктив, но ТИХИЙ: глиф нейтральный (Brush.OnSurfaceVariant от
+              IconButton40) в покое и лишь ЗАТЕМНЯЕТСЯ на шаг (Brush.OnSurfaceVariantHover) при
+              наведении/нажатии — ровно как иконочная навигация. НИКАКОГО красного и НИКАКОЙ фон-плитки:
+              разрушительность уже ясна из диалога-подтверждения. Поэтому здесь ещё и ГАСИМ hover-бокс
+              базового IconButton40 (ContentPresenter → Transparent), чтобы темнел САМ глиф, а не всплывала
+              плитка. Серый → mono-безопасен; тема (тёмная/светлая/mono) соблюдается через DynamicResource.  -->
         <Style Selector="Button.MetaDanger:pointerover PathIcon">
-            <Setter Property="Foreground" Value="{DynamicResource Brush.Red}" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariantHover}" />
         </Style>
         <Style Selector="Button.MetaDanger:pressed PathIcon">
-            <Setter Property="Foreground" Value="{DynamicResource Brush.Red}" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariantHover}" />
+        </Style>
+        <Style Selector="Button.MetaDanger:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="Button.MetaDanger:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
         </Style>
         <!--  Компактная трафик-пилюля: трек/заливка 14 (плотнее базовых 16) под узкую карту.  -->
         <Style Selector="Border.TrafficPill">
@@ -193,7 +201,8 @@
                     </Button>
                     <!--  Удалить ЭТУ подписку (SubItem + её серверы) с подтверждением. Заменяет прежний
                           «+» (добавление переехало в верхний-правый угол приложения — другой агент).
-                          Деструктив: красный глиф-корзина; виден лишь у реальной подписки (как обновить/пин).  -->
+                          Тихий нейтральный глиф-корзина (темнеет на ховере, без красного); виден лишь у
+                          реальной подписки (как обновить/пин). Деструктивность ясна из диалога-подтверждения.  -->
                     <Button
                         x:Name="DeleteButton"
                         Classes="IconButton40 Row MetaIcon MetaDanger"
@@ -261,15 +270,19 @@
                         Text="" />
                 </Grid>
 
-                <!--  Announce-баннер подписки (по центру, приглушённый, до 4 строк). Скрыт, если пусто.  -->
+                <!--  Announce-баннер подписки (по центру, приглушённый). Скрыт, если пусто. Переносится и
+                      показывается ЦЕЛИКОМ: карточка — вертикальный StackPanel без фикс-высоты, поэтому
+                      растёт под текст. Прежний MaxLines=4 + многоточие обрезали промо в компактной ширине
+                      (~372): первая строка переносится на две, и «@departamentvpn» уезжал за нижний край.
+                      Теперь без ограничения строк и без троеточия — провайдерский текст виден полностью
+                      в любой ширине и в любом состоянии (свёрнуто/развёрнуто).  -->
                 <TextBlock
                     x:Name="AnnounceText"
                     Margin="0,8,0,0"
                     Classes="Caption"
-                    MaxLines="4"
                     Text=""
                     TextAlignment="Center"
-                    TextTrimming="CharacterEllipsis"
+                    TextTrimming="None"
                     TextWrapping="Wrap" />
 
                 <!--  Нижняя строка: тональная «Поддержка» слева + Telegram справа (противоположные углы).

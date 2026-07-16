@@ -462,8 +462,12 @@
                         Orientation="Horizontal"
                         Spacing="8">
                         <Border Classes="ProtocolChip">
+                            <!--  BUG 2: center the glyph inside the padded chip so «VLESS» shares the
+                                  optical middle of the vertically-centred «· TCP · REALITY» transport
+                                  caption (без этого чип-текст рисовался у верха бокса → разные базовые).  -->
                             <TextBlock
                                 x:Name="ServerProtocol"
+                                VerticalAlignment="Center"
                                 Classes="Chip"
                                 Foreground="{DynamicResource Brush.Accent}"
                                 Text="" />

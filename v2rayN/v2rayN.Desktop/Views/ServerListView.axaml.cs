@@ -589,20 +589,49 @@ public partial class ServerListView : UserControl
                 return;
             }
 
+            //  COLLAPSE-SMOOTHNESS: the viewport Height animates TOGETHER with the rows' composited
+            //  opacity/translate (not touched once + snapped). Previously collapse froze the height for the
+            //  whole run and only dropped it to 0 in the finally, so the rows faded but the empty gap lingered
+            //  190ms then closed in one instant jump — that read as a hard "snap", no smooth hide. Now we
+            //  tween Height 0→natural on expand and natural→0 on collapse over the same 190ms OutQuint, so the
+            //  list below slides open/closed in step with the fade. It is a single group's container height
+            //  for 190ms (bounded), and it degrades safely: if we can't get a concrete pixel height we skip
+            //  the height tween and just fade the rows (auto height), exactly as before.
+            double fromH = 0, toH = 0;
+            bool animateHeight;
             if (expand)
             {
-                // Reserve the natural height in a SINGLE layout pass, host + clip, then fade/slide the rows in.
                 reveal.IsVisible = true;
                 reveal.Opacity = 1;
                 var target = MeasureRevealHeight(reveal);
-                reveal.Height = target > 0 ? target : double.NaN;
+                if (target > 0)
+                {
+                    fromH = 0;
+                    toH = target;
+                    animateHeight = true;
+                    reveal.Height = 0; //  start closed — the height tween opens it to `target`.
+                }
+                else
+                {
+                    animateHeight = false;
+                    reveal.Height = double.NaN; //  can't measure → auto height, fade rows only.
+                }
             }
             else
             {
-                // Freeze the current height so the viewport doesn't reflow while the rows fade/slide out; the
-                // space is snapped closed once (in the finally) after the composited animation completes.
                 var current = reveal.Bounds.Height;
-                reveal.Height = current > 0 ? current : reveal.Height;
+                if (current > 0)
+                {
+                    fromH = current;
+                    toH = 0;
+                    animateHeight = true;
+                    reveal.Height = current; //  freeze at the live height — the tween closes it to 0.
+                }
+                else
+                {
+                    animateHeight = false;
+                    // No live height to tween from → leave as-is; the finally snaps it closed.
+                }
             }
 
             var cts = new CancellationTokenSource();
@@ -648,9 +677,41 @@ public partial class ServerListView : UserControl
                 },
             };
 
+            //  Height tween on the reveal container itself (Layoutable.Height), same 190ms OutQuint curve,
+            //  run CONCURRENTLY with the row crossfade off the SAME token so a superseding toggle cancels
+            //  both together. FillMode.Forward holds the end height until the finally sets the resting state.
+            Animation? heightAnim = animateHeight
+                ? new Animation
+                {
+                    Duration = TimeSpan.FromMilliseconds(RevealSlideMs),
+                    Easing = new SplineEasing { X1 = 0.22, Y1 = 1, X2 = 0.36, Y2 = 1 },
+                    FillMode = FillMode.Forward,
+                    Children =
+                    {
+                        new KeyFrame
+                        {
+                            Cue = new Cue(0d),
+                            Setters = { new Setter(Control.HeightProperty, fromH) },
+                        },
+                        new KeyFrame
+                        {
+                            Cue = new Cue(1d),
+                            Setters = { new Setter(Control.HeightProperty, toH) },
+                        },
+                    },
+                }
+                : null;
+
             try
             {
-                await anim.RunAsync(inner, token);
+                if (heightAnim is null)
+                {
+                    await anim.RunAsync(inner, token);
+                }
+                else
+                {
+                    await Task.WhenAll(anim.RunAsync(inner, token), heightAnim.RunAsync(reveal, token));
+                }
             }
             catch (OperationCanceledException)
             {

@@ -35,6 +35,11 @@ public partial class App : Application
                 // (ru/en) и все {loc:T} биндинги открываются уже правильными. Живое переключение
                 // без перезапуска — см. L.SetLanguage.
                 L.Init();
+
+                // Remnawave HWID: send the same stable per-machine device id the account API uses
+                // (X-HWID) on every subscription GET, so a panel with HWID device-limit enabled serves
+                // the real server list instead of the «Приложение не поддерживается» placeholder.
+                ServiceLib.Global.SubscriptionHwidProvider = () => v2rayN.Desktop.Account.AuthTokenStore.DeviceId();
             }
 
             var mainWindowViewModel = new MainWindowViewModel();

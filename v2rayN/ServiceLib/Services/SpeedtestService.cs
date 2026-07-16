@@ -240,12 +240,20 @@ public class SpeedtestService(Config config, Func<SpeedTestResult, Task> updateF
     private async Task<bool> RunRealPingAsync(List<ServerTestItem> selecteds, string exitLoopKey)
     {
         ProcessService processService = null;
+        // departament: snapshot each node's REAL server address/port BEFORE GenerateClientSpeedtestConfig
+        // rewrites ServerTestItem.Port to a local inbound. If the test core can't be started (e.g.
+        // «Реальная задержка» chosen from a fresh start / while disconnected), we probe these originals
+        // with a direct TCP handshake so the row still shows a latency value instead of «—»
+        // (graceful Realping→Tcping fallback — ping works out of the box).
+        var realTargets = selecteds.ToDictionary(it => it, it => (it.Address, it.Port));
         try
         {
             processService = await CoreManager.Instance.LoadCoreConfigSpeedtest(selecteds);
             if (processService is null)
             {
-                return false;
+                // Core not running / config could not be built → TCP-handshake fallback, then report done.
+                await RunRealPingTcpFallbackAsync(selecteds, realTargets, exitLoopKey);
+                return true;
             }
             await Task.Delay(1000);
 
@@ -282,6 +290,45 @@ public class SpeedtestService(Config config, Func<SpeedTestResult, Task> updateF
             }
         }
         return true;
+    }
+
+    // departament: Realping→Tcping graceful fallback. When the speedtest core can't be started, probe
+    // each node's real address/port with the SAME TCP handshake as Tcping (GetTcpingTime) so «Реальная
+    // задержка» still returns a value while disconnected. No AllowTest gate — that flag is only set while
+    // BUILDING the (here-absent) core config, so we probe every node that carries a real address/port.
+    private async Task RunRealPingTcpFallbackAsync(List<ServerTestItem> selecteds, Dictionary<ServerTestItem, (string? Address, int Port)> realTargets, string exitLoopKey)
+    {
+        List<Task> tasks = [];
+        foreach (var it in selecteds)
+        {
+            if (ShouldStopTest(exitLoopKey))
+            {
+                return;
+            }
+
+            var target = realTargets.GetValueOrDefault(it);
+            if (target.Address.IsNullOrEmpty() || target.Port <= 0)
+            {
+                await UpdateFunc(it.IndexId, ResUI.SpeedtestingSkip);
+                continue;
+            }
+
+            tasks.Add(Task.Run(async () =>
+            {
+                try
+                {
+                    var responseTime = await GetTcpingTime(target.Address, target.Port);
+                    ProfileExManager.Instance.SetTestDelay(it.IndexId, responseTime);
+                    await UpdateFunc(it.IndexId, responseTime.ToString());
+                }
+                catch (Exception ex)
+                {
+                    Logging.SaveLog(_tag, ex);
+                }
+            }));
+        }
+
+        await Task.WhenAll(tasks);
     }
 
     private async Task RunUdpTestBatchAsync(List<ServerTestItem> lstSelected, string exitLoopKey, int pageSize = 0)
