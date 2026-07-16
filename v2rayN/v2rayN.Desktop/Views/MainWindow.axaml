@@ -18,7 +18,7 @@
     Design.DataContext="{x:Static dd:DesignData.MainWindow}"
     WindowDecorations="None"
     FontFamily="{DynamicResource Font.Grotesk}"
-    Icon="/Assets/NotifyIcon1.ico"
+    Icon="/Assets/NotifyShieldOn.ico"
     ShowInTaskbar="True"
     WindowStartupLocation="CenterScreen"
     mc:Ignorable="d">
@@ -27,8 +27,8 @@
     <Window.Styles>
         <Style Selector="Button.WinBtn">
             <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
-            <Setter Property="Width" Value="40" />
-            <Setter Property="Height" Value="24" />
+            <Setter Property="Width" Value="44" />
+            <Setter Property="Height" Value="22" />
             <Setter Property="Padding" Value="0" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
@@ -61,6 +61,103 @@
         <Style Selector="Button.WinBtn.close:pointerover Border.WinBtnBg">
             <Setter Property="Background" Value="{DynamicResource Brush.Red}" />
         </Style>
+
+        <!--  ==================== Свёртка нав-рейла ====================
+              Кнопка внизу рейла (btnRailToggle) сворачивает/разворачивает ЛЕВУЮ навигацию
+              (раньше прятала окно в трей — убрано; трей живёт в App.axaml + title-bar «мин»).
+              Состоянием управляет класс .railCollapsed на shellRoot (ставит code-behind):
+                • navItems (StackPanel вкладок) едет Width 76→0 + Opacity 1→0 (OutQuint 200мс),
+                  ClipToBounds режет 76-пиксельные пункты, столбец Auto рефлоит контент;
+                • шеврон разворачивается на 180° вокруг СОБСТВЕННОГО центра (RenderTransformOrigin
+                  0.5,0.5 на самом Path, НЕ на кейфрейме): ‹ (свернуть) ⇄ › (развернуть) — вращение
+                  на месте, без смещения.
+              В .lite (reduced-motion) переходы обнуляются — состояние переключается мгновенно.  -->
+
+        <!--  Кнопка-переключатель рейла: слим 30×30, круглый hover, press-scale.  -->
+        <Style Selector="Button.RailToggle">
+            <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
+            <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
+            <Setter Property="Width" Value="30" />
+            <Setter Property="Height" Value="30" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Stretch" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Button.RailToggle:pressed">
+            <Setter Property="RenderTransform" Value="scale(0.92)" />
+        </Style>
+        <Style Selector="Button.RailToggle Border.WinBtnBg">
+            <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill}" />
+        </Style>
+        <Style Selector="Button.RailToggle:pointerover Border.WinBtnBg">
+            <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
+        </Style>
+
+        <!--  Шеврон переключателя: по умолчанию ‹ (свернуть). Крутится вокруг своего центра.  -->
+        <Style Selector="Path.RailToggleGlyph">
+            <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
+            <Setter Property="RenderTransform" Value="rotate(0deg)" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.2">
+                        <TransformOperationsTransition.Easing>
+                            <SplineEasing X1="0.22" Y1="1" X2="0.36" Y2="1" />
+                        </TransformOperationsTransition.Easing>
+                    </TransformOperationsTransition>
+                </Transitions>
+            </Setter>
+        </Style>
+        <!--  Свёрнуто → шеврон 180° = › (развернуть).  -->
+        <Style Selector="Grid.railCollapsed Path.RailToggleGlyph">
+            <Setter Property="RenderTransform" Value="rotate(180deg)" />
+        </Style>
+
+        <!--  Столбец вкладок: развёрнут 76, ClipToBounds; плавная свёртка ширины/непрозрачности.  -->
+        <Style Selector="StackPanel.RailItems">
+            <Setter Property="Width" Value="76" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Width" Duration="0:0:0.2">
+                        <DoubleTransition.Easing>
+                            <SplineEasing X1="0.22" Y1="1" X2="0.36" Y2="1" />
+                        </DoubleTransition.Easing>
+                    </DoubleTransition>
+                    <DoubleTransition Property="Opacity" Duration="0:0:0.16" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Grid.railCollapsed StackPanel.RailItems">
+            <Setter Property="Width" Value="0" />
+            <Setter Property="Opacity" Value="0" />
+            <Setter Property="IsHitTestVisible" Value="False" />
+        </Style>
+
+        <!--  Reduced-motion: переходы свёртки/шеврона мгновенны (состояние без анимации).  -->
+        <Style Selector=":is(Window).lite StackPanel.RailItems">
+            <Setter Property="Transitions">
+                <Transitions />
+            </Setter>
+        </Style>
+        <Style Selector=":is(Window).lite Path.RailToggleGlyph">
+            <Setter Property="Transitions">
+                <Transitions />
+            </Setter>
+        </Style>
+        <Style Selector=":is(Window).lite Button.RailToggle">
+            <Setter Property="Transitions">
+                <Transitions />
+            </Setter>
+        </Style>
     </Window.Styles>
 
     <dialogHost:DialogHost
@@ -68,32 +165,33 @@
         CloseOnClickAway="True"
         DisableOpeningAnimation="True">
         <Panel>
-            <Grid RowDefinitions="32,*">
+            <Grid RowDefinitions="28,*">
 
-                <!--  ==================== Кастомная строка окна (chrome, высота 32) ====================
-                      Тонкая рамка-заголовок (было 40 — владелец: «слишком толстая»); держит
-                      мини-вордмарк + drag + системные кнопки (min/max/close 40×24).  -->
+                <!--  ==================== Кастомная строка окна (chrome, высота 28) ====================
+                      Слим-рамка-заголовок (было 40 → 32 → 28 — владелец: «слишком толстая»); держит
+                      мини-вордмарк (лого 18 + «departament» 14) + drag + системные кнопки 44×22.
+                      Глифы уменьшены (~11px) под тонкую полосу.  -->
                 <Grid
                     x:Name="titleBar"
                     Grid.Row="0"
                     Background="Transparent">
                     <!--  Мини-вордмарк слева  -->
                     <StackPanel
-                        Margin="16,0"
+                        Margin="14,0"
                         HorizontalAlignment="Left"
                         VerticalAlignment="Center"
                         Orientation="Horizontal"
-                        Spacing="8">
+                        Spacing="7">
                         <Border
-                            Width="22"
-                            Height="22"
+                            Width="18"
+                            Height="18"
                             Background="{DynamicResource Brush.Accent}"
-                            CornerRadius="7">
+                            CornerRadius="6">
                             <TextBlock
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
                                 FontFamily="{DynamicResource Font.Grotesk}"
-                                FontSize="13"
+                                FontSize="11"
                                 FontWeight="Bold"
                                 Foreground="{DynamicResource Brush.OnAccent}"
                                 Text="d" />
@@ -101,7 +199,7 @@
                         <TextBlock
                             VerticalAlignment="Center"
                             FontFamily="{DynamicResource Font.Grotesk}"
-                            FontSize="16"
+                            FontSize="14"
                             FontWeight="Bold"
                             Foreground="{DynamicResource Brush.OnSurface}"
                             Text="departament" />
@@ -109,7 +207,7 @@
 
                     <!--  Системные кнопки справа  -->
                     <StackPanel
-                        Margin="0,0,8,0"
+                        Margin="0,0,6,0"
                         HorizontalAlignment="Right"
                         VerticalAlignment="Center"
                         Orientation="Horizontal"
@@ -117,29 +215,29 @@
                         <Button x:Name="btnMin" Classes="WinBtn">
                             <Border Classes="WinBtnBg">
                                 <Path
-                                    Width="16"
-                                    Height="16"
+                                    Width="11"
+                                    Height="11"
                                     HorizontalAlignment="Center"
                                     VerticalAlignment="Center"
-                                    Data="M5 12 H19"
+                                    Data="M0,5.5 H11"
                                     Stretch="None"
                                     Stroke="{DynamicResource Brush.OnSurfaceVariant}"
                                     StrokeLineCap="Round"
-                                    StrokeThickness="1.5" />
+                                    StrokeThickness="1.4" />
                             </Border>
                         </Button>
                         <Button x:Name="btnMax" Classes="WinBtn">
                             <Border Classes="WinBtnBg">
                                 <Path
-                                    Width="12"
-                                    Height="12"
+                                    Width="10"
+                                    Height="10"
                                     HorizontalAlignment="Center"
                                     VerticalAlignment="Center"
-                                    Data="M6 6 H18 V18 H6 Z"
-                                    Stretch="Uniform"
+                                    Data="M0.5,0.5 H9.5 V9.5 H0.5 Z"
+                                    Stretch="None"
                                     Stroke="{DynamicResource Brush.OnSurfaceVariant}"
                                     StrokeJoin="Round"
-                                    StrokeThickness="1.5" />
+                                    StrokeThickness="1.4" />
                             </Border>
                         </Button>
                         <Button
@@ -147,15 +245,15 @@
                             Classes="WinBtn close">
                             <Border Classes="WinBtnBg">
                                 <Path
-                                    Width="12"
-                                    Height="12"
+                                    Width="11"
+                                    Height="11"
                                     HorizontalAlignment="Center"
                                     VerticalAlignment="Center"
-                                    Data="M6 6 L18 18 M18 6 L6 18"
-                                    Stretch="Uniform"
+                                    Data="M0.5,0.5 L10.5,10.5 M10.5,0.5 L0.5,10.5"
+                                    Stretch="None"
                                     Stroke="{DynamicResource Brush.OnSurface}"
                                     StrokeLineCap="Round"
-                                    StrokeThickness="1.5" />
+                                    StrokeThickness="1.4" />
                             </Border>
                         </Button>
                     </StackPanel>
@@ -167,8 +265,11 @@
                       появляется обычный шелл. Видимостью управляет MainWindow.SetupHome.  -->
                 <Panel Grid.Row="1">
 
-                    <!--  Шелл: рейл 76 | контент. Скрыт целиком, пока приложение пустое.  -->
-                    <Grid x:Name="shellRoot" ColumnDefinitions="76,*" IsVisible="False">
+                    <!--  Шелл: рейл (Auto) | контент. Скрыт целиком, пока приложение пустое.
+                          Столбец рейла — Auto: его ширину задаёт содержимое DockPanel, поэтому при
+                          свёртке (navItems Width 76→0) рейл сам сжимается до слим-полосы с шевроном,
+                          а контент (столбец *) плавно занимает освободившееся место без клипа.  -->
+                    <Grid x:Name="shellRoot" ColumnDefinitions="Auto,*" IsVisible="False">
 
                     <!--  Левый icon-рейл: фон = Bg (сливается с окном), без правой границы (DESIGN_PLAN Часть 3).  -->
                     <Border
@@ -178,7 +279,12 @@
 
                             <!--  3 вкладки (Главная · Настройки · Аккаунт). Список серверов живёт
                                   в левой колонке «Главной», отдельной вкладки «Сервера» нет.  -->
-                            <StackPanel DockPanel.Dock="Top" Margin="0,8,0,0">
+                            <StackPanel
+                                x:Name="navItems"
+                                Margin="0,8,0,0"
+                                Classes="RailItems"
+                                ClipToBounds="True"
+                                DockPanel.Dock="Top">
                                 <Button x:Name="navHome" Classes="NavRailItem">
                                     <Grid>
                                         <Border Classes="NavPill" />
@@ -226,7 +332,10 @@
                                 </Button>
                             </StackPanel>
 
-                            <!--  Низ рейла: индикатор подключения + кнопка «в трей»  -->
+                            <!--  Низ рейла (ВСЕГДА виден, не сворачивается): индикатор подключения +
+                                  кнопка свёртки навигации. Шеврон ‹ сворачивает рейл, › разворачивает —
+                                  так пользователь никогда не остаётся без навигации (кнопка сохраняется
+                                  и в слим-полосе). Индикатор railStatusDot биндит code-behind (idle/connected).  -->
                             <StackPanel
                                 Margin="0,0,0,12"
                                 HorizontalAlignment="Center"
@@ -238,15 +347,23 @@
                                     Height="8"
                                     HorizontalAlignment="Center"
                                     Fill="{DynamicResource Brush.OnSurfaceVariant}" />
-                                <Button x:Name="btnTray" Classes="WinBtn">
+                                <Button
+                                    x:Name="btnRailToggle"
+                                    Classes="RailToggle"
+                                    ToolTip.Tip="Свернуть панель">
                                     <Border Classes="WinBtnBg">
-                                        <PathIcon
-                                            Width="18"
-                                            Height="18"
+                                        <Path
+                                            Width="20"
+                                            Height="20"
                                             HorizontalAlignment="Center"
                                             VerticalAlignment="Center"
-                                            Data="M16.59 8.59 12 13.17 7.41 8.59 6 10l6 6 6-6z"
-                                            Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+                                            Classes="RailToggleGlyph"
+                                            Data="M13,4 L7,10 L13,16"
+                                            Stretch="None"
+                                            Stroke="{DynamicResource Brush.OnSurfaceVariant}"
+                                            StrokeJoin="Round"
+                                            StrokeLineCap="Round"
+                                            StrokeThickness="1.6" />
                                     </Border>
                                 </Button>
                             </StackPanel>

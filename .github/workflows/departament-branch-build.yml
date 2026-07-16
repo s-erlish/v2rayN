@@ -35,6 +35,17 @@ jobs:
         shell: pwsh
         run: Get-ChildItem "${{ github.workspace }}/dist" -Filter *.pdb -Recurse | Remove-Item -Force -ErrorAction SilentlyContinue
 
+      - name: Rename executable to departament
+        shell: pwsh
+        run: |
+          $exe = Join-Path "${{ github.workspace }}/dist" 'v2rayN.exe'
+          if (Test-Path $exe) {
+            Rename-Item $exe 'departament.exe' -Force
+            Write-Host 'Renamed v2rayN.exe -> departament.exe'
+          } else {
+            Write-Host 'v2rayN.exe not found; skipping rename'
+          }
+
       - name: Bundle Xray core + geo assets
         shell: pwsh
         env:

@@ -70,7 +70,11 @@ public class GUIItem
     public bool EnableStatistics { get; set; }
     public bool DisplayRealTimeSpeed { get; set; }
     public bool KeepOlderDedupl { get; set; }
-    public int AutoUpdateInterval { get; set; }
+
+    // departament: subscription/geo auto-update cadence in MINUTES. Default 60 (= 1 час) so a fresh
+    // config auto-refreshes hourly out of the box; the Settings «Автообновление подписки» row cycles
+    // 60/360/720/1440 (1/6/12/24 ч.). 0 disables. Kept in minutes to match the per-sub interval unit.
+    public int AutoUpdateInterval { get; set; } = 60;
     public int TrayMenuServersLimit { get; set; } = 20;
     public bool EnableHWA { get; set; } = false;
     public bool EnableLog { get; set; } = true;
@@ -186,6 +190,11 @@ public class SpeedTestItem
     public string UdpTestTarget { get; set; }
     public int? SpeedTestPageSize { get; set; }
     public int? SpeedTestDelayInterval { get; set; }
+
+    // departament: selected latency-probe method for the server list, mirroring Android
+    // (Realping = реальная задержка через ядро / Tcping = TCP / Httping = HTTP / Icmping = ICMP).
+    // Persisted as the method key; default "Realping". Read by the ping trigger + Settings «Пинг» row.
+    public string? PingMethod { get; set; }
 }
 
 [Serializable]

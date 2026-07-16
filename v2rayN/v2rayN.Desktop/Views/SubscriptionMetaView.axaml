@@ -46,19 +46,11 @@
     </UserControl.Resources>
 
     <UserControl.Styles>
-        <!--  Шеврон-сворачивание: 0° раскрыто, −90° свёрнуто (зеркалит Android bindHeader).  -->
-        <Style Selector="PathIcon.metaChevron">
-            <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
-            <Setter Property="RenderTransform" Value="rotate(0deg)" />
-            <Setter Property="Transitions">
-                <Transitions>
-                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.22" />
-                </Transitions>
-            </Setter>
-        </Style>
-        <Style Selector="PathIcon.metaChevron.collapsed">
-            <Setter Property="RenderTransform" Value="rotate(-90deg)" />
-        </Style>
+        <!--  Шеврон-сворачивание (0° раскрыто, −90° свёрнуто, зеркалит Android bindHeader) вращается
+              в code-behind через явный RotateTransform с CenterX/CenterY=11 (половина 22px-глифа):
+              RenderTransformOrigin к анимируемым render-transform в этой сборке НЕ применяется
+              (та же причина, что у ConnectingArc/спиннеров), поэтому TransformOperations rotate вокруг
+              origin уводил шеврон из бокса. Интринзик-центр держит его строго на месте.  -->
 
         <!--  Меню «+» (Incy тёмная поверхность, радиус 12, пункты Body).  -->
         <Style Selector="MenuFlyoutPresenter">
@@ -101,7 +93,6 @@
                         Height="22"
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
-                        Classes="metaChevron"
                         Data="{StaticResource Meta.Chevron}"
                         Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
                 </Button>
@@ -158,7 +149,17 @@
                                 Stroke="{DynamicResource Brush.Accent}"
                                 StrokeDashArray="7,21.2"
                                 StrokeLineCap="Round"
-                                StrokeThickness="2" />
+                                StrokeThickness="2">
+                                <!--  Явный центр вращения (половина 18px = 9): глобальный
+                                      Ellipse.Spinner.spinning крутит RotateTransform.Angle, а origin
+                                      к этому пути не применяется — без CenterX/CenterY дуга «облетала».  -->
+                                <Ellipse.RenderTransform>
+                                    <RotateTransform
+                                        Angle="0"
+                                        CenterX="9"
+                                        CenterY="9" />
+                                </Ellipse.RenderTransform>
+                            </Ellipse>
                         </Panel>
                     </Button>
                     <Button

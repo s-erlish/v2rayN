@@ -55,8 +55,11 @@
 
     <Grid Background="Transparent">
 
-        <!--  SCROLL: subscription sections (meta-bar header + its rows), bound to real ServerGroups.  -->
-        <ScrollViewer IsVisible="{Binding HasServers}" Padding="0,0,0,16">
+        <!--  SCROLL: subscription sections (meta-bar header + its rows), bound to real ServerGroups.
+              Bottom padding 24 (was 16): the last row carries a 2px margin + a 1px divider and, under
+              the always-on scrollbar, 16 left the final row visibly clipped at the bottom. 24 clears
+              the row + its divider with a comfortable gap so the last server is fully readable.  -->
+        <ScrollViewer IsVisible="{Binding HasServers}" Padding="0,0,0,24">
             <ItemsControl ItemsSource="{Binding ServerGroups}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vms:HomeServerGroup">
@@ -170,7 +173,18 @@
                                                             Stroke="{DynamicResource Brush.Accent}"
                                                             StrokeDashArray="5.9,17.7"
                                                             StrokeLineCap="Round"
-                                                            StrokeThickness="2" />
+                                                            StrokeThickness="2">
+                                                            <!--  Явный центр вращения (половина 15px = 7.5): глобальный
+                                                                  Ellipse.Spinner.spinning крутит RotateTransform.Angle, а
+                                                                  origin к этому пути не применяется — без CenterX/CenterY
+                                                                  спиннер «облетал» по орбите вместо вращения на месте.  -->
+                                                            <Ellipse.RenderTransform>
+                                                                <RotateTransform
+                                                                    Angle="0"
+                                                                    CenterX="7.5"
+                                                                    CenterY="7.5" />
+                                                            </Ellipse.RenderTransform>
+                                                        </Ellipse>
                                                         <!--  Result: right-aligned, tabular Grotesk digits, coloured by latency.  -->
                                                         <TextBlock
                                                             VerticalAlignment="Center"

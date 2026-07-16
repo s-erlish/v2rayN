@@ -11,6 +11,8 @@
 
     <UserControl.Resources>
         <StreamGeometry x:Key="Geo.Sub.Back">M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z</StreamGeometry>
+        <!--  Галочка выбранного метода (ic_check_24dp)  -->
+        <StreamGeometry x:Key="Geo.Sub.Check">M9,16.17L4.83,12l-1.42,1.41L9,19 21,7l-1.41,-1.41z</StreamGeometry>
     </UserControl.Resources>
 
     <UserControl.Styles>
@@ -23,6 +25,30 @@
         </Style>
         <Style Selector="Button.IconButton:pressed">
             <Setter Property="RenderTransform" Value="scale(0.92)" />
+        </Style>
+
+        <!--  Строка выбора метода пинга: minHeight 56, hover→SurfaceHigh внутри клипующей карты.  -->
+        <Style Selector="Border.MethodRow">
+            <Setter Property="MinHeight" Value="{DynamicResource Size.Row}" />
+            <Setter Property="Padding" Value="16,12" />
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="Border.MethodRow:pointerover">
+            <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
+        </Style>
+        <!--  Галочка выбранного метода: 22, акцент, по правому краю.  -->
+        <Style Selector="PathIcon.MethodCheck">
+            <Setter Property="Width" Value="22" />
+            <Setter Property="Height" Value="22" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="8,0,0,0" />
+        </Style>
+        <!--  Разделитель 1px, инсет слева 16.  -->
+        <Style Selector="Border.MethodDivider">
+            <Setter Property="Height" Value="1" />
+            <Setter Property="Margin" Value="16,0,0,0" />
+            <Setter Property="Background" Value="{DynamicResource Brush.OutlineVariant}" />
         </Style>
     </UserControl.Styles>
 
@@ -61,8 +87,90 @@
         <StackPanel Margin="16,12,16,24" Spacing="8">
             <TextBlock
                 Classes="Subtitle"
-                Text="Задержка серверов измеряется реальной проверкой через ядро. Ниже — адрес и тайм-аут проверки."
+                Text="Как измерять задержку серверов. Ниже — адрес и тайм-аут проверки."
                 TextWrapping="Wrap" />
+
+            <!--  Метод проверки задержки — одна карта с 4 выбираемыми строками (как в Android).  -->
+            <Border
+                Classes="Card"
+                ClipToBounds="True"
+                Padding="0">
+                <StackPanel>
+                    <Border x:Name="RowReal" Classes="MethodRow">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Grid.Column="0" Spacing="2">
+                                <TextBlock Classes="Body" Text="Реальная задержка" />
+                                <TextBlock
+                                    Classes="Subtitle"
+                                    Text="Через ядро, как при подключении"
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
+                            <PathIcon
+                                x:Name="CheckReal"
+                                Grid.Column="1"
+                                Classes="MethodCheck"
+                                Data="{StaticResource Geo.Sub.Check}" />
+                        </Grid>
+                    </Border>
+
+                    <Border Classes="MethodDivider" />
+
+                    <Border x:Name="RowTcp" Classes="MethodRow">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Grid.Column="0" Spacing="2">
+                                <TextBlock Classes="Body" Text="TCP" />
+                                <TextBlock
+                                    Classes="Subtitle"
+                                    Text="TCP-подключение к серверу"
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
+                            <PathIcon
+                                x:Name="CheckTcp"
+                                Grid.Column="1"
+                                Classes="MethodCheck"
+                                Data="{StaticResource Geo.Sub.Check}" />
+                        </Grid>
+                    </Border>
+
+                    <Border Classes="MethodDivider" />
+
+                    <Border x:Name="RowHttp" Classes="MethodRow">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Grid.Column="0" Spacing="2">
+                                <TextBlock Classes="Body" Text="HTTP" />
+                                <TextBlock
+                                    Classes="Subtitle"
+                                    Text="HTTP-запрос через прокси"
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
+                            <PathIcon
+                                x:Name="CheckHttp"
+                                Grid.Column="1"
+                                Classes="MethodCheck"
+                                Data="{StaticResource Geo.Sub.Check}" />
+                        </Grid>
+                    </Border>
+
+                    <Border Classes="MethodDivider" />
+
+                    <Border x:Name="RowIcmp" Classes="MethodRow">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Grid.Column="0" Spacing="2">
+                                <TextBlock Classes="Body" Text="ICMP" />
+                                <TextBlock
+                                    Classes="Subtitle"
+                                    Text="ICMP-эхо (ping) до сервера"
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
+                            <PathIcon
+                                x:Name="CheckIcmp"
+                                Grid.Column="1"
+                                Classes="MethodCheck"
+                                Data="{StaticResource Geo.Sub.Check}" />
+                        </Grid>
+                    </Border>
+                </StackPanel>
+            </Border>
 
             <Border Classes="Card" Padding="16,12">
                 <StackPanel Spacing="6">

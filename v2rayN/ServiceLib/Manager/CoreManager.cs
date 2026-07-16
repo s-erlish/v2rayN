@@ -82,14 +82,11 @@ public class CoreManager
         await UpdateFunc(false, $"{node.GetSummary()}");
         await UpdateFunc(false, $"{Utils.GetRuntimeInfo()}");
         await UpdateFunc(false, string.Format(ResUI.StartService, DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss")));
+        // CoreStop stops any running cores AND (on Windows + TUN) removes the wintun adapter, so a
+        // stale adapter from a previous session/crash can never break this connect. A single short
+        // settle delay lets the OS release the freed local ports before we re-bind them.
         await CoreStop();
         await Task.Delay(100);
-
-        if (Utils.IsWindows() && _config.TunModeItem.EnableTun)
-        {
-            await Task.Delay(100);
-            await WindowsUtils.RemoveTunDevice();
-        }
 
         await CoreStart(mainContext);
         await WaitForProxyPort(preContext);
@@ -109,7 +106,14 @@ public class CoreManager
         {
             // Both the main core and (if required) the pre-service actually started — mark the app as
             // running so IsRunningCore()/the connect shield/tray honestly read "connected".
-            AppManager.Instance.RunningCoreType = preContext?.RunCoreType ?? mainContext.RunCoreType;
+            // The MAIN core always owns the proxy, routing and traffic stats/metrics — for a CUSTOM
+            // (Remnawave XRAY_JSON) node that is Xray, whose config carries stats/metrics (see
+            // MergeAppInbounds). The pre-service (sing-box) is only a TUN/socks transport shim and
+            // exposes no stats API. Reporting the pre-service's core type here would (a) make
+            // StatisticsXrayService skip polling (RunningCoreType != Xray) so the traffic widget
+            // stays blank, and (b) wrongly flip the app into Clash UI mode. So mark the app as
+            // running under the MAIN core's type.
+            AppManager.Instance.RunningCoreType = mainContext.RunCoreType;
             await UpdateFunc(true, $"{node.GetSummary()}");
         }
         else
@@ -193,6 +197,17 @@ public class CoreManager
         catch (Exception ex)
         {
             Logging.SaveLog(_tag, ex);
+        }
+
+        // Fully tear down the OS TUN adapter on disconnect (Windows + TUN). The processes are already
+        // stopped above, so the wintun device is free to remove. Without this a stale adapter lingers
+        // after every disconnect and can block/stall the NEXT connect (sing-box hangs trying to create
+        // a device that still exists). Doing it here means both an explicit user disconnect and the
+        // stop-before-start inside LoadCore leave a clean slate. RemoveTunDevice swallows its own
+        // errors, so a missing adapter is a no-op.
+        if (Utils.IsWindows() && _config?.TunModeItem?.EnableTun == true)
+        {
+            await WindowsUtils.RemoveTunDevice();
         }
 
         // Reset the running-core marker so IsRunningCore() reports "stopped" after teardown.

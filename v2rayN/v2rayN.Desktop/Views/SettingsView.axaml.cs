@@ -12,7 +12,7 @@ namespace v2rayN.Desktop.Views;
 /// реальная рабочая функция, ни одного мёртвого affordance:
 ///   • переключают/открывают диалог: Режим (TUN), DNS, Маршрутизация;
 ///   • открывают реальный суб-экран: Прокси по приложениям, Пинг, Файлы ресурсов,
-///     Настройки провайдеров, О приложении, Резервное копирование, Схемы URL-адресов;
+///     О приложении, Резервное копирование, Схемы URL-адресов;
 ///   • раскрывают инлайн-поля: Локальный прокси;
 ///   • циклят реальное значение: Число Mux, Язык, Автообновление, Оформление;
 ///   • тумблеры (Обход сети, IPv6, Mux, Фрагментация, Облегчённый режим, Запуск при загрузке)
@@ -54,9 +54,10 @@ public partial class SettingsView : UserControl
 
         // --- Строки, открывающие реальные Incy суб-СТРАНИЦЫ (in-app, БЕЗ отдельных окон) ---
         RowPerApp.Tapped += (_, _) => OpenPage(new PerAppProxyPage(), refresh: true);
-        RowPingMethod.Tapped += (_, _) => OpenPage(new PingSettingsPage());
+        RowPingMethod.Tapped += (_, _) => OpenPage(new PingSettingsPage(), refresh: true);
         RowAssets.Tapped += (_, _) => OpenPage(new GeoFilesPage());
-        RowProvider.Tapped += (_, _) => OpenPage(new ProviderSettingsPage(), refresh: true);
+        // «Настройки провайдеров» строка удалена из SettingsView — экран сделан недостижимым
+        // (файл ProviderSettingsPage сохранён, но не открывается ниоткуда).
         RowAbout.Tapped += (_, _) => OpenPage(new AboutPage());
         RowBackup.Tapped += (_, _) => OpenPage(new BackupPage());
         RowUrlScheme.Tapped += (_, _) => OpenPage(new UrlSchemesPage());

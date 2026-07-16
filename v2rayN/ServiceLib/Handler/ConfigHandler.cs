@@ -89,7 +89,8 @@ public static class ConfigHandler
         };
         config.TunModeItem ??= new TunModeItem
         {
-            EnableTun = false,
+            // departament: a fresh config is TUN by default (whole-device routing) — ModeText shows «TUN».
+            EnableTun = true,
             Mtu = 9000,
             IcmpRouting = Global.TunIcmpRoutingPolicies.First(),
             EnableLegacyProtect = false,
@@ -107,9 +108,9 @@ public static class ConfigHandler
 
         if (config.UiItem.CurrentLanguage.IsNullOrEmpty())
         {
-            config.UiItem.CurrentLanguage = Thread.CurrentThread.CurrentCulture.TwoLetterISOLanguageName.Equals("zh", StringComparison.CurrentCultureIgnoreCase)
-                ? Global.Languages.First()
-                : Global.Languages[2];
+            // departament: default a fresh config to Russian UI. English (and every other language)
+            // stays fully available and switchable via the «Язык» row; this only sets the initial value.
+            config.UiItem.CurrentLanguage = Global.Languages[5]; // "ru"
         }
 
         config.ConstItem ??= new ConstItem();
@@ -141,6 +142,11 @@ public static class ConfigHandler
         {
             config.SpeedTestItem.UdpTestTarget = Global.UdpTestTargets.First();
         }
+        if (config.SpeedTestItem.PingMethod.IsNullOrEmpty())
+        {
+            // departament: default latency probe = real delay through the core (Android parity).
+            config.SpeedTestItem.PingMethod = nameof(ESpeedActionType.Realping);
+        }
 
         config.Mux4RayItem ??= new()
         {
@@ -151,7 +157,9 @@ public static class ConfigHandler
 
         config.Mux4SboxItem ??= new()
         {
-            Protocol = Global.SingboxMuxs.First(),
+            // departament: Mux OFF by default — empty Protocol gates mux off in SingboxOutboundService
+            // (see `Protocol.IsNotEmpty()` guard). The Settings Mux toggle writes a real protocol when on.
+            Protocol = string.Empty,
             MaxConnections = 8
         };
 

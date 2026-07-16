@@ -32,7 +32,8 @@ public class SettingsViewModel : MyReactiveObject
     private const string DefaultMuxProtocol = "h2mux";
 
     // Cycle-on-tap option sets (no picker sub-screen exists yet → advance through real values in place).
-    private static readonly int[] AutoUpdateOptions = [0, 6, 12, 24, 48];
+    // Auto-update interval is stored in MINUTES: 60/360/720/1440 == 1/6/12/24 ч. (default 60 = 1 ч.).
+    private static readonly int[] AutoUpdateOptions = [60, 360, 720, 1440];
     private static readonly int[] MuxConcurrencyOptions = [4, 8, 16, 32, 64, 128];
 
     #region Toggle-backed settings (two-way from the iOS switches → real config)
@@ -108,8 +109,9 @@ public class SettingsViewModel : MyReactiveObject
         AboutText = Utils.GetVersionInfo();
         BypassLan = true;
         LocalPortText = "10808";
-        ProxyUser = "incy_6b7e970f";
-        ProxyPass = "••••••••";
+        // Plain v2rayN default: local SOCKS5 has no auth out of the box (empty login/password).
+        ProxyUser = string.Empty;
+        ProxyPass = string.Empty;
     }
 
     /// <summary>Design-only instance referenced from <c>Design.DataContext</c> in the axaml.</summary>
@@ -136,8 +138,7 @@ public class SettingsViewModel : MyReactiveObject
         ModeText = StatusBarViewModel.Instance.EnableTun ? "TUN" : "Прокси";
         PerAppText = ResolvePerAppText();
         DnsText = ResolveDnsText();
-        // Ping is a fixed real-delay probe through the core (no persisted method enum to fake).
-        PingMethodText = "Реальная задержка (через ядро)";
+        PingMethodText = ResolvePingMethodText();
         MuxConcurrencyText = ResolveMuxConcurrencyText();
         AppearanceText = ResolveThemeText();
         LanguageText = ResolveLanguageText();
@@ -211,7 +212,16 @@ public class SettingsViewModel : MyReactiveObject
         }
         _config.GuiItem.AutoRun = v;
         await ConfigHandler.SaveConfig(_config);
-        await AutoStartupHandler.UpdateTask(_config);
+        // Windows: write/remove the human-readable HKCU\...\Run value «departament» → exe.
+        // Non-Windows: AutostartHelper is a no-op, so the shared handler owns autostart there.
+        if (Utils.IsWindows())
+        {
+            v2rayN.Desktop.Common.AutostartHelper.Apply(v);
+        }
+        else
+        {
+            await AutoStartupHandler.UpdateTask(_config);
+        }
     }
 
     /// <summary>«Облегчённый режим» — a pure UI/motion flag. Persist it so it survives restart AND so the
@@ -410,6 +420,7 @@ public class SettingsViewModel : MyReactiveObject
         }
         PerAppText = ResolvePerAppText();
         DnsText = ResolveDnsText();
+        PingMethodText = ResolvePingMethodText();
         SubAutoUpdateText = ResolveAutoUpdateText();
         AppearanceText = ResolveThemeText();
         LanguageText = ResolveLanguageText();
@@ -424,6 +435,16 @@ public class SettingsViewModel : MyReactiveObject
         var remote = _config.SimpleDNSItem?.RemoteDNS;
         return remote.IsNullOrEmpty() ? "По умолчанию" : remote!;
     }
+
+    /// <summary>Maps the persisted ping-method key (<c>SpeedTestItem.PingMethod</c>) to its Russian
+    /// row label. Mirrors the Android method set: real delay через ядро / TCP / HTTP / ICMP.</summary>
+    private string ResolvePingMethodText() => _config.SpeedTestItem?.PingMethod switch
+    {
+        "Tcping" => "TCP",
+        "Httping" => "HTTP",
+        "Icmping" => "ICMP",
+        _ => "Реальная задержка (через ядро)",
+    };
 
     private string ResolveMuxConcurrencyText() =>
         _config.Mux4SboxItem.MaxConnections > 0 ? _config.Mux4SboxItem.MaxConnections.ToString() : "8";
@@ -463,8 +484,9 @@ public class SettingsViewModel : MyReactiveObject
 
     private string ResolveAutoUpdateText()
     {
+        // Stored in minutes; the row shows whole hours (60 → «1 ч.»). 0 disables.
         var n = _config.GuiItem.AutoUpdateInterval;
-        return n > 0 ? $"{n} ч." : "Выкл";
+        return n > 0 ? $"{n / 60} ч." : "Выкл";
     }
 
     #endregion Display resolvers

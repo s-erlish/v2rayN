@@ -40,8 +40,24 @@ public partial class ConnectHeroView : UserControl
 
     //  Accent resolved from the live theme (Brush.Accent) so the monochrome («Чёрно-белая»)
     //  overlay reaches the connected shield + status text — falls back to Incy blue.
-    private IBrush AccentBrush =>
-        this.TryFindResource("Brush.Accent", ActualThemeVariant, out var v) && v is IBrush b ? b : AccentFallback;
+    //  Wrapped defensively: a theme-resource lookup must NEVER throw out of the connect path and
+    //  leave the hero half-built / blank — any failure silently returns the cached Incy accent.
+    private IBrush AccentBrush
+    {
+        get
+        {
+            try
+            {
+                return this.TryFindResource("Brush.Accent", ActualThemeVariant, out var v) && v is IBrush b
+                    ? b
+                    : AccentFallback;
+            }
+            catch
+            {
+                return AccentFallback;
+            }
+        }
+    }
 
     //  Кривые зеркалят токены GlobalResources Ease.* 1:1 (ease_out_quart/_quint/_standard) —
     //  для императивных частей (press, перекл. длительностей). Декларативный XAML берёт токены.
@@ -100,9 +116,25 @@ public partial class ConnectHeroView : UserControl
 
         //  Свой press-scale вместо общего перехода RenderTransform из GlobalStyles: масштаб —
         //  единственный отклик (без ripple/glow). Перекрываем переходы диска пустыми и ставим ScaleTransform.
+        //
+        //  ЦЕНТР МАСШТАБА. RenderTransformOrigin НЕ применяется к анимируемым render-transform в этой
+        //  сборке (та же причина, по которой ConnectingArc держит центр через RotateTransform.CenterX/Y,
+        //  а не через origin). У ScaleTransform НЕТ CenterX/CenterY, поэтому голый ScaleTransform
+        //  масштабировал диск от ЛЕВОГО-ВЕРХНЕГО угла → диск «проваливался» влево-вверх. Оборачиваем в
+        //  группу: сдвиг центра диска (88,88) в (0,0) → масштаб → сдвиг обратно = масштаб строго вокруг
+        //  центра. Переход живёт на самом ScaleTransform (асимметрия 90/160 сохраняется).
         _discScale.Transitions = new Transitions { _discScaleX, _discScaleY };
         ConnectDisc.Transitions = new Transitions();
-        ConnectDisc.RenderTransform = _discScale;
+        const double discHalf = 88; // Size.ConnectDisc (176) / 2
+        ConnectDisc.RenderTransform = new TransformGroup
+        {
+            Children =
+            {
+                new TranslateTransform { X = -discHalf, Y = -discHalf },
+                _discScale,
+                new TranslateTransform { X = discHalf, Y = discHalf },
+            },
+        };
 
         //  Диск — кнопка connect: press-scale + клик = переключение.
         ConnectDisc.PointerPressed += OnDiscPointerPressed;
@@ -118,6 +150,12 @@ public partial class ConnectHeroView : UserControl
         if (!ReducedMotion && !_assembled)
         {
             HeroFrame.Opacity = 0;
+
+            //  СТРАХОВКА ОТ ПУСТОГО ЩИТА. Пре-скрытие полагается на Loaded, который вернёт видимость.
+            //  Если Loaded не придёт (переиспользование окна, прерванная раскладка, исключение внутри
+            //  «сборки») — щит остался бы невидимым НАВСЕГДА. Форсируем видимость с запасом: на штатном
+            //  пути «сборка» (≈460мс) уже вернула Opacity=1, поэтому здесь это no-op.
+            DispatcherTimer.RunOnce(EnsureHeroVisible, TimeSpan.FromMilliseconds(700));
         }
 
         Loaded += OnFirstLoaded;
@@ -298,13 +336,20 @@ public partial class ConnectHeroView : UserControl
     private void SetArc(bool on)
     {
         ConnectingArc.IsVisible = on;
-        if (on && !ReducedMotion)
+
+        //  Второй «живой» слой (faint counter-arc) существует ТОЛЬКО пока реально крутится —
+        //  под ReducedMotion/lite его нет вовсе (основная дуга остаётся статичным индикатором).
+        var spin = on && !ReducedMotion;
+        CounterArc.IsVisible = spin;
+        if (spin)
         {
             ConnectingArc.Classes.Add("spinning");
+            CounterArc.Classes.Add("spinning");
         }
         else
         {
             ConnectingArc.Classes.Remove("spinning");
+            CounterArc.Classes.Remove("spinning");
         }
     }
 
@@ -364,15 +409,33 @@ public partial class ConnectHeroView : UserControl
         Loaded -= OnFirstLoaded;
         if (_assembled || ReducedMotion)
         {
-            HeroFrame.Opacity = 1; //  сборку пропускаем — гарантируем видимость
+            EnsureHeroVisible(); //  сборку пропускаем — гарантируем видимость
             return;
         }
 
         _assembled = true;
-        HeroFrame.Classes.Add("assembling");
-        await Task.Delay(460);
-        HeroFrame.Opacity = 1; //  вернуть базовую непрозрачность перед снятием forward-fill
+        try
+        {
+            HeroFrame.Classes.Add("assembling");
+            await Task.Delay(460);
+        }
+        finally
+        {
+            //  ВСЕГДА возвращаем видимость (даже если задержка/анимация прервана исключением) —
+            //  щит физически не может остаться пустым.
+            EnsureHeroVisible();
+        }
+    }
+
+    //  Единая точка восстановления покоя героя: полная непрозрачность + снятие one-shot-класса
+    //  «сборки». Идемпотентна — безопасно вызывать из Loaded, finally и страховочного таймера.
+    private void EnsureHeroVisible()
+    {
         HeroFrame.Classes.Remove("assembling");
+        if (HeroFrame.Opacity < 1)
+        {
+            HeroFrame.Opacity = 1;
+        }
     }
 
     // ── «Облегчённый режим» (lite): общий флаг reduced-motion из конфига ──────────────────

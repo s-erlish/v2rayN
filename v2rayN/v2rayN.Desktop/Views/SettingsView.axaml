@@ -50,8 +50,6 @@
         <StreamGeometry x:Key="Geo.Set.Routing">M740,161a112.1,112.1 0,0 0,-33.5 218.9v95.9L320,602.4L320,318.1a112.1,112.1 0,1 0,-148 -106.1c0,49.3 31.8,91 76,106.1v387.9a112.1,112.1 0,1 0,148 106.1c0,-49.2 -31.8,-91 -76,-106.1v-27.8l423.5,-138.7a50.6,50.6 0,0 0,34.9 -48.2L778.4,378.2c42.9,-15.8 73.6,-57 73.6,-105.2 0,-61.8 -50.2,-112 -112,-112zM236,212a48,48 0,1 1,96 0,48 48,0 0,1 -96,0zM332,812a48,48 0,1 1,-96 0,48 48,0 0,1 96,0zM740,321a48,48 0,1 1,0 -96,48 48,0 0,1 0,96z</StreamGeometry>
         <!--  Файл (ic_file_24dp, viewport 1024)  -->
         <StreamGeometry x:Key="Geo.Set.File">M537,85.3A85.3,85.3 0,0 1,597.3 110.3L828.3,341.3A85.3,85.3 0,0 1,853.3 401.7L853.3,810.7a128,128 0,0 1,-128 128L298.7,938.7a128,128 0,0 1,-128 -128L170.7,213.3a128,128 0,0 1,128 -128zM537,170.7L298.7,170.7a42.7,42.7 0,0 0,-42.7 42.7v597.3a42.7,42.7 0,0 0,42.7 42.7h426.7a42.7,42.7 0,0 0,42.7 -42.7L768,401.7L537,170.7zM512,384a42.7,42.7 0,0 1,42.4 37.7L554.7,426.7v85.3h85.3a42.7,42.7 0,0 1,5 85L640,597.3h-85.3v85.3a42.7,42.7 0,0 1,-85 5L469.3,682.7v-85.3L384,597.3a42.7,42.7 0,0 1,-5 -85L384,512h85.3v-85.3a42.7,42.7 0,0 1,42.7 -42.7z</StreamGeometry>
-        <!--  Провайдеры / стек серверов (ic_hub_provider)  -->
-        <StreamGeometry x:Key="Geo.Set.Provider">M20,13H4c-0.55,0 -1,0.45 -1,1v6c0,0.55 0.45,1 1,1h16c0.55,0 1,-0.45 1,-1v-6c0,-0.55 -0.45,-1 -1,-1zM7,19c-1.1,0 -2,-0.9 -2,-2s0.9,-2 2,-2 2,0.9 2,2 -0.9,2 -2,2zM20,3H4c-0.55,0 -1,0.45 -1,1v6c0,0.55 0.45,1 1,1h16c0.55,0 1,-0.45 1,-1V4c0,-0.55 -0.45,-1 -1,-1zM7,9c-1.1,0 -2,-0.9 -2,-2s0.9,-2 2,-2 2,0.9 2,2 -0.9,2 -2,2z</StreamGeometry>
         <!--  О приложении / инфо (ic_about_24dp, viewport 1024)  -->
         <StreamGeometry x:Key="Geo.Set.About">M810.7,206.3A426.7,426.7 0,1 0,512 938.7h5.5A426.7,426.7 0,0 0,810.7 206.3zM771.8,765A360.1,360.1 0,0 1,517.1 874.7L512,874.7a362.7,362.7 0,0 1,-4.9 -725.3h3.4a362.7,362.7 0,0 1,261.3 615.7zM547.2,390a57.4,57.4 0,0 0,62.3 -55.3,39.3 39.3,0 0,0 -45,-42.7 58.9,58.9 0,0 0,-64 54.6c-1.7,26.9 13.9,43.3 46.7,43.3zM548.3,663.5c-5.5,0 -7.9,-7.3 -2.3,-28.2l31.1,-118c11.7,-42.7 7.9,-71.3 -15.8,-71.3 -28.4,0 -94.7,28.4 -152.5,76.4l11.7,19.4a181.3,181.3 0,0 1,56.1 -24.7c5.5,0 4.7,7.3 0,25.2l-27.3,112.2c-16.6,64 0,77.7 24.5,77.7s85.3,-21.3 141,-77.7l-13.4,-17.9a122.7,122.7 0,0 1,-53.1 26.9z</StreamGeometry>
         <!--  Резервное копирование (ic_backup_24dp, viewport 1024)  -->
@@ -887,38 +885,6 @@
                                 VerticalAlignment="Center"
                                 Classes="Body"
                                 Text="Файлы ресурсов" />
-                            <PathIcon
-                                Grid.Column="2"
-                                Classes="Chevron"
-                                Data="{StaticResource Geo.Set.Chevron}" />
-                        </Grid>
-                    </Border>
-
-                    <Border Classes="SettingDivider" />
-
-                    <!--  Настройки провайдеров → User-Agent, HWID, автообновление (реальный экран)  -->
-                    <Border x:Name="RowProvider" Classes="SettingRow">
-                        <Grid ColumnDefinitions="Auto,*,Auto">
-                            <Border
-                                Grid.Column="0"
-                                Classes="Tile Orange"
-                                VerticalAlignment="Center">
-                                <PathIcon
-                                    Classes="Glyph"
-                                    Data="{StaticResource Geo.Set.Provider}"
-                                    Foreground="{DynamicResource Brush.Icon.Orange}" />
-                            </Border>
-                            <StackPanel
-                                Grid.Column="1"
-                                Margin="16,0,8,0"
-                                VerticalAlignment="Center">
-                                <TextBlock Classes="Body" Text="Настройки провайдеров" />
-                                <TextBlock
-                                    Margin="0,4,0,0"
-                                    Classes="Subtitle"
-                                    Text="Автообновление, HWID, User-Agent"
-                                    TextWrapping="Wrap" />
-                            </StackPanel>
                             <PathIcon
                                 Grid.Column="2"
                                 Classes="Chevron"

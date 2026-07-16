@@ -1,4 +1,6 @@
 using System.ComponentModel;
+using Avalonia.Animation;
+using Avalonia.Animation.Easings;
 using ServiceLib.Helper;
 using v2rayN.Desktop.ViewModels;
 
@@ -34,9 +36,26 @@ public partial class SubscriptionMetaView : UserControl
     private string _currentSubId = string.Empty;
     private bool _refreshing;
 
+    //  Шеврон сворачивания: явный RotateTransform с интринзик-центром (CenterX/CenterY = половина
+    //  22px-глифа = 11) — вращается СТРОГО на месте. RenderTransformOrigin в этой сборке к
+    //  анимируемым render-transform не применяется, поэтому центр держим геометрией самого трансформа
+    //  (как ConnectingArc). Угол меняем плавно через собственный переход (0° раскрыто / −90° свёрнуто).
+    private readonly RotateTransform _chevronRotate = new() { Angle = 0, CenterX = 11, CenterY = 11 };
+
     public SubscriptionMetaView()
     {
         InitializeComponent();
+
+        _chevronRotate.Transitions = new Transitions
+        {
+            new DoubleTransition
+            {
+                Property = RotateTransform.AngleProperty,
+                Duration = TimeSpan.FromMilliseconds(220),
+                Easing = new SplineEasing(0.2, 0, 0, 1), // Ease.Standard
+            },
+        };
+        CollapseIcon.RenderTransform = _chevronRotate;
 
         if (Design.IsDesignMode)
         {
@@ -107,18 +126,12 @@ public partial class SubscriptionMetaView : UserControl
         }
     }
 
-    // Reflect the group's collapsed state on the chevron (−90° collapsed).
+    // Reflect the group's collapsed state on the chevron (−90° collapsed). Rotates in place about
+    // its own centre (RotateTransform.CenterX/Y=11); the transition animates the angle smoothly.
     private void SyncCollapsed()
     {
         var collapsed = _group is { IsExpanded: false };
-        if (collapsed)
-        {
-            CollapseIcon.Classes.Add("collapsed");
-        }
-        else
-        {
-            CollapseIcon.Classes.Remove("collapsed");
-        }
+        _chevronRotate.Angle = collapsed ? -90 : 0;
     }
 
     // The group's Subid → real SubItem. Data-driven: null when the group has no real subscription.

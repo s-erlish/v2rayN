@@ -53,6 +53,26 @@
             </Style.Animations>
         </Style>
 
+        <!--  Faint counter-arc: тонкая приглушённая дуга, крутится В ОБРАТНУЮ сторону медленнее
+              основной (2с против 1.1с) — «живой» второй слой connecting без перегруза. Центр вращения
+              задан ЯВНО (RotateTransform.CenterX/CenterY = половина Ø200 = 100): RenderTransformOrigin
+              на этот путь НЕ влияет (см. ConnectingArc), поэтому без интринзик-центра дуга бы «облетала».  -->
+        <Style Selector="Ellipse.CounterArc.spinning">
+            <Style.Animations>
+                <Animation
+                    Duration="0:0:2"
+                    Easing="LinearEasing"
+                    IterationCount="Infinite">
+                    <KeyFrame Cue="0%">
+                        <Setter Property="RotateTransform.Angle" Value="0" />
+                    </KeyFrame>
+                    <KeyFrame Cue="100%">
+                        <Setter Property="RotateTransform.Angle" Value="-360" />
+                    </KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+
         <!--  Glow «дышит» пока класс .breathing (connecting): scale 0.96↔1.04, alpha 0.3↔0.6.  -->
         <Style Selector="Ellipse.Glow.breathing">
             <Style.Animations>
@@ -265,6 +285,32 @@
                         RenderTransformOrigin="0.5,0.5"
                         Stroke="{DynamicResource Brush.Ring.Inner}"
                         StrokeThickness="2" />
+
+                    <!--  (3b) faint counter-arc Ø200 (радиус 100 — в зазоре между диском r88/дугой r95
+                          и внутренним кольцом r105): тонкая приглушённая дуга, крутится в обратную
+                          сторону медленнее основной. Второй «живой» слой connecting (дыхание glow —
+                          третий). Виден только пока реально крутится (код-behind, off под ReducedMotion).
+                          Центр вращения зашит ЯВНО (CenterX/CenterY=100), как у основной дуги.  -->
+                    <Ellipse
+                        x:Name="CounterArc"
+                        Width="200"
+                        Height="200"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Classes="CounterArc"
+                        IsVisible="False"
+                        Opacity="0.35"
+                        Stroke="{DynamicResource Brush.Accent}"
+                        StrokeDashArray="150,478"
+                        StrokeLineCap="Round"
+                        StrokeThickness="1.5">
+                        <Ellipse.RenderTransform>
+                            <RotateTransform
+                                Angle="0"
+                                CenterX="100"
+                                CenterY="100" />
+                        </Ellipse.RenderTransform>
+                    </Ellipse>
 
                     <!--  (4) тонкая connecting-дуга Ø190 толщина 3 (акцент): одиночный сегмент
                           пунктиром, крутится тонким кольцом вплотную к диску (176). Видна только

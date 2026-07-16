@@ -55,7 +55,12 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         btnMin.Click += (_, _) => WindowState = WindowState.Minimized;
         btnMax.Click += (_, _) => WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
         btnClose.Click += (_, _) => Close();
-        btnTray.Click += (_, _) => ShowHideWindow(false);
+
+        // Кнопка внизу рейла сворачивает/разворачивает ЛЕВУЮ навигацию (раньше прятала окно
+        // в трей — убрано; в трей ведёт иконка App.axaml и «мин» в заголовке). Тумблит класс
+        // .railCollapsed на shellRoot → стили гонят navItems Width 76↔0 + шеврон ‹↔› (OutQuint,
+        // гасится под .lite). railStatusDot и сама кнопка остаются видны в слим-полосе.
+        btnRailToggle.Click += (_, _) => ToggleRail();
 
         // Нав-рейл: переключение вкладок (Главная · Настройки · Аккаунт).
         _navButtons = [navHome, navSettings, navAccount];
@@ -185,6 +190,26 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         }
         active.Classes.Add("active");
         contentHost.Content = view;
+    }
+
+    // Свёртка/разворот левого нав-рейла. Всё движение (navItems Width/Opacity, поворот шеврона)
+    // живёт в стилях по классу .railCollapsed на shellRoot; здесь только тумблим класс и правим
+    // подсказку. Столбец рейла Auto → контент сам занимает освободившееся место, ничего не клипая.
+    // Кнопка и индикатор остаются в слим-полосе, так что развернуть можно всегда (не «застрять»).
+    private bool _railCollapsed;
+
+    private void ToggleRail()
+    {
+        _railCollapsed = !_railCollapsed;
+        if (_railCollapsed)
+        {
+            shellRoot.Classes.Add("railCollapsed");
+        }
+        else
+        {
+            shellRoot.Classes.Remove("railCollapsed");
+        }
+        ToolTip.SetTip(btnRailToggle, _railCollapsed ? "Развернуть панель" : "Свернуть панель");
     }
 
     // Создаёт HomeViewModel поверх реального движка (ProfilesViewModel + StatusBarViewModel из
