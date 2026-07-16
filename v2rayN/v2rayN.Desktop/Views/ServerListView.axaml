@@ -72,14 +72,16 @@
     <Grid Background="Transparent">
 
         <!--  SCROLL: subscription sections (meta-bar header + its rows), bound to real ServerGroups.
-              Bottom padding 88 (was 72): in compact the tail of this list is overlaid by MainWindow's
-              72px `navScrim` (a fade-to-background band above the bottom nav) AND the ~64px nav sits just
-              below it. 72 left the final server flush against the scrim, so its lower half still dissolved
-              into the fade («bottom border clips the final server»). 88 = 72 scrim + 16 gap (which also
-              swallows the row's own 2px margin + 1px divider), lifting the LAST row's full height clear of
-              the scrim/nav with breathing room. Widescreen has no nav/scrim, so the extra inset there is
-              just harmless tail space. ServerListView hosts BOTH layouts → one inset covers both.  -->
-        <ScrollViewer IsVisible="{Binding HasServers}" Padding="0,0,0,88">
+              CLEARANCE — the bottom breathing room is a REAL trailing spacer child at the END of the
+              scroll content (the trailing spacer below), NOT `ScrollViewer.Padding`. In this Avalonia
+              build the ScrollViewer's bottom Padding is NOT reliably folded into the scroll Extent, so a
+              padding-only clearance let the last row sit past the scrollable range and never come fully
+              into view («bottom border clips the final server», both layouts). A child's height is ALWAYS
+              part of the Extent, so a 0-hit-test spacer guarantees the last row scrolls clear. Compact's
+              bottom nav no longer overlays the list (MainWindow's `navScrim` now reserves space instead
+              of painting over `contentHost`), so ONE modest tail covers both layouts with no dead space.  -->
+        <ScrollViewer IsVisible="{Binding HasServers}">
+            <StackPanel>
             <ItemsControl ItemsSource="{Binding ServerGroups}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vms:HomeServerGroup">
@@ -92,9 +94,10 @@
                             <!--  Group rows reveal (collapse with the group via the meta-bar chevron).
                                   The chevron flips HomeServerGroup.IsExpanded; the code-behind reveals the
                                   rows with a SMOOTH composited crossfade — inside this ClipToBounds viewport
-                                  only the inner rows' RenderTransform (small translateY) + Opacity animate
-                                  (~190ms OutQuint), while the viewport Height is set once per toggle (no
-                                  per-frame layout, no jitter). Gated: under lite the toggle is instant.  -->
+                                  the inner rows' RenderTransform (small translateY) + Opacity crossfade AND
+                                  the viewport Height tween run concurrently (~300ms OutQuint), so the list
+                                  slides open/closed in step with the fade — both expand AND collapse animate.
+                                  Gated: under lite / reduced-motion the toggle is instant.  -->
                             <Border
                                 ClipToBounds="True"
                                 Loaded="OnGroupRevealLoaded"
@@ -251,6 +254,17 @@
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
+
+                <!--  Trailing spacer = the list's real bottom clearance (see the ScrollViewer note).
+                      A concrete child height is always in the scroll Extent, so this lifts the LAST
+                      server's full height clear of the bottom edge / nav with clean breathing room and
+                      no magic padding constant. 0-hit-test so it never intercepts a row tap or scroll.  -->
+                <Border
+                    Height="24"
+                    Background="Transparent"
+                    Focusable="False"
+                    IsHitTestVisible="False" />
+            </StackPanel>
         </ScrollViewer>
 
         <!--  Empty state (layout_servers_empty): hero icon 64 + «Список пуст». The full onboarding

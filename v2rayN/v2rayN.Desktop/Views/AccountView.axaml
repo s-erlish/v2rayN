@@ -58,6 +58,24 @@
             <Setter Property="Background" Value="#3877E0" />
         </Style>
 
+        <!--  BUG 5: строки «Управление» (BuyRow/DevicesRow/HistoryRow/LogoutRow) и кнопка
+              копирования реф-кода на ховере ТОЛЬКО ЧУТЬ ТЕМНЕЮТ и НИКОГДА не синеют.
+              Явно и локально прибиваем hover/press к Brush.Hover (полупрозрачное
+              затемнение — тёмная/светлая/mono одинаково), чтобы НИ базовая тема Semi
+              (её сплошной hover уходит в светло-синий #5F9AFF), НИ акцент не подменяли
+              фон синим. Синими остаются ТОЛЬКО «Пополнить» (accent-CTA выше, намеренно)
+              и ПОКОЙНЫЕ акцентные детали BuyRow (плитка + заголовок) — но НЕ их ховер.
+              Глобальный Border.Row/ServerRow не трогаем — это локальная гарантия вида.  -->
+        <Style Selector="Border.Row:pointerover">
+            <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
+        </Style>
+        <Style Selector="Button#CopyReferralButton:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
+        </Style>
+        <Style Selector="Button#CopyReferralButton:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
+        </Style>
+
         <!--  ПРОБЛЕМА 3: заголовок строки «Управление» — вес Medium (не Bold),
               Space Grotesk. Строки читаются как остальной интерфейс, а не тяжело.
               Плюс одна строка + эллипсис: на ~360px «История платежей» / «Купить

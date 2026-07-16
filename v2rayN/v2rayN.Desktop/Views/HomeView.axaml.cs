@@ -22,19 +22,25 @@ public partial class HomeView : ReactiveUserControl<HomeViewModel>
 
         this.WhenActivated(disposables =>
         {
-            var vm = ViewModel;
-            if (vm is null)
-            {
-                return;
-            }
-
             // ── Account chip tap → open the Account tab (rail button, unchanged path) ──
+            //  Independent of the ViewModel, so wire it unconditionally — never gated behind a
+            //  (possibly-null-at-activation) ViewModel the way it used to be.
             void OnAccountRequested(object? s, EventArgs e) => OpenAccountTab();
             AccountChip.AccountRequested += OnAccountRequested;
             Disposable.Create(() => AccountChip.AccountRequested -= OnAccountRequested).DisposeWith(disposables);
 
-            // ── Connect-hero: shared binder (one connect pipeline, both layouts) ───────
-            HomeHeroPresenter.Bind(ConnectHero, vm).DisposeWith(disposables);
+            // ── Connect-hero: (re)bind on ViewModel AVAILABILITY (mirrors CompactHomeView) ──────
+            //  In the keep-alive model this permanent tab view is activated once — often BEFORE the
+            //  host assigns DataContext/ViewModel — so the old `var vm = ViewModel; if (vm is null)
+            //  return;` guard could skip the connect wiring forever, leaving the widescreen shield /
+            //  server rows dead. Subscribing to ViewModel and rebinding whenever it becomes non-null
+            //  (and re-binding if it swaps) keeps the widescreen connect pipeline wired regardless of
+            //  activation/DataContext ordering, exactly like compact.
+            var heroBinding = new SerialDisposable().DisposeWith(disposables);
+            this.WhenAnyValue(x => x.ViewModel)
+                .Where(vm => vm is not null)
+                .Subscribe(vm => heroBinding.Disposable = HomeHeroPresenter.Bind(ConnectHero, vm!))
+                .DisposeWith(disposables);
         });
     }
 

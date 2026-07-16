@@ -68,16 +68,19 @@
         <Style Selector="Button.WinBtn:pressed /template/ ContentPresenter#PART_ContentPresenter">
             <Setter Property="Background" Value="Transparent" />
         </Style>
+        <!--  Bug3: ховер-заливка caption-кнопок МГНОВЕННА. BrushTransition на Background убран —
+              при переходе курсора min→max уходящая кнопка гасла плавно (~120мс), а входящая
+              проявлялась → на ~120мс подсвечены ОБЕ («ховер минимайза подсвечивает и максимайз»).
+              Тот же фикс, что для строк сервера (GlobalStyles.axaml Border.ServerRow). Каждая
+              кнопка теперь загорается независимо; close сразу чист (без серо-красной мути), так
+              как убран переход между Brush.Hover и Brush.CloseHover. Path.CloseGlyph держит свой
+              Stroke-переход (тинт глифа) отдельно. RailToggle переопределяет Transitions ниже
+              (TransformOperationsTransition для press-scale) — на него это не влияет.  -->
         <Style Selector="Border.WinBtnBg">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="CornerRadius" Value="8" />
             <Setter Property="HorizontalAlignment" Value="Stretch" />
             <Setter Property="VerticalAlignment" Value="Stretch" />
-            <Setter Property="Transitions">
-                <Transitions>
-                    <BrushTransition Property="Background" Duration="0:0:0.12" />
-                </Transitions>
-            </Setter>
         </Style>
         <Style Selector="Button.WinBtn:pointerover Border.WinBtnBg">
             <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
@@ -506,17 +509,24 @@
                                   code-behind (SwapContent); под .lite — мгновенный своп.  -->
                             <Panel x:Name="contentHost" Background="Transparent" />
 
-                            <!--  ==================== Bug5: скрим низа контента (компакт) ====================
-                                  Компактная раскладка: контент раньше обрывался резкой линией над нижней
-                                  навигацией. Теперь снизу контента лежит мягкий градиент-скрим, и контент
-                                  «растворяется» в фон под безрамочной навигацией. Заливка = Brush.Bg
-                                  (следует теме: тёмная/светлая/моно), а плавность даёт OpacityMask (только
-                                  альфа: прозрачно сверху → непрозрачно снизу), поэтому цвет остаётся тема-
-                                  верным во всех темах. Виден ТОЛЬКО в компакте (ApplyLayoutMode гонит
-                                  IsVisible); в широкой раскладке нижней навигации нет. Клик сквозной.  -->
+                            <!--  ==================== Bug2/Bug5: скрим низа контента (компакт) ====================
+                                  Компактная раскладка: контент «растворяется» в фон под безрамочной нижней
+                                  навигацией мягким градиент-скримом (Brush.Bg + OpacityMask прозрачно→
+                                  непрозрачно, тема-верно во всех темах).
+                                  Bug2 (последний сервер прятался): раньше скрим был высотой 72 и растворял
+                                  нижние 72px ЖИВОГО контента — на максимальной прокрутке последняя строка
+                                  оказывалась под затуханием и была не видна. Теперь высота скрима = высоте
+                                  трейлинг-спейсера в ServerListView (Border, 24 — реальный child в Extent
+                                  прокрутки, agent D). На макс-прокрутке нижние 24px вьюпорта — это ИМЕННО
+                                  пустой спейсер, а низ последней строки совпадает с ВЕРХНИМ (полностью
+                                  прозрачным, offset 0) краем скрима → последняя строка видна целиком, при
+                                  этом мягкое затухание в нав сохраняется, а во время прокрутки строки всё
+                                  так же плавно «уходят» в фон. Спейсер == высота скрима ⇒ нулевой dead-space.
+                                  Виден ТОЛЬКО в компакте (ApplyLayoutMode гонит IsVisible); в широкой нав нет.
+                                  Клик сквозной.  -->
                             <Border
                                 x:Name="navScrim"
-                                Height="72"
+                                Height="24"
                                 VerticalAlignment="Bottom"
                                 Background="{DynamicResource Brush.Bg}"
                                 IsHitTestVisible="False"

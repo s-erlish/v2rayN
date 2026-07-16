@@ -98,9 +98,11 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         AddViaQrCmd = ReactiveCommand.CreateFromTask(AddViaQr);
         RefreshSubscriptionCmd = ReactiveCommand.CreateFromTask(RefreshSubscription);
 
-        // Rebuild grouped list + counters whenever the real server collection changes.
+        // Reconcile grouped list + counters whenever the real server collection changes. The
+        // reconcile mutates ServerGroups IN PLACE (never Clear()+rebuild) so a mere active-flag flip
+        // on selection does not tear the whole list down — see ReconcileGroups (Bug 6).
         Profiles.ProfileItems.CollectionChanged += OnProfileItemsChanged;
-        RebuildGroups();
+        ReconcileGroups();
 
         // Live language switch: the fallback group name ("My servers") and the servers/providers
         // meta line are composed in code, so re-run the projection when the language changes.
@@ -374,56 +376,156 @@ public class HomeViewModel : MyReactiveObject, IDisposable
 
     #region Grouped list projection
 
-    private void OnProfileItemsChanged(object? sender, NotifyCollectionChangedEventArgs e) => RebuildGroups();
+    private void OnProfileItemsChanged(object? sender, NotifyCollectionChangedEventArgs e) => ReconcileGroups();
 
-    private void RebuildGroups()
+    /// <summary>
+    /// Project <c>Profiles.ProfileItems</c> onto the grouped <see cref="ServerGroups"/> by RECONCILING
+    /// the existing collection IN PLACE — never <c>Clear()</c>+rebuild (Bug 6). The engine rebuilds
+    /// ProfileItems wholesale (Clear + AddRange of brand-new instances) on EVERY change, including a
+    /// mere active-flag flip when a server is selected. A blind rebuild made the non-virtualizing
+    /// ItemsControl destroy + recreate all group headers, rows and reveal containers (and re-run the
+    /// SubscriptionMetaView async resolve) → the visible jerk/flash on every tap.
+    ///
+    /// Instead we diff:
+    ///   • groups by <see cref="HomeServerGroup.Key"/> (<c>{subid}|{name}</c>) — add / remove / move
+    ///     only when the grouping itself changes;
+    ///   • rows within a matched group by <c>IndexId</c> — a persisting row keeps its container and
+    ///     only its reactive fields (IsActive / Delay / …) are copied across, so the selected-pill
+    ///     binding (<c>Classes.selected="{Binding IsActive}"</c>) updates smoothly with NO teardown.
+    /// A pure selection therefore mutates nothing structural: only two rows' IsActive flip. A full
+    /// container rebuild now happens ONLY for a genuine grouping change (sub added/removed/reordered,
+    /// server added/removed/reordered, or a renamed row whose displayed non-reactive fields changed).
+    /// </summary>
+    private void ReconcileGroups()
     {
         var items = Profiles?.ProfileItems;
         var count = items?.Count ?? 0;
         HasServers = count > 0;
         IsEmpty = !HasServers;
 
-        ServerGroups.Clear();
+        var plan = BuildGroupPlan(items, out var providers);
+        ReconcileServerGroups(plan);
 
-        var providers = 0;
-        if (items != null && count > 0)
+        Subtitle = FormatServersProvidersMeta(count, providers);
+    }
+
+    /// <summary>The desired shape of one group for a reconcile pass (no view objects allocated yet).</summary>
+    private readonly struct GroupPlan
+    {
+        public GroupPlan(string key, string name, bool pinned, bool expanded, List<ProfileItemModel> servers)
         {
-            var grouped = items
-                .GroupBy(i => new
-                {
-                    Key = i.Subid ?? string.Empty,
-                    Name = string.IsNullOrEmpty(i.SubRemarks) ? L.T("Home_MyServers") : i.SubRemarks,
-                })
-                .ToList();
+            Key = key;
+            Name = name;
+            Pinned = pinned;
+            Expanded = expanded;
+            Servers = servers;
+        }
 
-            providers = grouped.Count(g => !string.IsNullOrEmpty(g.Key.Key));
-            if (providers == 0)
+        public string Key { get; }
+        public string Name { get; }
+        public bool Pinned { get; }
+        public bool Expanded { get; }
+        public List<ProfileItemModel> Servers { get; }
+    }
+
+    /// <summary>Compute the desired ordered grouping from the live ProfileItems (same rule as before:
+    /// group by subscription, pinned subs first). Purely a data projection — it touches no view state.</summary>
+    private List<GroupPlan> BuildGroupPlan(IList<ProfileItemModel>? items, out int providers)
+    {
+        providers = 0;
+        var plan = new List<GroupPlan>();
+        if (items == null || items.Count == 0)
+        {
+            return plan;
+        }
+
+        var grouped = items
+            .GroupBy(i => new
             {
-                providers = grouped.Count;
-            }
+                Key = i.Subid ?? string.Empty,
+                Name = string.IsNullOrEmpty(i.SubRemarks) ? L.T("Home_MyServers") : i.SubRemarks,
+            })
+            .ToList();
 
-            // A9: pinned subscriptions float to the top. SubItem.Pinned is read from the in-memory
-            // sub cache (Profiles.SubItems, keyed by Subid == the group key). OrderByDescending is a
-            // stable sort, so unpinned groups keep their existing order underneath the pinned ones.
-            var ordered = grouped
-                .Select(g => new
-                {
-                    Group = g,
-                    Pinned = Profiles?.SubItems.FirstOrDefault(s => s.Id == g.Key.Key)?.Pinned ?? false,
-                })
-                .OrderByDescending(x => x.Pinned)
-                .ToList();
+        providers = grouped.Count(g => !string.IsNullOrEmpty(g.Key.Key));
+        if (providers == 0)
+        {
+            providers = grouped.Count;
+        }
 
-            foreach (var x in ordered)
+        // A9: pinned subscriptions float to the top. SubItem.Pinned is read from the in-memory
+        // sub cache (Profiles.SubItems, keyed by Subid == the group key). OrderByDescending is a
+        // stable sort, so unpinned groups keep their existing order underneath the pinned ones.
+        var ordered = grouped
+            .Select(g => new
             {
-                var g = x.Group;
-                var key = $"{g.Key.Key}|{g.Key.Name}";
-                var expanded = !_groupExpanded.TryGetValue(key, out var ex) || ex;
-                ServerGroups.Add(new HomeServerGroup(key, g.Key.Name, g.ToList(), expanded, x.Pinned, OnGroupExpandedChanged));
+                Group = g,
+                Pinned = Profiles?.SubItems.FirstOrDefault(s => s.Id == g.Key.Key)?.Pinned ?? false,
+            })
+            .OrderByDescending(x => x.Pinned)
+            .ToList();
+
+        foreach (var x in ordered)
+        {
+            var g = x.Group;
+            var key = $"{g.Key.Key}|{g.Key.Name}";
+            var expanded = !_groupExpanded.TryGetValue(key, out var ex) || ex;
+            plan.Add(new GroupPlan(key, g.Key.Name, x.Pinned, expanded, g.ToList()));
+        }
+
+        return plan;
+    }
+
+    /// <summary>Reconcile the live <see cref="ServerGroups"/> collection against the plan, mutating
+    /// only what actually differs. Matched groups are updated in place (see <see cref="GroupPlan"/>).</summary>
+    private void ReconcileServerGroups(List<GroupPlan> plan)
+    {
+        // 1. Drop groups that no longer exist (match by Key). Only their own containers are torn down.
+        var planKeys = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var p in plan)
+        {
+            planKeys.Add(p.Key);
+        }
+        for (var i = ServerGroups.Count - 1; i >= 0; i--)
+        {
+            if (!planKeys.Contains(ServerGroups[i].Key))
+            {
+                ServerGroups.RemoveAt(i);
             }
         }
 
-        Subtitle = FormatServersProvidersMeta(count, providers);
+        // 2. Walk the plan in order: insert new groups, move displaced ones, update matched ones in
+        //    place. Everything left of i is already correct, so a match is found at index >= i.
+        for (var i = 0; i < plan.Count; i++)
+        {
+            var p = plan[i];
+            var existingIndex = IndexOfGroup(p.Key);
+            if (existingIndex < 0)
+            {
+                // A genuinely new subscription group — only this one container is created.
+                ServerGroups.Insert(i, new HomeServerGroup(p.Key, p.Name, p.Servers, p.Expanded, p.Pinned, OnGroupExpandedChanged));
+                continue;
+            }
+            if (existingIndex != i)
+            {
+                ServerGroups.Move(existingIndex, i);
+            }
+            var group = ServerGroups[i];
+            group.UpdateHeader(p.Name, p.Pinned);
+            group.ReconcileServers(p.Servers);
+        }
+    }
+
+    private int IndexOfGroup(string key)
+    {
+        for (var i = 0; i < ServerGroups.Count; i++)
+        {
+            if (string.Equals(ServerGroups[i].Key, key, StringComparison.Ordinal))
+            {
+                return i;
+            }
+        }
+        return -1;
     }
 
     /// <summary>Compose the "{n} servers · {n} providers" meta line from the locale-aware plural
@@ -434,7 +536,7 @@ public class HomeViewModel : MyReactiveObject, IDisposable
 
     private void OnGroupExpandedChanged(string key, bool expanded) => _groupExpanded[key] = expanded;
 
-    private void OnLanguageChanged(object? sender, EventArgs e) => RebuildGroups();
+    private void OnLanguageChanged(object? sender, EventArgs e) => ReconcileGroups();
 
     #endregion Grouped list projection
 
@@ -491,26 +593,168 @@ public sealed class HomeServerGroup : INotifyPropertyChanged
 {
     private readonly Action<string, bool>? _onExpandedChanged;
     private bool _isExpanded;
+    private string _name;
+    private bool _pinned;
 
-    public HomeServerGroup(string key, string name, IList<ProfileItemModel> servers, bool isExpanded, bool pinned = false, Action<string, bool>? onExpandedChanged = null)
+    public HomeServerGroup(string key, string name, IEnumerable<ProfileItemModel> servers, bool isExpanded, bool pinned = false, Action<string, bool>? onExpandedChanged = null)
     {
         Key = key;
-        Name = name;
-        Servers = servers;
+        _name = name;
+        Servers = new ObservableCollection<ProfileItemModel>(servers);
         _isExpanded = isExpanded;
-        Pinned = pinned;
+        _pinned = pinned;
         _onExpandedChanged = onExpandedChanged;
     }
 
     public string Key { get; }
-    public string Name { get; }
-    public IList<ProfileItemModel> Servers { get; }
+
+    public string Name
+    {
+        get => _name;
+        private set
+        {
+            if (string.Equals(_name, value, StringComparison.Ordinal))
+            {
+                return;
+            }
+            _name = value;
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>
+    /// Live server rows for this group. An <see cref="ObservableCollection{T}"/> (not a static list)
+    /// so it can be reconciled IN PLACE via <see cref="ReconcileServers"/> — a selection / refresh
+    /// updates rows through their existing containers instead of tearing every row down (Bug 6).
+    /// </summary>
+    public ObservableCollection<ProfileItemModel> Servers { get; }
 
     /// <summary>True when this subscription is pinned — pinned groups are ordered first (A9).</summary>
-    public bool Pinned { get; }
+    public bool Pinned
+    {
+        get => _pinned;
+        private set
+        {
+            if (_pinned == value)
+            {
+                return;
+            }
+            _pinned = value;
+            OnPropertyChanged();
+        }
+    }
 
     public int Count => Servers.Count;
     public string CountText => Count.ToString();
+
+    /// <summary>Update header fields that can shift WITHOUT changing the group's identity (Key), so a
+    /// pin toggle / re-projection keeps this exact group instance (its expand state, its hooked
+    /// meta-bar and reveal container) rather than replacing it.</summary>
+    internal void UpdateHeader(string name, bool pinned)
+    {
+        Name = name;
+        Pinned = pinned;
+    }
+
+    /// <summary>
+    /// Reconcile this group's rows against the latest engine projection IN PLACE, matching by
+    /// <c>IndexId</c>. A row that persists keeps its existing container — only its reactive fields
+    /// (IsActive / Delay / DelayVal / …) are copied across, so the selected-pill and ping bindings
+    /// update with NO teardown/relayout (Bug 6). Rows are inserted / removed / reordered only for a
+    /// genuine membership or order change; a row whose DISPLAYED (non-reactive) fields changed — e.g.
+    /// a rename — is swapped so that one row re-renders.
+    /// </summary>
+    internal void ReconcileServers(IReadOnlyList<ProfileItemModel> desired)
+    {
+        var before = Servers.Count;
+
+        // Remove rows that are gone (by IndexId).
+        var desiredIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var d in desired)
+        {
+            desiredIds.Add(d.IndexId ?? string.Empty);
+        }
+        for (var i = Servers.Count - 1; i >= 0; i--)
+        {
+            if (!desiredIds.Contains(Servers[i].IndexId ?? string.Empty))
+            {
+                Servers.RemoveAt(i);
+            }
+        }
+
+        // Insert / move / update to match the desired order. Positions left of i are already correct.
+        for (var i = 0; i < desired.Count; i++)
+        {
+            var d = desired[i];
+            var existingIndex = IndexOfServer(d.IndexId);
+            if (existingIndex < 0)
+            {
+                Servers.Insert(i, d);
+                continue;
+            }
+            if (existingIndex != i)
+            {
+                Servers.Move(existingIndex, i);
+            }
+            var current = Servers[i];
+            if (SameDisplay(current, d))
+            {
+                // Same row — refresh only the reactive state so its container is NOT rebuilt.
+                CopyLiveState(current, d);
+            }
+            else
+            {
+                // A displayed but non-reactive field changed (rename / protocol shift) — swap the
+                // instance so ONLY this one row re-renders.
+                Servers[i] = d;
+            }
+        }
+
+        if (Servers.Count != before)
+        {
+            OnPropertyChanged(nameof(Count));
+            OnPropertyChanged(nameof(CountText));
+        }
+    }
+
+    private int IndexOfServer(string? indexId)
+    {
+        for (var i = 0; i < Servers.Count; i++)
+        {
+            if (string.Equals(Servers[i].IndexId, indexId, StringComparison.Ordinal))
+            {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /// <summary>The row's displayed, NON-reactive fields — when these all match, the two instances
+    /// render identically and only their reactive state can differ, so an in-place copy suffices.</summary>
+    private static bool SameDisplay(ProfileItemModel a, ProfileItemModel b) =>
+        string.Equals(a.Remarks, b.Remarks, StringComparison.Ordinal)
+        && a.ConfigType == b.ConfigType
+        && string.Equals(a.ProtocolDisplay, b.ProtocolDisplay, StringComparison.Ordinal)
+        && string.Equals(a.Network, b.Network, StringComparison.Ordinal)
+        && string.Equals(a.StreamSecurity, b.StreamSecurity, StringComparison.Ordinal)
+        && string.Equals(a.Subid, b.Subid, StringComparison.Ordinal)
+        && string.Equals(a.SubRemarks, b.SubRemarks, StringComparison.Ordinal);
+
+    /// <summary>Copy the [Reactive] fields the rows observe onto the retained instance. Each set is a
+    /// no-op when unchanged (ReactiveObject raises only on real change), so a pure selection touches
+    /// just IsActive — the selected pill flips, nothing else moves.</summary>
+    private static void CopyLiveState(ProfileItemModel target, ProfileItemModel source)
+    {
+        target.IsActive = source.IsActive;
+        target.Delay = source.Delay;
+        target.DelayVal = source.DelayVal;
+        target.SpeedVal = source.SpeedVal;
+        target.IpInfo = source.IpInfo;
+        target.TodayUp = source.TodayUp;
+        target.TodayDown = source.TodayDown;
+        target.TotalUp = source.TotalUp;
+        target.TotalDown = source.TotalDown;
+    }
 
     public bool IsExpanded
     {

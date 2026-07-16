@@ -58,6 +58,7 @@
                 VerticalContentAlignment="Center"
                 Classes="Primary">
                 <StackPanel
+                    HorizontalAlignment="Center"
                     Orientation="Horizontal"
                     Spacing="8"
                     VerticalAlignment="Center">
@@ -84,6 +85,7 @@
                 VerticalContentAlignment="Center"
                 Classes="Tonal">
                 <StackPanel
+                    HorizontalAlignment="Center"
                     Orientation="Horizontal"
                     Spacing="8"
                     VerticalAlignment="Center">
@@ -118,6 +120,7 @@
                 VerticalContentAlignment="Center"
                 Classes="Tonal">
                 <StackPanel
+                    HorizontalAlignment="Center"
                     Orientation="Horizontal"
                     Spacing="8"
                     VerticalAlignment="Center">
@@ -144,6 +147,7 @@
                 VerticalContentAlignment="Center"
                 Classes="OutlinedAccent">
                 <StackPanel
+                    HorizontalAlignment="Center"
                     Orientation="Horizontal"
                     Spacing="8"
                     VerticalAlignment="Center">

@@ -472,7 +472,7 @@ public partial class ServerListView : UserControl
     //  ItemsControl uses a non-virtualizing StackPanel, so each reveal container is stable; we hook its
     //  group on Loaded, unhook on Unloaded, and cancel any in-flight reveal when a new toggle arrives.
 
-    private const double RevealSlideMs = 190; //  fast reveal — OutQuint
+    private const double RevealSlideMs = 300; //  deliberate reveal — OutQuint, both directions (was 190, too snappy)
 
     //  Small translateY (composited) — a subtle slide that reads as a reveal regardless of list length,
     //  paired with the opacity crossfade. Full-height slides would whoosh on long lists; 12px stays crisp.
@@ -590,13 +590,14 @@ public partial class ServerListView : UserControl
             }
 
             //  COLLAPSE-SMOOTHNESS: the viewport Height animates TOGETHER with the rows' composited
-            //  opacity/translate (not touched once + snapped). Previously collapse froze the height for the
-            //  whole run and only dropped it to 0 in the finally, so the rows faded but the empty gap lingered
-            //  190ms then closed in one instant jump — that read as a hard "snap", no smooth hide. Now we
-            //  tween Height 0→natural on expand and natural→0 on collapse over the same 190ms OutQuint, so the
-            //  list below slides open/closed in step with the fade. It is a single group's container height
-            //  for 190ms (bounded), and it degrades safely: if we can't get a concrete pixel height we skip
-            //  the height tween and just fade the rows (auto height), exactly as before.
+            //  opacity/translate (not touched once + snapped). Previously collapse could fall into an instant
+            //  path (a non-concrete Bounds.Height → animateHeight=false → the finally slammed it shut) so the
+            //  rows faded but the container jumped closed — a hard "snap", no smooth hide. Now BOTH directions
+            //  always resolve a concrete height (expand: measured natural; collapse: live bounds else a fresh
+            //  measure) and tween Height 0→natural / natural→0 over the same ~300ms OutQuint, so the list below
+            //  slides open/closed in step with the fade. It is a single group's container height for ~300ms
+            //  (bounded), and it degrades safely: a genuinely unmeasurable container skips the height tween
+            //  and just fades the rows (auto height).
             double fromH = 0, toH = 0;
             bool animateHeight;
             if (expand)
@@ -619,18 +620,27 @@ public partial class ServerListView : UserControl
             }
             else
             {
+                //  COLLAPSE must ALWAYS animate: get a concrete start height from the live bounds, and if
+                //  those aren't realized at this instant (auto height / mid-layout) fall back to a fresh
+                //  measure — the SAME source expand uses. Only a genuinely unmeasurable container (0) drops
+                //  to the instant path; that is the crash-safe degrade, not the common case. This is what
+                //  fixes «collapse doesn't animate»: previously a non-concrete Bounds.Height snapped it shut.
                 var current = reveal.Bounds.Height;
+                if (current <= 0)
+                {
+                    current = MeasureRevealHeight(reveal);
+                }
                 if (current > 0)
                 {
                     fromH = current;
                     toH = 0;
                     animateHeight = true;
-                    reveal.Height = current; //  freeze at the live height — the tween closes it to 0.
+                    reveal.Height = current; //  freeze at the concrete height — the tween closes it to 0.
                 }
                 else
                 {
                     animateHeight = false;
-                    // No live height to tween from → leave as-is; the finally snaps it closed.
+                    // Truly unmeasurable → leave as-is; the finally snaps it closed.
                 }
             }
 
@@ -677,7 +687,7 @@ public partial class ServerListView : UserControl
                 },
             };
 
-            //  Height tween on the reveal container itself (Layoutable.Height), same 190ms OutQuint curve,
+            //  Height tween on the reveal container itself (Layoutable.Height), same ~300ms OutQuint curve,
             //  run CONCURRENTLY with the row crossfade off the SAME token so a superseding toggle cancels
             //  both together. FillMode.Forward holds the end height until the finally sets the resting state.
             Animation? heightAnim = animateHeight
@@ -722,13 +732,14 @@ public partial class ServerListView : UserControl
                 //  Only settle if THIS run still owns the container's CTS — a newer toggle may have
                 //  replaced (and cancelled/disposed) it while we awaited, in which case that toggle owns
                 //  the resting state and the dictionary entry. Dispose is idempotent, so a double-dispose
-                //  from the superseding path can't throw.
+                //  from the superseding path can't throw. When we DO own it, ApplyRevealState ALWAYS runs
+                //  (expand → Height=NaN; collapse → Height=0 + hidden), so the FillMode.Forward height
+                //  tween can never strand a stale fixed Height on the container — that stale clip is what
+                //  used to hide the last group/row (Bug 2). If we were cancelled we no longer own the CTS,
+                //  so we correctly defer to the superseding toggle here.
                 if (_revealCts.TryGetValue(reveal, out var mine) && ReferenceEquals(mine, cts))
                 {
-                    if (!token.IsCancellationRequested)
-                    {
-                        ApplyRevealState(reveal, expand);
-                    }
+                    ApplyRevealState(reveal, expand);
                     _revealCts.Remove(reveal);
                 }
                 cts.Dispose();

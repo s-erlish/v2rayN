@@ -85,6 +85,11 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     private Control? _currentContentView;        // текущая видимая вкладка в contentHost (keep-alive своп)
     private int _contentZ;                       // ZIndex-счётчик: входящая вкладка всегда поверх уходящей
 
+    // Bug8: интеракции буфера/скана регистрируются на ВРЕМЯ ЖИЗНИ окна (а не под WhenActivated, что снимало
+    // их при деактивации). Держим их здесь и освобождаем один раз в OnClosed — так угловой «+» (MenuFlyout,
+    // деактивирующий окно) не теряет обработчик и «добавить из буфера/по QR» не проваливается молча.
+    private readonly CompositeDisposable _windowInteractions = new();
+
     public MainWindow()
     {
         InitializeComponent();
@@ -127,17 +132,26 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
 
         // Двойной клик по навигации (рейл в широкой / нижний бар в компактной) тумблит окно через
         // брейкпоинт: компакт⇄широкая. handledEventsToo — ловим даже если кнопка «съела» тап.
-        // Bug3: но двойной клик по КНОПКЕ СВЁРТКИ рейла (btnRailToggle) НЕ должен сжимать окно — раньше
-        // он «проваливался» в этот handler. Поскольку handledEventsToo:true ловит событие даже помеченным
-        // Handled, пометки Handled на кнопке недостаточно — исключаем её по источнику события.
+        // Bug4: тумблер размера должен срабатывать ТОЛЬКО по пустой хром-области, а НЕ по любой
+        // нав-кнопке (navHome/navSettings/navAccount, кнопки нижнего бара, btnRailToggle). Раньше
+        // исключался лишь btnRailToggle, поэтому двойной клик по любой другой нав-кнопке «проваливался»
+        // в этот handler и разворачивал/сжимал окно. Поскольку handledEventsToo:true ловит событие даже
+        // помеченным Handled, пометки на кнопке недостаточно — фильтруем по источнику: IsWithinInteractive
+        // возвращает true, если клик попал ВНУТРЬ любого Button раньше, чем в host (railHost/bottomNav).
         railHost.AddHandler(InputElement.DoubleTappedEvent, (_, e) =>
         {
-            if (!IsWithinRailToggle(e.Source as Visual))
+            if (!IsWithinInteractive(e.Source as Visual))
             {
                 ToggleLayoutSize();
             }
         }, RoutingStrategies.Bubble, handledEventsToo: true);
-        bottomNav.AddHandler(InputElement.DoubleTappedEvent, (_, _) => ToggleLayoutSize(), RoutingStrategies.Bubble, handledEventsToo: true);
+        bottomNav.AddHandler(InputElement.DoubleTappedEvent, (_, e) =>
+        {
+            if (!IsWithinInteractive(e.Source as Visual))
+            {
+                ToggleLayoutSize();
+            }
+        }, RoutingStrategies.Bubble, handledEventsToo: true);
 
         // Drag-to-edge: тащим компактное окно к краю рабочей области → разворот в широкую.
         PositionChanged += OnPositionChanged;
@@ -213,7 +227,16 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         this.WhenAnyValue(x => x.ViewModel)
             .Where(vm => vm != null)
             .Take(1)
-            .Subscribe(vm => SetupHome(vm!));
+            .Subscribe(vm =>
+            {
+                // Bug8: регистрируем интеракции буфера/скана на ВРЕМЯ ЖИЗНИ окна, как только доступен
+                // ViewModel (App присваивает его сразу после Build). Раньше они жили под WhenActivated и
+                // снимались при деактивации — открытие MenuFlyout углового «+» деактивировало окно,
+                // обработчик пропадал, и AddServerViaClipboardAsync бросал UnhandledInteractionException в
+                // незамеченную задачу → «ничего не происходит». Теперь обработчик жив всегда.
+                RegisterWindowInteractions(vm!);
+                SetupHome(vm!);
+            });
 
         this.WhenActivated(disposables =>
         {
@@ -225,21 +248,10 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
             L.Instance.LanguageChanged += OnLanguageChanged;
             Disposable.Create(() => L.Instance.LanguageChanged -= OnLanguageChanged).DisposeWith(disposables);
 
-            ViewModel.ReadTextFromClipboardInteraction.RegisterHandler(async interaction =>
-            {
-                var result = await AvaUtils.GetClipboardData(this);
-                interaction.SetOutput(result);
-            }).DisposeWith(disposables);
-
-            ViewModel.ScanScreenInteraction.RegisterHandler(async interaction =>
-            {
-                ShowHideWindow(false);
-                await Task.Delay(200);
-                var result = QRCodeAvaloniaUtils.CaptureScreen();
-                ShowHideWindow(true);
-                interaction.SetOutput(result);
-            }).DisposeWith(disposables);
-
+            // Bug8: ReadTextFromClipboardInteraction / ScanScreenInteraction более НЕ регистрируются здесь —
+            // они живут на время жизни окна (RegisterWindowInteractions), чтобы деактивация окна flyout-«+»
+            // не снимала их. Оставшиеся интеракции (выбор файла/картинки, показ-скрытие) привязаны к
+            // активной сессии окна и корректно снимаются при деактивации.
             ViewModel.BrowseImageFileInteraction.RegisterHandler(async interaction =>
             {
                 var result = await UI.OpenFileDialog(null);
@@ -321,11 +333,17 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         _currentContentView = target;
 
         target.ZIndex = ++_contentZ;   // входящая ВСЕГДА поверх уходящей → подъём читается корректно
-        target.IsHitTestVisible = true;
-        if (previous != null)
+
+        // Bug7: РОВНО одна интерактивная поверхность. Гасим hit-test на ВСЕХ keep-alive вкладках, кроме
+        // target (а не только на previous). Широкая и компактная «Главная» — РАЗНЫЕ экземпляры, которые
+        // свопаются при смене ширины; устаревший IsHitTestVisible=true на скрытом инстансе Home перехватывал
+        // клики поверх видимого → «мёртвый» выбор сервера/подключение в широкой раскладке. Теперь ровно одна
+        // вкладка (target) хит-тестируется, остальные — прозрачны для указателя.
+        foreach (var v in new Control[] { _homeView, _compactHome, _settingsView, _accountView })
         {
-            previous.IsHitTestVisible = false;
+            v.IsHitTestVisible = ReferenceEquals(v, target);
         }
+        target.IsHitTestVisible = true;   // покрывает и PREVIEW_VIEW (target вне keep-alive-набора)
 
         // Мгновенный своп: первый показ (previous == null), reduced-motion (.lite) или своп раскладки.
         if (!animate || previous is null || MotionState.IsLite)
@@ -648,6 +666,30 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
 
     private void OnLanguageChanged(object? sender, EventArgs e) => ApplyRailToggleTip();
 
+    // Bug8: интеракции буфера обмена и скана экрана. Раньше они регистрировались под WhenActivated и
+    // снимались при деактивации окна. Угловой «+» открывает MenuFlyout, который может деактивировать
+    // окно; к моменту вызова ReadTextFromClipboardInteraction.Handle обработчика уже не было → бросок
+    // UnhandledInteractionException в незамеченную fire-and-forget задачу (_ = vm.AddViaClipboard()) →
+    // тихая неудача добавления. Регистрируем на ВРЕМЯ ЖИЗНИ окна (_windowInteractions, освобождается в
+    // OnClosed) — обработчик доступен из любого места независимо от активации.
+    private void RegisterWindowInteractions(MainWindowViewModel vm)
+    {
+        vm.ReadTextFromClipboardInteraction.RegisterHandler(async interaction =>
+        {
+            var result = await AvaUtils.GetClipboardData(this);
+            interaction.SetOutput(result);
+        }).DisposeWith(_windowInteractions);
+
+        vm.ScanScreenInteraction.RegisterHandler(async interaction =>
+        {
+            ShowHideWindow(false);
+            await Task.Delay(200);
+            var result = QRCodeAvaloniaUtils.CaptureScreen();
+            ShowHideWindow(true);
+            interaction.SetOutput(result);
+        }).DisposeWith(_windowInteractions);
+    }
+
     // Создаёт HomeViewModel поверх реального движка (ProfilesViewModel + StatusBarViewModel из
     // MainWindowViewModel) и отдаёт его «Главной». Индикатор рейла следует за IsConnected.
     private void SetupHome(MainWindowViewModel vm)
@@ -921,13 +963,19 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         }
     }
 
-    // Bug3: истина, если визуал — сам btnRailToggle или его потомок (т.е. источник двойного клика попал
-    // внутрь кнопки свёртки рейла). Используется, чтобы двойной клик по кнопке НЕ тумблил размер окна.
-    private bool IsWithinRailToggle(Visual? source)
+    // Bug4: истина, если источник двойного клика лежит ВНУТРИ любого интерактивного контрола (нав-кнопки,
+    // кнопки нижнего бара, кнопки свёртки рейла). Поднимаемся по визуальному дереву от источника: встретив
+    // Button РАНЬШЕ, чем host (railHost/bottomNav), считаем клик «по кнопке» → тумблер размера НЕ срабатывает.
+    // Дойдя до самого host, не встретив кнопки, — это пустая хром-область, тумблер разрешён (false).
+    private bool IsWithinInteractive(Visual? source)
     {
         for (var v = source; v is not null; v = v.GetVisualParent())
         {
-            if (ReferenceEquals(v, btnRailToggle))
+            if (ReferenceEquals(v, railHost) || ReferenceEquals(v, bottomNav))
+            {
+                return false;
+            }
+            if (v is Button)
             {
                 return true;
             }
@@ -1100,14 +1148,20 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
             DispatcherPriority.Default);
     }
 
-    // ==================== Инлайн-уведомление ОТКЛЮЧЕНО (Bug1) ====================
-    // Владелец: НИКАКИХ нижних уведомлений вообще — ни на подключении/отключении, ни на добавлении/
-    // обновлении подписки, ни на прочих событиях. Раньше сюда приходил AppEvents.SendSnackMsgRequested
-    // и показывал пилюлю снизу (snackHost). Теперь это осознанный no-op: тост не всплывает никогда.
-    // Ошибки подключения и так отражены состоянием Error на connect-щите, поэтому ничего не теряется.
-    // Подписку на событие и сам snackHost (скрытый) оставляем на месте — чтобы не трогать проводку/
-    // разметку — но отображение полностью подавлено.
-    private Task DelegateSnackMsg(string content) => Task.CompletedTask;
+    // ==================== Нижняя пилюля-тост ОТКЛЮЧЕНА; фидбэк уходит в панель сообщений (Bug8) ====================
+    // Владелец: НИКАКИХ всплывающих нижних тостов (snackHost) — ни на подключении/отключении, ни на
+    // добавлении/обновлении подписки. Пилюля снизу по-прежнему НЕ показывается (snackHost остаётся
+    // скрытым). Но раньше это был ПОЛНЫЙ no-op: весь фидбэк добавления (пустой буфер, неверные данные,
+    // дубликат, успех) шёл через NoticeManager.Enqueue → это событие и молча ПРОПАДАЛ → «добавляю
+    // подписку — ничего не происходит, без объяснений». Теперь вместо тоста маршрутизируем текст в
+    // ИНЛАЙН-панель сообщений (NoticeManager.SendMessage → SendMsgViewRequested → MsgViewModel-лог) —
+    // не плавающий тост, а лог-поверхность (owner-aligned): исход добавления больше не теряется.
+    // (SubscriptionImportLogHandler в MainWindowViewModel уже пишет прогресс скачивания в ту же панель.)
+    private Task DelegateSnackMsg(string content)
+    {
+        NoticeManager.Instance.SendMessage(content);
+        return Task.CompletedTask;
+    }
 
     // ==================== Общие аниматоры оболочки (transform+opacity, §A) ====================
     // Все переходы MainWindow строятся из этих двух примитивов: чистый fade и translate+fade (две
@@ -1195,6 +1249,15 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         }
 
         base.OnClosing(e);
+    }
+
+    // Bug8: освобождаем интеракции, зарегистрированные на время жизни окна (буфер/скан). Окно реально
+    // закрывается только при завершении приложения (обычное закрытие уходит в трей через OnClosing),
+    // поэтому одноразового освобождения здесь достаточно.
+    protected override void OnClosed(EventArgs e)
+    {
+        _windowInteractions.Dispose();
+        base.OnClosed(e);
     }
 
     private async void MainWindow_KeyDown(object? sender, KeyEventArgs e)

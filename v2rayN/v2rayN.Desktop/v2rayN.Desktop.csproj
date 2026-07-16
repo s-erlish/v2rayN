@@ -5,7 +5,12 @@
 		<ApplicationIcon>Assets\NotifyShieldOn.ico</ApplicationIcon>
 		<BuiltInComInteropSupport>true</BuiltInComInteropSupport>
 		<AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
-		<AssemblyName>v2rayN</AssemblyName>
+		<AssemblyName>departament</AssemblyName>
+		<!-- Task Manager reads these version-resource fields (Name/Description columns).
+		     Set them explicitly so the built host identifies as "departament", not "v2rayN". -->
+		<Product>departament</Product>
+		<AssemblyTitle>departament</AssemblyTitle>
+		<Company>departament</Company>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<CETCompat>false</CETCompat>
 		<!-- Elevate on Windows so TUN mode can create the wintun adapter (full-tunnel VPN). -->

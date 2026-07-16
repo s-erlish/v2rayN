@@ -469,36 +469,70 @@ public class MainWindowViewModel : MyReactiveObject
 
     public async Task AddServerViaClipboardAsync(string? clipboardData)
     {
-        var stringData = clipboardData;
-        if (clipboardData == null)
+        // Bug 8: every add outcome must be OBSERVABLE. The bottom snack (Enqueue) is a no-op sink on
+        // this build, and a subscription-URL add deliberately raises no snack at all, so each branch
+        // below ALSO writes a concise inline status line to the message panel (SendMessageEx) — the
+        // user always sees that the tap did something. Exceptions are caught + logged, never swallowed.
+        try
         {
-            var result = await ReadTextFromClipboardInteraction.Handle(Unit.Default);
-            if (result.IsNullOrEmpty())
+            var stringData = clipboardData;
+            if (clipboardData == null)
             {
+                var result = await ReadTextFromClipboardInteraction.Handle(Unit.Default);
+                if (result.IsNullOrEmpty())
+                {
+                    // Empty/unavailable clipboard — surface it instead of a silent no-op.
+                    NoticeManager.Instance.SendMessageEx("Нет данных для добавления");
+                    NoticeManager.Instance.Enqueue(ResUI.OperationFailed);
+                    return;
+                }
+                stringData = result;
+            }
+
+            // Detect a subscription-URL paste and whether that URL is already stored, so a duplicate
+            // re-paste surfaces "подписка уже добавлена" instead of silently re-fetching. (AddSubItem
+            // returns 0 for an existing URL too, so ret alone cannot tell new from duplicate.)
+            var isSubUrl = ContainsSubscriptionUrl(stringData);
+            var alreadyExists = isSubUrl && await SubscriptionUrlAlreadyExistsAsync(stringData);
+
+            var ret = await ConfigHandler.AddBatchServers(_config, stringData, _config.SubIndexId, false);
+            if (ret > 0)
+            {
+                await RefreshSubscriptions();
+                await RefreshServersDispatcherAsync();
+                if (isSubUrl)
+                {
+                    // Subscription add: no bottom notification (owner request) — its download progress
+                    // streams into the message panel below; here we mark the add itself.
+                    NoticeManager.Instance.SendMessageEx(alreadyExists
+                        ? "Подписка уже добавлена, обновляю данные"
+                        : "Подписка добавлена, загружаю серверы");
+                }
+                else
+                {
+                    // Direct server-link import — keep the snack AND mirror it inline.
+                    var msg = string.Format(ResUI.SuccessfullyImportedServerViaClipboard, ret);
+                    NoticeManager.Instance.Enqueue(msg);
+                    NoticeManager.Instance.SendMessageEx(msg);
+                }
+                // A pasted http(s) URL only creates a SubItem — no servers were fetched yet. Download
+                // them now so ProfileItems populates and onboarding is replaced (Android does this
+                // immediately after import). Never starts the core (OFF-model).
+                await DownloadImportedSubscriptionAsync(stringData);
+            }
+            else
+            {
+                // Nothing recognised in the pasted data (invalid / unsupported / already-present with
+                // nothing new). Surface it inline as well as via the snack sink.
+                NoticeManager.Instance.SendMessageEx("Нет данных для добавления");
                 NoticeManager.Instance.Enqueue(ResUI.OperationFailed);
-                return;
             }
-            stringData = result;
         }
-        var ret = await ConfigHandler.AddBatchServers(_config, stringData, _config.SubIndexId, false);
-        if (ret > 0)
+        catch (Exception ex)
         {
-            await RefreshSubscriptions();
-            await RefreshServersDispatcherAsync();
-            // Toast only for a direct server-link import; a subscription-URL add must raise no bottom
-            // notification (owner request) — its progress streams into the message panel instead.
-            if (!ContainsSubscriptionUrl(stringData))
-            {
-                NoticeManager.Instance.Enqueue(string.Format(ResUI.SuccessfullyImportedServerViaClipboard, ret));
-            }
-            // A pasted http(s) URL only creates a SubItem — no servers were fetched yet. Download
-            // them now so ProfileItems populates and onboarding is replaced (Android does this
-            // immediately after import). Never starts the core (OFF-model).
-            await DownloadImportedSubscriptionAsync(stringData);
-        }
-        else
-        {
-            NoticeManager.Instance.Enqueue(ResUI.OperationFailed);
+            // Never let the import path throw into an unobserved fire-and-forget task.
+            Logging.SaveLog("AddServerViaClipboardAsync", ex);
+            NoticeManager.Instance.SendMessageEx(ResUI.OperationFailed);
         }
     }
 
@@ -533,22 +567,37 @@ public class MainWindowViewModel : MyReactiveObject
 
     private async Task AddScanResultAsync(string? result)
     {
-        if (result.IsNullOrEmpty())
+        // Bug 8: mirror the clipboard path — every outcome is surfaced inline (message panel) so a
+        // scan is never a silent no-op, and the whole flow is wrapped so nothing throws unobserved.
+        try
         {
-            NoticeManager.Instance.Enqueue(ResUI.NoValidQRcodeFound);
-        }
-        else
-        {
+            if (result.IsNullOrEmpty())
+            {
+                NoticeManager.Instance.SendMessageEx(ResUI.NoValidQRcodeFound);
+                NoticeManager.Instance.Enqueue(ResUI.NoValidQRcodeFound);
+                return;
+            }
+
+            var isSubUrl = ContainsSubscriptionUrl(result);
+            var alreadyExists = isSubUrl && await SubscriptionUrlAlreadyExistsAsync(result);
+
             var ret = await ConfigHandler.AddBatchServers(_config, result, _config.SubIndexId, false);
             if (ret > 0)
             {
                 await RefreshSubscriptions();
                 await RefreshServersDispatcherAsync();
-                // Toast only for a direct server-link scan; a subscription-URL add must raise no bottom
-                // notification (owner request) — its progress streams into the message panel instead.
-                if (!ContainsSubscriptionUrl(result))
+                if (isSubUrl)
                 {
+                    // Subscription add: no bottom notification (owner request) — mark it inline instead.
+                    NoticeManager.Instance.SendMessageEx(alreadyExists
+                        ? "Подписка уже добавлена, обновляю данные"
+                        : "Подписка добавлена, загружаю серверы");
+                }
+                else
+                {
+                    // Direct server-link scan — keep the snack AND mirror it inline.
                     NoticeManager.Instance.Enqueue(ResUI.SuccessfullyImportedServerViaScan);
+                    NoticeManager.Instance.SendMessageEx(ResUI.SuccessfullyImportedServerViaScan);
                 }
                 // A scanned http(s) URL only creates a SubItem — fetch its servers now (OFF-model:
                 // never starts the core) so the list populates and onboarding is replaced.
@@ -556,8 +605,14 @@ public class MainWindowViewModel : MyReactiveObject
             }
             else
             {
+                NoticeManager.Instance.SendMessageEx("Нет данных для добавления");
                 NoticeManager.Instance.Enqueue(ResUI.OperationFailed);
             }
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog("AddScanResultAsync", ex);
+            NoticeManager.Instance.SendMessageEx(ResUI.OperationFailed);
         }
     }
 
@@ -592,6 +647,36 @@ public class MainWindowViewModel : MyReactiveObject
         }
         return data.Split('\n', '\r')
             .Any(line => line.Trim().StartsWith(Global.HttpsProtocol) || line.Trim().StartsWith(Global.HttpProtocol));
+    }
+
+    /// <summary>
+    /// True when every http(s) subscription URL contained in <paramref name="data"/> is already
+    /// stored as a <c>SubItem</c> — i.e. a re-paste/re-scan of a subscription that was added before.
+    /// <see cref="ConfigHandler.AddSubItem(Config, string)"/> returns 0 for an already-existing URL as
+    /// well as for a freshly-added one, so the add counter cannot distinguish them; this pre-check
+    /// lets the add path surface "подписка уже добавлена" instead of silently re-fetching.
+    /// </summary>
+    private static async Task<bool> SubscriptionUrlAlreadyExistsAsync(string? data)
+    {
+        if (data.IsNullOrEmpty())
+        {
+            return false;
+        }
+        var urls = data.Split('\n', '\r')
+            .Select(line => line.Trim())
+            .Where(line => line.StartsWith(Global.HttpsProtocol) || line.StartsWith(Global.HttpProtocol))
+            .ToList();
+        if (urls.Count == 0)
+        {
+            return false;
+        }
+        var subItems = await AppManager.Instance.SubItems();
+        if (subItems is null || subItems.Count == 0)
+        {
+            return false;
+        }
+        var existing = subItems.Select(s => s.Url).Where(u => u.IsNotEmpty()).ToHashSet();
+        return urls.All(existing.Contains);
     }
 
     /// <summary>

@@ -209,10 +209,11 @@
                 </Button>
                 <TextBlock
                     Grid.Column="1"
-                    Margin="8,0,0,0"
+                    Margin="12,0,0,0"
                     VerticalAlignment="Center"
                     Classes="Headline"
-                    Text="{loc:T Login_SignIn}" />
+                    Text="{loc:T Login_SignIn}"
+                    TextTrimming="CharacterEllipsis" />
             </Grid>
         </Border>
 
@@ -267,11 +268,14 @@
                             x:Name="TelegramButton"
                             Margin="0,24,0,0"
                             HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Center"
+                            VerticalContentAlignment="Center"
                             Classes="Primary Tall">
                             <StackPanel
+                                HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
                                 Orientation="Horizontal"
-                                Spacing="10">
+                                Spacing="8">
                                 <PathIcon
                                     Width="20"
                                     Height="20"
@@ -357,9 +361,15 @@
                             <Button
                                 x:Name="SiteButton"
                                 HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Center"
+                                VerticalContentAlignment="Center"
                                 Classes="Tonal Tall"
                                 Command="{Binding LoginSiteCmd}">
-                                <TextBlock x:Name="SiteButtonLabel" Text="{loc:T Common_SignInWebsite}" />
+                                <TextBlock
+                                    x:Name="SiteButtonLabel"
+                                    HorizontalAlignment="Center"
+                                    TextAlignment="Center"
+                                    Text="{loc:T Common_SignInWebsite}" />
                             </Button>
                             <Ellipse
                                 x:Name="SiteSpinner"
@@ -415,9 +425,15 @@
                                 <Button
                                     x:Name="ConfirmButton"
                                     HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Center"
+                                    VerticalContentAlignment="Center"
                                     Classes="Primary Tall"
                                     Command="{Binding Submit2FaCmd}">
-                                    <TextBlock x:Name="ConfirmButtonLabel" Text="{loc:T Login_Confirm}" />
+                                    <TextBlock
+                                        x:Name="ConfirmButtonLabel"
+                                        HorizontalAlignment="Center"
+                                        TextAlignment="Center"
+                                        Text="{loc:T Login_Confirm}" />
                                 </Button>
                                 <Ellipse
                                     x:Name="ConfirmSpinner"
@@ -510,11 +526,14 @@
                             x:Name="OpenTelegramButton"
                             Margin="0,24,0,0"
                             HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Center"
+                            VerticalContentAlignment="Center"
                             Classes="Primary Tall">
                             <StackPanel
+                                HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
                                 Orientation="Horizontal"
-                                Spacing="10">
+                                Spacing="8">
                                 <PathIcon
                                     Width="20"
                                     Height="20"
