@@ -33,10 +33,6 @@ public partial class LoginView : UserControl
     private CompositeDisposable? _subscriptions;
     private AccountViewModel? _vm;
 
-    // Deep link, уже открытый в текущей попытке — чтобы Polling не переоткрывал Telegram
-    // (паритет LoginActivity.currentDeepLink / openTelegramOnce).
-    private string? _openedDeepLink;
-
     // Запрос входа через сайт / 2FA в полёте (LoginState.SiteLoading).
     private bool _siteBusy;
 
@@ -108,11 +104,10 @@ public partial class LoginView : UserControl
             .Subscribe(Apply2Fa)
             .DisposeWith(d);
 
-        // Deep link готов — открываем Telegram один раз на попытку.
-        _vm.WhenAnyValue(x => x.TelegramDeepLink)
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
-            .Subscribe(OpenTelegramOnce)
-            .DisposeWith(d);
+        // ВАЖНО: deep link Telegram открывает ТОЛЬКО VM (AccountViewModel.ApplyLoginState →
+        // ProcUtils.ProcessStart на состоянии AwaitingTelegram). Раньше вид ПОВТОРНО открывал ту же
+        // ссылку по WhenAnyValue(TelegramDeepLink) → браузер поднимал ДВЕ одинаковые вкладки. Вид
+        // авто-открытие больше НЕ делает; ручной повтор доступен кнопкой «Открыть Telegram».
 
         // Живая валидация: submit активен только при валидном вводе (паритет
         // updateSiteSubmitEnabled / update2faSubmitEnabled + doAfterTextChanged).
@@ -318,17 +313,6 @@ public partial class LoginView : UserControl
 
     // ── Действия ────────────────────────────────────────────────────────────
 
-    /// <summary>Открывает deep link Telegram один раз на попытку (паритет openTelegramOnce).</summary>
-    private void OpenTelegramOnce(string? deepLink)
-    {
-        if (deepLink.IsNullOrEmpty() || _openedDeepLink == deepLink || Design.IsDesignMode)
-        {
-            return;
-        }
-        _openedDeepLink = deepLink;
-        ProcUtils.ProcessStart(deepLink);
-    }
-
     /// <summary>«Открыть Telegram»: повторно открывает текущий deep link (ссылка ещё живая).</summary>
     private void OnOpenTelegramClick(object? sender, RoutedEventArgs e)
     {
@@ -346,7 +330,6 @@ public partial class LoginView : UserControl
     /// </summary>
     private void OnTelegramClick(object? sender, RoutedEventArgs e)
     {
-        _openedDeepLink = null;
         SetLoginError(string.Empty);
         Execute(_vm?.LoginTelegramCmd);
     }
@@ -354,7 +337,6 @@ public partial class LoginView : UserControl
     /// <summary>«Начать заново»: новая попытка входа через Telegram со свежим deep link.</summary>
     private void OnRestartClick(object? sender, RoutedEventArgs e)
     {
-        _openedDeepLink = null;
         SetLoginError(string.Empty);
         Execute(_vm?.LoginTelegramCmd);
     }

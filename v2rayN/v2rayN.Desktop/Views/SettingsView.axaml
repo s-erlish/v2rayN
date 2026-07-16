@@ -431,12 +431,15 @@
                                     Text="SOCKS5-авторизация, память, доступ по сети"
                                     TextWrapping="Wrap" />
                             </StackPanel>
+                            <!--  Раскрытие панели вращает шеврон 0°→90° БЕЗ CenterX/Y (code-behind ставит
+                                  голый RotateTransform) → он вращается вокруг origin. Значит origin =
+                                  относительный центр «50%,50%»; «0.5,0.5» = 0.5px ≈ угол → шеврон облетал бы.  -->
                             <PathIcon
                                 x:Name="LocalProxyChevron"
                                 Grid.Column="3"
                                 Classes="Chevron"
                                 Data="{StaticResource Geo.Set.Chevron}"
-                                RenderTransformOrigin="0.5,0.5" />
+                                RenderTransformOrigin="50%,50%" />
                         </Grid>
                     </Border>
 

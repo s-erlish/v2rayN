@@ -27,9 +27,11 @@
           DataContext = ОДИН HomeViewModel (тот же, что широкая раскладка).
           =================================================================================  -->
 
+    <!--  Нижний padding = высота нижней навигации (~58) + комфортный зазор (~40), чтобы ПОСЛЕДНЯЯ
+          строка сервера полностью читалась над баром и не пряталась под ним.  -->
     <ScrollViewer
         HorizontalScrollBarVisibility="Disabled"
-        Padding="0,0,0,88"
+        Padding="0,0,0,98"
         VerticalScrollBarVisibility="Auto">
         <StackPanel>
 

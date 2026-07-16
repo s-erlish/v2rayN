@@ -19,16 +19,30 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     private readonly Button[] _navButtons;
     private HomeViewModel? _homeViewModel;
 
-    // Компактная (телефонная) раскладка: свои экземпляры «Главной» и «Серверов» (широкая и
-    // компактная делят ОДИН HomeViewModel, но каждая держит своё дерево — см. ApplyLayoutMode).
+    // Компактная (телефонная) «Главная»: свой одностолбцовый экземпляр (широкая и компактная
+    // делят ОДИН HomeViewModel, но каждая держит своё дерево «Главной» — см. ViewFor).
     private readonly CompactHomeView _compactHome = new();
-    private readonly CompactServersView _compactServers = new();
 
     // Брейкпоинт адаптива: ширина < 760 → компакт, ≥ 760 → широкая. Гистерезис 24 (назад в компакт
-    // только < 736), чтобы окно, «припаркованное» на границе, не мигало между деревьями при драге.
+    // только < 736), чтобы окно, «припаркованное» на границе, не мигало между раскладками при драге.
     private const double CompactBreakpointWidth = 760.0;
     private const double LayoutHysteresis = 24.0;
-    private bool _compactMode = true;          // старт компактный (дефолт 400×820 < 760)
+    private bool _compactMode = true;          // старт компактный (дефолт 310×630 < 760)
+
+    // Целевые размеры тумблера раскладки (двойной клик по навигации / drag-to-edge). Компакт
+    // держит title-bar на маленьком окне; широкая — рабочий десктоп. Оба клампятся в WorkingArea.
+    private const double WideToggleWidth = 1120.0;
+    private const double WideToggleHeight = 760.0;
+    private const double CompactToggleWidth = 310.0;
+    private const double CompactToggleHeight = 630.0;
+
+    // Драг-к-краю: когда пользователь тащит компактное окно к верхнему/боковому краю рабочей
+    // области — разворачиваем в широкую. Порог в физ. пикселях; _edgeSnapSuspended гасит ложные
+    // срабатывания во время программного репозиционирования (клампы/тумблер).
+    private const int EdgeSnapThreshold = 6;
+    private bool _edgeSnapSuspended;
+    private bool _titleDragging;
+    private bool _edgeExpandRequested;
     private AppTab _currentTab = AppTab.Home;   // ОДНО состояние вкладки на обе раскладки
     private bool _isEmpty = true;
 
@@ -59,7 +73,6 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         {
             Classes.Add("lite");
             contentHost.PageTransition = null;
-            compactContentHost.PageTransition = null;
         }
 
         KeyDown += MainWindow_KeyDown;
@@ -72,8 +85,8 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
 
         // Кнопка внизу рейла сворачивает/разворачивает ЛЕВУЮ навигацию (раньше прятала окно
         // в трей — убрано; в трей ведёт иконка App.axaml и «мин» в заголовке). Тумблит класс
-        // .railCollapsed на shellRoot → стили гонят navItems Width 76↔0 + шеврон ‹↔› (OutQuint,
-        // гасится под .lite). railStatusDot и сама кнопка остаются видны в слим-полосе.
+        // .railCollapsed на bodyRoot → стили гонят navItems Width 76↔0 + шеврон ‹↔› (OutQuint,
+        // гасится под .lite). Бренд-марка, railStatusDot и сама кнопка остаются видны в слим-полосе.
         btnRailToggle.Click += (_, _) => ToggleRail();
 
         // Единое состояние вкладки для ОБЕИХ раскладок: рейл (широкая) и нижняя навигация
@@ -85,8 +98,16 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         bottomNav.TabSelected += (_, tab) => ShowTab(tab);
         _compactHome.AccountRequested += (_, _) => ShowTab(AppTab.Account);
 
+        // Двойной клик по навигации (рейл в широкой / нижний бар в компактной) тумблит окно через
+        // брейкпоинт: компакт⇄широкая. handledEventsToo — ловим даже если кнопка «съела» тап.
+        railHost.AddHandler(InputElement.DoubleTappedEvent, (_, _) => ToggleLayoutSize(), RoutingStrategies.Bubble, handledEventsToo: true);
+        bottomNav.AddHandler(InputElement.DoubleTappedEvent, (_, _) => ToggleLayoutSize(), RoutingStrategies.Bubble, handledEventsToo: true);
+
+        // Drag-to-edge: тащим компактное окно к краю рабочей области → разворот в широкую.
+        PositionChanged += OnPositionChanged;
+
         // Первичная раскладка + вотчер ширины окна. Наблюдаем Bounds окна (ширина клиентской
-        // области); при пересечении брейкпоинта дерево меняется РОВНО один раз (гистерезис).
+        // области); при пересечении брейкпоинта раскладка меняется РОВНО один раз (гистерезис).
         ApplyLayoutMode(_compactMode);
         this.GetObservable(BoundsProperty).Subscribe(b => UpdateLayoutMode(b.Width));
 
@@ -125,7 +146,7 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
             if (preview is not null)
             {
                 onboardingView.IsVisible = false;
-                shellRoot.IsVisible = true;
+                bodyRoot.IsVisible = true;
                 contentHost.Content = preview;
             }
         }
@@ -204,42 +225,28 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     #region Nav & Chrome
 
     // ==================== Единая смена вкладки (обе раскладки) ====================
-    // ОДИН источник истины (_currentTab). Кладёт контент в ВИДИМЫЙ хост (широкий contentHost или
-    // компактный compactContentHost). Настройки/Аккаунт — общие экземпляры (перецепляются между
-    // хостами при смене раскладки); «Главная» и «Сервера» имеют своё дерево в каждой раскладке.
-    // Широкая раскладка не имеет вкладки «Сервера» — там серверы в левой колонке «Главной»,
-    // поэтому Servers отображается как Home в рейле/широком хосте (состояние вкладки сохраняется).
+    // ОДИН источник истины (_currentTab) и ОДИН общий хост (contentHost). Настройки/Аккаунт —
+    // общие экземпляры, которые ВСЕГДА живут в этом ЕДИНОМ хосте, поэтому смена ширины физически
+    // не «перецепляет» живой контрол в другой хост (был краш компакт→Настройки→расширение).
+    // «Главная» имеет своё дерево на раскладку (компактное одностолбцовое vs широкое двухколоночное);
+    // ViewFor выбирает нужное по _compactMode — это просто смена Content ОДНОГО хоста, без переноса
+    // между родителями. Отдельной вкладки «Сервера» нет: серверы — часть «Главной».
     private void ShowTab(AppTab tab)
     {
         _currentTab = tab;
-        var wideTab = tab == AppTab.Servers ? AppTab.Home : tab;
 
-        SetRailActive(wideTab);
+        SetRailActive(tab);
         bottomNav.SetSelected(tab);
 
-        if (_compactMode)
-        {
-            compactContentHost.Content = CompactViewFor(tab);
-        }
-        else
-        {
-            contentHost.Content = WideViewFor(wideTab);
-        }
+        contentHost.Content = ViewFor(tab);
     }
 
-    private Control CompactViewFor(AppTab tab) => tab switch
-    {
-        AppTab.Servers => _compactServers,
-        AppTab.Settings => _settingsView,
-        AppTab.Account => _accountView,
-        _ => _compactHome,
-    };
-
-    private Control WideViewFor(AppTab tab) => tab switch
+    // Home разный на раскладку (компакт vs широкая); Настройки/Аккаунт — единые экземпляры.
+    private Control ViewFor(AppTab tab) => tab switch
     {
         AppTab.Settings => _settingsView,
         AppTab.Account => _accountView,
-        _ => _homeView,
+        _ => _compactMode ? _compactHome : _homeView,
     };
 
     private void SetRailActive(AppTab tab)
@@ -274,33 +281,43 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         }
     }
 
-    // Чистая видимость + класс раскладки на окне; VM не пересоздаём. Освобождаем общие экраны из
-    // скрытого хоста, чтобы ShowTab чисто перецепил их в видимый (контрол = один родитель).
+    // Переклад chrome вокруг ЕДИНОГО contentHost: широкая = [рейл(Auto) | контент(*)], компакт =
+    // [контент(*) / нижняя-нав(Auto)]. Меняем только Grid-раскладку/видимость chrome и Content
+    // хоста — сами контролы НЕ переносятся между деревьями (нет двойного родителя → нет краша).
     private void ApplyLayoutMode(bool compact)
     {
         _compactMode = compact;
 
-        Classes.Remove(compact ? "wide" : "compact");
-        if (!Classes.Contains(compact ? "compact" : "wide"))
-        {
-            Classes.Add(compact ? "compact" : "wide");
-        }
-
         if (compact)
         {
-            contentHost.Content = null;
+            // Одна колонка, две строки: контент над нижней навигацией.
+            bodyRoot.ColumnDefinitions = new ColumnDefinitions("*");
+            bodyRoot.RowDefinitions = new RowDefinitions("*,Auto");
+            Grid.SetColumn(contentArea, 0);
+            Grid.SetRow(contentArea, 0);
+            Grid.SetColumn(bottomNav, 0);
+            Grid.SetRow(bottomNav, 1);
         }
         else
         {
-            compactContentHost.Content = null;
+            // Две колонки, одна строка: рейл слева, контент справа.
+            bodyRoot.ColumnDefinitions = new ColumnDefinitions("Auto,*");
+            bodyRoot.RowDefinitions = new RowDefinitions("*");
+            Grid.SetColumn(railHost, 0);
+            Grid.SetRow(railHost, 0);
+            Grid.SetColumn(contentArea, 1);
+            Grid.SetRow(contentArea, 0);
         }
+
+        railHost.IsVisible = !compact;
+        bottomNav.IsVisible = compact;
 
         ApplyShellVisibility();
         ShowTab(_currentTab);
     }
 
     // Онбординг/суб-страницы — mode-agnostic оверлеи. Пусто (нет подписок) → только онбординг на всю
-    // ширину. Есть подписки → видим ровно одно дерево по текущей раскладке.
+    // ширину. Есть подписки → виден единый bodyRoot (chrome раскладывает ApplyLayoutMode).
     private void ApplyShellVisibility()
     {
         // Не трогаем видимость в режиме превью суб-экрана (DEV screenshot hook).
@@ -309,12 +326,11 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
             return;
         }
         onboardingView.IsVisible = _isEmpty;
-        shellRoot.IsVisible = !_isEmpty && !_compactMode;
-        compactRoot.IsVisible = !_isEmpty && _compactMode;
+        bodyRoot.IsVisible = !_isEmpty;
     }
 
     // Свёртка/разворот левого нав-рейла. Всё движение (navItems Width/Opacity, поворот шеврона)
-    // живёт в стилях по классу .railCollapsed на shellRoot; здесь только тумблим класс и правим
+    // живёт в стилях по классу .railCollapsed на bodyRoot; здесь только тумблим класс и правим
     // подсказку. Столбец рейла Auto → контент сам занимает освободившееся место, ничего не клипая.
     // Кнопка и индикатор остаются в слим-полосе, так что развернуть можно всегда (не «застрять»).
     private bool _railCollapsed;
@@ -324,11 +340,11 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         _railCollapsed = !_railCollapsed;
         if (_railCollapsed)
         {
-            shellRoot.Classes.Add("railCollapsed");
+            bodyRoot.Classes.Add("railCollapsed");
         }
         else
         {
-            shellRoot.Classes.Remove("railCollapsed");
+            bodyRoot.Classes.Remove("railCollapsed");
         }
         ToolTip.SetTip(btnRailToggle, _railCollapsed ? "Развернуть панель" : "Свернуть панель");
     }
@@ -338,11 +354,10 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     private void SetupHome(MainWindowViewModel vm)
     {
         _homeViewModel = new HomeViewModel(vm);
-        // ОДИН HomeViewModel питает ОБЕ раскладки (широкую «Главную» и компактные Home/Servers),
-        // поэтому connect-состояние, выбранный сервер, скорости и таймер одинаковы при любой ширине.
+        // ОДИН HomeViewModel питает ОБЕ раскладки (широкую и компактную «Главную»), поэтому
+        // connect-состояние, выбранный сервер, скорости и таймер одинаковы при любой ширине.
         _homeView.DataContext = _homeViewModel;
         _compactHome.DataContext = _homeViewModel;
-        _compactServers.DataContext = _homeViewModel;
         onboardingView.DataContext = _homeViewModel;
 
         // Индикатор рейла: серый в покое, синий при подключении И в процессе подключения (P1-3).
@@ -444,7 +459,108 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     {
         if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
         {
+            // Арм drag-to-edge только на реальный перенос заголовка. На Windows BeginMoveDrag
+            // блокирует до конца перетаскивания (PositionChanged летят реентрантно и лишь помечают
+            // _edgeExpandRequested), поэтому фактический разворот делаем ПОСЛЕ выхода из move-loop —
+            // не воюем с нативным циклом перемещения за позицию окна.
+            _titleDragging = true;
+            _edgeExpandRequested = false;
             BeginMoveDrag(e);
+            _titleDragging = false;
+            if (_edgeExpandRequested)
+            {
+                _edgeExpandRequested = false;
+                ResizeClamped(WideToggleWidth, WideToggleHeight);
+            }
+        }
+    }
+
+    // ==================== Двойной клик по навигации: тумблер компакт⇄широкая ====================
+    // Компакт → широкая (WideToggle), широкая → компакт (CompactToggle). Смена ширины через
+    // брейкпоинт триггерит ApplyLayoutMode из Bounds-вотчера, так что раскладка следует за размером.
+    private void ToggleLayoutSize()
+    {
+        if (WindowState != WindowState.Normal)
+        {
+            WindowState = WindowState.Normal;
+        }
+        if (_compactMode)
+        {
+            ResizeClamped(WideToggleWidth, WideToggleHeight);
+        }
+        else
+        {
+            ResizeClamped(CompactToggleWidth, CompactToggleHeight);
+        }
+    }
+
+    // ==================== Drag-to-edge: разворот компакта у края экрана ====================
+    // Тащим компактное окно так, что его верх/левый/правый край касается края рабочей области →
+    // разворачиваем в широкую. Только из компакта и только при реальном drag заголовка (не дёргает
+    // при программных клампах). После разворота _compactMode=false — повторно не срабатывает.
+    private void OnPositionChanged(object? sender, PixelPointEventArgs e)
+    {
+        if (_edgeSnapSuspended || !_titleDragging || !_compactMode || WindowState != WindowState.Normal)
+        {
+            return;
+        }
+
+        var screen = Screens.ScreenFromWindow(this) ?? Screens.Primary;
+        if (screen is null)
+        {
+            return;
+        }
+        var scaling = screen.Scaling > 0 ? screen.Scaling : 1.0;
+        var wa = screen.WorkingArea;
+        var p = Position;
+        var physW = (int)(Width * scaling);
+
+        var hitTop = p.Y <= wa.Y + EdgeSnapThreshold;
+        var hitLeft = p.X <= wa.X + EdgeSnapThreshold;
+        var hitRight = p.X + physW >= wa.X + wa.Width - EdgeSnapThreshold;
+        if (hitTop || hitLeft || hitRight)
+        {
+            // Помечаем разворот; сам ResizeClamped выполнит TitleBar_PointerPressed после move-loop.
+            _edgeExpandRequested = true;
+        }
+    }
+
+    // Ставит размер и КЛАМПИТ его + позицию в WorkingArea текущего экрана: окно (и кастомный
+    // заголовок) всегда целиком на экране — верх никогда не уходит за границу (y ≥ wa.Y).
+    private void ResizeClamped(double width, double height)
+    {
+        _edgeSnapSuspended = true;
+        try
+        {
+            var screen = Screens.ScreenFromWindow(this) ?? Screens.Primary;
+            if (screen is null)
+            {
+                Width = width;
+                Height = height;
+                return;
+            }
+            var scaling = screen.Scaling > 0 ? screen.Scaling : 1.0;
+            var wa = screen.WorkingArea;
+            var maxW = wa.Width / scaling;
+            var maxH = wa.Height / scaling;
+
+            var w = Math.Clamp(width, Math.Min(MinWidth, maxW), maxW);
+            var h = Math.Clamp(height, Math.Min(MinHeight, maxH), maxH);
+            Width = w;
+            Height = h;
+
+            var physW = w * scaling;
+            var physH = h * scaling;
+            var x = wa.X + Math.Max(0, (wa.Width - physW) / 2);
+            var y = wa.Y + Math.Max(0, (wa.Height - physH) / 2);
+            x = Math.Max(wa.X, Math.Min(x, wa.X + wa.Width - physW));
+            y = Math.Max(wa.Y, Math.Min(y, wa.Y + wa.Height - physH));
+            Position = new PixelPoint((int)x, (int)y);
+        }
+        catch { }
+        finally
+        {
+            _edgeSnapSuspended = false;
         }
     }
 

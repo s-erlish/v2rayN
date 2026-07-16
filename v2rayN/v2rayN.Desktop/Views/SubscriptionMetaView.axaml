@@ -47,10 +47,11 @@
 
     <UserControl.Styles>
         <!--  Шеврон-сворачивание (0° раскрыто, −90° свёрнуто, зеркалит Android bindHeader) вращается
-              в code-behind через явный RotateTransform с CenterX/CenterY=11 (половина 22px-глифа):
-              RenderTransformOrigin к анимируемым render-transform в этой сборке НЕ применяется
-              (та же причина, что у ConnectingArc/спиннеров), поэтому TransformOperations rotate вокруг
-              origin уводил шеврон из бокса. Интринзик-центр держит его строго на месте.  -->
+              в code-behind через явный RotateTransform с ПЛАВНЫМ переходом угла. Центр задаём РОВНО
+              ОДИН раз — через RenderTransformOrigin="50%,50%" самого глифа (ОТНОСИТЕЛЬНЫЙ центр = 11,11
+              у 22px-глифа). ВАЖНО: «50%,50%», а НЕ «0.5,0.5»: последнее парсится как 0.5 ПИКСЕЛЯ ≈ угол,
+              и шеврон облетал бы орбитой. RotateTransform.CenterX/Y держим на 0, чтобы центр НЕ удвоился
+              (origin 11,11 + center 0 = 11,11 = центр глифа) — вращение строго на месте.  -->
 
         <!--  Меню «+» (Incy тёмная поверхность, радиус 12, пункты Body).  -->
         <Style Selector="MenuFlyoutPresenter">
@@ -94,7 +95,8 @@
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
                         Data="{StaticResource Meta.Chevron}"
-                        Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+                        Foreground="{DynamicResource Brush.OnSurfaceVariant}"
+                        RenderTransformOrigin="50%,50%" />
                 </Button>
 
                 <!--  Заголовок (profile-title/remarks) + подзаголовок (last-update · автообновление).  -->

@@ -32,32 +32,39 @@ public partial class ConnectHeroView : UserControl
         Connected,
     }
 
-    //  Кэш-кисти повторяют токены Incy (Brush.OnSurfaceVariant / Brush.Accent / Brush.OnSurface),
-    //  чтобы смена состояния не зависела от рантайм-поиска ресурсов. Тема одна (тёмная).
-    private static readonly IBrush ShieldGray = new SolidColorBrush(Color.Parse("#9BA1AD"));
+    //  Fallbacks (Incy dark defaults) — used ONLY when a theme-resource lookup fails. The LIVE
+    //  values below come from theme tokens so the shield + status text stay readable on the light
+    //  theme AND under the «Чёрно-белая» (mono) overlay, not just on dark. Hardcoding these was the
+    //  bug: on light/mono the disc collapsed to a light/grey surface while the grey shield + near-
+    //  white status text washed out (black-on-black / white-on-white).
+    private static readonly IBrush ShieldGrayFallback = new SolidColorBrush(Color.Parse("#9BA1AD"));
     private static readonly IBrush AccentFallback = new SolidColorBrush(Color.Parse("#4C8DFF"));
-    private static readonly IBrush OnSurface = new SolidColorBrush(Color.Parse("#F2F4F8"));
+    private static readonly IBrush OnSurfaceFallback = new SolidColorBrush(Color.Parse("#F2F4F8"));
 
-    //  Accent resolved from the live theme (Brush.Accent) so the monochrome («Чёрно-белая»)
-    //  overlay reaches the connected shield + status text — falls back to Incy blue.
-    //  Wrapped defensively: a theme-resource lookup must NEVER throw out of the connect path and
-    //  leave the hero half-built / blank — any failure silently returns the cached Incy accent.
-    private IBrush AccentBrush
+    //  Resolve a theme brush for the CURRENT theme variant (so it picks up the light theme AND the
+    //  merged mono overlay), never throwing out of the connect path — any failure silently returns
+    //  the cached Incy fallback so the hero can never end up half-built / blank.
+    private IBrush ResolveBrush(string key, IBrush fallback)
     {
-        get
+        try
         {
-            try
-            {
-                return this.TryFindResource("Brush.Accent", ActualThemeVariant, out var v) && v is IBrush b
-                    ? b
-                    : AccentFallback;
-            }
-            catch
-            {
-                return AccentFallback;
-            }
+            return this.TryFindResource(key, ActualThemeVariant, out var v) && v is IBrush b ? b : fallback;
+        }
+        catch
+        {
+            return fallback;
         }
     }
+
+    //  Connected shield/status accent → mono maps Brush.Accent to grey/white (contrast kept).
+    private IBrush AccentBrush => ResolveBrush("Brush.Accent", AccentFallback);
+
+    //  Idle shield glyph → Brush.OnSurfaceVariant (dark: grey #9BA1AD, light: #54607A,
+    //  mono-dark: #B0B0B4, mono-light: #5A5A5E) — always contrasts the SurfaceHigh disc.
+    private IBrush ShieldIdleBrush => ResolveBrush("Brush.OnSurfaceVariant", ShieldGrayFallback);
+
+    //  Idle status text → Brush.OnSurface (theme ink), readable on light/mono, not fixed near-white.
+    private IBrush OnSurfaceBrush => ResolveBrush("Brush.OnSurface", OnSurfaceFallback);
 
     //  Кривые зеркалят токены GlobalResources Ease.* 1:1 (ease_out_quart/_quint/_standard) —
     //  для императивных частей (press, перекл. длительностей). Декларативный XAML берёт токены.
@@ -223,11 +230,11 @@ public partial class ConnectHeroView : UserControl
                 break;
 
             default: // Idle
-                ShieldOutline.Fill = ShieldGray;
+                ShieldOutline.Fill = ShieldIdleBrush;
                 ShieldOutline.Opacity = hasServer ? 1 : 0.38;
                 ShieldFilled.Opacity = 0;
                 StatusText.Text = hasServer ? "Не подключено" : "Выберите сервер";
-                StatusText.Foreground = OnSurface;
+                StatusText.Foreground = OnSurfaceBrush;
                 ServerInfo.IsVisible = hasServer;
                 SetArc(false);
                 SetGlow(connecting: false, connected: false);
@@ -337,19 +344,16 @@ public partial class ConnectHeroView : UserControl
     {
         ConnectingArc.IsVisible = on;
 
-        //  Второй «живой» слой (faint counter-arc) существует ТОЛЬКО пока реально крутится —
-        //  под ReducedMotion/lite его нет вовсе (основная дуга остаётся статичным индикатором).
-        var spin = on && !ReducedMotion;
-        CounterArc.IsVisible = spin;
-        if (spin)
+        //  ОДНА чистая центрированная дуга: крутится только пока реально нужно и не под
+        //  ReducedMotion/lite (тогда остаётся статичным индикатором). Второй counter-arc убран —
+        //  он «облетал» шит, т.к. не имел RenderTransformOrigin в центре.
+        if (on && !ReducedMotion)
         {
             ConnectingArc.Classes.Add("spinning");
-            CounterArc.Classes.Add("spinning");
         }
         else
         {
             ConnectingArc.Classes.Remove("spinning");
-            CounterArc.Classes.Remove("spinning");
         }
     }
 

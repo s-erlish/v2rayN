@@ -67,8 +67,12 @@ public class GrpcItem
 public class GUIItem
 {
     public bool AutoRun { get; set; }
-    public bool EnableStatistics { get; set; }
-    public bool DisplayRealTimeSpeed { get; set; }
+
+    // departament: traffic stats ON by default so the ↑/↓ speed widget (Home stats row, both compact
+    // and widescreen) actually updates — a fresh config previously left both false, so the stats event
+    // was never published and speed stayed frozen at 0 KB/s even while connected.
+    public bool EnableStatistics { get; set; } = true;
+    public bool DisplayRealTimeSpeed { get; set; } = true;
     public bool KeepOlderDedupl { get; set; }
 
     // departament: subscription/geo auto-update cadence in MINUTES. Default 60 (= 1 час) so a fresh

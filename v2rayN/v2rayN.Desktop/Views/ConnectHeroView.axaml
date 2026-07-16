@@ -17,24 +17,6 @@
           Дизайн: Incy (pure dark + один синий #4C8DFF), ease-out анимации, без bounce.
           =================================================================================  -->
 
-    <UserControl.Resources>
-        <!--  ЛОКАЛЬНО (владение view): заливка диска — тёмный «колодец» под щитом, как в android_home.jpg.
-              Центр чуть светлее края, чтобы диск читался объёмной тёмной кнопкой, а не плоским пятном
-              (замена плоского SurfaceHigh, из-за которого диск выглядел светлым и «кривым»).  -->
-        <RadialGradientBrush
-            x:Key="Disc.Fill"
-            Center="50%,50%"
-            GradientOrigin="50%,50%"
-            RadiusX="62%"
-            RadiusY="62%">
-            <GradientStop Offset="0" Color="#161B24" />
-            <GradientStop Offset="1" Color="#0A0C11" />
-        </RadialGradientBrush>
-        <!--  ЛОКАЛЬНО: промежуточная яркость кольца (между Brush.Ring.Inner #80 и Brush.Ring.Outer #33)
-              для второго концентрического кольца сразу под внешним.  -->
-        <SolidColorBrush x:Key="Disc.Ring.Mid" Color="#554C8DFF" />
-    </UserControl.Resources>
-
     <UserControl.Styles>
         <!--  Connecting-дуга: равномерное (линейное) вращение, только пока класс .spinning.  -->
         <Style Selector="Ellipse.ConnectArc.spinning">
@@ -48,26 +30,6 @@
                     </KeyFrame>
                     <KeyFrame Cue="100%">
                         <Setter Property="RotateTransform.Angle" Value="360" />
-                    </KeyFrame>
-                </Animation>
-            </Style.Animations>
-        </Style>
-
-        <!--  Faint counter-arc: тонкая приглушённая дуга, крутится В ОБРАТНУЮ сторону медленнее
-              основной (2с против 1.1с) — «живой» второй слой connecting без перегруза. Центр вращения
-              задан ЯВНО (RotateTransform.CenterX/CenterY = половина Ø200 = 100): RenderTransformOrigin
-              на этот путь НЕ влияет (см. ConnectingArc), поэтому без интринзик-центра дуга бы «облетала».  -->
-        <Style Selector="Ellipse.CounterArc.spinning">
-            <Style.Animations>
-                <Animation
-                    Duration="0:0:2"
-                    Easing="LinearEasing"
-                    IterationCount="Infinite">
-                    <KeyFrame Cue="0%">
-                        <Setter Property="RotateTransform.Angle" Value="0" />
-                    </KeyFrame>
-                    <KeyFrame Cue="100%">
-                        <Setter Property="RotateTransform.Angle" Value="-360" />
                     </KeyFrame>
                 </Animation>
             </Style.Animations>
@@ -217,15 +179,21 @@
                 VerticalAlignment="Center">
 
                 <!--  Рамка 230×230, clip выключен: glow/сонар могут выходить за диск.  -->
+                <!--  Cold-start «сборка» (Panel.assembling) масштабирует ГОЛЫЙ ScaleTransform 0.9→1
+                      без собственного центра → он вращается вокруг RenderTransformOrigin. Значит origin
+                      обязан быть ОТНОСИТЕЛЬНЫМ центром «50%,50%»; «0.5,0.5» = 0.5px ≈ угол → «сборка»
+                      росла бы из левого-верхнего угла.  -->
                 <Panel
                     x:Name="HeroFrame"
                     Width="{StaticResource Size.HeroFrame}"
                     Height="{StaticResource Size.HeroFrame}"
                     HorizontalAlignment="Center"
                     ClipToBounds="False"
-                    RenderTransformOrigin="0.5,0.5">
+                    RenderTransformOrigin="50%,50%">
 
-                    <!--  (1) glow-halo (bg_connect_glow) — виден только при connected.  -->
+                    <!--  (1) glow-halo (bg_connect_glow) — виден только при connected.
+                          «Дыхание» (Glow.breathing) масштабирует ГОЛЫЙ ScaleTransform без центра →
+                          origin = относительный центр «50%,50%», иначе пульс рос бы из угла.  -->
                     <Ellipse
                         x:Name="GlowHalo"
                         Width="220"
@@ -236,7 +204,7 @@
                         Fill="{DynamicResource Brush.ConnectGlow}"
                         IsVisible="False"
                         Opacity="0"
-                        RenderTransformOrigin="0.5,0.5">
+                        RenderTransformOrigin="50%,50%">
                         <!--  Reveal/hide glow: длительность+кривую перекл. код-behind по направлению
                               (reveal 300 OutQuint / hide 225 Standard). Здесь — forward-дефолт.  -->
                         <Ellipse.Transitions>
@@ -252,9 +220,9 @@
                     </Ellipse>
 
                     <!--  (2) Два концентрических ТОНКИХ кольца у кромки рамки (как в android_home.jpg):
-                          внешнее — самое чёткое синее (Brush.Ring.Inner #80), внутреннее сразу под ним —
-                          чуть тусклее (Disc.Ring.Mid #55). Обе обводки 1.5, зазор 9px, идеально
-                          концентричны (общий центр рамки).  -->
+                          внешнее — самое чёткое (Brush.Ring.Inner), внутреннее сразу под ним —
+                          тусклее (Brush.Ring.Outer). ОБА — тема-токены (mono-оверлей схлопывает
+                          синий в серый). Обводки 1.5, зазор 9px, идеально концентричны.  -->
                     <Ellipse
                         x:Name="RingOuter"
                         Width="228"
@@ -269,10 +237,12 @@
                         Height="210"
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
-                        Stroke="{StaticResource Disc.Ring.Mid}"
+                        Stroke="{DynamicResource Brush.Ring.Outer}"
                         StrokeThickness="1.5" />
 
-                    <!--  (3) одноразовый сонар-импульс на подтверждение connect.  -->
+                    <!--  (3) одноразовый сонар-импульс на подтверждение connect.
+                          Sonar.pulsing масштабирует ГОЛЫЙ ScaleTransform 1→1.6 без центра → origin =
+                          относительный центр «50%,50%» (иначе кольцо расходилось бы из угла).  -->
                     <Ellipse
                         x:Name="SonarPulse"
                         Width="200"
@@ -282,45 +252,21 @@
                         Classes="Sonar"
                         IsVisible="False"
                         Opacity="0"
-                        RenderTransformOrigin="0.5,0.5"
+                        RenderTransformOrigin="50%,50%"
                         Stroke="{DynamicResource Brush.Ring.Inner}"
                         StrokeThickness="2" />
-
-                    <!--  (3b) faint counter-arc Ø200 (радиус 100 — в зазоре между диском r88/дугой r95
-                          и внутренним кольцом r105): тонкая приглушённая дуга, крутится в обратную
-                          сторону медленнее основной. Второй «живой» слой connecting (дыхание glow —
-                          третий). Виден только пока реально крутится (код-behind, off под ReducedMotion).
-                          Центр вращения зашит ЯВНО (CenterX/CenterY=100), как у основной дуги.  -->
-                    <Ellipse
-                        x:Name="CounterArc"
-                        Width="200"
-                        Height="200"
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        Classes="CounterArc"
-                        IsVisible="False"
-                        Opacity="0.35"
-                        Stroke="{DynamicResource Brush.Accent}"
-                        StrokeDashArray="150,478"
-                        StrokeLineCap="Round"
-                        StrokeThickness="1.5">
-                        <Ellipse.RenderTransform>
-                            <RotateTransform
-                                Angle="0"
-                                CenterX="100"
-                                CenterY="100" />
-                        </Ellipse.RenderTransform>
-                    </Ellipse>
 
                     <!--  (4) тонкая connecting-дуга Ø190 толщина 3 (акцент): одиночный сегмент
                           пунктиром, крутится тонким кольцом вплотную к диску (176). Видна только
                           при connecting. Размер инлайн (190) — тонкое кольцо в ~7px от диска (r95 vs r88).
-                          КРИТИЧНО: keyframe-анимация пишет RotateTransform.Angle прямо в ЭТОТ явный
-                          RenderTransform, а голый RotateTransform крутит вокруг (CenterX,CenterY),
-                          по умолчанию (0,0) = левый-верх элемента → дуга «облетала» всё окно.
-                          RenderTransformOrigin на этот путь НЕ влияет. Поэтому центр вращения
-                          зашит ЯВНО: CenterX/CenterY = половина 190 = 95 → вращение строго вокруг
-                          собственного центра, «улететь» физически не может.  -->
+                          ЕДИНСТВЕННОЕ вращающееся кольцо (второй counter-arc убран — он «облетал»,
+                          т.к. не имел RenderTransformOrigin).
+                          ГАРАНТИЯ «не улетит»: keyframe-анимация RotateTransform.Angle крутит вокруг
+                          RenderTransformOrigin, поэтому он выставлен в ЦЕНТР (0.5,0.5). Дублируем это
+                          явным RotateTransform.CenterX/CenterY = половина 190 = 95: ВСЕ три центра
+                          (ячейка HAlign/VAlign=Center, origin 0.5,0.5, center 95) совпадают с
+                          геометрическим центром элемента → вращение строго вокруг центра при любом
+                          механизме Avalonia, орбита физически невозможна.  -->
                     <Ellipse
                         x:Name="ConnectingArc"
                         Width="190"
@@ -344,11 +290,19 @@
 
                     <!--  (5) диск-кнопка 176 r88 (Border.ConnectDisc, SurfaceHigh, press-scale 0.94).
                           (6) внутри два щита: контур (idle, серый) + залив (connected, синий).  -->
+                    <!--  Фон диска — тема-токен (Brush.SurfaceHigh): тёмный «колодец» на dark-теме,
+                          светлая приподнятая плитка на light-теме, и серый на «Чёрно-белой» оверлее.
+                          НЕ хардкодим #… — иначе диск оставался бы чёрным на light/mono (щит
+                          терялся бы в черноте). Щит (idle=OnSurfaceVariant / connected=Accent)
+                          гарантированно контрастирует с ним во всех 4 комбинациях.  -->
+                    <!--  origin ОСТАВЛЕН «0.5,0.5» (=0.5px ≈ 0,0) НАМЕРЕННО: press-scale диска центрирует
+                          себя САМ через self-centering TransformGroup в code-behind (translate −88 / scale /
+                          translate +88, 88 = 176/2). Относительный «50%,50%» удвоил бы центр → диск в угол.  -->
                     <Border
                         x:Name="ConnectDisc"
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
-                        Background="{StaticResource Disc.Fill}"
+                        Background="{DynamicResource Brush.SurfaceHigh}"
                         Classes="ConnectDisc"
                         Cursor="Hand"
                         RenderTransformOrigin="0.5,0.5">

@@ -23,28 +23,38 @@ public class WindowBase<TViewModel> : ReactiveWindow<TViewModel> where TViewMode
     {
         try
         {
-            var sizeItem = ConfigHandler.GetWindowSizeItem(AppManager.Instance.Config, GetType().Name);
-            if (sizeItem is null)
+            var screen = Screens.ScreenFromWindow(this) ?? Screens.Primary;
+            if (screen is null)
             {
                 return;
             }
-
-            var screen = Screens.ScreenFromWindow(this) ?? Screens.Primary;
             var scaling = screen.Scaling > 0 ? screen.Scaling : 1.0;
             var workingArea = screen.WorkingArea;
 
-            // Верхняя граница = рабочая область экрана. Раскладка адаптивна (компакт 400×820 ↔
-            // широкая), поэтому НЕ навязываем проектный потолок 1120×760: он обрезал бы компактную
-            // высоту 820 до 760. Развёрнутый/максимизированный размер и так не персистится
-            // (OnClosed сохраняет только Normal), так что клампа под workingArea достаточно.
-            // Когда сохранённого размера нет (sizeItem == null, выход выше) — берут верх дефолты XAML
-            // (компакт 400×820), т.е. свежий запуск открывается компактным.
+            // Желаемый размер: сохранённый (если есть) ИЛИ текущие дефолты XAML (компакт 310×630).
+            // ВСЕГДА клампим в рабочую область экрана — окно борелесс (WindowDecorations=None), и на
+            // ноутбуке 1366×768 высокое окно центрировалось с y<0, унося кастомный заголовок
+            // (close/maximize) за верх экрана. Гарантируем: размер ≤ рабочей области, а верх окна
+            // никогда не выше её (y ≥ workingArea.Y), поэтому title-bar всегда на экране.
+            // Раскладка адаптивна, поэтому проектный потолок 1120×760 НЕ навязываем — только
+            // границу рабочей области. Развёрнутый/макс. размер не персистится (OnClosed: только Normal).
+            var sizeItem = ConfigHandler.GetWindowSizeItem(AppManager.Instance.Config, GetType().Name);
+            var desiredWidth = sizeItem?.Width ?? Width;
+            var desiredHeight = sizeItem?.Height ?? Height;
+
             var maxWidth = workingArea.Width / scaling;
             var maxHeight = workingArea.Height / scaling;
-            var width = Math.Min(sizeItem.Width, maxWidth);
-            var height = Math.Min(sizeItem.Height, maxHeight);
-            var x = workingArea.X + ((workingArea.Width - (width * scaling)) / 2);
-            var y = workingArea.Y + ((workingArea.Height - (height * scaling)) / 2);
+            var minWidth = Math.Min(MinWidth, maxWidth);
+            var minHeight = Math.Min(MinHeight, maxHeight);
+            var width = Math.Clamp(desiredWidth, minWidth, maxWidth);
+            var height = Math.Clamp(desiredHeight, minHeight, maxHeight);
+
+            var physW = width * scaling;
+            var physH = height * scaling;
+            var x = workingArea.X + Math.Max(0, (workingArea.Width - physW) / 2);
+            var y = workingArea.Y + Math.Max(0, (workingArea.Height - physH) / 2);
+            x = Math.Max(workingArea.X, Math.Min(x, workingArea.X + workingArea.Width - physW));
+            y = Math.Max(workingArea.Y, Math.Min(y, workingArea.Y + workingArea.Height - physH));
 
             Width = width;
             Height = height;

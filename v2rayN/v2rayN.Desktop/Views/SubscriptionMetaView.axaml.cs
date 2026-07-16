@@ -36,11 +36,13 @@ public partial class SubscriptionMetaView : UserControl
     private string _currentSubId = string.Empty;
     private bool _refreshing;
 
-    //  Шеврон сворачивания: явный RotateTransform с интринзик-центром (CenterX/CenterY = половина
-    //  22px-глифа = 11) — вращается СТРОГО на месте. RenderTransformOrigin в этой сборке к
-    //  анимируемым render-transform не применяется, поэтому центр держим геометрией самого трансформа
-    //  (как ConnectingArc). Угол меняем плавно через собственный переход (0° раскрыто / −90° свёрнуто).
-    private readonly RotateTransform _chevronRotate = new() { Angle = 0, CenterX = 11, CenterY = 11 };
+    //  Шеврон сворачивания: явный RotateTransform, угол меняем плавно через собственный переход
+    //  (0° раскрыто / −90° свёрнуто). Центр вращения задаётся РОВНО ОДИН раз — через
+    //  RenderTransformOrigin="50%,50%" на самом CollapseIcon (ОТНОСИТЕЛЬНЫЙ центр = 11,11 у 22px-глифа).
+    //  ВАЖНО «50%,50%», а НЕ «0.5,0.5»: последнее = 0.5 ПИКСЕЛЯ ≈ угол → шеврон облетал бы орбитой.
+    //  CenterX/CenterY НАМЕРЕННО оставлены нулевыми, чтобы центр НЕ удвоился (origin 11,11 + center 0 =
+    //  11,11 = центр глифа): удвоение унесло бы центр в (22,22) — дальний угол бокса.
+    private readonly RotateTransform _chevronRotate = new() { Angle = 0 };
 
     public SubscriptionMetaView()
     {
@@ -127,7 +129,7 @@ public partial class SubscriptionMetaView : UserControl
     }
 
     // Reflect the group's collapsed state on the chevron (−90° collapsed). Rotates in place about
-    // its own centre (RotateTransform.CenterX/Y=11); the transition animates the angle smoothly.
+    // its own centre (CollapseIcon.RenderTransformOrigin=50%,50%); the transition animates the angle.
     private void SyncCollapsed()
     {
         var collapsed = _group is { IsExpanded: false };

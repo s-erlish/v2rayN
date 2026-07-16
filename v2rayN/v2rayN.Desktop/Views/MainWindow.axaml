@@ -9,10 +9,10 @@
     xmlns:views="clr-namespace:v2rayN.Desktop.Views"
     xmlns:vms="clr-namespace:ServiceLib.ViewModels;assembly=ServiceLib"
     Title="departament VPN"
-    Width="400"
-    Height="820"
-    MinWidth="360"
-    MinHeight="640"
+    Width="310"
+    Height="630"
+    MinWidth="300"
+    MinHeight="560"
     x:DataType="vms:MainWindowViewModel"
     Background="{DynamicResource Brush.Bg}"
     Design.DataContext="{x:Static dd:DesignData.MainWindow}"
@@ -65,7 +65,7 @@
         <!--  ==================== Свёртка нав-рейла ====================
               Кнопка внизу рейла (btnRailToggle) сворачивает/разворачивает ЛЕВУЮ навигацию
               (раньше прятала окно в трей — убрано; трей живёт в App.axaml + title-bar «мин»).
-              Состоянием управляет класс .railCollapsed на shellRoot (ставит code-behind):
+              Состоянием управляет класс .railCollapsed на bodyRoot (ставит code-behind):
                 • navItems (StackPanel вкладок) едет Width 76→0 + Opacity 1→0 (OutQuint 200мс),
                   ClipToBounds режет 76-пиксельные пункты, столбец Auto рефлоит контент;
                 • шеврон разворачивается на 180° вокруг СОБСТВЕННОГО центра (RenderTransformOrigin
@@ -259,147 +259,157 @@
                     </StackPanel>
                 </Grid>
 
-                <!--  ==================== Тело (Row 1): шелл (рейл 76 | контент) ↔ онбординг ====================
-                      Пустой старт (нет подписок): виден ТОЛЬКО онбординг на всю ширину под chrome
-                      (рейл и контент скрыты). После добавления подписки (HomeViewModel.IsEmpty=false)
-                      появляется обычный шелл. Видимостью управляет MainWindow.SetupHome.  -->
+                <!--  ==================== Тело (Row 1): единый адаптивный шелл ↔ онбординг ====================
+                      Пустой старт (нет подписок): виден ТОЛЬКО онбординг на всю ширину под chrome.
+                      После добавления подписки (HomeViewModel.IsEmpty=false) виден bodyRoot.
+                      Видимостью управляет ApplyShellVisibility.  -->
                 <Panel Grid.Row="1">
 
-                    <!--  Шелл: рейл (Auto) | контент. Скрыт целиком, пока приложение пустое.
-                          Столбец рейла — Auto: его ширину задаёт содержимое DockPanel, поэтому при
-                          свёртке (navItems Width 76→0) рейл сам сжимается до слим-полосы с шевроном,
-                          а контент (столбец *) плавно занимает освободившееся место без клипа.  -->
-                    <Grid x:Name="shellRoot" ColumnDefinitions="Auto,*" IsVisible="False">
+                    <!--  ==================== Единый адаптивный шелл (bodyRoot) ====================
+                          ОДИН общий contentHost на ОБЕ раскладки. Chrome перекладывается вокруг него:
+                          широкая = [рейл(Auto) | контент(*)], компакт = [контент(*) / нижняя-нав(Auto)].
+                          Строки/столбцы и Grid.Row/Column детей ставит код (ApplyLayoutMode) — сами
+                          контролы НЕ переносятся между деревьями. Ключ к устойчивости свопа: Настройки/
+                          Аккаунт (общие экземпляры) всегда живут в ЕДИНОМ contentHost, поэтому смена
+                          ширины физически не может «перецепить» живой контрол в другой хост (был краш:
+                          компакт→Настройки→расширение). Класс .railCollapsed на bodyRoot управляет
+                          свёрткой рейла (стили выше по Grid.railCollapsed).  -->
+                    <Grid x:Name="bodyRoot" IsVisible="False">
 
-                    <!--  Левый icon-рейл: фон = Bg (сливается с окном), без правой границы (DESIGN_PLAN Часть 3).  -->
-                    <Border
-                        Grid.Column="0"
-                        Background="{DynamicResource Brush.Bg}">
-                        <DockPanel LastChildFill="False">
+                        <!--  Левый icon-рейл (широкая раскладка). Фон = Bg (сливается с окном).  -->
+                        <Border
+                            x:Name="railHost"
+                            Grid.Column="0"
+                            Background="{DynamicResource Brush.Bg}">
+                            <DockPanel LastChildFill="False">
 
-                            <!--  3 вкладки (Главная · Настройки · Аккаунт). Список серверов живёт
-                                  в левой колонке «Главной», отдельной вкладки «Сервера» нет.  -->
-                            <StackPanel
-                                x:Name="navItems"
-                                Margin="0,8,0,0"
-                                Classes="RailItems"
-                                ClipToBounds="True"
-                                DockPanel.Dock="Top">
-                                <Button x:Name="navHome" Classes="NavRailItem">
-                                    <Grid>
-                                        <Border Classes="NavPill" />
-                                        <StackPanel
-                                            HorizontalAlignment="Center"
-                                            VerticalAlignment="Center"
-                                            Spacing="4">
-                                            <PathIcon Data="{StaticResource Geo.Nav.Home}" />
-                                            <TextBlock
-                                                HorizontalAlignment="Center"
-                                                Classes="Chip"
-                                                Text="Главная" />
-                                        </StackPanel>
-                                    </Grid>
-                                </Button>
-                                <Button x:Name="navSettings" Classes="NavRailItem">
-                                    <Grid>
-                                        <Border Classes="NavPill" />
-                                        <StackPanel
-                                            HorizontalAlignment="Center"
-                                            VerticalAlignment="Center"
-                                            Spacing="4">
-                                            <PathIcon Data="{StaticResource Geo.Nav.Settings}" />
-                                            <TextBlock
-                                                HorizontalAlignment="Center"
-                                                Classes="Chip"
-                                                Text="Настройки" />
-                                        </StackPanel>
-                                    </Grid>
-                                </Button>
-                                <Button x:Name="navAccount" Classes="NavRailItem">
-                                    <Grid>
-                                        <Border Classes="NavPill" />
-                                        <StackPanel
-                                            HorizontalAlignment="Center"
-                                            VerticalAlignment="Center"
-                                            Spacing="4">
-                                            <PathIcon Data="{StaticResource Geo.Nav.Account}" />
-                                            <TextBlock
-                                                HorizontalAlignment="Center"
-                                                Classes="Chip"
-                                                Text="Аккаунт" />
-                                        </StackPanel>
-                                    </Grid>
-                                </Button>
-                            </StackPanel>
-
-                            <!--  Низ рейла (ВСЕГДА виден, не сворачивается): индикатор подключения +
-                                  кнопка свёртки навигации. Шеврон ‹ сворачивает рейл, › разворачивает —
-                                  так пользователь никогда не остаётся без навигации (кнопка сохраняется
-                                  и в слим-полосе). Индикатор railStatusDot биндит code-behind (idle/connected).  -->
-                            <StackPanel
-                                Margin="0,0,0,12"
-                                HorizontalAlignment="Center"
-                                DockPanel.Dock="Bottom"
-                                Spacing="10">
-                                <Ellipse
-                                    x:Name="railStatusDot"
-                                    Width="8"
-                                    Height="8"
+                                <!--  Бренд-марка departament: ВСЕГДА видна, даже когда рейл свёрнут
+                                      (живёт ВНЕ navItems, который и сворачивается) — пользователь не
+                                      теряет лого/идентичность в слим-полосе.  -->
+                                <Border
+                                    x:Name="railBrand"
+                                    Width="40"
+                                    Height="40"
+                                    Margin="0,10,0,2"
                                     HorizontalAlignment="Center"
-                                    Fill="{DynamicResource Brush.OnSurfaceVariant}" />
-                                <Button
-                                    x:Name="btnRailToggle"
-                                    Classes="RailToggle"
-                                    ToolTip.Tip="Свернуть панель">
-                                    <Border Classes="WinBtnBg">
-                                        <Path
-                                            Width="20"
-                                            Height="20"
-                                            HorizontalAlignment="Center"
-                                            VerticalAlignment="Center"
-                                            Classes="RailToggleGlyph"
-                                            Data="M13,4 L7,10 L13,16"
-                                            Stretch="None"
-                                            Stroke="{DynamicResource Brush.OnSurfaceVariant}"
-                                            StrokeJoin="Round"
-                                            StrokeLineCap="Round"
-                                            StrokeThickness="1.6" />
-                                    </Border>
-                                </Button>
-                            </StackPanel>
-                        </DockPanel>
-                    </Border>
+                                    Background="{DynamicResource Brush.Accent}"
+                                    CornerRadius="{DynamicResource Radius.Tile}"
+                                    DockPanel.Dock="Top">
+                                    <TextBlock
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        FontFamily="{DynamicResource Font.Grotesk}"
+                                        FontSize="20"
+                                        FontWeight="Bold"
+                                        Foreground="{DynamicResource Brush.OnAccent}"
+                                        Text="d" />
+                                </Border>
 
-                    <!--  Контент по вкладкам (fade-through). Общий Incy-градиент рисуется ОДИН раз
-                          под хостом страниц — каждая вкладка (Главная/Настройки/Аккаунт) наследует
-                          его сквозь прозрачный фон, поэтому фон не «рвётся» на кроссфейде.  -->
-                    <Panel Grid.Column="1">
-                        <Border Background="{DynamicResource Brush.HomeGradient}" />
-                        <TransitioningContentControl x:Name="contentHost" Background="Transparent">
-                            <TransitioningContentControl.PageTransition>
-                                <CrossFade Duration="0:0:0.18" />
-                            </TransitioningContentControl.PageTransition>
-                        </TransitioningContentControl>
-                    </Panel>
-                    </Grid>
+                                <!--  3 вкладки (Главная · Настройки · Аккаунт). Список серверов живёт
+                                      в левой колонке «Главной», отдельной вкладки «Сервера» нет.  -->
+                                <StackPanel
+                                    x:Name="navItems"
+                                    Margin="0,8,0,0"
+                                    Classes="RailItems"
+                                    ClipToBounds="True"
+                                    DockPanel.Dock="Top">
+                                    <Button x:Name="navHome" Classes="NavRailItem">
+                                        <Grid>
+                                            <Border Classes="NavPill" />
+                                            <StackPanel
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                Spacing="4">
+                                                <PathIcon Data="{StaticResource Geo.Nav.Home}" />
+                                                <TextBlock
+                                                    HorizontalAlignment="Center"
+                                                    Classes="Chip"
+                                                    Text="Главная" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </Button>
+                                    <Button x:Name="navSettings" Classes="NavRailItem">
+                                        <Grid>
+                                            <Border Classes="NavPill" />
+                                            <StackPanel
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                Spacing="4">
+                                                <PathIcon Data="{StaticResource Geo.Nav.Settings}" />
+                                                <TextBlock
+                                                    HorizontalAlignment="Center"
+                                                    Classes="Chip"
+                                                    Text="Настройки" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </Button>
+                                    <Button x:Name="navAccount" Classes="NavRailItem">
+                                        <Grid>
+                                            <Border Classes="NavPill" />
+                                            <StackPanel
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                Spacing="4">
+                                                <PathIcon Data="{StaticResource Geo.Nav.Account}" />
+                                                <TextBlock
+                                                    HorizontalAlignment="Center"
+                                                    Classes="Chip"
+                                                    Text="Аккаунт" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </Button>
+                                </StackPanel>
 
-                    <!--  ==================== Компактная (телефонная) раскладка ====================
-                          Sibling of shellRoot: при ширине окна < брейкпоинта (760, с гистерезисом
-                          736) виден compactRoot, а shellRoot скрыт — и наоборот. Оба дерева живут
-                          одновременно, но одномоментно показано ровно одно (ApplyLayoutMode). Общий
-                          Incy-градиент рисуется ОДИН раз под compactContentHost — каждая компактная
-                          вкладка наследует его сквозь прозрачный фон. Строка 0 = контент по вкладке
-                          (кроссфейд как в широком contentHost), строка 1 = нижняя навигация.  -->
-                    <Grid x:Name="compactRoot" IsVisible="False" RowDefinitions="*,Auto">
-                        <Panel Grid.Row="0">
+                                <!--  Низ рейла (ВСЕГДА виден): индикатор подключения + кнопка свёртки.
+                                      Шеврон ‹ сворачивает рейл, › разворачивает — навигация не «застревает».  -->
+                                <StackPanel
+                                    Margin="0,0,0,12"
+                                    HorizontalAlignment="Center"
+                                    DockPanel.Dock="Bottom"
+                                    Spacing="10">
+                                    <Ellipse
+                                        x:Name="railStatusDot"
+                                        Width="8"
+                                        Height="8"
+                                        HorizontalAlignment="Center"
+                                        Fill="{DynamicResource Brush.OnSurfaceVariant}" />
+                                    <Button
+                                        x:Name="btnRailToggle"
+                                        Classes="RailToggle"
+                                        ToolTip.Tip="Свернуть панель">
+                                        <Border Classes="WinBtnBg">
+                                            <Path
+                                                Width="20"
+                                                Height="20"
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                Classes="RailToggleGlyph"
+                                                Data="M13,4 L7,10 L13,16"
+                                                Stretch="None"
+                                                Stroke="{DynamicResource Brush.OnSurfaceVariant}"
+                                                StrokeJoin="Round"
+                                                StrokeLineCap="Round"
+                                                StrokeThickness="1.6" />
+                                        </Border>
+                                    </Button>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+
+                        <!--  Общая область контента: Incy-градиент рисуется ОДИН раз под ЕДИНЫМ
+                              хостом страниц — каждая вкладка наследует его сквозь прозрачный фон,
+                              поэтому фон не «рвётся» на кроссфейде.  -->
+                        <Panel x:Name="contentArea">
                             <Border Background="{DynamicResource Brush.HomeGradient}" />
-                            <TransitioningContentControl x:Name="compactContentHost" Background="Transparent">
+                            <TransitioningContentControl x:Name="contentHost" Background="Transparent">
                                 <TransitioningContentControl.PageTransition>
                                     <CrossFade Duration="0:0:0.18" />
                                 </TransitioningContentControl.PageTransition>
                             </TransitioningContentControl>
                         </Panel>
-                        <views:BottomNavBar x:Name="bottomNav" Grid.Row="1" />
+
+                        <!--  Нижняя навигация (компактная раскладка). Ставится в свою строку кодом.  -->
+                        <views:BottomNavBar x:Name="bottomNav" />
                     </Grid>
 
                     <!--  Онбординг на всю ширину Row 1 (без рейла/панелей). Виден, пока нет подписок.  -->

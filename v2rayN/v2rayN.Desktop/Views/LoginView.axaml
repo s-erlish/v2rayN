@@ -176,11 +176,16 @@
         <!--
             Спиннер: дуга ~25% окружности (Ellipse со штрих-пунктиром, приём ConnectHeroView),
             равномерное вращение только с классом .spinning (навешивает code-behind).
+            Вращение центрируется относительным origin «50%,50%» на самом Ellipse (см. разметку) —
+            instance-центра у этих спиннеров нет.
+            «Облегчённый режим»: под lite-окном keyframe НЕ аттачится (селектор
+            :is(Window):not(.lite) не совпадает) — конкурирующий стиль не отменяет уже запущенную
+            анимацию, поэтому гасим на уровне СЕЛЕКТОРА, как глобальный Ellipse.Spinner.spinning.
         -->
         <Style Selector="Ellipse.Spinner">
             <Setter Property="IsHitTestVisible" Value="False" />
         </Style>
-        <Style Selector="Ellipse.Spinner.spinning">
+        <Style Selector=":is(Window):not(.lite) Ellipse.Spinner.spinning">
             <Style.Animations>
                 <Animation
                     Easing="LinearEasing"
@@ -281,7 +286,7 @@
                                 Height="32"
                                 HorizontalAlignment="Center"
                                 Classes="Spinner"
-                                RenderTransformOrigin="0.5,0.5"
+                                RenderTransformOrigin="50%,50%"
                                 Stroke="{DynamicResource Brush.Accent}"
                                 StrokeDashArray="8.4,25.1"
                                 StrokeLineCap="Round"
@@ -387,7 +392,7 @@
                                 VerticalAlignment="Center"
                                 Classes="Spinner"
                                 IsVisible="False"
-                                RenderTransformOrigin="0.5,0.5"
+                                RenderTransformOrigin="50%,50%"
                                 Stroke="{DynamicResource Brush.OnAccent}"
                                 StrokeDashArray="6.9,20.8"
                                 StrokeLineCap="Round"
@@ -441,7 +446,7 @@
                                     VerticalAlignment="Center"
                                     Classes="Spinner"
                                     IsVisible="False"
-                                    RenderTransformOrigin="0.5,0.5"
+                                    RenderTransformOrigin="50%,50%"
                                     Stroke="{DynamicResource Brush.OnAccent}"
                                     StrokeDashArray="6.9,20.8"
                                     StrokeLineCap="Round"

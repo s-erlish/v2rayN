@@ -50,7 +50,7 @@
         <Setter Property="Height" Value="{StaticResource IconButtonHeight}" />
         <Setter Property="MinWidth" Value="{StaticResource IconButtonWidth}" />
         <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
-        <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
+        <Setter Property="RenderTransformOrigin" Value="50%,50%" />
     </Style>
     <!--  Легаси IconButton (гик-окна) БЕЗ переопределения давал светлый оверлей темы
           Semi на hover = «белый glow». Гасим тинт и красим НАШ ховер-затемнение,
@@ -191,11 +191,21 @@
     <!--  Радиус = Radius.Button 16 (скруглённый прямоугольник, не капсула,      -->
     <!--  объяснение у Styles.Resources сверху). Никакого ripple/glow: един-     -->
     <!--  ственный отклик на нажатие — scale (Android press_scale/nav_press).    -->
+    <!--                                                                          -->
+    <!--  ЦЕНТР press-scale: RenderTransformOrigin ОБЯЗАН быть ОТНОСИТЕЛЬНЫМ        -->
+    <!--  «50%,50%», а НЕ «0.5,0.5». RelativePoint.Parse трактует значение БЕЗ «%» -->
+    <!--  как АБСОЛЮТНЫЕ пиксели: «0.5,0.5» → (0.5px,0.5px) ≈ левый-верхний угол,  -->
+    <!--  из-за чего scale(0.97) «проваливался» влево-вверх (баг реального теста).  -->
+    <!--  «50%,50%» → Relative → ToPixels = (0.5·W, 0.5·H) = истинный центр при      -->
+    <!--  ЛЮБОМ размере. Visual оборачивает RenderTransform.Value через origin      -->
+    <!--  (−T·value·T), поэтому TransformOperations scale(...) масштабируется        -->
+    <!--  строго от центра. (Исключения: Border.ConnectDisc и Ellipse.Spinner —      -->
+    <!--  они центрируются сами, там origin намеренно абсолютный no-op, см. ниже.)   -->
     <!-- ==================================================================== -->
 
     <!--  Первичная (акцент). 48h, Grotesk 15 Bold. press scale 0.97 @90мс.  -->
     <Style Selector="Button.Primary">
-        <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
+        <Setter Property="RenderTransformOrigin" Value="50%,50%" />
         <Setter Property="Background" Value="{DynamicResource Brush.Accent}" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnAccent}" />
         <Setter Property="CornerRadius" Value="{DynamicResource Radius.Button}" />
@@ -229,7 +239,7 @@
     <!--  Тональная. 48h, SurfaceHighest/OnSurface, Grotesk 15 Medium.
           ДОБАВЛЕНЫ press scale 0.97 + переход (раньше их не было) — как Primary.  -->
     <Style Selector="Button.Tonal">
-        <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
+        <Setter Property="RenderTransformOrigin" Value="50%,50%" />
         <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHighest}" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
         <Setter Property="CornerRadius" Value="{DynamicResource Radius.Button}" />
@@ -257,7 +267,7 @@
           Grotesk 15 Medium. Регистрация / Начать заново. Android btn_restart:
           materialButtonOutlinedStyle, strokeColor=colorPrimary, textColor=colorPrimary.  -->
     <Style Selector="Button.OutlinedAccent">
-        <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
+        <Setter Property="RenderTransformOrigin" Value="50%,50%" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
@@ -289,7 +299,7 @@
           tile_size 40, cornerRadius 20, iconSize 20, iconTint=colorPrimary,
           backgroundTint=iconTileBgBlue (bg_icon_blue), inset/padding 0.  -->
     <Style Selector="Button.Stepper">
-        <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
+        <Setter Property="RenderTransformOrigin" Value="50%,50%" />
         <Setter Property="Width" Value="{DynamicResource Size.Tile}" />
         <Setter Property="Height" Value="{DynamicResource Size.Tile}" />
         <Setter Property="MinWidth" Value="0" />
@@ -351,7 +361,7 @@
           press scale 0.96, selected = заливка #1F4C8DFF + 1.5px Accent, radius 20.
           Рамка всегда 1.5px (прозрачная в покое), чтобы выбор не сдвигал раскладку.  -->
     <Style Selector="Border.ServerRow">
-        <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
+        <Setter Property="RenderTransformOrigin" Value="50%,50%" />
         <Setter Property="MinHeight" Value="{DynamicResource Size.Row}" />
         <Setter Property="CornerRadius" Value="{DynamicResource Radius.Card}" />
         <Setter Property="Padding" Value="12,8" />
@@ -416,6 +426,12 @@
     <!--  Диск connect-щита (card_connect): 176 круг, SurfaceHigh, press-scale 0.94→1.0.
           Класс .pressed навешивает потребитель по PointerPressed/Released.  -->
     <Style Selector="Border.ConnectDisc">
+        <!--  ВНИМАНИЕ: origin здесь НАМЕРЕННО абсолютный «0.5,0.5» (= 0.5px ≈ no-op),
+              а НЕ относительный «50%,50%». ConnectHeroView сам центрирует press-scale
+              императивным TransformGroup (translate −88 → scale → translate +88).
+              Относительный центр здесь удвоил бы центрирование (Visual оборачивает
+              RenderTransform.Value ещё раз через origin) → диск «провалился» бы в угол.
+              НЕ меняй на «50%,50%».  -->
         <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
         <Setter Property="Width" Value="{DynamicResource Size.ConnectDisc}" />
         <Setter Property="Height" Value="{DynamicResource Size.ConnectDisc}" />
@@ -450,7 +466,7 @@
     <!-- ==================================================================== -->
     <Style Selector="Button.NavRailItem">
         <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
-        <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
+        <Setter Property="RenderTransformOrigin" Value="50%,50%" />
         <Setter Property="Width" Value="76" />
         <Setter Property="Height" Value="64" />
         <Setter Property="Padding" Value="0" />
@@ -541,7 +557,7 @@
     <!-- ==================================================================== -->
     <Style Selector="Button.IconButton40">
         <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
-        <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
+        <Setter Property="RenderTransformOrigin" Value="50%,50%" />
         <Setter Property="Width" Value="{DynamicResource Size.IconButton}" />
         <Setter Property="Height" Value="{DynamicResource Size.IconButton}" />
         <Setter Property="MinWidth" Value="0" />
@@ -606,7 +622,7 @@
           (Geo.ArrowBack). Класс существует ради читаемости разметки тулбаров.  -->
     <Style Selector="Button.BackNav">
         <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
-        <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
+        <Setter Property="RenderTransformOrigin" Value="50%,50%" />
         <Setter Property="Width" Value="{DynamicResource Size.IconButton}" />
         <Setter Property="Height" Value="{DynamicResource Size.IconButton}" />
         <Setter Property="MinWidth" Value="0" />
@@ -647,7 +663,7 @@
           таргет, press scale 0.97. Пример: «Открыть Telegram», «Забыли пароль».  -->
     <Style Selector="Button.LinkAction">
         <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
-        <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
+        <Setter Property="RenderTransformOrigin" Value="50%,50%" />
         <Setter Property="Height" Value="40" />
         <Setter Property="Padding" Value="12,0" />
         <Setter Property="CornerRadius" Value="{DynamicResource Radius.Chip}" />
@@ -679,7 +695,7 @@
     <!--  Фон закреплён и на ContentPresenter, чтобы hover темы Semi не подменял.  -->
     <!-- ==================================================================== -->
     <Style Selector="Button.Destructive">
-        <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
+        <Setter Property="RenderTransformOrigin" Value="50%,50%" />
         <Setter Property="Background" Value="{DynamicResource Brush.Red}" />
         <Setter Property="Foreground" Value="White" />
         <Setter Property="CornerRadius" Value="{DynamicResource Radius.Button}" />
@@ -831,7 +847,7 @@
     <!-- ==================================================================== -->
     <Style Selector="ToggleButton.Segment">
         <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
-        <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
+        <Setter Property="RenderTransformOrigin" Value="50%,50%" />
         <Setter Property="Height" Value="{DynamicResource Size.SegmentChip}" />
         <Setter Property="MinWidth" Value="44" />
         <Setter Property="Padding" Value="16,0" />
@@ -935,6 +951,13 @@
     <!-- ==================================================================== -->
     <Style Selector="Ellipse.Spinner">
         <Setter Property="IsHitTestVisible" Value="False" />
+        <!--  ВНИМАНИЕ: origin здесь НАМЕРЕННО абсолютный «0.5,0.5» (= 0.5px ≈ no-op),
+              а НЕ относительный «50%,50%». Спиннеры центрируют вращение сами —
+              instance RotateTransform CenterX/CenterY (SubscriptionMetaView 9/9,
+              ServerListView 7.5/7.5) или собственный instance-origin (LoginView).
+              Относительный «50%,50%» здесь удвоил бы центр (Visual ещё раз обернул бы
+              RenderTransform.Value через origin) → дуга «облетала» бы вместо вращения.
+              НЕ меняй на «50%,50%».  -->
         <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
     </Style>
     <!--  Под lite-окном вращение НЕ навешивается (см. SkeletonPulse: гасим на уровне селектора,

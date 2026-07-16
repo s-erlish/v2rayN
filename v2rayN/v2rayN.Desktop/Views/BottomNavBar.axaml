@@ -9,8 +9,10 @@
 
     <!--  ================================================================================
           НИЖНЯЯ НАВИГАЦИЯ (CA-2) — компактная раскладка, 1:1 с Android bottom_nav.
-          Пункты: Главная · Сервера · Настройки (всегда) + Аккаунт (только при входе, тогда
-          столбец разворачивается из 0 в равную долю — три оставшихся держат равные трети).
+          Пункты: Главная · Настройки (всегда) + Аккаунт (только при входе, тогда столбец
+          разворачивается из 0 в равную долю). Отдельной вкладки «Сервера» нет — компактная
+          «Главная» показывает щит + мету + список серверов в ОДНОМ скролле, так что вторая
+          вкладка серверов была бы избыточной.
           Каждый пункт: глиф 24 + подпись 11 + короткая синяя пилюля 34×3 (видна у выбранного).
           Выбранный: глиф/подпись серый→accent, вес 500→700, пилюля fade-in. Press: scale 0.92.
           Под панелью — лёгкий градиент-скрим (frameless-вид), а не сплошная заливка.
@@ -131,7 +133,7 @@
     </UserControl.Styles>
 
     <Panel Background="{StaticResource Nav.Scrim}">
-        <Grid x:Name="NavGrid" ColumnDefinitions="*,*,*,*">
+        <Grid x:Name="NavGrid" ColumnDefinitions="*,*,*">
             <Button
                 x:Name="ItemHome"
                 Grid.Column="0"
@@ -143,18 +145,8 @@
                 </StackPanel>
             </Button>
             <Button
-                x:Name="ItemServers"
-                Grid.Column="1"
-                Classes="BottomNavItem">
-                <StackPanel HorizontalAlignment="Center">
-                    <PathIcon HorizontalAlignment="Center" Data="{StaticResource Geo.Nav.Servers}" />
-                    <TextBlock Classes="NavLabel" Text="Сервера" />
-                    <Border Classes="NavPillBottom" />
-                </StackPanel>
-            </Button>
-            <Button
                 x:Name="ItemSettings"
-                Grid.Column="2"
+                Grid.Column="1"
                 Classes="BottomNavItem">
                 <StackPanel HorizontalAlignment="Center">
                     <PathIcon HorizontalAlignment="Center" Data="{StaticResource Geo.Nav.Settings}" />
@@ -164,7 +156,7 @@
             </Button>
             <Button
                 x:Name="ItemAccount"
-                Grid.Column="3"
+                Grid.Column="2"
                 Classes="BottomNavItem"
                 IsVisible="False">
                 <StackPanel HorizontalAlignment="Center">

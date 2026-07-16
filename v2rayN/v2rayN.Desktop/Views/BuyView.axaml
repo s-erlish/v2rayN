@@ -172,7 +172,10 @@
             <Setter Property="CornerRadius" Value="{StaticResource Radius.Card}" />
             <Setter Property="Background" Value="{DynamicResource Brush.SurfaceVariant}" />
         </Style>
-        <Style Selector="StackPanel.SkeletonPulse">
+        <!--  «Облегчённый режим»: под lite-окном пульс НЕ аттачится (селектор :is(Window):not(.lite)
+              не совпадает → статичная непрозрачность). Конкурирующий стиль в Avalonia не отменяет уже
+              запущенную анимацию — поэтому гасим на уровне СЕЛЕКТОРА, как глобальный SkeletonPulse.  -->
+        <Style Selector=":is(Window):not(.lite) StackPanel.SkeletonPulse">
             <Style.Animations>
                 <Animation
                     Duration="0:0:0.9"
@@ -190,8 +193,10 @@
         </Style>
 
         <!--  Один рецепт входа состояния (ошибка/пусто/успех/контент): fade 220мс ease-out-quart.
-              Заменяет андроидный cross-fade skeleton→контент без жёсткого «попа».  -->
-        <Style Selector="StackPanel.reveal[IsVisible=True]">
+              Заменяет андроидный cross-fade skeleton→контент без жёсткого «попа».
+              «Облегчённый режим»: под lite-окном fade НЕ аттачится (селектор :is(Window):not(.lite) не
+              совпадает) → состояние появляется мгновенно, без движения (как гасит движение весь lite).  -->
+        <Style Selector=":is(Window):not(.lite) StackPanel.reveal[IsVisible=True]">
             <Style.Animations>
                 <Animation
                     Duration="0:0:0.22"

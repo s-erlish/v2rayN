@@ -2,11 +2,11 @@ using v2rayN.Desktop.Account;
 
 namespace v2rayN.Desktop.Views;
 
-/// <summary>The four compact tabs — the single source of truth for tab identity across both layouts.</summary>
+/// <summary>The compact tabs — the single source of truth for tab identity across both layouts.
+/// There is no «Сервера» tab: the compact Home already lists servers in its single scroll.</summary>
 public enum AppTab
 {
     Home,
-    Servers,
     Settings,
     Account,
 }
@@ -30,7 +30,6 @@ public partial class BottomNavBar : UserControl
         InitializeComponent();
 
         ItemHome.Click += (_, _) => Raise(AppTab.Home);
-        ItemServers.Click += (_, _) => Raise(AppTab.Servers);
         ItemSettings.Click += (_, _) => Raise(AppTab.Settings);
         ItemAccount.Click += (_, _) => Raise(AppTab.Account);
 
@@ -67,7 +66,6 @@ public partial class BottomNavBar : UserControl
     {
         _selected = tab;
         SetItemState(ItemHome, tab == AppTab.Home);
-        SetItemState(ItemServers, tab == AppTab.Servers);
         SetItemState(ItemSettings, tab == AppTab.Settings);
         SetItemState(ItemAccount, tab == AppTab.Account);
     }
@@ -87,13 +85,13 @@ public partial class BottomNavBar : UserControl
         }
     }
 
-    // «Аккаунт» viden только при входе; его столбец сворачивается до 0, чтобы 3 остальных
-    // держали равные трети (Android nav_account weighted collapse).
+    // «Аккаунт» виден только при входе; его столбец сворачивается до 0, чтобы 2 остальных
+    // (Главная · Настройки) держали равные половины (Android nav_account weighted collapse).
     private void ApplyAccountVisibility()
     {
         var logged = AccountSession.IsLoggedIn();
         ItemAccount.IsVisible = logged;
-        NavGrid.ColumnDefinitions[3].Width = logged
+        NavGrid.ColumnDefinitions[2].Width = logged
             ? new GridLength(1, GridUnitType.Star)
             : new GridLength(0);
 
