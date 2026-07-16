@@ -43,12 +43,12 @@
 
     <UserControl.Styles>
         <!--  Row divider (port of custom_divider): 1px, inset to the text-column start
-              (16 gutter + 12 row padding + 36 tile + 12 gap = 76), full-bleed to the 16 gutter
+              (16 gutter + 12 row padding + 40 tile + 12 gap = 80), full-bleed to the 16 gutter
               on the right. Hidden on the selected row so the blue pill reads cleanly. ONE
               separator only — a single row gap, no competing margins.  -->
         <Style Selector="Border.rowDivider">
             <Setter Property="Height" Value="1" />
-            <Setter Property="Margin" Value="76,0,16,0" />
+            <Setter Property="Margin" Value="80,0,16,0" />
             <Setter Property="Background" Value="{DynamicResource Brush.OutlineVariant}" />
         </Style>
     </UserControl.Styles>
@@ -56,21 +56,30 @@
     <Grid Background="Transparent">
 
         <!--  SCROLL: subscription sections (meta-bar header + its rows), bound to real ServerGroups.
-              Bottom padding 24 (was 16): the last row carries a 2px margin + a 1px divider and, under
-              the always-on scrollbar, 16 left the final row visibly clipped at the bottom. 24 clears
-              the row + its divider with a comfortable gap so the last server is fully readable.  -->
-        <ScrollViewer IsVisible="{Binding HasServers}" Padding="0,0,0,24">
+              Bottom padding 40 (was 24): the last row carries a 2px margin + a 1px divider and, under
+              the always-on scrollbar, 24 STILL clipped the final server on the widescreen layout. 40
+              clears the row + its margin + divider with a comfortable gap so the last server (e.g.
+              «Приложение не поддерживается») is FULLY readable in both compact and widescreen.  -->
+        <ScrollViewer IsVisible="{Binding HasServers}" Padding="0,0,0,40">
             <ItemsControl ItemsSource="{Binding ServerGroups}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vms:HomeServerGroup">
                         <StackPanel Margin="0,0,0,4">
 
                             <!--  Subscription meta-bar = the section header (name + traffic pill +
-                                  actions + collapse chevron + «+»). Flows directly into its rows.  -->
+                                  actions + collapse chevron + delete). Flows directly into its rows.  -->
                             <local:SubscriptionMetaView Margin="16,16,16,8" />
 
-                            <!--  Group rows (collapse with the group via the meta-bar chevron).  -->
-                            <ItemsControl IsVisible="{Binding IsExpanded}" ItemsSource="{Binding Servers}">
+                            <!--  Group rows reveal (collapse with the group via the meta-bar chevron).
+                                  The chevron flips HomeServerGroup.IsExpanded; the code-behind SLIDES this
+                                  clipped container's Height + Opacity (~200ms OutQuint) instead of snapping
+                                  IsVisible. Gated: under lite / reduced-motion the toggle is instant. The
+                                  ClipToBounds hides the rows cleanly as the height animates.  -->
+                            <Border
+                                ClipToBounds="True"
+                                Loaded="OnGroupRevealLoaded"
+                                Unloaded="OnGroupRevealUnloaded">
+                            <ItemsControl ItemsSource="{Binding Servers}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="models:ProfileItemModel">
                                         <StackPanel>
@@ -84,7 +93,7 @@
                                                   ~300мс OutQuint). Строки видимы ПО УМОЛЧАНИЮ — анимация лишь
                                                   усиливает уже видимый покой (см. code-behind, §A.4).  -->
                                             <Border
-                                                MinHeight="50"
+                                                MinHeight="52"
                                                 Margin="16,2"
                                                 Padding="12,6"
                                                 Classes="ServerRow"
@@ -116,23 +125,23 @@
 
                                                 <Grid VerticalAlignment="Center" ColumnDefinitions="Auto,*,Auto">
 
-                                                    <!--  Flag: 36dp CIRCULAR tile (matches Android) — the country flag reads as a
+                                                    <!--  Flag: 40dp CIRCULAR tile (matches Android) — the country flag reads as a
                                                           clean disc, not a rounded square. The flag PNGs are already circular with
-                                                          transparent corners, so a circular tile (radius = half = 18) removes the
+                                                          transparent corners, so a circular tile (radius = half = 20) removes the
                                                           square corners that used to poke out behind the disc. A 1.5px inset lets the
                                                           dark neutral tile show as a subtle ring around the flag (Android treatment).
                                                           RemarkToFlag resolves the country flag from Remarks; non-country / aggregate
                                                           rows fall back to the globe disc (xx.png) — a distinct, data-driven emblem.  -->
                                                     <Border
                                                         Grid.Column="0"
-                                                        Width="36"
-                                                        Height="36"
+                                                        Width="40"
+                                                        Height="40"
                                                         Margin="0,0,12,0"
                                                         Padding="1.5"
                                                         VerticalAlignment="Center"
                                                         Background="{DynamicResource Brush.Tile.Neutral}"
                                                         ClipToBounds="True"
-                                                        CornerRadius="18">
+                                                        CornerRadius="20">
                                                         <Image Source="{Binding Remarks, Converter={StaticResource RemarkToFlag}}" Stretch="UniformToFill" />
                                                     </Border>
 
@@ -209,6 +218,7 @@
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
+                            </Border>
                         </StackPanel>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>

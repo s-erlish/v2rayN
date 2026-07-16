@@ -181,10 +181,16 @@ public partial class LoginView : UserControl
         }
     }
 
-    /// <summary>Состояние ожидания подтверждения в Telegram (layout_awaiting).</summary>
+    /// <summary>
+    /// Состояние ожидания подтверждения в Telegram (layout_awaiting). AwaitingBlock —
+    /// отдельный сфокусированный экран: на время опроса он ЗАМЕНЯЕТ MethodBlock (выбор способа
+    /// входа + форма сайта), чтобы фокус был на подтверждении. По выходу из ожидания
+    /// (успех / ошибка / idle) MethodBlock возвращается — форма и её состояние сохранены.
+    /// </summary>
     private void SetAwaiting(bool awaiting)
     {
         AwaitingBlock.IsVisible = awaiting;
+        MethodBlock.IsVisible = !awaiting;
         SetSpinning(AwaitingSpinner, awaiting);
         // CTA Telegram неактивен ТОЛЬКО пока идёт опрос подтверждения (паритет showAwaiting:
         // btnTelegram.isEnabled = false). В любом другом состоянии он активен — вход через

@@ -1,8 +1,11 @@
+using System.ComponentModel;
 using System.Runtime.InteropServices;
 using Avalonia.Animation;
 using Avalonia.Animation.Easings;
 using Avalonia.Data.Converters;
+using Avalonia.Layout;
 using Avalonia.Media.Transformation;
+using Avalonia.VisualTree;
 using DialogHostAvalonia;
 using v2rayN.Desktop.Common;
 using v2rayN.Desktop.ViewModels;
@@ -425,6 +428,214 @@ public partial class ServerListView : UserControl
     }
 
     #endregion List-reveal stagger
+
+    #region Group expand/collapse slide (fast height+opacity reveal; instant under lite)
+
+    //  The meta-bar chevron flips HomeServerGroup.IsExpanded. Instead of snapping the rows in/out
+    //  (IsVisible), each group's rows live in a clipped GroupReveal Border whose Height + Opacity we
+    //  SLIDE (~200ms OutQuint) on toggle — a fast, smooth reveal that matches the chevron rotate.
+    //  Under lite / reduced-motion the toggle is INSTANT (same gate as the list-reveal stagger).
+    //
+    //  Rows stay UN-hosted while collapsed (IsVisible=false at rest), so a collapsed group never
+    //  realizes its rows — this preserves the one-shot list-reveal stagger (it keys off row Loaded,
+    //  which only fires for expanded groups). The outer groups ItemsControl uses a non-virtualizing
+    //  StackPanel, so each GroupReveal container is stable; we hook its group on Loaded, unhook on
+    //  Unloaded, and cancel any in-flight slide when a new toggle arrives.
+
+    private const double RevealSlideMs = 200; //  fast slide (rows in/out) — OutQuint
+
+    private readonly Dictionary<Border, (HomeServerGroup group, PropertyChangedEventHandler handler)> _revealHooks = new();
+    private readonly Dictionary<Border, CancellationTokenSource> _revealCts = new();
+
+    // Hook the group behind this reveal container and set its rest state (no animation on first bind).
+    private void OnGroupRevealLoaded(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Border reveal || reveal.DataContext is not HomeServerGroup group)
+        {
+            return;
+        }
+
+        // Already hooked to the SAME group (Loaded can re-fire) → just re-assert rest, don't double-subscribe.
+        if (_revealHooks.TryGetValue(reveal, out var existing))
+        {
+            if (ReferenceEquals(existing.group, group))
+            {
+                ApplyRevealState(reveal, group.IsExpanded);
+                return;
+            }
+            existing.group.PropertyChanged -= existing.handler;
+            _revealHooks.Remove(reveal);
+        }
+
+        void Handler(object? _, PropertyChangedEventArgs args)
+        {
+            if (args.PropertyName == nameof(HomeServerGroup.IsExpanded))
+            {
+                AnimateReveal(reveal, group.IsExpanded);
+            }
+        }
+
+        group.PropertyChanged += Handler;
+        _revealHooks[reveal] = (group, Handler);
+        ApplyRevealState(reveal, group.IsExpanded);
+    }
+
+    private void OnGroupRevealUnloaded(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Border reveal)
+        {
+            return;
+        }
+        if (_revealHooks.TryGetValue(reveal, out var hook))
+        {
+            hook.group.PropertyChanged -= hook.handler;
+            _revealHooks.Remove(reveal);
+        }
+        if (_revealCts.TryGetValue(reveal, out var cts))
+        {
+            cts.Cancel();
+            cts.Dispose();
+            _revealCts.Remove(reveal);
+        }
+    }
+
+    // Instant rest state: expanded → auto height, fully visible; collapsed → height 0, hidden (rows un-hosted).
+    private static void ApplyRevealState(Border reveal, bool expanded)
+    {
+        if (expanded)
+        {
+            reveal.IsVisible = true;
+            reveal.Height = double.NaN;
+            reveal.Opacity = 1;
+        }
+        else
+        {
+            reveal.Height = 0;
+            reveal.Opacity = 0;
+            reveal.IsVisible = false;
+        }
+    }
+
+    // Fast height + opacity slide. Cancels any in-flight slide on this container first. Instant under lite.
+    private async void AnimateReveal(Border reveal, bool expand)
+    {
+        if (_revealCts.TryGetValue(reveal, out var prev))
+        {
+            prev.Cancel();
+            prev.Dispose();
+            _revealCts.Remove(reveal);
+        }
+
+        if (IsReducedMotion())
+        {
+            ApplyRevealState(reveal, expand);
+            return;
+        }
+
+        double fromH, toH, fromO, toO;
+        if (expand)
+        {
+            // Host the rows, measure their natural height at the current width, then grow 0 → target.
+            reveal.IsVisible = true;
+            var target = MeasureRevealHeight(reveal);
+            if (target <= 0)
+            {
+                ApplyRevealState(reveal, true);
+                return;
+            }
+            (fromH, toH, fromO, toO) = (0, target, 0, 1);
+        }
+        else
+        {
+            var from = reveal.Bounds.Height;
+            if (from <= 0)
+            {
+                from = MeasureRevealHeight(reveal);
+            }
+            if (from <= 0)
+            {
+                ApplyRevealState(reveal, false);
+                return;
+            }
+            (fromH, toH, fromO, toO) = (from, 0, 1, 0);
+        }
+
+        var cts = new CancellationTokenSource();
+        _revealCts[reveal] = cts;
+        var token = cts.Token;
+
+        // Base = start-state (matches keyframe 0) so nothing flashes before the clock ticks; FillMode.None
+        // releases the properties on completion and the finally sets the resting base immediately after.
+        reveal.Height = fromH;
+        reveal.Opacity = fromO;
+
+        var anim = new Animation
+        {
+            Duration = TimeSpan.FromMilliseconds(RevealSlideMs),
+            //  Ease.OutQuint (0.22,1,0.36,1) — the confident-reveal curve used across the app.
+            Easing = new SplineEasing { X1 = 0.22, Y1 = 1, X2 = 0.36, Y2 = 1 },
+            FillMode = FillMode.None,
+            Children =
+            {
+                new KeyFrame
+                {
+                    Cue = new Cue(0d),
+                    Setters =
+                    {
+                        new Setter(Layoutable.HeightProperty, fromH),
+                        new Setter(Visual.OpacityProperty, fromO),
+                    },
+                },
+                new KeyFrame
+                {
+                    Cue = new Cue(1d),
+                    Setters =
+                    {
+                        new Setter(Layoutable.HeightProperty, toH),
+                        new Setter(Visual.OpacityProperty, toO),
+                    },
+                },
+            },
+        };
+
+        try
+        {
+            await anim.RunAsync(reveal, token);
+        }
+        catch (OperationCanceledException)
+        {
+            //  Superseded by a newer toggle — it owns the resting state now.
+        }
+        finally
+        {
+            if (!token.IsCancellationRequested)
+            {
+                ApplyRevealState(reveal, expand);
+                _revealCts.Remove(reveal);
+                cts.Dispose();
+            }
+        }
+    }
+
+    // Natural height of the reveal's rows at the current column width (measured with Height cleared).
+    private static double MeasureRevealHeight(Border reveal)
+    {
+        double width = 0;
+        if (reveal.GetVisualParent() is Control parent && parent.Bounds.Width > 0)
+        {
+            width = parent.Bounds.Width;
+        }
+        else if (reveal.Bounds.Width > 0)
+        {
+            width = reveal.Bounds.Width;
+        }
+
+        reveal.Height = double.NaN;
+        reveal.Measure(new Size(width > 0 ? width : double.PositiveInfinity, double.PositiveInfinity));
+        return reveal.DesiredSize.Height;
+    }
+
+    #endregion Group expand/collapse slide
 
     #region Server-row context actions (§2.13)
 

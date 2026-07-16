@@ -14,6 +14,129 @@
     <!-- ==================================================================== -->
     <Styles.Resources>
         <CornerRadius x:Key="Radius.Button">16</CornerRadius>
+
+        <!-- ==================================================================== -->
+        <!--  Incy-скроллбар (замена уродливого дефолта Semi). Тонкая оверлей-      -->
+        <!--  полоса: пилюля-ползунок 6px в покое → 8px при наведении на полосу,    -->
+        <!--  цвет muted OnSurfaceVariant с низкой альфой → ярче на ховере →         -->
+        <!--  Accent при перетаскивании. Без чанковых кнопок-стрелок (line-up/down  -->
+        <!--  не включены в шаблон — они null-safe в ScrollBar.OnApplyTemplate).     -->
+        <!--  Плавность width/opacity 150мс Ease.Standard, мгновенно под .lite.      -->
+        <!--  Тема-зависимо через DynamicResource; применяется глобально ключом       -->
+        <!--  {x:Type ScrollBar} (GlobalStyles подключён ПОСЛЕ SemiTheme).            -->
+        <!-- ==================================================================== -->
+
+        <!--  Область-страница трека: невидима, но hit-target для click-to-page.  -->
+        <ControlTheme x:Key="Incy.ScrollBarPageButton" TargetType="RepeatButton">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Background="{TemplateBinding Background}" />
+                </ControlTemplate>
+            </Setter>
+        </ControlTheme>
+
+        <!--  Ползунок: пилюля muted, размеры/ховер/press задаёт ScrollBar-шаблон.  -->
+        <ControlTheme x:Key="Incy.ScrollBarThumb" TargetType="Thumb">
+            <Setter Property="Background" Value="{DynamicResource Brush.OnSurfaceVariant}" />
+            <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill}" />
+            <Setter Property="Opacity" Value="0.45" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Background="{TemplateBinding Background}"
+                            CornerRadius="{TemplateBinding CornerRadius}" />
+                </ControlTemplate>
+            </Setter>
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Width" Duration="0:0:0.15" Easing="{StaticResource Ease.Standard}" />
+                    <DoubleTransition Property="Height" Duration="0:0:0.15" Easing="{StaticResource Ease.Standard}" />
+                    <DoubleTransition Property="Opacity" Duration="0:0:0.15" Easing="{StaticResource Ease.Standard}" />
+                    <BrushTransition Property="Background" Duration="0:0:0.15" />
+                </Transitions>
+            </Setter>
+        </ControlTheme>
+
+        <!--  Глобальный слим-скроллбар (implicit ControlTheme).  -->
+        <ControlTheme x:Key="{x:Type ScrollBar}" TargetType="ScrollBar">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Cursor" Value="Arrow" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border x:Name="Root" Background="{TemplateBinding Background}">
+                        <Track Name="PART_Track"
+                               Minimum="{TemplateBinding Minimum}"
+                               Maximum="{TemplateBinding Maximum}"
+                               Value="{TemplateBinding Value, Mode=TwoWay}"
+                               ViewportSize="{TemplateBinding ViewportSize}"
+                               Orientation="{TemplateBinding Orientation}">
+                            <Track.DecreaseButton>
+                                <RepeatButton Name="PART_PageUpButton"
+                                              Theme="{StaticResource Incy.ScrollBarPageButton}" />
+                            </Track.DecreaseButton>
+                            <Track.IncreaseButton>
+                                <RepeatButton Name="PART_PageDownButton"
+                                              Theme="{StaticResource Incy.ScrollBarPageButton}" />
+                            </Track.IncreaseButton>
+                            <Track.Thumb>
+                                <Thumb Name="thumb" Theme="{StaticResource Incy.ScrollBarThumb}" />
+                            </Track.Thumb>
+                        </Track>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+
+            <!--  Вертикальный: полоса-лейн 12px, пилюля 6px прижата к правому краю.  -->
+            <Style Selector="^:vertical">
+                <Setter Property="Width" Value="12" />
+            </Style>
+            <Style Selector="^:vertical /template/ Track#PART_Track">
+                <Setter Property="IsDirectionReversed" Value="True" />
+            </Style>
+            <Style Selector="^:vertical /template/ Thumb#thumb">
+                <Setter Property="Width" Value="6" />
+                <Setter Property="MinHeight" Value="32" />
+                <Setter Property="HorizontalAlignment" Value="Right" />
+                <Setter Property="Margin" Value="0,0,3,0" />
+            </Style>
+            <Style Selector="^:vertical:pointerover /template/ Thumb#thumb">
+                <Setter Property="Width" Value="8" />
+                <Setter Property="Margin" Value="0,0,2,0" />
+            </Style>
+
+            <!--  Горизонтальный: лейн 12px, пилюля 6px прижата к низу.  -->
+            <Style Selector="^:horizontal">
+                <Setter Property="Height" Value="12" />
+            </Style>
+            <Style Selector="^:horizontal /template/ Thumb#thumb">
+                <Setter Property="Height" Value="6" />
+                <Setter Property="MinWidth" Value="32" />
+                <Setter Property="VerticalAlignment" Value="Bottom" />
+                <Setter Property="Margin" Value="0,0,0,3" />
+            </Style>
+            <Style Selector="^:horizontal:pointerover /template/ Thumb#thumb">
+                <Setter Property="Height" Value="8" />
+                <Setter Property="Margin" Value="0,0,0,2" />
+            </Style>
+
+            <!--  Наведение на полосу → ползунок ярче (более непрозрачный).  -->
+            <Style Selector="^:pointerover /template/ Thumb#thumb">
+                <Setter Property="Opacity" Value="0.8" />
+            </Style>
+            <!--  Перетаскивание → Accent + полная непрозрачность (после ховера — выигрывает).  -->
+            <Style Selector="^ /template/ Thumb#thumb:pressed">
+                <Setter Property="Background" Value="{DynamicResource Brush.Accent}" />
+                <Setter Property="Opacity" Value="1" />
+            </Style>
+            <!--  Отключён → ползунок скрыт.  -->
+            <Style Selector="^:disabled /template/ Thumb#thumb">
+                <Setter Property="Opacity" Value="0" />
+            </Style>
+        </ControlTheme>
     </Styles.Resources>
 
     <Design.PreviewWith>
@@ -1059,6 +1182,13 @@
         </Setter>
     </Style>
     <Style Selector=":is(Window).lite Button.NavRailItem TextBlock">
+        <Setter Property="Transitions">
+            <Transitions />
+        </Setter>
+    </Style>
+    <!--  Скроллбар: ширина/opacity/цвет ползунка переключаются МГНОВЕННО под lite.
+          Стиль перекрывает Transitions из ControlTheme ползунка (Style > ControlTheme).  -->
+    <Style Selector=":is(Window).lite ScrollBar /template/ Thumb#thumb">
         <Setter Property="Transitions">
             <Transitions />
         </Setter>

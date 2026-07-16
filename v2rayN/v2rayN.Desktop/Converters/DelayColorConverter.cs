@@ -1,28 +1,31 @@
 using Avalonia.Data.Converters;
+using Avalonia.Styling;
 
 namespace v2rayN.Desktop.Converters;
 
 /// <summary>
-/// Раскрашивает значение задержки (пинга) ТЕМА-зависимыми токенами, а не жёсткими зелёным/красным:
-/// хорошо (>0…≤500 мс) = <c>Brush.Green</c>, плохо/таймаут (≤0 или &gt;500 мс) = <c>Brush.Red</c>.
-/// Кисти резолвим из ресурсов приложения по активному <see cref="ThemeVariant"/>, поэтому цвет
-/// совпадает с текущей темой (Тёмная/Светлая) и с монохромным оверлеем (в mono Brush.Green
-/// перекрашен в серый connected-токен — пинг читается серым, как остальной UI). Пороговые значения
-/// good/bad/timeout сохранены. Если ресурсы недоступны — защитный откат к литеральным токенам Incy.
+/// Красит значение задержки (пинга) ОДНИМ тема-зависимым чернилом — без зелёного/красного «хорошо/плохо».
+/// Владелец: пинг должен следовать теме — «на светлой синий, на тёмной белый». Поэтому:
+///   • Светлая  → <c>Brush.Accent</c>  (синий #4C8DFF; в mono-светлой — серый accent-токен);
+///   • Тёмная   → <c>Brush.OnSurface</c> (белый #F2F4F8; в mono-тёмной — светло-серые чернила).
+/// Кисть резолвим из ресурсов приложения по активному <see cref="ThemeVariant"/> (учитывает mono-оверлей),
+/// поэтому цвет совпадает с текущей темой. Значение показывается лишь для реальных числовых результатов
+/// (видимость гейтит DelayResultConverter; во время теста — спиннер). Если ресурсы недоступны — защитный
+/// откат к литеральным токенам Incy, чтобы конвертер никогда не ронял привязку.
 /// </summary>
 public class DelayColorConverter : IValueConverter
 {
-    // Литеральный откат = базовые токены Incy (Dark), если ресурсы темы почему-то не резолвятся.
-    private static readonly IBrush _goodFallback = new SolidColorBrush(Color.Parse("#22C55E")); // Brush.Green
-    private static readonly IBrush _badFallback = new SolidColorBrush(Color.Parse("#F04452"));  // Brush.Red
+    // Литеральный откат = базовые токены Incy, если ресурсы темы почему-то не резолвятся.
+    private static readonly IBrush _blueFallback = new SolidColorBrush(Color.Parse("#4C8DFF"));  // Brush.Accent (Light)
+    private static readonly IBrush _whiteFallback = new SolidColorBrush(Color.Parse("#F2F4F8")); // Brush.OnSurface (Dark)
 
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
-        var delay = value.ToString().ToInt();
-
-        // Пороги: таймаут/ошибка (≤0) и «медленно» (>500) → плохо (Red); (0…500] → хорошо (Green).
-        var good = delay is > 0 and <= 500;
-        return good ? Resolve("Brush.Green", _goodFallback) : Resolve("Brush.Red", _badFallback);
+        // Единое тема-адаптивное чернило: синий на светлой, белый на тёмной (mono-маппинг — через токены).
+        var light = Application.Current?.ActualThemeVariant == ThemeVariant.Light;
+        return light
+            ? Resolve("Brush.Accent", _blueFallback)
+            : Resolve("Brush.OnSurface", _whiteFallback);
     }
 
     // Резолвит кисть темы по активному ThemeVariant (учитывает mono-оверлей). Защитно: любой сбой

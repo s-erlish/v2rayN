@@ -22,6 +22,13 @@ namespace v2rayN.Desktop.Account;
 /// </summary>
 public sealed class SubscriptionSyncManager
 {
+    /// <summary>
+    /// v2rayNG-family User-Agent stamped on every account-imported subscription. The departament
+    /// panel keys its managed server list off a recognised v2rayNG client, so this must stay a
+    /// v2rayNG UA — it is passed through verbatim by <see cref="SubscriptionHandler"/>.
+    /// </summary>
+    private const string AccountSubscriptionUserAgent = "v2rayNG/1.10.6";
+
     private readonly IDepartamentApiClient _api;
 
     public SubscriptionSyncManager(IDepartamentApiClient? api = null)
@@ -87,7 +94,11 @@ public sealed class SubscriptionSyncManager
             item.Remarks = candidate.Remarks;
             item.Url = candidate.Url;                              // the ACCOUNT subscription URL
             item.Enabled = true;
-            item.UserAgent = BackendConfig.SubscriptionUserAgent;  // SubscriptionHandler forces v2rayNG over this
+            // Stamp an explicit v2rayNG-family UA: the departament/Remnawave panel serves its managed
+            // server list only for a recognised v2rayNG client. SubscriptionHandler.ResolveSubUserAgent
+            // honours this verbatim. (Manually-added subs carry no UA and correctly fall back to the
+            // standard "v2rayN/<version>" desktop UA instead — see that method.)
+            item.UserAgent = AccountSubscriptionUserAgent;
 
             await ConfigHandler.AddSubItem(config, item);
             var guid = item.Id;

@@ -6,28 +6,30 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:vms="clr-namespace:v2rayN.Desktop.ViewModels"
     d:DesignHeight="760"
-    d:DesignWidth="900"
+    d:DesignWidth="380"
     x:DataType="vms:AccountViewModel"
     mc:Ignorable="d">
 
     <!--
-        Экран «Вход» (порт Android activity_login.xml + LoginActivity.kt, 1:1).
-        Суб-страница с бесшовным тулбаром «← Вход» и двумя СОСЕДНИМИ картами (не вложенными):
-        1) Telegram: заголовок + описание + CTA; состояние ожидания (спиннер + «Ожидаем
-           подтверждения в Telegram…» + «Открыть Telegram» + «Начать заново»).
-        2) Сайт: email + пароль (глаз), CTA со спиннером поверх, блок 2FA (разделитель + код 6 цифр
-           + «Подтвердить»), «Регистрация на сайте».
-        Под картами: строка ошибки (Red, по центру) — реальный диагностик из VM.
-        Incy: pure dark + один синий #4C8DFF, Space Grotesk, sentence-case Russian (строки verbatim
-        из strings_auth.xml), сетка 4/8/12/16/24, radius chip 12 / input 14 / button 16 / card 20.
-        Состояния (idle / awaiting-TG / loading-site / 2FA / error) переключает code-behind по
-        AccountViewModel.CurrentLoginState (WhenAnyValue на UI-шедулере).
+        Экран «Вход» departament (порт Android LoginActivity.kt + strings_auth.xml).
+        Переработан под КОМПАКТНОЕ окно (~360–380px): бесшовный тулбар «← Вход», единая
+        центрированная колонка контента (MaxWidth 440 — красиво и на широком окне) с gutter 16,
+        фирменный щит-логотип, заголовок + подзаголовок, CTA Telegram (акцент, самолётик) и CTA
+        сайта (тональная), поля Incy, блок 2FA. Два экрана состояния переключает code-behind:
+          • MethodBlock — выбор способа входа + форма сайта + 2FA + строка ошибки;
+          • AwaitingBlock — сфокусированное ожидание подтверждения в Telegram (спиннер + текст +
+            «Открыть Telegram» + «Начать заново»).
+        Incy: pure dark + один синий #4C8DFF, Space Grotesk, sentence-case Russian, сетка 4/8/12/16/24,
+        radius chip 12 / input 14 / button 16 / card 20. Состояния (idle / awaiting-TG / loading-site /
+        2FA / error) — по AccountViewModel.CurrentLoginState (WhenAnyValue на UI-шедулере).
     -->
 
     <UserControl.Resources>
         <!--  Глифы (порт Android res/drawable, Material 24dp).  -->
         <!--  Стрелка «назад» тулбара (arrow_back).  -->
         <StreamGeometry x:Key="Geo.Login.Back">M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z</StreamGeometry>
+        <!--  Фирменный щит (bg_connect, filled) — логотип departament на экране входа.  -->
+        <StreamGeometry x:Key="Geo.Login.Shield">M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3z</StreamGeometry>
         <!--  Telegram (ic_telegram_24dp, viewport 1024) — контурный бумажный самолётик.  -->
         <StreamGeometry x:Key="Geo.Login.Telegram">M912.2,154A85.3,85.3 0,0 0,853.3 128a85.3,85.3 0,0 0,-33.3 6.8l-708.3,306.8a42.7,42.7 0,0 0,-26.5 42.7V512a42.7,42.7 0,0 0,29.4 42.7L298.7,616.1l55.5,187.3a75.9,75.9 0,0 0,56.3 53.3,62.7 62.7,0 0,0 15.4,0 73.8,73.8 0,0 0,50.8 -20.5l67.8,-64 131.4,103.7a85.3,85.3 0,0 0,90 9.4l14.1,-7.3a88.3,88.3 0,0 0,46.5 -62.7L938.7,235.1a90,90 0,0 0,-26.5 -81.1zM763.7,805.1a25.2,25.2 0,0 1,-12.8 17.5l-14.1,7.3a19.6,19.6 0,0 1,-9 2.1,19.6 19.6,0 0,1 -12.4,-4.7l-160.4,-128a20.9,20.9 0,0 0,-27.7 0l-94.7,89.2a11.1,11.1 0,0 1,-6 2.1V640a21.8,21.8 0,0 1,6.8 -15.8c136.1,-128 217.6,-199.7 266.2,-240.6a15.8,15.8 0,0 0,5.1 -11.1,13.7 13.7,0 0,0 -4.3,-11.1 14.9,14.9 0,0 0,-17.9 -4.3l-322.6,203.5a21.3,21.3 0,0 1,-18.3 0L149.3,494.9l694.2,-301.2a16.6,16.6 0,0 1,7.7 0,22.2 22.2,0 0,1 16.2,7.7 26.9,26.9 0,0 1,6.8 23.5z</StreamGeometry>
         <!--  Глаз password-toggle: «показать» (visibility) / «скрыть» (visibility_off).  -->
@@ -149,8 +151,8 @@
         </Style>
 
         <!--
-            [ЛОКАЛЬНО, к продвижению] Линк-действие («Открыть Telegram»): текстовая кнопка
-            акцента без рамки, 40h (тач-таргет), pressed scale 0.97.
+            [ЛОКАЛЬНО, к продвижению] Линк-действие («Начать заново» / «Регистрация на сайте»):
+            текстовая кнопка акцента без рамки, 40h (тач-таргет), pressed scale 0.97.
         -->
         <Style Selector="Button.LinkAction">
             <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
@@ -163,6 +165,7 @@
             <Setter Property="FontSize" Value="14" />
             <Setter Property="HorizontalContentAlignment" Value="Center" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="RenderTransformOrigin" Value="50%,50%" />
             <Setter Property="Transitions">
                 <Transitions>
                     <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" />
@@ -171,6 +174,14 @@
         </Style>
         <Style Selector="Button.LinkAction:pressed">
             <Setter Property="RenderTransform" Value="scale(0.97)" />
+        </Style>
+
+        <!--
+            [ЛОКАЛЬНО, к продвижению] Высокая тональная (52h) — вторичный CTA формы сайта,
+            чтобы совпадать по высоте с Primary.Tall (глобально .Tall задан только для Primary).
+        -->
+        <Style Selector="Button.Tonal.Tall">
+            <Setter Property="Height" Value="52" />
         </Style>
 
         <!--
@@ -208,8 +219,7 @@
         <Grid
             Grid.Row="0"
             Height="56"
-            MaxWidth="560"
-            Margin="16,0"
+            Margin="8,0,16,0"
             ColumnDefinitions="Auto,*">
             <Button
                 x:Name="BackButton"
@@ -225,39 +235,62 @@
             </Button>
             <TextBlock
                 Grid.Column="1"
-                Margin="12,0,0,0"
+                Margin="8,0,0,0"
                 VerticalAlignment="Center"
                 Classes="Headline"
                 Text="Вход" />
         </Grid>
 
-        <!--  ============ Контент: скролл, gutter 16, колонка формы ≤560 ============  -->
+        <!--  ============ Контент: скролл, gutter 16, центрированная колонка ≤440 ============  -->
         <ScrollViewer
             Grid.Row="1"
             HorizontalScrollBarVisibility="Disabled"
             VerticalScrollBarVisibility="Auto">
-            <StackPanel
-                MaxWidth="560"
-                Margin="16,16,16,24"
-                HorizontalAlignment="Stretch">
+            <!--  HorizontalAlignment=Stretch + MaxWidth: колонка заполняет компактное окно
+                  (за вычетом gutter 16) и центрируется-обрезается на широком.  -->
+            <Panel Margin="16,8,16,28">
+                <StackPanel MaxWidth="440" HorizontalAlignment="Stretch">
 
-                <!--  ==================== Карта 1: Вход через Telegram ====================  -->
-                <Border Classes="Card">
-                    <StackPanel>
-                        <TextBlock Classes="Title" Text="Вход через Telegram" />
+                    <!--  ==================== MethodBlock: выбор способа входа ====================  -->
+                    <StackPanel x:Name="MethodBlock" HorizontalAlignment="Stretch">
+
+                        <!--  Фирменный щит-логотип: плитка 64, радиус 20, фон Tile.Blue, глиф Accent 30.  -->
+                        <Border
+                            Width="64"
+                            Height="64"
+                            Margin="0,16,0,0"
+                            HorizontalAlignment="Center"
+                            Background="{DynamicResource Brush.Tile.Blue}"
+                            CornerRadius="{DynamicResource Radius.Card}">
+                            <PathIcon
+                                Width="30"
+                                Height="30"
+                                Data="{StaticResource Geo.Login.Shield}"
+                                Foreground="{DynamicResource Brush.Accent}" />
+                        </Border>
+
+                        <!--  Заголовок + подзаголовок (по центру, sentence-case).  -->
+                        <TextBlock
+                            Margin="0,20,0,0"
+                            HorizontalAlignment="Stretch"
+                            Classes="Headline"
+                            Text="Вход в departament"
+                            TextAlignment="Center"
+                            TextWrapping="Wrap" />
                         <TextBlock
                             Margin="0,8,0,0"
-                            Classes="Subtitle"
-                            Text="Подключите аккаунт Telegram, чтобы войти в один тап."
+                            HorizontalAlignment="Stretch"
+                            Classes="Body"
+                            Foreground="{DynamicResource Brush.OnSurfaceVariant}"
+                            Text="Войдите через Telegram в один тап или по email и паролю."
+                            TextAlignment="Center"
                             TextWrapping="Wrap" />
 
-                        <!--  CTA. НЕ гейтится формой сайта: вход через Telegram не требует ввода и
-                              всегда активен. Диспетчеризуется из code-behind (Click), поэтому пустой
-                              email/пароль или null DataContext НЕ дизейблят кнопку; в «занятой»/ожидающей
-                              вид она переходит только на время опроса подтверждения (SetAwaiting).  -->
+                        <!--  Первичный CTA — вход через Telegram (акцент, самолётик). НЕ гейтится формой
+                              сайта: всегда активен, кроме времени опроса подтверждения (SetAwaiting).  -->
                         <Button
                             x:Name="TelegramButton"
-                            Margin="0,16,0,0"
+                            Margin="0,24,0,0"
                             HorizontalAlignment="Stretch"
                             Classes="Primary Tall">
                             <StackPanel
@@ -273,67 +306,36 @@
                             </StackPanel>
                         </Button>
 
-                        <!--  Состояние ожидания (AwaitingTelegram / Polling): спиннер + текст +
-                              «Открыть Telegram» (повторно открыть deep link) + «Начать заново».  -->
-                        <StackPanel
-                            x:Name="AwaitingBlock"
-                            Margin="0,16,0,0"
-                            HorizontalAlignment="Stretch"
-                            IsVisible="False">
-                            <Ellipse
-                                x:Name="AwaitingSpinner"
-                                Width="32"
-                                Height="32"
-                                HorizontalAlignment="Center"
-                                Classes="Spinner"
-                                RenderTransformOrigin="50%,50%"
-                                Stroke="{DynamicResource Brush.Accent}"
-                                StrokeDashArray="8.4,25.1"
-                                StrokeLineCap="Round"
-                                StrokeThickness="3" />
+                        <!--  Разделитель «или»: две тонкие линии + подпись по центру.  -->
+                        <Grid Margin="0,20,0,0" ColumnDefinitions="*,Auto,*">
+                            <Border
+                                Grid.Column="0"
+                                Height="1"
+                                VerticalAlignment="Center"
+                                Background="{DynamicResource Brush.OutlineVariant}" />
                             <TextBlock
-                                Margin="0,12,0,0"
-                                Classes="Subtitle"
-                                Text="Ожидаем подтверждения в Telegram…"
-                                TextAlignment="Center"
-                                TextWrapping="Wrap" />
-                            <Button
-                                x:Name="OpenTelegramButton"
-                                Margin="0,12,0,0"
-                                HorizontalAlignment="Center"
-                                Classes="LinkAction"
-                                Content="Открыть Telegram" />
-                            <Button
-                                x:Name="RestartButton"
-                                Margin="0,12,0,0"
-                                HorizontalAlignment="Center"
-                                Classes="OutlinedAccent"
-                                Content="Начать заново" />
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
-
-                <!--  ==================== Карта 2: Вход через сайт ====================  -->
-                <Border Margin="0,16,0,0" Classes="Card">
-                    <StackPanel>
-                        <TextBlock Classes="Title" Text="Вход через сайт" />
-                        <TextBlock
-                            Margin="0,8,0,0"
-                            Classes="Subtitle"
-                            Text="Войдите по email и паролю от аккаунта departament."
-                            TextWrapping="Wrap" />
+                                Grid.Column="1"
+                                Margin="12,0"
+                                Classes="Caption"
+                                Text="или" />
+                            <Border
+                                Grid.Column="2"
+                                Height="1"
+                                VerticalAlignment="Center"
+                                Background="{DynamicResource Brush.OutlineVariant}" />
+                        </Grid>
 
                         <!--  Email (auth_email_hint). Enter переводит фокус на пароль.  -->
                         <TextBox
                             x:Name="EmailBox"
-                            Margin="0,16,0,0"
+                            Margin="0,20,0,0"
                             Text="{Binding LoginEmail, Mode=TwoWay}"
                             Theme="{StaticResource TextBox.Incy}"
                             Watermark="Электронная почта" />
                         <!--  Живая подсказка невалидного email (auth_email_invalid), как в Android.  -->
                         <TextBlock
                             x:Name="EmailError"
-                            Margin="4,4,4,0"
+                            Margin="4,6,4,0"
                             FontSize="12"
                             Foreground="{DynamicResource Brush.Red}"
                             IsVisible="False"
@@ -375,12 +377,12 @@
                             </TextBox.InnerRightContent>
                         </TextBox>
 
-                        <!--  CTA «Войти через сайт» + спиннер поверх во время SiteLoading (pb_site).  -->
+                        <!--  Вторичный CTA «Войти через сайт» (тональная) + спиннер поверх при SiteLoading.  -->
                         <Panel Margin="0,16,0,0">
                             <Button
                                 x:Name="SiteButton"
                                 HorizontalAlignment="Stretch"
-                                Classes="Primary Tall"
+                                Classes="Tonal Tall"
                                 Command="{Binding LoginSiteCmd}">
                                 <TextBlock x:Name="SiteButtonLabel" Text="Войти через сайт" />
                             </Button>
@@ -393,7 +395,7 @@
                                 Classes="Spinner"
                                 IsVisible="False"
                                 RenderTransformOrigin="50%,50%"
-                                Stroke="{DynamicResource Brush.OnAccent}"
+                                Stroke="{DynamicResource Brush.Accent}"
                                 StrokeDashArray="6.9,20.8"
                                 StrokeLineCap="Round"
                                 StrokeThickness="2.5" />
@@ -407,23 +409,26 @@
                             <Border Height="1" Background="{DynamicResource Brush.OutlineVariant}" />
                             <TextBlock
                                 Margin="0,16,0,0"
-                                Classes="Subtitle"
+                                HorizontalAlignment="Stretch"
+                                Classes="Body"
+                                Foreground="{DynamicResource Brush.OnSurfaceVariant}"
                                 Text="Введите 6-значный код из приложения"
+                                TextAlignment="Center"
                                 TextWrapping="Wrap" />
                             <TextBox
                                 x:Name="CodeBox"
                                 Margin="0,12,0,0"
                                 FontFeatures="tnum,lnum"
-                                FontSize="18"
+                                FontSize="20"
                                 MaxLength="6"
                                 Text="{Binding TwoFaCode, Mode=TwoWay}"
                                 TextAlignment="Center"
                                 Theme="{StaticResource TextBox.Incy}"
-                                Watermark="6-значный код" />
+                                Watermark="000000" />
                             <!--  Живая подсказка (auth_code_invalid).  -->
                             <TextBlock
                                 x:Name="CodeError"
-                                Margin="4,4,4,0"
+                                Margin="4,6,4,0"
                                 FontSize="12"
                                 Foreground="{DynamicResource Brush.Red}"
                                 IsVisible="False"
@@ -457,23 +462,101 @@
                         <!--  Регистрация на основном сайте (открывается во внешнем браузере).  -->
                         <Button
                             x:Name="RegisterButton"
-                            Margin="0,12,0,0"
-                            HorizontalAlignment="Stretch"
-                            Classes="OutlinedAccent"
+                            Margin="0,8,0,0"
+                            HorizontalAlignment="Center"
+                            Classes="LinkAction"
                             Content="Регистрация на сайте" />
-                    </StackPanel>
-                </Border>
 
-                <!--  Строка ошибки (tv_error): Red, по центру, только реальный диагностик.  -->
-                <TextBlock
-                    x:Name="ErrorLine"
-                    Margin="0,16,0,0"
-                    Classes="Subtitle"
-                    Foreground="{DynamicResource Brush.Red}"
-                    IsVisible="False"
-                    TextAlignment="Center"
-                    TextWrapping="Wrap" />
-            </StackPanel>
+                        <!--  Строка ошибки (tv_error): Red, по центру, только реальный диагностик.  -->
+                        <TextBlock
+                            x:Name="ErrorLine"
+                            Margin="0,16,0,0"
+                            HorizontalAlignment="Stretch"
+                            Classes="Body"
+                            Foreground="{DynamicResource Brush.Red}"
+                            IsVisible="False"
+                            TextAlignment="Center"
+                            TextWrapping="Wrap" />
+                    </StackPanel>
+
+                    <!--  ==================== AwaitingBlock: ожидание подтверждения в Telegram ====================
+                          Сфокусированный экран: заменяет MethodBlock, пока идёт опрос (AwaitingTelegram / Polling).
+                          Показывает спиннер, статус и повторное действие «Открыть Telegram» + «Начать заново».  -->
+                    <StackPanel
+                        x:Name="AwaitingBlock"
+                        Margin="0,40,0,0"
+                        HorizontalAlignment="Stretch"
+                        IsVisible="False">
+                        <!--  Спиннер акцента 48, по центру (крутится только с классом .spinning).  -->
+                        <Panel
+                            Width="64"
+                            Height="64"
+                            HorizontalAlignment="Center">
+                            <Ellipse
+                                Width="64"
+                                Height="64"
+                                Stroke="{DynamicResource Brush.OutlineVariant}"
+                                StrokeThickness="3" />
+                            <Ellipse
+                                x:Name="AwaitingSpinner"
+                                Width="64"
+                                Height="64"
+                                Classes="Spinner"
+                                RenderTransformOrigin="50%,50%"
+                                Stroke="{DynamicResource Brush.Accent}"
+                                StrokeDashArray="16.75,50.25"
+                                StrokeLineCap="Round"
+                                StrokeThickness="3" />
+                            <PathIcon
+                                Width="26"
+                                Height="26"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Data="{StaticResource Geo.Login.Telegram}"
+                                Foreground="{DynamicResource Brush.Accent}" />
+                        </Panel>
+                        <TextBlock
+                            Margin="0,20,0,0"
+                            HorizontalAlignment="Stretch"
+                            Classes="Title"
+                            Text="Ожидаем подтверждения"
+                            TextAlignment="Center"
+                            TextWrapping="Wrap" />
+                        <TextBlock
+                            Margin="0,8,0,0"
+                            HorizontalAlignment="Stretch"
+                            Classes="Body"
+                            Foreground="{DynamicResource Brush.OnSurfaceVariant}"
+                            Text="Подтвердите вход в приложении Telegram и вернитесь сюда."
+                            TextAlignment="Center"
+                            TextWrapping="Wrap" />
+                        <Button
+                            x:Name="OpenTelegramButton"
+                            Margin="0,24,0,0"
+                            HorizontalAlignment="Stretch"
+                            Classes="Primary Tall">
+                            <StackPanel
+                                VerticalAlignment="Center"
+                                Orientation="Horizontal"
+                                Spacing="10">
+                                <PathIcon
+                                    Width="20"
+                                    Height="20"
+                                    Data="{StaticResource Geo.Login.Telegram}"
+                                    Foreground="{DynamicResource Brush.OnAccent}" />
+                                <TextBlock VerticalAlignment="Center" Text="Открыть Telegram" />
+                            </StackPanel>
+                        </Button>
+                        <Button
+                            x:Name="RestartButton"
+                            Margin="0,8,0,0"
+                            HorizontalAlignment="Center"
+                            Classes="LinkAction"
+                            Content="Начать заново" />
+                    </StackPanel>
+
+                </StackPanel>
+            </Panel>
         </ScrollViewer>
     </Grid>
 </UserControl>

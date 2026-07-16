@@ -42,7 +42,9 @@ public partial class AccountView : UserControl
         BuyRow.Tapped += (_, _) => BuyRequested?.Invoke(this, EventArgs.Empty);
         DevicesRow.Tapped += (_, _) => DevicesRequested?.Invoke(this, EventArgs.Empty);
         HistoryRow.Tapped += (_, _) => HistoryRequested?.Invoke(this, EventArgs.Empty);
-        LoginCtaButton.Click += (_, _) => LoginRequested?.Invoke(this, EventArgs.Empty);
+        // «Войти через сайт» → полная форма входа (email/пароль/2FA) на хосте.
+        // «Войти через Telegram» биндится прямо на LoginTelegramCmd в разметке (deep-link).
+        LoginSiteButton.Click += (_, _) => LoginRequested?.Invoke(this, EventArgs.Empty);
 
         // Реф-строка: копирует код в буфер + тост «Скопировано» (clipboard живёт на TopLevel, поэтому
         // это чисто view-действие; сам код берём из VM).

@@ -2,6 +2,7 @@ using System.ComponentModel;
 using Avalonia.Animation;
 using Avalonia.Animation.Easings;
 using ServiceLib.Helper;
+using v2rayN.Desktop.Common;
 using v2rayN.Desktop.ViewModels;
 
 namespace v2rayN.Desktop.Views;
@@ -10,7 +11,7 @@ namespace v2rayN.Desktop.Views;
 /// Мета-бар подписки = ЗАГОЛОВОК её группы серверов (под-план 2 / Ф-D4). Владелец потребовал, чтобы
 /// карточка подписки сверху бесшовно продолжалась в свои серверы одной секцией — поэтому этот вид
 /// живёт КАК header каждой группы внутри <see cref="ServerListView"/> (никакого отдельного
-/// «Сервера»-заголовка). Показывает: заголовок/подзаголовок, действия (пинг/обновить/пин/«+»),
+/// «Сервера»-заголовка). Показывает: заголовок/подзаголовок, действия (пинг/обновить/пин/удалить),
 /// трафик-пилюлю + expiry, announce, поддержку + Telegram. Шеврон сворачивает серверы ЭТОЙ подписки.
 ///
 /// Data-driven: <see cref="Control.DataContext"/> = <see cref="HomeServerGroup"/> (наследуется из
@@ -38,10 +39,10 @@ public partial class SubscriptionMetaView : UserControl
 
     //  Шеврон сворачивания: явный RotateTransform, угол меняем плавно через собственный переход
     //  (0° раскрыто / −90° свёрнуто). Центр вращения задаётся РОВНО ОДИН раз — через
-    //  RenderTransformOrigin="50%,50%" на самом CollapseIcon (ОТНОСИТЕЛЬНЫЙ центр = 11,11 у 22px-глифа).
+    //  RenderTransformOrigin="50%,50%" на самом CollapseIcon (ОТНОСИТЕЛЬНЫЙ центр = 10,10 у 20px-глифа).
     //  ВАЖНО «50%,50%», а НЕ «0.5,0.5»: последнее = 0.5 ПИКСЕЛЯ ≈ угол → шеврон облетал бы орбитой.
-    //  CenterX/CenterY НАМЕРЕННО оставлены нулевыми, чтобы центр НЕ удвоился (origin 11,11 + center 0 =
-    //  11,11 = центр глифа): удвоение унесло бы центр в (22,22) — дальний угол бокса.
+    //  CenterX/CenterY НАМЕРЕННО оставлены нулевыми, чтобы центр НЕ удвоился (origin 10,10 + center 0 =
+    //  10,10 = центр глифа): удвоение унесло бы центр в (20,20) — дальний угол бокса.
     private readonly RotateTransform _chevronRotate = new() { Angle = 0 };
 
     public SubscriptionMetaView()
@@ -70,6 +71,7 @@ public partial class SubscriptionMetaView : UserControl
         SupportButton.Click += OnSupportClick;
         TelegramButton.Click += OnTelegramClick;
         PinButton.Click += OnPinClick;
+        DeleteButton.Click += OnDeleteSubClick;
 
         DataContextChanged += (_, _) => Rebind();
         DetachedFromVisualTree += (_, _) => Unhook();
@@ -115,6 +117,7 @@ public partial class SubscriptionMetaView : UserControl
         MetaBody.IsVisible = false;
         RefreshButton.IsVisible = false;
         PinButton.IsVisible = false;
+        DeleteButton.IsVisible = false;
 
         // Resolve the real subscription (with userinfo) behind this group, if any.
         _ = ResolveAndBindSub();
@@ -188,6 +191,8 @@ public partial class SubscriptionMetaView : UserControl
         MetaBody.IsVisible = true;
         RefreshButton.IsVisible = true;
         PinButton.IsVisible = true;
+        // Delete targets THIS real subscription (SubItem + its servers) — hidden for a manual no-sub group.
+        DeleteButton.IsVisible = true;
 
         // Traffic pill: used = upload + download; total <= 0 => unlimited ("∞").
         var used = sub.UploadUsed + sub.DownloadUsed;
@@ -413,12 +418,39 @@ public partial class SubscriptionMetaView : UserControl
         }
     }
 
-    // «+» add-another-subscription menu (clipboard / QR / file) → shared MainWindowViewModel.
-    private void OnImportClipboard(object? sender, RoutedEventArgs e) => _ = MainVm?.AddServerViaClipboardAsync(null);
+    // Delete THIS subscription: confirm, then drop its SubItem + all of its servers via the engine
+    // (ConfigHandler.DeleteSubItem = SQLite delete of the SubItem + RemoveServersViaSubid). Replaces the
+    // old «+» (adding moved to the app's top-right corner). After deletion we refresh the shared list VM,
+    // which rebuilds the grouped ServerGroups — so this whole section disappears.
+    private async void OnDeleteSubClick(object? sender, RoutedEventArgs e)
+    {
+        var subId = _currentSubId;
+        if (subId.IsNullOrEmpty())
+        {
+            return;
+        }
 
-    private void OnImportQr(object? sender, RoutedEventArgs e) => _ = MainVm?.AddServerViaScanAsync();
+        // Confirm in the interface's voice («Удалить подписку?»), same yes/no affordance as row-delete.
+        if (await UI.ShowYesNo("Удалить подписку?") != ButtonResult.Yes)
+        {
+            return;
+        }
 
-    private void OnImportFile(object? sender, RoutedEventArgs e) => _ = MainVm?.AddServerViaImageAsync();
+        try
+        {
+            await ConfigHandler.DeleteSubItem(AppManager.Instance.Config, subId);
+            // Rebuild the real ProfileItems → HomeViewModel.ServerGroups reprojects → this section is gone.
+            var profiles = Profiles;
+            if (profiles is not null)
+            {
+                await profiles.RefreshServers();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog("SubscriptionMetaView.DeleteSub", ex);
+        }
+    }
 
     // ── Design-time only ────────────────────────────────────────────────────
 
@@ -428,6 +460,7 @@ public partial class SubscriptionMetaView : UserControl
         MetaCard.IsVisible = true;
         RefreshButton.IsVisible = true;
         PinButton.IsVisible = true;
+        DeleteButton.IsVisible = true;
         TitleText.Text = "erlish";
         SubtitleText.Text = "10.07.2026 17:17 · Автообновление — 1 ч.";
         SubtitleText.IsVisible = true;

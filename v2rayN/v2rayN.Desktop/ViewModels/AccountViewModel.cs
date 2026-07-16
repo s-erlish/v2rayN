@@ -570,8 +570,13 @@ public class AccountViewModel : MyReactiveObject
     private async Task Logout()
     {
         _telegramCts?.Cancel();
+        // Wipe stops the VPN and DELETES the account-imported subscriptions + their servers (tracked by
+        // AuthTokenStore.ManagedGuids — a user's OWN manually-added subs are never in that set, so they
+        // survive logout). Refresh the Home server list afterwards so the removed servers disappear and
+        // Home returns to its empty/onboarding state instead of showing the stale (e.g. «Base») group.
         await AccountSession.Wipe();
         AccountCache.InvalidateAll();
+        RequestHomeServerRefresh();
         RunOnUi(() =>
         {
             IsLoggedIn = false;

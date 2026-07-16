@@ -92,20 +92,26 @@ public static class SubscriptionHandler
     }
 
     /// <summary>
-    /// Remnawave / 3x-ui panels (departament) key the subscription response format — the managed
-    /// server list vs a generic "app not supported" placeholder — off a recognised v2rayNG-family
-    /// client User-Agent. A blank or branding UA yields the wrong content. Force a v2rayNG-family UA
-    /// when the item's own value is missing or not v2rayNG-family. 1:1 with the Android client
-    /// (HttpUtil.getUrlContentWithUserAgentEx).
+    /// Resolves the User-Agent to send for a subscription fetch.
+    ///
+    /// Any explicit value is honoured verbatim — this covers BOTH a manually-added sub carrying the
+    /// user's own UA AND an account-imported (Remnawave) sub, which the account sync stamps with an
+    /// explicit v2rayNG-family UA because the departament panel serves its managed server list only
+    /// for a recognised v2rayNG client (a branding/other UA yields an "app not supported" placeholder).
+    ///
+    /// A blank UA means a plain manually-added sub. Here we send the STANDARD desktop v2rayN UA
+    /// (<c>Utils.GetVersion(false)</c> => "v2rayN/&lt;version&gt;"), which generic panels accept.
+    /// Previously this path forced the Android "v2rayNG/1.10.6" UA, which made some providers reject
+    /// a user's own subscription with «Приложение не поддерживается» — that was the manual-add bug.
     /// </summary>
     private static string ResolveSubUserAgent(string? userAgent)
     {
         var ua = userAgent?.Trim();
-        if (ua.IsNotEmpty() && ua!.Contains("v2rayng", StringComparison.OrdinalIgnoreCase))
+        if (ua.IsNotEmpty())
         {
-            return ua;
+            return ua!;
         }
-        return "v2rayNG/1.10.6";
+        return Utils.GetVersion(false);
     }
 
     private static async Task<string> DownloadSubscriptionContent(DownloadService downloadHandle, string url, bool blProxy, string userAgent)

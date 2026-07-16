@@ -1,4 +1,3 @@
-using Avalonia.VisualTree;
 using v2rayN.Desktop.ViewModels;
 
 namespace v2rayN.Desktop.Views;
@@ -10,8 +9,10 @@ namespace v2rayN.Desktop.Views;
 /// via DataContext. The hero is wired through the shared <see cref="HomeHeroPresenter"/> so the
 /// connect pipeline is identical to widescreen.
 ///
-/// The reused <see cref="ConnectHeroView"/> already carries its own stats row; here we drive a
-/// dedicated top stats row (with the «+»), so the hero's internal one is hidden to avoid duplication.
+/// The reused <see cref="ConnectHeroView"/> now carries the speed/uptime stats row UNDER the shield
+/// (moved off the top, where it looked crooked on compact startup), so this compact tree no longer
+/// drives its own top stats row — it only keeps the «+» add affordance in the top-right header. The
+/// hero's own corner «+» is hidden here to avoid a duplicate (compact uses the header «+»).
 /// </summary>
 public partial class CompactHomeView : UserControl
 {
@@ -20,8 +21,6 @@ public partial class CompactHomeView : UserControl
 
     private IDisposable? _heroBinding;
 
-    private bool _statsHidden;
-
     public CompactHomeView()
     {
         InitializeComponent();
@@ -29,27 +28,9 @@ public partial class CompactHomeView : UserControl
         AccountChip.AccountRequested += (_, _) => AccountRequested?.Invoke(this, EventArgs.Empty);
 
         DataContextChanged += OnDataContextChanged;
-        AttachedToVisualTree += (_, _) => HideHeroStatsRow();
+        // Compact uses its own header «+», so hide the hero's corner «+» (widescreen keeps it).
+        AttachedToVisualTree += (_, _) => ConnectHero.SetCornerAddVisible(false);
         DetachedFromVisualTree += (_, _) => DisposeBinding();
-    }
-
-    // The compact top stats row (bound to the VM, with the «+») replaces the hero's own identical
-    // row — hide the duplicate inside the reused ConnectHeroView. Done once on attach so its inner
-    // named element is resolvable.
-    private void HideHeroStatsRow()
-    {
-        if (_statsHidden)
-        {
-            return;
-        }
-        var innerStats = ConnectHero.GetVisualDescendants()
-            .OfType<Grid>()
-            .FirstOrDefault(g => g.Name == "StatsRow");
-        if (innerStats is not null)
-        {
-            innerStats.IsVisible = false;
-            _statsHidden = true;
-        }
     }
 
     private void OnDataContextChanged(object? sender, EventArgs e)

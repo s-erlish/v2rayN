@@ -29,13 +29,13 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     // только < 736), чтобы окно, «припаркованное» на границе, не мигало между раскладками при драге.
     private const double CompactBreakpointWidth = 760.0;
     private const double LayoutHysteresis = 24.0;
-    private bool _compactMode = true;          // старт компактный (дефолт 310×630 < 760)
+    private bool _compactMode = true;          // старт компактный (дефолт 372×630 < 760)
 
     // Целевые размеры тумблера раскладки (двойной клик по навигации / drag-to-edge). Компакт
     // держит title-bar на маленьком окне; широкая — рабочий десктоп. Оба клампятся в WorkingArea.
     private const double WideToggleWidth = 1120.0;
     private const double WideToggleHeight = 760.0;
-    private const double CompactToggleWidth = 310.0;
+    private const double CompactToggleWidth = 372.0;
     private const double CompactToggleHeight = 630.0;
 
     // Драг-к-краю: когда пользователь тащит компактное окно к верхнему/боковому краю рабочей
@@ -68,21 +68,16 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
 
         _config = AppManager.Instance.Config;
 
-        // «Облегчённый режим» (reduced-motion): класс .lite обнуляет press/hover/reveal-переходы
-        // оболочки (GlobalStyles :is(Window).lite), а тут снимаем анимацию смены вкладок
-        // (page cross-fade). Хореографию connect-щита гасит сам ConnectHeroView по тому же флагу.
-        if (_config.UiItem.LiteMode)
-        {
-            Classes.Add("lite");
-            contentHost.PageTransition = null;
-        }
-        else
-        {
-            // Смена вкладок «оживает»: входящая страница слегка всплывает (translateY 8→0) с fade-in
-            // поверх кроссфейда — §A.4. Только translate (без scale/rotate) → центр не важен, ничего
-            // не «улетает». Под .lite (ветка выше) переход не назначается → мгновенный своп.
-            contentHost.PageTransition = RiseFadePageTransition.Default;
-        }
+        // «Облегчённый режим» (reduced-motion) теперь РЕАКТИВЕН: единый источник — MotionState.
+        // MainWindow сеет его из конфига и подписывается на изменения; SettingsViewModel двигает флаг
+        // live (без рестарта). ApplyMotionMode вешает/снимает класс .lite (обнуляет press/hover/reveal
+        // оболочки через :is(Window).lite + свёртку рейла) и переключает page-transition единого
+        // contentHost: null = мгновенный своп, иначе rise/fade §A.4. Хореографию connect-щита гасит
+        // сам ConnectHeroView по тому же MotionState. Итог: тумблер lite мгновенно ГЛУШИТ ВСЁ движение
+        // (щит, переходы вкладок, page-rise) и так же мгновенно оживляет обратно.
+        MotionState.Initialize(_config.UiItem.LiteMode);
+        ApplyMotionMode(MotionState.IsLite);
+        MotionState.Changed += OnMotionStateChanged;
 
         KeyDown += MainWindow_KeyDown;
 
@@ -322,7 +317,51 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         bottomNav.IsVisible = compact;
 
         ApplyShellVisibility();
+
+        // ==================== Плавный своп раскладки (без джанка) ====================
+        // Смена дерева «Главной» (компактное ↔ широкое) под page-rise «дерётся» с рефлоу сетки —
+        // видимый скачок «контент прыгнул и осел». Гасим переход НА ВРЕМЯ свопа контента (мгновенная
+        // подмена), затем возвращаем режим-верную анимацию (lite-aware) для последующей навигации.
+        var savedTransition = contentHost.PageTransition;
+        contentHost.PageTransition = null;
         ShowTab(_currentTab);
+        contentHost.PageTransition = MotionState.IsLite ? null : savedTransition ?? RiseFadePageTransition.Default;
+    }
+
+    // ==================== Реактивный «Облегчённый режим» (lite) ====================
+    // Единственная точка применения reduced-motion к ОБОЛОЧКЕ. Класс .lite обнуляет press/hover/
+    // reveal-переходы и свёртку рейла (стили :is(Window).lite), а page-transition единого contentHost
+    // переключается на null (мгновенный своп) под lite / на rise-fade иначе. Вызывается на старте и на
+    // КАЖДОМ рантайм-переключении MotionState — переход lite происходит без перезапуска приложения.
+    private void OnMotionStateChanged(object? sender, bool lite)
+    {
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            ApplyMotionMode(lite);
+        }
+        else
+        {
+            Dispatcher.UIThread.Post(() => ApplyMotionMode(lite));
+        }
+    }
+
+    private void ApplyMotionMode(bool lite)
+    {
+        if (lite)
+        {
+            if (!Classes.Contains("lite"))
+            {
+                Classes.Add("lite");
+            }
+            contentHost.PageTransition = null;
+        }
+        else
+        {
+            Classes.Remove("lite");
+            // Смена вкладок «оживает»: входящая страница всплывает (translateY 8→0) с fade-in поверх
+            // кроссфейда (§A.4) — только translate, ничего не «улетает».
+            contentHost.PageTransition = RiseFadePageTransition.Default;
+        }
     }
 
     // Онбординг/суб-страницы — mode-agnostic оверлеи. Пусто (нет подписок) → только онбординг на всю
@@ -447,6 +486,22 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         var view = new LoginView { DataContext = _accountVm };
         view.BackRequested += (_, _) => PopSubPage();
         PushSubPage(view);
+    }
+
+    // Онбординг «Войти через Telegram»: НЕ показываем промежуточный выбор метода — сразу стартуем
+    // Telegram-авторизацию на ОБЩЕМ AccountViewModel (открывает Telegram deep link) и открываем
+    // LoginView, который переходит в состояние ожидания подтверждения по CurrentLoginState.
+    public void OpenLoginTelegram()
+    {
+        OpenLogin();
+        _accountVm.LoginTelegramCmd.Execute().Subscribe();
+    }
+
+    // Онбординг «Войти через сайт»: открываем LoginView прямо на форме входа по email/паролю
+    // (site-авторизация требует ввод, поэтому «немедленно» = сразу форма сайта, без выбора способа).
+    public void OpenLoginSite()
+    {
+        OpenLogin();
     }
 
     // Общий вход для суб-страниц НАСТРОЕК (DNS, Маршрутизация, Прокси по приложениям, Провайдеры,
@@ -806,6 +861,7 @@ internal sealed class RiseFadePageTransition : IPageTransition
         if (to != null)
         {
             to.IsVisible = true;
+            to.Opacity = 0d; // known clean start → fade/rise ВСЕГДА видимы, даже для кэш-вью
 
             var fadeIn = new Animation
             {
@@ -837,9 +893,25 @@ internal sealed class RiseFadePageTransition : IPageTransition
 
         await Task.WhenAll(tasks);
 
-        if (from != null && !cancellationToken.IsCancellationRequested)
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+
+        // Settle the incoming page fully opaque.
+        if (to != null)
+        {
+            to.Opacity = 1d;
+        }
+
+        // Hide the outgoing page AND restore it to a clean visible state (Opacity 1). Without this a
+        // cached tab left at Opacity 0 by its fade-out would render BLANK the next time it is shown
+        // WITHOUT a transition (e.g. during a layout swap, where we suspend the transition). Restoring
+        // it here is what keeps EVERY tab switch — including the return to «Главная» — consistent.
+        if (from != null)
         {
             from.IsVisible = false;
+            from.Opacity = 1d;
         }
     }
 }

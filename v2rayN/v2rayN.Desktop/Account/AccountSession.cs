@@ -1,3 +1,4 @@
+using ServiceLib.Handler.SysProxy;
 using v2rayN.Desktop.Account.Dto;
 
 namespace v2rayN.Desktop.Account;
@@ -107,9 +108,30 @@ public static class AccountSession
     /// </summary>
     public static async Task Wipe()
     {
+        // Logout must not leave the VPN running against a subscription we are about to delete: stop
+        // the core (and clear the system proxy so the user keeps internet) BEFORE removing the subs.
+        await StopEngine();
         await _subs.RemoveAllManaged();
         AuthTokenStore.Clear();
         SetState(new AccountState.LoggedOut());
+    }
+
+    /// <summary>
+    /// Disconnects the VPN: stops any running core and force-disables the system proxy. Best-effort —
+    /// a failure here must never block the session wipe. Mirrors HomeViewModel.Disconnect so the Home
+    /// shield (which polls the core state) flips back to disconnected.
+    /// </summary>
+    private static async Task StopEngine()
+    {
+        try
+        {
+            await CoreManager.Instance.CoreStop();
+            await SysProxyHandler.UpdateSysProxy(AppManager.Instance.Config, true);
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog("AccountSession.StopEngine", ex);
+        }
     }
 
     private static void SetState(AccountState state)

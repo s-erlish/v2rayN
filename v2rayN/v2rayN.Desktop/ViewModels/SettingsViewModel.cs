@@ -101,7 +101,7 @@ public class SettingsViewModel : MyReactiveObject
         ModeText = "TUN";
         PerAppText = "Выкл";
         DnsText = "Cloudflare";
-        PingMethodText = "Реальная задержка (через ядро)";
+        PingMethodText = "Реальная";
         MuxConcurrencyText = "8";
         AppearanceText = "Тёмная";
         LanguageText = "Русский";
@@ -234,6 +234,10 @@ public class SettingsViewModel : MyReactiveObject
         }
         _config.UiItem.LiteMode = v;
         await ConfigHandler.SaveConfig(_config);
+        // Broadcast the change so the shell (MainWindow) + connect hero (ConnectHeroView) re-apply
+        // their motion state IMMEDIATELY — no restart. This is what actually stops the shield spin,
+        // the tab-transition and the page rise the instant lite is enabled (and revives them off).
+        v2rayN.Desktop.Common.MotionState.SetLite(v);
     }
 
     /// <summary>«Чёрная (AMOLED)» — a pure appearance flag. Persist it (survives restart) and apply the
@@ -430,20 +434,35 @@ public class SettingsViewModel : MyReactiveObject
 
     #region Display resolvers
 
+    /// <summary>Maps the stored remote-DNS value to its friendly preset name (never the raw DoH URL).
+    /// Preset URLs mirror <see cref="DnsSubView"/> / <c>Global.DomainRemoteDNSAddress</c>; an empty
+    /// value is the built-in resolver («По умолчанию»), any other non-empty value is a custom entry
+    /// («Свой»).</summary>
     private string ResolveDnsText()
     {
-        var remote = _config.SimpleDNSItem?.RemoteDNS;
-        return remote.IsNullOrEmpty() ? "По умолчанию" : remote!;
+        var remote = _config.SimpleDNSItem?.RemoteDNS?.Trim();
+        if (remote.IsNullOrEmpty())
+        {
+            return "По умолчанию";
+        }
+        return remote switch
+        {
+            "https://cloudflare-dns.com/dns-query" => "Cloudflare",
+            "https://dns.google/dns-query" => "Google",
+            "https://dns.adguard-dns.com/dns-query" => "AdGuard",
+            _ => "Свой",
+        };
     }
 
-    /// <summary>Maps the persisted ping-method key (<c>SpeedTestItem.PingMethod</c>) to its Russian
-    /// row label. Mirrors the Android method set: real delay через ядро / TCP / HTTP / ICMP.</summary>
+    /// <summary>Maps the persisted ping-method key (<c>SpeedTestItem.PingMethod</c>) to its SHORT
+    /// Russian row label — «Реальная» / «TCP» / «HTTP» / «ICMP» (the long "…через ядро" phrasing
+    /// overflowed the row value).</summary>
     private string ResolvePingMethodText() => _config.SpeedTestItem?.PingMethod switch
     {
         "Tcping" => "TCP",
         "Httping" => "HTTP",
         "Icmping" => "ICMP",
-        _ => "Реальная задержка (через ядро)",
+        _ => "Реальная",
     };
 
     private string ResolveMuxConcurrencyText() =>

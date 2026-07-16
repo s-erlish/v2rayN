@@ -181,11 +181,24 @@
             <Setter Property="Margin" Value="16,18,16,8" />
         </Style>
 
-        <!--  Значение строки: правое, одна строка, отступ слева 8.  -->
+        <!--  Заголовок строки: одна строка, обрезается многоточием, НИКОГДА не наезжает на
+              значение/шеврон. На узком окне «Прокси по приложениям», «Обход локальной сети»
+              и т.п. деградируют в «…», а не режутся по букве / не наплывают на значение.  -->
+        <Style Selector="Border.SettingRow TextBlock.Body">
+            <Setter Property="TextWrapping" Value="NoWrap" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+
+        <!--  Значение строки: правое, одна строка, отступ слева 8. Обрезается многоточием и
+              ограничено по ширине (MaxWidth), чтобы длинное значение (DNS-URL) не выталкивало
+              шеврон за край карточки на ~360px, а трималось: «https://cloudflare-…».  -->
         <Style Selector="TextBlock.RowValue">
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="TextAlignment" Value="Right" />
             <Setter Property="Margin" Value="8,0,0,0" />
+            <Setter Property="TextWrapping" Value="NoWrap" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            <Setter Property="MaxWidth" Value="150" />
         </Style>
 
         <!--  iOS-тумблер строки: тема применяется в разметке; здесь только отступ.  -->

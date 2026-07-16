@@ -56,6 +56,14 @@
             <Setter Property="Height" Value="16" />
         </Style>
 
+        <!--  Заголовок строки «Управление»: одна строка, обрезается многоточием — на ~360px
+              «История платежей» / «Купить подписку» деградируют в «…», а не режутся и не
+              наезжают на значение/шеврон.  -->
+        <Style Selector="Border.Row TextBlock.Title">
+            <Setter Property="TextWrapping" Value="NoWrap" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+
         <!--  Пульс скелета: alpha 0.45 to 1.0, 900ms, реверс, бесконечно (передаёт «загрузка»).  -->
         <Style Selector="Border.Skeleton">
             <Style.Animations>
@@ -75,162 +83,82 @@
         </Style>
     </UserControl.Styles>
 
-    <!--  Прозрачный фон: общий Incy-градиент рисуется под хостом страниц (MainWindow), показываем его.  -->
-    <ScrollViewer
-        Background="Transparent"
-        HorizontalScrollBarVisibility="Disabled"
-        VerticalScrollBarVisibility="Auto">
+    <!--  Прозрачный фон: общий Incy-градиент рисуется под хостом страниц (MainWindow), показываем его.
+          Две взаимоисключающие поверхности: ВОШЁЛ → прокручиваемый аккаунт; НЕ ВОШЁЛ → один
+          центрированный гейт входа (ShowLoginCta = !IsLoggedIn во VM).  -->
+    <Panel>
 
-        <!--  Центрированная колонка ~560; на узком окне ужимается с 16dp-гаттером.  -->
-        <StackPanel MaxWidth="560" Margin="16,12,16,24">
+        <!-- ================= ВОШЁЛ: прокручиваемый контент аккаунта ================= -->
+        <ScrollViewer
+            Background="Transparent"
+            HorizontalScrollBarVisibility="Disabled"
+            IsVisible="{Binding IsLoggedIn}"
+            VerticalScrollBarVisibility="Auto">
+
+            <!--  Центрированная колонка ~560; на узком окне ужимается с 16dp-гаттером.  -->
+            <StackPanel MaxWidth="560" Margin="16,12,16,24">
 
             <!-- ============ HERO: профиль-карта ============ -->
-            <Border Classes="Card">
-                <Panel>
+            <Border Classes="Card" IsVisible="{Binding HasProfile}">
+                <StackPanel>
 
-                    <!--  Вошедший пользователь: аватар + имя + «Пополнить», баланс, реф-код.  -->
-                    <StackPanel IsVisible="{Binding HasProfile}">
-                        <Grid ColumnDefinitions="Auto,*,Auto">
-                            <!--  Аватар 48 с инициалом. Без бейджа-камеры: пикера фото нет.  -->
-                            <Border
-                                Grid.Column="0"
-                                Classes="Avatar"
-                                Width="48"
-                                Height="48"
-                                VerticalAlignment="Center">
-                                <TextBlock
-                                    HorizontalAlignment="Center"
-                                    VerticalAlignment="Center"
-                                    FontFamily="{DynamicResource Font.Grotesk}"
-                                    FontSize="20"
-                                    FontWeight="Bold"
-                                    Foreground="{DynamicResource Brush.Accent}"
-                                    Text="{Binding AvatarInitial}" />
-                            </Border>
-
-                            <TextBlock
-                                Grid.Column="1"
-                                Margin="12,0,12,0"
-                                VerticalAlignment="Center"
-                                Classes="Title"
-                                Text="{Binding Username}"
-                                TextTrimming="CharacterEllipsis" />
-
-                            <!--  «Пополнить»: синяя пилюля (shared Button.Primary), «+» + текст OnAccent.
-                                  Тап открывает флайаут «Пополнение баланса» → Platega-чекаут.  -->
-                            <Button
-                                x:Name="TopUpButton"
-                                Grid.Column="2"
-                                VerticalAlignment="Center"
-                                Classes="Primary">
-                                <StackPanel
-                                    Orientation="Horizontal"
-                                    Spacing="8"
-                                    VerticalAlignment="Center">
-                                    <PathIcon
-                                        Width="18"
-                                        Height="18"
-                                        VerticalAlignment="Center"
-                                        Data="{StaticResource Geo.Acc.Add}"
-                                        Foreground="{DynamicResource Brush.OnAccent}" />
-                                    <TextBlock
-                                        VerticalAlignment="Center"
-                                        Foreground="{DynamicResource Brush.OnAccent}"
-                                        Text="Пополнить" />
-                                </StackPanel>
-                                <Button.Flyout>
-                                    <Flyout Placement="Bottom">
-                                        <StackPanel
-                                            Width="248"
-                                            Spacing="12"
-                                            x:DataType="vms:AccountViewModel">
-                                            <TextBlock Classes="Title" Text="Пополнение баланса" />
-                                            <TextBlock
-                                                Classes="Caption"
-                                                Text="Введите сумму в рублях — откроется страница оплаты." />
-                                            <TextBox
-                                                x:Name="TopUpAmountBox"
-                                                Watermark="Сумма, ₽"
-                                                Text="{Binding TopUpAmount, Mode=TwoWay}"
-                                                FontFeatures="tnum" />
-                                            <Button
-                                                HorizontalAlignment="Stretch"
-                                                HorizontalContentAlignment="Center"
-                                                Classes="Primary"
-                                                Command="{Binding TopUpCmd}"
-                                                Content="Продолжить" />
-                                        </StackPanel>
-                                    </Flyout>
-                                </Button.Flyout>
-                            </Button>
-                        </Grid>
-
-                        <!--  Баланс: тихая подпись над крупной бренд-цифрой (tnum для ровных знаков).  -->
-                        <TextBlock
-                            Margin="0,16,0,0"
-                            Classes="Caption"
-                            IsVisible="{Binding HasBalance}"
-                            Text="Баланс" />
-                        <TextBlock
-                            Margin="0,4,0,0"
-                            Classes="Display Numeric"
-                            FontFeatures="tnum"
-                            IsVisible="{Binding HasBalance}"
-                            Text="{Binding BalanceText}"
-                            TextTrimming="CharacterEllipsis" />
-
-                        <!--  Реф-код: вся строка копирует код в буфер (чип + завершающий глиф).  -->
+                    <!--  Строка 1: аватар + @никнейм во всю ширину. @никнейм (Username = «@serumfx»)
+                          больше не делит строку с «Пополнить», поэтому виден целиком и обрезается
+                          многоточием, а не выдавливается кнопкой на ~360px.  -->
+                    <Grid ColumnDefinitions="Auto,*">
+                        <!--  Аватар 48 с инициалом. Без бейджа-камеры: пикера фото нет.  -->
                         <Border
-                            x:Name="ReferralRow"
-                            Margin="0,12,0,0"
-                            Classes="RefRow"
-                            IsVisible="{Binding HasReferral}">
-                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <Border
-                                    Padding="12,8"
-                                    Background="{DynamicResource Brush.SurfaceVariant}"
-                                    CornerRadius="{StaticResource Radius.Chip}">
-                                    <TextBlock
-                                        Classes="Caption"
-                                        Text="{Binding ReferralText}"
-                                        TextTrimming="CharacterEllipsis" />
-                                </Border>
-                                <PathIcon
-                                    Width="18"
-                                    Height="18"
-                                    Margin="8,0,0,0"
-                                    VerticalAlignment="Center"
-                                    Data="{StaticResource Geo.Acc.Copy}"
-                                    Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
-                            </StackPanel>
-                        </Border>
-                    </StackPanel>
-
-                    <!--  Не вошёл: приглашение войти через Telegram (nav-гейтинг отложен).  -->
-                    <StackPanel IsVisible="{Binding ShowLoginCta}" Spacing="12">
-                        <Border
+                            Grid.Column="0"
                             Classes="Avatar"
                             Width="48"
                             Height="48"
-                            HorizontalAlignment="Left">
-                            <PathIcon
-                                Width="24"
-                                Height="24"
+                            VerticalAlignment="Center">
+                            <TextBlock
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
-                                Data="{StaticResource Geo.Acc.Telegram}"
-                                Foreground="{DynamicResource Brush.Accent}" />
+                                FontFamily="{DynamicResource Font.Grotesk}"
+                                FontSize="20"
+                                FontWeight="Bold"
+                                Foreground="{DynamicResource Brush.Accent}"
+                                Text="{Binding AvatarInitial}" />
                         </Border>
-                        <TextBlock Classes="Title" Text="Войдите в аккаунт" />
+
                         <TextBlock
-                            Classes="Subtitle"
-                            MaxWidth="360"
-                            HorizontalAlignment="Left"
-                            Text="Войдите, чтобы увидеть подписку, устройства и историю платежей."
-                            TextWrapping="Wrap" />
+                            Grid.Column="1"
+                            Margin="12,0,0,0"
+                            VerticalAlignment="Center"
+                            Classes="Title"
+                            Text="{Binding Username}"
+                            TextWrapping="NoWrap"
+                            TextTrimming="CharacterEllipsis" />
+                    </Grid>
+
+                    <!--  Строка 2: баланс (слева, обрезается) + «Пополнить» (справа, фикс. ширина).
+                          Кнопка ушла из строки имени сюда — @никнейм получает всю ширину.  -->
+                    <Grid Margin="0,16,0,0" ColumnDefinitions="*,Auto">
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                            <!--  Баланс: тихая подпись над крупной бренд-цифрой (tnum для ровных знаков).  -->
+                            <TextBlock
+                                Classes="Caption"
+                                IsVisible="{Binding HasBalance}"
+                                Text="Баланс" />
+                            <TextBlock
+                                Margin="0,4,0,0"
+                                Classes="Display Numeric"
+                                FontFeatures="tnum"
+                                IsVisible="{Binding HasBalance}"
+                                Text="{Binding BalanceText}"
+                                TextWrapping="NoWrap"
+                                TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+
+                        <!--  «Пополнить»: синяя пилюля (shared Button.Primary), «+» + текст OnAccent.
+                              Тап открывает флайаут «Пополнение баланса» → Platega-чекаут.  -->
                         <Button
-                            x:Name="LoginCtaButton"
-                            HorizontalAlignment="Left"
+                            x:Name="TopUpButton"
+                            Grid.Column="1"
+                            Margin="12,0,0,0"
+                            VerticalAlignment="Center"
                             Classes="Primary">
                             <StackPanel
                                 Orientation="Horizontal"
@@ -240,16 +168,68 @@
                                     Width="18"
                                     Height="18"
                                     VerticalAlignment="Center"
-                                    Data="{StaticResource Geo.Acc.Telegram}"
+                                    Data="{StaticResource Geo.Acc.Add}"
                                     Foreground="{DynamicResource Brush.OnAccent}" />
                                 <TextBlock
                                     VerticalAlignment="Center"
                                     Foreground="{DynamicResource Brush.OnAccent}"
-                                    Text="Войти через Telegram" />
+                                    Text="Пополнить" />
                             </StackPanel>
+                            <Button.Flyout>
+                                <Flyout Placement="Bottom">
+                                    <StackPanel
+                                        Width="248"
+                                        Spacing="12"
+                                        x:DataType="vms:AccountViewModel">
+                                        <TextBlock Classes="Title" Text="Пополнение баланса" />
+                                        <TextBlock
+                                            Classes="Caption"
+                                            Text="Введите сумму в рублях — откроется страница оплаты." />
+                                        <TextBox
+                                            x:Name="TopUpAmountBox"
+                                            Watermark="Сумма, ₽"
+                                            Text="{Binding TopUpAmount, Mode=TwoWay}"
+                                            FontFeatures="tnum" />
+                                        <Button
+                                            HorizontalAlignment="Stretch"
+                                            HorizontalContentAlignment="Center"
+                                            Classes="Primary"
+                                            Command="{Binding TopUpCmd}"
+                                            Content="Продолжить" />
+                                    </StackPanel>
+                                </Flyout>
+                            </Button.Flyout>
                         </Button>
-                    </StackPanel>
-                </Panel>
+                    </Grid>
+
+                    <!--  Реф-код: вся строка копирует код в буфер (чип + завершающий глиф).  -->
+                    <Border
+                        x:Name="ReferralRow"
+                        Margin="0,12,0,0"
+                        Classes="RefRow"
+                        IsVisible="{Binding HasReferral}">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Border
+                                Padding="12,8"
+                                Background="{DynamicResource Brush.SurfaceVariant}"
+                                CornerRadius="{StaticResource Radius.Chip}">
+                                <TextBlock
+                                    Classes="Caption"
+                                    MaxWidth="240"
+                                    Text="{Binding ReferralText}"
+                                    TextWrapping="NoWrap"
+                                    TextTrimming="CharacterEllipsis" />
+                            </Border>
+                            <PathIcon
+                                Width="18"
+                                Height="18"
+                                Margin="8,0,0,0"
+                                VerticalAlignment="Center"
+                                Data="{StaticResource Geo.Acc.Copy}"
+                                Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
             </Border>
 
             <!-- ============ HERO: карточка подписки (сосед, не вложенная) — 4 состояния ============ -->
@@ -320,12 +300,16 @@
                         Margin="0,12,0,0"
                         Classes="Subtitle"
                         IsVisible="{Binding HasSubExpiry}"
-                        Text="{Binding SubExpiry}" />
+                        Text="{Binding SubExpiry}"
+                        TextTrimming="CharacterEllipsis"
+                        TextWrapping="NoWrap" />
                     <TextBlock
                         Margin="0,4,0,0"
                         Classes="Subtitle"
                         FontFeatures="tnum"
-                        Text="{Binding SubDevicesText}" />
+                        Text="{Binding SubDevicesText}"
+                        TextTrimming="CharacterEllipsis"
+                        TextWrapping="NoWrap" />
                 </StackPanel>
             </Border>
 
@@ -464,7 +448,10 @@
                                 Classes="Subtitle"
                                 FontFeatures="tnum"
                                 IsVisible="{Binding HasDevicesRowValue}"
-                                Text="{Binding DevicesRowValue}" />
+                                MaxWidth="120"
+                                Text="{Binding DevicesRowValue}"
+                                TextTrimming="CharacterEllipsis"
+                                TextWrapping="NoWrap" />
                             <PathIcon
                                 Grid.Column="3"
                                 Width="18"
@@ -512,7 +499,10 @@
                                 Classes="Subtitle"
                                 FontFeatures="tnum"
                                 IsVisible="{Binding HasHistoryRowValue}"
-                                Text="{Binding HistoryRowValue}" />
+                                MaxWidth="120"
+                                Text="{Binding HistoryRowValue}"
+                                TextTrimming="CharacterEllipsis"
+                                TextWrapping="NoWrap" />
                             <PathIcon
                                 Grid.Column="3"
                                 Width="18"
@@ -557,6 +547,87 @@
                     </Border>
                 </StackPanel>
             </Border>
-        </StackPanel>
-    </ScrollViewer>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- ================= НЕ ВОШЁЛ: центрированный гейт входа ================= -->
+        <!--  Только приглашение войти — без баланса/подписки/«Управления». Карточка по центру
+              экрана (VerticalAlignment=Center), два способа: Telegram (акцент) и сайт (тональная).  -->
+        <Grid IsVisible="{Binding ShowLoginCta}" Margin="16">
+            <Border
+                Classes="Card"
+                MaxWidth="380"
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Center">
+                <StackPanel Spacing="20">
+
+                    <!--  Круг-аватар с глифом Telegram — акцентная точка входа.  -->
+                    <Border
+                        Classes="Avatar"
+                        Width="56"
+                        Height="56"
+                        HorizontalAlignment="Center">
+                        <PathIcon
+                            Width="28"
+                            Height="28"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Data="{StaticResource Geo.Acc.Telegram}"
+                            Foreground="{DynamicResource Brush.Accent}" />
+                    </Border>
+
+                    <StackPanel Spacing="6">
+                        <TextBlock
+                            HorizontalAlignment="Center"
+                            Classes="Title"
+                            Text="Войдите в аккаунт"
+                            TextAlignment="Center" />
+                        <TextBlock
+                            HorizontalAlignment="Center"
+                            Classes="Subtitle"
+                            Text="Войдите, чтобы увидеть подписку, устройства и историю платежей."
+                            TextAlignment="Center"
+                            TextWrapping="Wrap" />
+                    </StackPanel>
+
+                    <StackPanel Spacing="12">
+                        <!--  «Войти через Telegram»: акцентная CTA 52dp, центрированные глиф + подпись
+                              на одной оси. Прямой запуск LoginTelegramCmd (открывает deep-link).  -->
+                        <Button
+                            x:Name="LoginTelegramButton"
+                            HorizontalAlignment="Stretch"
+                            Classes="Primary Tall"
+                            Command="{Binding LoginTelegramCmd}">
+                            <StackPanel
+                                Orientation="Horizontal"
+                                Spacing="10"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center">
+                                <PathIcon
+                                    Width="20"
+                                    Height="20"
+                                    VerticalAlignment="Center"
+                                    Data="{StaticResource Geo.Acc.Telegram}"
+                                    Foreground="{DynamicResource Brush.OnAccent}" />
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    Foreground="{DynamicResource Brush.OnAccent}"
+                                    Text="Войти через Telegram" />
+                            </StackPanel>
+                        </Button>
+
+                        <!--  «Войти через сайт»: тональная вторичная. Открывает полную форму входа
+                              (email/пароль/2FA) через существующее событие LoginRequested → LoginView.  -->
+                        <Button
+                            x:Name="LoginSiteButton"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Center"
+                            Classes="Tonal"
+                            Content="Войти через сайт" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+    </Panel>
 </UserControl>

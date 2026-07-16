@@ -138,66 +138,14 @@
     <Panel>
 
         <!--  ===================== СЛОЙ «есть подписка»: стата + герой ===================== -->
-        <Grid x:Name="LayerNormal" RowDefinitions="Auto,*">
+        <Grid x:Name="LayerNormal">
 
-            <!--  Стата-строка: ↑ отдача · таймер · ↓ приём + «+». Скрыта, когда подписок нет.
-                  Сетка 40|*|40 центрирует средний блок так, что таймер стоит по центру панели.  -->
-            <Grid
-                x:Name="StatsRow"
-                Grid.Row="0"
-                Margin="16,12,16,0">
-                <Grid ColumnDefinitions="*,*,*">
-                    <StackPanel
-                        Grid.Column="0"
-                        HorizontalAlignment="Center"
-                        Orientation="Horizontal"
-                        Spacing="4">
-                        <TextBlock
-                            VerticalAlignment="Center"
-                            Classes="Caption"
-                            Foreground="{DynamicResource Brush.Accent}"
-                            Text="↑" />
-                        <TextBlock
-                            x:Name="UpSpeed"
-                            Classes="Numeric"
-                            FontSize="13"
-                            FontWeight="Bold"
-                            Text="0 KB/s" />
-                    </StackPanel>
-                    <TextBlock
-                        x:Name="Uptime"
-                        Grid.Column="1"
-                        HorizontalAlignment="Center"
-                        Classes="Numeric"
-                        FontSize="14"
-                        FontWeight="Bold"
-                        Foreground="{DynamicResource Brush.OnSurfaceVariant}"
-                        Text="00:00:00" />
-                    <StackPanel
-                        Grid.Column="2"
-                        HorizontalAlignment="Center"
-                        Orientation="Horizontal"
-                        Spacing="4">
-                        <TextBlock
-                            VerticalAlignment="Center"
-                            Classes="Caption"
-                            Foreground="{DynamicResource Brush.Accent}"
-                            Text="↓" />
-                        <TextBlock
-                            x:Name="DownSpeed"
-                            Classes="Numeric"
-                            FontSize="13"
-                            FontWeight="Bold"
-                            Text="0 KB/s" />
-                    </StackPanel>
-                </Grid>
-            </Grid>
-
-            <!--  Герой-блок: щит по центру свободного места панели (стата-строка закреплена
-                  сверху row 0), под щитом — подпись состояния и идентичность сервера. Центрирование
-                  по вертикали убирает «щит висит высоко, снизу пусто» → выглядит ровно (spec §1.4).  -->
+            <!--  Герой-блок: щит по центру панели; ПОД диском идут подпись состояния, компактная
+                  стата-строка (↑ отдача · аптайм · ↓ приём) и идентичность сервера. Стата-строка
+                  переехала с верха панели СЮДА — под щит, над именем сервера (как на телефоне);
+                  верхний ряд «висел криво» на старте компакта. Центрирование по вертикали убирает
+                  «щит висит высоко, снизу пусто» → выглядит ровно (spec §1.4).  -->
             <StackPanel
-                Grid.Row="1"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center">
 
@@ -405,6 +353,60 @@
                     </TextBlock.Transitions>
                 </TextBlock>
 
+                <!--  Стата-строка ПОД щитом, НАД именем сервера: ↑ отдача · аптайм · ↓ приём.
+                      Компактный центрированный ряд (spacing 20) — телеметрия жмётся к щиту, как на
+                      телефоне. Скрывается целиком в «Облегчённом режиме» (code-behind по ReducedMotion:
+                      владелец — «над кнопкой эти показатели скорости должны пропадать»).  -->
+                <StackPanel
+                    x:Name="StatsRow"
+                    Margin="0,16,0,0"
+                    HorizontalAlignment="Center"
+                    Orientation="Horizontal"
+                    Spacing="20">
+                    <StackPanel
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal"
+                        Spacing="4">
+                        <TextBlock
+                            VerticalAlignment="Center"
+                            Classes="Caption"
+                            Foreground="{DynamicResource Brush.Accent}"
+                            Text="↑" />
+                        <TextBlock
+                            x:Name="UpSpeed"
+                            VerticalAlignment="Center"
+                            Classes="Numeric"
+                            FontSize="13"
+                            FontWeight="Bold"
+                            Text="0 KB/s" />
+                    </StackPanel>
+                    <TextBlock
+                        x:Name="Uptime"
+                        VerticalAlignment="Center"
+                        Classes="Numeric"
+                        FontSize="14"
+                        FontWeight="Bold"
+                        Foreground="{DynamicResource Brush.OnSurfaceVariant}"
+                        Text="00:00:00" />
+                    <StackPanel
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal"
+                        Spacing="4">
+                        <TextBlock
+                            VerticalAlignment="Center"
+                            Classes="Caption"
+                            Foreground="{DynamicResource Brush.Accent}"
+                            Text="↓" />
+                        <TextBlock
+                            x:Name="DownSpeed"
+                            VerticalAlignment="Center"
+                            Classes="Numeric"
+                            FontSize="13"
+                            FontWeight="Bold"
+                            Text="0 KB/s" />
+                    </StackPanel>
+                </StackPanel>
+
                 <!--  Идентичность сервера: флаг + имя (remark) + бейдж протокола + транспорт.
                       Видна при выбранном/подключённом сервере. Данные: выбранный ProfileItem
                       (remark→флаг/имя, EConfigType→протокол, Network+Security→транспорт).  -->
@@ -457,6 +459,30 @@
                     </StackPanel>
                 </StackPanel>
             </StackPanel>
+
+            <!--  «+» в правом-верхнем углу connect-панели: добавить подписку (буфер / QR). Живёт в
+                  углу шелла возле connect-области (владелец: «+» переехал сюда с мета-карты). В
+                  компактной раскладке скрывается (SetCornerAddVisible(false)) — там свой «+» в шапке.
+                  Меню — команды унаследованного HomeViewModel (те же, что «+» в компактной шапке).  -->
+            <Button
+                x:Name="CornerAddButton"
+                Margin="0,12,16,0"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Top"
+                Classes="IconButton40"
+                ToolTip.Tip="Добавить подписку">
+                <PathIcon
+                    Width="22"
+                    Height="22"
+                    Data="M11,5 H13 V11 H19 V13 H13 V19 H11 V13 H5 V11 H11 Z"
+                    Foreground="{DynamicResource Brush.OnSurface}" />
+                <Button.Flyout>
+                    <MenuFlyout Placement="BottomEdgeAlignedRight">
+                        <MenuItem Click="OnCornerAddClipboard" Header="Добавить из буфера обмена" />
+                        <MenuItem Click="OnCornerAddQr" Header="Добавить по QR-коду" />
+                    </MenuFlyout>
+                </Button.Flyout>
+            </Button>
         </Grid>
 
         <!--  ===================== СЛОЙ «нет подписки» (онбординг) — скрыт по умолчанию =====================

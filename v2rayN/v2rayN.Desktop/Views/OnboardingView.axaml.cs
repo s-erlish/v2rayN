@@ -9,9 +9,10 @@ namespace v2rayN.Desktop.Views;
 /// подписка добавлена. Разметка статична; здесь — только проводка CTA по DataContext.
 ///
 /// «Добавить по QR-коду» / «из буфера обмена» бьют в реальный движок через HomeViewModel
-/// (тот же путь, что онбординг-CTA в HomeView). «Войти через Telegram» / «через сайт» открывают
-/// суб-страницу «Вход» (LoginView) поверх онбординга через MainWindow.OpenLogin (P0-2): шелл
-/// скрыт, пока пусто, поэтому вход показываем оверлеем; «назад» возвращает к онбордингу.
+/// (тот же путь, что онбординг-CTA в HomeView). «Войти через Telegram» / «через сайт» СРАЗУ
+/// стартуют соответствующую авторизацию (без промежуточного выбора метода): Telegram открывает
+/// deep link и переходит в ожидание, сайт открывает форму email/пароля. Шелл скрыт, пока пусто,
+/// поэтому вход показываем оверлеем; «назад» возвращает к онбордингу.
 /// </summary>
 public partial class OnboardingView : UserControl
 {
@@ -21,8 +22,8 @@ public partial class OnboardingView : UserControl
 
         AddQrButton.Click += OnAddQr;
         AddClipboardButton.Click += OnAddClipboard;
-        LoginTelegramButton.Click += OnLogin;
-        LoginSiteButton.Click += OnLogin;
+        LoginTelegramButton.Click += OnLoginTelegram;
+        LoginSiteButton.Click += OnLoginSite;
     }
 
     // Добавить по QR-коду → скан экрана (MainWindowViewModel.AddServerViaScanAsync).
@@ -43,10 +44,16 @@ public partial class OnboardingView : UserControl
         }
     }
 
-    // Вход через Telegram/сайт: открываем суб-страницу «Вход» поверх онбординга (P0-2).
-    // Оба CTA ведут на один LoginView (в нём есть и Telegram, и сайт); «назад» вернёт к онбордингу.
-    private void OnLogin(object? sender, RoutedEventArgs e)
+    // Войти через Telegram → сразу стартуем Telegram-авторизацию (открывает Telegram), LoginView
+    // показывает состояние ожидания подтверждения — без повторного выбора метода.
+    private void OnLoginTelegram(object? sender, RoutedEventArgs e)
     {
-        (TopLevel.GetTopLevel(this) as MainWindow)?.OpenLogin();
+        (TopLevel.GetTopLevel(this) as MainWindow)?.OpenLoginTelegram();
+    }
+
+    // Войти через сайт → открываем LoginView прямо на форме входа по email/паролю.
+    private void OnLoginSite(object? sender, RoutedEventArgs e)
+    {
+        (TopLevel.GetTopLevel(this) as MainWindow)?.OpenLoginSite();
     }
 }

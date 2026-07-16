@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using Avalonia.Animation;
 using Avalonia.Animation.Easings;
+using v2rayN.Desktop.Common;
 
 namespace v2rayN.Desktop.Views;
 
@@ -78,6 +79,10 @@ public partial class ConnectHeroView : UserControl
     private bool _pressing;
     private ConnectVisualState _visualState = ConnectVisualState.Idle;
 
+    //  Last hasServer passed to SetConnectState — remembered so a runtime lite toggle can re-apply
+    //  the CURRENT visual state (jump to its end-look) without the presenter re-driving it.
+    private bool _hasServer = true;
+
     //  Press-scale диска: собственный ScaleTransform, чей ScaleX/Y анимируем через его же
     //  переходы — длительность+кривую перекл. по направлению (quart-in 90 / quint-out 160).
     private readonly ScaleTransform _discScale = new(1, 1);
@@ -113,6 +118,9 @@ public partial class ConnectHeroView : UserControl
         //  _config.UiItem.LiteMode) ЛИБО система просит меньше анимаций
         //  («Показывать анимации в Windows» выкл). По умолчанию — движение включено.
         ReducedMotion = LiteModeEnabled() || !SystemAnimationsEnabled();
+
+        //  Стата-строка над щитом скрыта целиком в lite (task 2) — начальное состояние по флагу.
+        StatsRow.IsVisible = !ReducedMotion;
 
         //  Держим ссылки на декларативные переходы, чтобы гнуть их темп по направлению.
         //  Порядок соответствует XAML: ShieldOutline[0]=Opacity,[1]=Fill; Filled[0]=Opacity; Glow[0]=Opacity.
@@ -152,6 +160,14 @@ public partial class ConnectHeroView : UserControl
         AddQrButton.Click += (_, _) => AddByQrRequested?.Invoke(this, EventArgs.Empty);
         AddClipboardButton.Click += (_, _) => AddFromClipboardRequested?.Invoke(this, EventArgs.Empty);
 
+        //  Угловой «+» (правый-верхний угол панели) — меню импорта (буфер / QR) через команды
+        //  унаследованного HomeViewModel (см. XAML Command-биндинги); code-behind проводка не нужна.
+
+        //  Реактивный lite: подписываемся, пока во визуальном дереве, и синхронизируем ReducedMotion
+        //  с текущим MotionState при входе (значение уже засеяно MainWindow к моменту показа окна).
+        AttachedToVisualTree += OnHeroAttached;
+        DetachedFromVisualTree += OnHeroDetached;
+
         //  Cold-start «сборка» героя по первому показу окна (гвард статик-флагом). Прячем герой
         //  ДО первого кадра, чтобы не мелькнул в покое перед анимацией «сборки».
         if (!ReducedMotion && !_assembled)
@@ -190,6 +206,7 @@ public partial class ConnectHeroView : UserControl
     /// </summary>
     public void SetConnectState(ConnectVisualState state, bool hasServer = true, bool animate = false)
     {
+        _hasServer = hasServer;
         var motion = animate && !ReducedMotion;
 
         //  Idle — «остывающая» цель ⇒ реверс-темп (165/225); connecting/connected — forward (220/300).
@@ -273,6 +290,59 @@ public partial class ConnectHeroView : UserControl
         ServerProtocol.Text = protocol;
         ServerTransport.Text = transport;
         ServerFlagImage.Source = flag;
+    }
+
+    /// <summary>Show/hide the corner «+» (add-subscription) affordance. The widescreen connect panel
+    /// keeps it in its top-right corner; the compact layout hides it (its own header carries the «+»).</summary>
+    public void SetCornerAddVisible(bool visible) => CornerAddButton.IsVisible = visible;
+
+    //  Угловой «+» (добавить подписку) — те же события, что онбординг-кнопки; MainWindow ведёт их
+    //  в реальный поток добавления (буфер обмена / QR).
+    private void OnCornerAddClipboard(object? sender, Avalonia.Interactivity.RoutedEventArgs e) => AddFromClipboardRequested?.Invoke(this, EventArgs.Empty);
+
+    private void OnCornerAddQr(object? sender, Avalonia.Interactivity.RoutedEventArgs e) => AddByQrRequested?.Invoke(this, EventArgs.Empty);
+
+    // ── Реактивный «Облегчённый режим» (runtime, без рестарта) ───────────────────────────
+    //  MotionState.Changed → мгновенно гасим/оживляем ВСЮ хореографию щита (спин дуги, breathe glow,
+    //  shieldbreathe, сонар, «сборку») и прячем/показываем стата-строку, прыгая в конечный вид.
+    private void OnHeroAttached(object? sender, VisualTreeAttachmentEventArgs e)
+    {
+        MotionState.Changed += OnMotionStateChanged;
+        //  Синхронизируемся с текущим режимом на входе в дерево (без перезапуска состояния —
+        //  connect-состояние подаст HomeHeroPresenter). Обновляем только флаг + видимость статы.
+        ApplyLiteMode(MotionState.IsLite, reapply: false);
+    }
+
+    private void OnHeroDetached(object? sender, VisualTreeAttachmentEventArgs e)
+    {
+        MotionState.Changed -= OnMotionStateChanged;
+    }
+
+    private void OnMotionStateChanged(object? sender, bool lite) => ApplyLiteMode(lite, reapply: true);
+
+    private void ApplyLiteMode(bool lite, bool reapply)
+    {
+        //  Система тоже может требовать reduced-motion — тогда lite=off всё равно оставляет движение
+        //  выключенным (как в ctor).
+        ReducedMotion = lite || !SystemAnimationsEnabled();
+
+        //  Task 2: показатели скорости/аптайма над кнопкой пропадают в lite.
+        StatsRow.IsVisible = !ReducedMotion;
+
+        if (!reapply)
+        {
+            return;
+        }
+
+        //  Рантайм-переключение: убиваем любую идущую петлю анимаций и прыгаем в текущий конечный вид.
+        //  (При выключении lite SetConnectState заново навесит нужные петли, т.к. ReducedMotion=false.)
+        ConnectingArc.Classes.Remove("spinning");
+        GlowHalo.Classes.Remove("breathing");
+        ShieldOutline.Classes.Remove("shieldbreathe");
+        HideSonar();
+        HeroFrame.Classes.Remove("assembling");
+        EnsureHeroVisible();
+        SetConnectState(_visualState, hasServer: _hasServer, animate: false);
     }
 
     // ── Темп переходов (forward 220/300 ↔ реверс 165/225; reduced-motion → 0) ──────────

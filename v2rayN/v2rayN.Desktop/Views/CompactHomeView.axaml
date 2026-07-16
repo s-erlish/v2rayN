@@ -16,10 +16,10 @@
     <!--  ================================================================================
           КОМПАКТНАЯ «ГЛАВНАЯ» (CA-3) — 1:1 с Android activity_main.xml (телефонный Home).
           ОДИН вертикальный скролл (mirrors NestedScrollView), сверху вниз:
-            1) стата-строка ↑скорость · аптайм · ↓скорость + «+» (тот же импорт-меню);
+            1) шапка с «+» (добавить подписку) в правом-верхнем углу — импорт-меню (буфер / QR);
             2) чип аккаунта (HomeAccountChip, общий с широкой раскладкой);
-            3) большой центр-щит (ConnectHeroView — переиспользуем; его внутренняя стата-строка
-               скрыта в code-behind, чтобы не дублировать нашу верхнюю);
+            3) большой центр-щит (ConnectHeroView — переиспользуем; стата-строка ↑/аптайм/↓ теперь
+               ВНУТРИ него, под щитом — переехала с верха, где косила на старте);
             4) подпись состояния/сервера — внутри ConnectHeroView под щитом;
             5) мета-карта(ы) подписки + одноколоночный список серверов — ServerListView
                (его внутренний скролл инертен внутри страничного скролла → одна область прокрутки).
@@ -27,64 +27,23 @@
           DataContext = ОДИН HomeViewModel (тот же, что широкая раскладка).
           =================================================================================  -->
 
-    <!--  Нижний padding = высота нижней навигации (~58) + комфортный зазор (~40), чтобы ПОСЛЕДНЯЯ
-          строка сервера полностью читалась над баром и не пряталась под ним.  -->
+    <!--  Нижний padding = высота нижней навигации (нав-бар ≥56 + скрим) + комфортный зазор (~24),
+          чтобы ПОСЛЕДНЯЯ строка сервера полностью читалась над баром и не пряталась под ним
+          (владелец: последний сервер обрезался). 130 гарантирует зазор над баром.  -->
     <ScrollViewer
         HorizontalScrollBarVisibility="Disabled"
-        Padding="0,0,0,98"
+        Padding="0,0,0,130"
         VerticalScrollBarVisibility="Auto">
         <StackPanel>
 
-            <!--  (1) Стата-строка: 42 спейсер | [↑ · аптайм · ↓] | «+» 42 — таймер строго по центру.  -->
-            <Grid Margin="16,6,10,4" ColumnDefinitions="42,*,Auto">
-                <Grid Grid.Column="1" ColumnDefinitions="*,*,*">
-                    <StackPanel
-                        Grid.Column="0"
-                        HorizontalAlignment="Center"
-                        Orientation="Horizontal"
-                        Spacing="4">
-                        <TextBlock
-                            VerticalAlignment="Center"
-                            Classes="Caption"
-                            Foreground="{DynamicResource Brush.Accent}"
-                            Text="↑" />
-                        <TextBlock
-                            Classes="Numeric"
-                            FontSize="13"
-                            FontWeight="Bold"
-                            Text="{Binding UpSpeed}" />
-                    </StackPanel>
-                    <TextBlock
-                        Grid.Column="1"
-                        HorizontalAlignment="Center"
-                        Classes="Numeric"
-                        FontSize="14"
-                        FontWeight="Bold"
-                        Foreground="{DynamicResource Brush.OnSurfaceVariant}"
-                        Text="{Binding Uptime}" />
-                    <StackPanel
-                        Grid.Column="2"
-                        HorizontalAlignment="Center"
-                        Orientation="Horizontal"
-                        Spacing="4">
-                        <TextBlock
-                            VerticalAlignment="Center"
-                            Classes="Caption"
-                            Foreground="{DynamicResource Brush.Accent}"
-                            Text="↓" />
-                        <TextBlock
-                            Classes="Numeric"
-                            FontSize="13"
-                            FontWeight="Bold"
-                            Text="{Binding DownSpeed}" />
-                    </StackPanel>
-                </Grid>
-
-                <!--  «+» — тот же импорт (буфер / QR), что и в широкой раскладке (команды VM).  -->
+            <!--  (1) Шапка: «+» (добавить подписку) в правом-верхнем углу приложения. Показатели
+                  скорости/аптайма переехали ПОД щит (см. ConnectHeroView) — тут их больше нет, поэтому
+                  верхний ряд не «косит» на старте. «+» — тот же импорт (буфер / QR), команды VM.  -->
+            <Grid Margin="16,6,10,4">
                 <Button
-                    Grid.Column="2"
+                    HorizontalAlignment="Right"
                     Classes="IconButton40"
-                    ToolTip.Tip="Добавить">
+                    ToolTip.Tip="Добавить подписку">
                     <PathIcon
                         Width="22"
                         Height="22"
