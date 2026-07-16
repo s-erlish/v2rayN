@@ -79,6 +79,10 @@
                                                   scale 0.96, selected = blue pill (12% accent fill + 1.5px Accent,
                                                   radius 16). Tap → SelectServer (default + connect). Right-click → §2.13.
                                                   ONE grid: 56 rhythm, 40 tile, single inset divider, no vertical margin.  -->
+                                            <!--  Loaded → одноразовый reveal-стаггер первой заливки списка
+                                                  (первые ≤8 строк всплывают 12→0 + fade, задержка i×40мс,
+                                                  ~300мс OutQuint). Строки видимы ПО УМОЛЧАНИЮ — анимация лишь
+                                                  усиливает уже видимый покой (см. code-behind, §A.4).  -->
                                             <Border
                                                 MinHeight="50"
                                                 Margin="16,2"
@@ -87,6 +91,7 @@
                                                 Classes.selected="{Binding IsActive}"
                                                 ContextRequested="OnRowContextRequested"
                                                 CornerRadius="{StaticResource Radius.Search}"
+                                                Loaded="OnServerRowLoaded"
                                                 PointerCaptureLost="OnRowPointerCaptureLost"
                                                 PointerExited="OnRowPointerExited"
                                                 PointerPressed="OnRowPointerPressed"

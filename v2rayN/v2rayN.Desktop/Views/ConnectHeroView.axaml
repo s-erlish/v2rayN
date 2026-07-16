@@ -57,6 +57,29 @@
             </Style.Animations>
         </Style>
 
+        <!--  Connecting «дыхание» щита: пока класс .shieldbreathe (connecting), контур-щит
+              (уже залит акцентом) мягко пульсирует alpha 1↔0.8 в УНИСОН с glow-breathe (те же
+              850мс sine, PlaybackDirection=Alternate) → две синхронные волны читаются как ОДИН
+              спокойный вдох, а не как две суеты. ЭТО ТОЛЬКО OPACITY — ни transform, ни центра:
+              физически не может «улететь» из угла (в отличие от scale/rotate). Снимается код-behind
+              на выходе из connecting (иначе перекрыл бы crossfade контур→залив на connected).  -->
+        <Style Selector="Path.shieldbreathe">
+            <Style.Animations>
+                <Animation
+                    Duration="0:0:0.85"
+                    Easing="SineEaseInOut"
+                    IterationCount="Infinite"
+                    PlaybackDirection="Alternate">
+                    <KeyFrame Cue="0%">
+                        <Setter Property="Opacity" Value="1" />
+                    </KeyFrame>
+                    <KeyFrame Cue="100%">
+                        <Setter Property="Opacity" Value="0.8" />
+                    </KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+
         <!--  Один сонар-импульс на connect-confirm: кольцо scale 1→1.6 + alpha 1→0 за
               emphasis (600мс), ease_out_quint (0.22,1,0.36,1 = Ease.OutQuint), ОДИН РАЗ.  -->
         <Style Selector="Ellipse.Sonar.pulsing">

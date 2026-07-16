@@ -30,7 +30,9 @@
         <!--  Пункт нав-бара: прозрачная borderless-кнопка, press-scale 0.92, без ripple/glow.  -->
         <Style Selector="Button.BottomNavItem">
             <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
-            <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
+            <!--  Press-scale ОТ ЦЕНТРА: origin ОБЯЗАН быть относительным «50%,50%» (= 0.5·W,0.5·H),
+                  а НЕ абсолютным «0.5,0.5» (≈ 0.5px = левый-верхний угол → «проваливание влево»).  -->
+            <Setter Property="RenderTransformOrigin" Value="50%,50%" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Padding" Value="0,8,0,6" />
@@ -40,7 +42,7 @@
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Transitions">
                 <Transitions>
-                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.1" />
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.1" Easing="{StaticResource Ease.OutQuint}" />
                 </Transitions>
             </Setter>
         </Style>
@@ -62,9 +64,10 @@
             <Setter Property="Width" Value="24" />
             <Setter Property="Height" Value="24" />
             <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
+            <!--  Тон серый↔accent = Ease.Standard 200мс (двусторонняя смена, как рейл/Android nav).  -->
             <Setter Property="Transitions">
                 <Transitions>
-                    <BrushTransition Property="Foreground" Duration="0:0:0.2" />
+                    <BrushTransition Property="Foreground" Duration="0:0:0.2" Easing="{StaticResource Ease.Standard}" />
                 </Transitions>
             </Setter>
         </Style>
@@ -77,11 +80,13 @@
             <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
             <Setter Property="Transitions">
                 <Transitions>
-                    <BrushTransition Property="Foreground" Duration="0:0:0.2" />
+                    <BrushTransition Property="Foreground" Duration="0:0:0.2" Easing="{StaticResource Ease.Standard}" />
                 </Transitions>
             </Setter>
         </Style>
-        <!--  Активная пилюля (bg_nav_dot): 34×3, скрыта в покое.  -->
+        <!--  Активная пилюля (bg_nav_dot): 34×3, скрыта в покое; у выбранного «вырастает» по
+              горизонтали (scaleX 0.55→1) + fade. origin 50%,50% (относит.) → растёт из центра,
+              метод TransformOperations scale() как у press-классов (не из угла).  -->
         <Style Selector="Button.BottomNavItem Border.NavPillBottom">
             <Setter Property="Width" Value="34" />
             <Setter Property="Height" Value="3" />
@@ -89,15 +94,18 @@
             <Setter Property="CornerRadius" Value="2" />
             <Setter Property="HorizontalAlignment" Value="Center" />
             <Setter Property="Background" Value="{DynamicResource Brush.Accent}" />
+            <Setter Property="RenderTransformOrigin" Value="50%,50%" />
             <Setter Property="Opacity" Value="0" />
+            <Setter Property="RenderTransform" Value="scale(0.55,1)" />
             <Setter Property="Transitions">
                 <Transitions>
-                    <DoubleTransition Property="Opacity" Duration="0:0:0.2" />
+                    <DoubleTransition Property="Opacity" Duration="0:0:0.2" Easing="{StaticResource Ease.Standard}" />
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.2" Easing="{StaticResource Ease.Standard}" />
                 </Transitions>
             </Setter>
         </Style>
 
-        <!--  Выбранный пункт (класс .sel): глиф+подпись accent, подпись bold, пилюля видна.  -->
+        <!--  Выбранный пункт (класс .sel): глиф+подпись accent, подпись 500→700, пилюля вырастает + fade.  -->
         <Style Selector="Button.BottomNavItem.sel PathIcon">
             <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
         </Style>
@@ -107,6 +115,7 @@
         </Style>
         <Style Selector="Button.BottomNavItem.sel Border.NavPillBottom">
             <Setter Property="Opacity" Value="1" />
+            <Setter Property="RenderTransform" Value="scale(1,1)" />
         </Style>
 
         <!--  Reduced-motion (.lite на окне): переходы мгновенны.  -->

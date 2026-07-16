@@ -195,6 +195,11 @@ public partial class ConnectHeroView : UserControl
         //  Idle — «остывающая» цель ⇒ реверс-темп (165/225); connecting/connected — forward (220/300).
         PrepareStateTiming(reverse: state == ConnectVisualState.Idle);
 
+        //  Вторичный connecting-сигнал: щит «дышит» акцентом в УНИСОН с glow (см. SetShieldPulse).
+        //  Ставим/снимаем ДО switch — на connected/idle класс снят прежде, чем ветка выставит
+        //  Opacity контура (иначе анимация перекрыла бы crossfade контур→залив).
+        SetShieldPulse(state == ConnectVisualState.Connecting);
+
         switch (state)
         {
             case ConnectVisualState.Connecting:
@@ -354,6 +359,22 @@ public partial class ConnectHeroView : UserControl
         else
         {
             ConnectingArc.Classes.Remove("spinning");
+        }
+    }
+
+    //  Connecting-«дыхание» щита: спокойный вторичный сигнал в унисон с glow-breathe (те же 850мс
+    //  sine). Только OPACITY (1↔0.8) на контур-щите — БЕЗ transform, поэтому центрировать нечего и
+    //  «улететь» физически нельзя. Reduced-motion/lite: класс не вешаем → щит статичен (дуга/сигнал
+    //  подключения остаются читаемыми и без движения).
+    private void SetShieldPulse(bool on)
+    {
+        if (on && !ReducedMotion)
+        {
+            ShieldOutline.Classes.Add("shieldbreathe");
+        }
+        else
+        {
+            ShieldOutline.Classes.Remove("shieldbreathe");
         }
     }
 

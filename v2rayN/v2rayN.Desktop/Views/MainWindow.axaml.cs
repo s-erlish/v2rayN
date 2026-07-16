@@ -1,4 +1,6 @@
 using System.Reactive.Disposables;
+using Avalonia.Animation;
+using Avalonia.Animation.Easings;
 using v2rayN.Desktop.Base;
 using v2rayN.Desktop.Common;
 using v2rayN.Desktop.Manager;
@@ -73,6 +75,13 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         {
             Classes.Add("lite");
             contentHost.PageTransition = null;
+        }
+        else
+        {
+            // Смена вкладок «оживает»: входящая страница слегка всплывает (translateY 8→0) с fade-in
+            // поверх кроссфейда — §A.4. Только translate (без scale/rotate) → центр не важен, ничего
+            // не «улетает». Под .lite (ветка выше) переход не назначается → мгновенный своп.
+            contentHost.PageTransition = RiseFadePageTransition.Default;
         }
 
         KeyDown += MainWindow_KeyDown;
@@ -743,4 +752,94 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     }
 
     #endregion UI
+}
+
+// ==================== Переход вкладок: crossfade + подъём 8→0 (§A.4) ====================
+// Кастомный IPageTransition для ЕДИНОГО contentHost: входящая страница всплывает
+// (translateY 8→0) с fade-in ~300мс Ease.OutQuint ПОВЕРХ обычного кроссфейда, а исходящая
+// гаснет быстрее (fade-out 150мс Ease.Standard — выход всегда быстрее входа). Анимируется
+// ТОЛЬКО translate + opacity (никаких scale/rotate) → центр вращения не при чём, страница
+// физически не может «улететь» из угла. Тот же путь, что у встроенного PageSlide
+// (TranslateTransform.Y через keyframes). Под .lite не назначается (MainWindow ctor ставит
+// PageTransition=null) → своп мгновенный, движение полностью выключено.
+internal sealed class RiseFadePageTransition : IPageTransition
+{
+    // Кривые = моушен-токены §A.0 (SplineEasing 1:1 с GlobalResources Ease.OutQuint/Ease.Standard).
+    private static readonly Easing EaseOutQuint = new SplineEasing(0.22, 1, 0.36, 1);
+    private static readonly Easing EaseStandard = new SplineEasing(0.2, 0, 0, 1);
+
+    // Вход (in-fade + подъём) = Dur.Reveal 300мс; выход (out-fade) = 150мс (короче входа).
+    private static readonly TimeSpan EnterDuration = TimeSpan.FromMilliseconds(300);
+    private static readonly TimeSpan ExitDuration = TimeSpan.FromMilliseconds(150);
+    private const double RiseFrom = 8.0;
+
+    public static readonly RiseFadePageTransition Default = new();
+
+    public async Task Start(Visual? from, Visual? to, bool forward, CancellationToken cancellationToken)
+    {
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+
+        var tasks = new List<Task>();
+
+        // Исходящая: быстрый fade-out (Ease.Standard) — короче входа, без сдвига.
+        if (from != null)
+        {
+            var fadeOut = new Animation
+            {
+                Duration = ExitDuration,
+                Easing = EaseStandard,
+                FillMode = FillMode.Forward,
+                Children =
+                {
+                    new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(Visual.OpacityProperty, 1d) } },
+                    new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(Visual.OpacityProperty, 0d) } },
+                },
+            };
+            tasks.Add(fadeOut.RunAsync(from, cancellationToken));
+        }
+
+        // Входящая: fade-in + подъём translateY 8→0 (OutQuint). Opacity и translate — РАЗДЕЛЬНЫЕ
+        // анимации (разные аниматоры Avalonia), запускаются параллельно на одном визуале.
+        if (to != null)
+        {
+            to.IsVisible = true;
+
+            var fadeIn = new Animation
+            {
+                Duration = EnterDuration,
+                Easing = EaseOutQuint,
+                FillMode = FillMode.Forward,
+                Children =
+                {
+                    new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(Visual.OpacityProperty, 0d) } },
+                    new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(Visual.OpacityProperty, 1d) } },
+                },
+            };
+
+            var rise = new Animation
+            {
+                Duration = EnterDuration,
+                Easing = EaseOutQuint,
+                FillMode = FillMode.Forward,
+                Children =
+                {
+                    new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(TranslateTransform.YProperty, RiseFrom) } },
+                    new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(TranslateTransform.YProperty, 0d) } },
+                },
+            };
+
+            tasks.Add(fadeIn.RunAsync(to, cancellationToken));
+            tasks.Add(rise.RunAsync(to, cancellationToken));
+        }
+
+        await Task.WhenAll(tasks);
+
+        if (from != null && !cancellationToken.IsCancellationRequested)
+        {
+            from.IsVisible = false;
+        }
+    }
 }

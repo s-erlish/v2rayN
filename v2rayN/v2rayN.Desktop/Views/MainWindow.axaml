@@ -401,11 +401,10 @@
                               поэтому фон не «рвётся» на кроссфейде.  -->
                         <Panel x:Name="contentArea">
                             <Border Background="{DynamicResource Brush.HomeGradient}" />
-                            <TransitioningContentControl x:Name="contentHost" Background="Transparent">
-                                <TransitioningContentControl.PageTransition>
-                                    <CrossFade Duration="0:0:0.18" />
-                                </TransitioningContentControl.PageTransition>
-                            </TransitioningContentControl>
+                            <!--  PageTransition назначается в code-behind: RiseFadePageTransition
+                                  (§A.4 — кроссфейд + подъём входящей страницы translateY 8→0, OutQuint);
+                                  под .lite ставится null (мгновенный своп). Один источник — без инлайна.  -->
+                            <TransitioningContentControl x:Name="contentHost" Background="Transparent" />
                         </Panel>
 
                         <!--  Нижняя навигация (компактная раскладка). Ставится в свою строку кодом.  -->

@@ -1,4 +1,8 @@
+using System.Runtime.InteropServices;
+using Avalonia.Animation;
+using Avalonia.Animation.Easings;
 using Avalonia.Data.Converters;
+using Avalonia.Media.Transformation;
 using DialogHostAvalonia;
 using v2rayN.Desktop.Common;
 using v2rayN.Desktop.ViewModels;
@@ -39,7 +43,20 @@ public partial class ServerListView : UserControl
         InitializeComponent();
         // NOTE: no runtime DataContext here — it inherits the real HomeViewModel from HomeView.
         // The XAML Design.DataContext (DesignData.Home) only feeds the previewer.
-        DataContextChanged += (_, _) => RegisterInteractions();
+        DataContextChanged += (_, _) =>
+        {
+            RegisterInteractions();
+            // Re-arm the one-shot list-reveal stagger only when a genuinely NEW view-model is bound
+            // (identity change), so the reveal plays once per bind — never again on scroll/refresh
+            // (those keep the same VM instance and only mutate its ServerGroups collection).
+            if (!ReferenceEquals(DataContext, _revealBoundContext))
+            {
+                _revealBoundContext = DataContext;
+                _revealStarted = false;
+                _revealFinished = false;
+                _revealIndex = 0;
+            }
+        };
     }
 
     #region Server-action interaction handlers (mirror ProfilesView, so share/delete work here)
@@ -193,6 +210,221 @@ public partial class ServerListView : UserControl
     }
 
     #endregion Row selection
+
+    #region List-reveal stagger (§A.4 — first-population only; Lite / reduced-motion disables it)
+
+    //  Android parity: on the FIRST population of the server list the first ≤8 rows RISE
+    //  (translateY 12→0) + fade (0→1) with a per-row delay of index×40ms over ~300ms OutQuint;
+    //  rows beyond the first 8 just appear. This is a one-shot per bind — refresh / collapse /
+    //  scroll re-run Loaded on fresh containers but are suppressed by _revealFinished.
+    //
+    //  ROBUSTNESS: rows are visible by DEFAULT (their XAML rest is Opacity 1, no transform). The
+    //  reveal only ENHANCES that — it sets the transient hidden start state as part of actually
+    //  running, and a safety timer + finally ALWAYS restore rest, so a row can never be stranded
+    //  hidden if the animation clock never ticks (headless / inactive render).
+
+    private const double RevealMs = 300; //  Dur.Reveal (rise = translateY 12 → 0, see _riseFrom)
+    private const int StaggerMs = 40; //  Dur.Stagger (per-row delay)
+    private const int MaxStaggerRows = 8; //  cap: only the first ≤8 rows stagger in
+
+    private object? _revealBoundContext;
+    private bool _revealStarted; //  first-population window has opened (rows attaching)
+    private bool _revealFinished; //  first population done → no further reveals this bind
+    private int _revealIndex; //  running per-row index within the first-population batch
+
+    // Each server row raises Loaded when its container is realized. On the FIRST population we
+    // stagger the first ≤8 rows in; every later realization (refresh / re-expand) is skipped so
+    // rows simply appear at their visible rest.
+    private void OnServerRowLoaded(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Border row)
+        {
+            return;
+        }
+
+        // Previewer: never animate — the design surface shows the final rest frame.
+        if (Design.IsDesignMode)
+        {
+            return;
+        }
+
+        // One-shot: refresh / collapse / scroll re-run Loaded on new containers → leave them at
+        // their visible XAML rest (no stagger, no flash).
+        if (_revealFinished)
+        {
+            return;
+        }
+
+        // Lite / reduced-motion: no stagger. Rows are visible by default, so nothing to do but
+        // close the window so no row in this population animates.
+        if (IsReducedMotion())
+        {
+            _revealFinished = true;
+            return;
+        }
+
+        if (!_revealStarted)
+        {
+            _revealStarted = true;
+            _revealIndex = 0;
+            // Close the first-population window once this layout batch drains. Loaded callbacks run
+            // at a higher dispatcher priority than Background, so every row realized in this pass is
+            // indexed before the window closes; later (refresh) rows fall under _revealFinished.
+            Dispatcher.UIThread.Post(() => _revealFinished = true, DispatcherPriority.Background);
+        }
+
+        var index = _revealIndex++;
+        // Rows past the first 8 just appear — keeps the reveal snappy on long lists.
+        if (index >= MaxStaggerRows)
+        {
+            return;
+        }
+
+        _ = PlayRowReveal(row, index * StaggerMs);
+    }
+
+    //  Rise expressed as TransformOperations (translateY), the SAME transform vocabulary the row's
+    //  own press-scale uses (Border.ServerRow `scale(0.96)` + TransformOperationsTransition). Driving
+    //  RenderTransform with TransformOperations composes cleanly with that subsystem — a raw
+    //  TranslateTransform would clash with the style's TransformOperationsTransition on RenderTransform.
+    private static readonly ITransform _riseFrom = TransformOperations.Parse("translateY(12px)");
+    private static readonly ITransform _riseTo = TransformOperations.Parse("translateY(0px)");
+
+    private async Task PlayRowReveal(Border row, int delayMs)
+    {
+        // Transient hidden start — set ONLY as part of running the reveal (never a persistent gate).
+        // During the stagger delay the animation has not started, so this base Opacity holds the row
+        // hidden (no pre-delay flash) until its turn; the rise is carried entirely by the keyframes.
+        row.Opacity = 0;
+
+        var anim = new Animation
+        {
+            Duration = TimeSpan.FromMilliseconds(RevealMs),
+            Delay = TimeSpan.FromMilliseconds(delayMs),
+            //  Ease.OutQuint (0.22,1,0.36,1) — the confident-reveal curve (matches GlobalResources).
+            Easing = new SplineEasing { X1 = 0.22, Y1 = 1, X2 = 0.36, Y2 = 1 },
+            //  None (NOT Forward): on completion the animation RELEASES RenderTransform / Opacity back
+            //  to the control's base — so it never keeps ownership at Animation priority and can't
+            //  shadow the row's `:pressed` scale-0.96. RestoreRow then defines the visible rest.
+            FillMode = FillMode.None,
+            Children =
+            {
+                new KeyFrame
+                {
+                    Cue = new Cue(0d),
+                    Setters =
+                    {
+                        new Setter(Visual.OpacityProperty, 0d),
+                        new Setter(Visual.RenderTransformProperty, _riseFrom),
+                    },
+                },
+                new KeyFrame
+                {
+                    Cue = new Cue(1d),
+                    Setters =
+                    {
+                        new Setter(Visual.OpacityProperty, 1d),
+                        new Setter(Visual.RenderTransformProperty, _riseTo),
+                    },
+                },
+            },
+        };
+
+        // SAFETY (mirrors ConnectHeroView's pre-hide + DispatcherTimer.RunOnce EnsureHeroVisible):
+        // guarantee the row reaches visible rest even if the animation clock never advances (headless
+        // / inactive render). Cancelling first makes the (possibly stuck) animation relinquish the
+        // property so the base values RestoreRow writes actually take effect. Margin past delay+dur.
+        var cts = new CancellationTokenSource();
+        var safety = DispatcherTimer.RunOnce(
+            () =>
+            {
+                cts.Cancel();
+                RestoreRow(row);
+            },
+            TimeSpan.FromMilliseconds(delayMs + RevealMs + 250));
+
+        try
+        {
+            await anim.RunAsync(row, cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            //  Safety path already restored the row — nothing more to do.
+        }
+        finally
+        {
+            safety.Dispose(); //  cancel the pending safety callback when the reveal ended normally
+            RestoreRow(row);
+            cts.Dispose();
+        }
+    }
+
+    // Idempotent rest = fully visible, no reveal transform. Safe to call from the safety timer and
+    // finally. RenderTransform → null returns the row to the style's identity, so the `:pressed`
+    // scale-0.96 keeps working on later taps.
+    private static void RestoreRow(Control row)
+    {
+        row.Opacity = 1;
+        row.RenderTransform = null;
+    }
+
+    // Reduced-motion decision — same signal the rest of the app gates on (ConnectHeroView): the
+    // live `.lite` window class (set from UiItem.LiteMode), the persisted LiteMode flag, and the
+    // Windows "show animations" system preference. Any one true → rows appear instantly.
+    private bool IsReducedMotion()
+    {
+        if (Design.IsDesignMode)
+        {
+            return false;
+        }
+
+        // Live lite state: MainWindow carries the `.lite` class whenever LiteMode is on.
+        if (TopLevel.GetTopLevel(this) is { } top && top.Classes.Contains("lite"))
+        {
+            return true;
+        }
+
+        try
+        {
+            if (AppManager.Instance.Config.UiItem.LiteMode)
+            {
+                return true;
+            }
+        }
+        catch
+        {
+            //  Config not ready → treat motion as enabled.
+        }
+
+        return !SystemAnimationsEnabled();
+    }
+
+    private const uint SPI_GETCLIENTAREAANIMATION = 0x1042;
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SystemParametersInfo(uint uiAction, uint uiParam, ref bool pvParam, uint fWinIni);
+
+    private static bool SystemAnimationsEnabled()
+    {
+        //  No direct signal off Windows → assume motion is enabled.
+        if (!OperatingSystem.IsWindows())
+        {
+            return true;
+        }
+
+        try
+        {
+            var enabled = true;
+            return !SystemParametersInfo(SPI_GETCLIENTAREAANIMATION, 0, ref enabled, 0) || enabled;
+        }
+        catch
+        {
+            return true;
+        }
+    }
+
+    #endregion List-reveal stagger
 
     #region Server-row context actions (§2.13)
 
