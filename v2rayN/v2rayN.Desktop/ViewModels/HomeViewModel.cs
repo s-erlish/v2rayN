@@ -48,6 +48,13 @@ public class HomeViewModel : MyReactiveObject, IDisposable
     private readonly IDisposable? _coreStateSub;
     private readonly IDisposable? _switchSettledSub;
     private readonly IDisposable? _statsSub;
+    // Per-item live-sync: latency/speed results are reported by MUTATING the ProfileItems instances in
+    // place (ProfilesViewModel.SetSpeedTestResult sets Delay/DelayVal/SpeedVal/IpInfo) — a per-ITEM
+    // property change that raises NO CollectionChanged, so the CollectionChanged-driven reconcile never
+    // fires and the DISPLAYED rows (distinct retained instances) would never show the "Testing…" spinner
+    // or the ms result. We subscribe to each source item's PropertyChanged and mirror the changed field
+    // onto the matching displayed row. Re-synced on every reconcile (items are rebuilt wholesale).
+    private readonly List<ProfileItemModel> _observedItems = new();
     private DispatcherTimer? _uptimeTimer;
     private DateTime? _connectedSince;
     private DateTime? _connectingUntil;
@@ -516,6 +523,85 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         ReconcileServerGroups(plan);
 
         Subtitle = FormatServersProvidersMeta(count, providers);
+
+        // Point the per-item ping/speedtest live-sync at the current (possibly rebuilt) source items.
+        ResyncItemSubscriptions();
+    }
+
+    /// <summary>(Re)attach the per-item PropertyChanged handler to the live ProfileItems so an in-place
+    /// latency/speed update propagates to the displayed rows. Detaches the previous set first — the
+    /// engine rebuilds ProfileItems wholesale, so stale instances must be dropped.</summary>
+    private void ResyncItemSubscriptions()
+    {
+        foreach (var it in _observedItems)
+        {
+            it.PropertyChanged -= OnSourceItemChanged;
+        }
+        _observedItems.Clear();
+
+        var items = Profiles?.ProfileItems;
+        if (items == null)
+        {
+            return;
+        }
+        foreach (var it in items)
+        {
+            it.PropertyChanged += OnSourceItemChanged;
+            _observedItems.Add(it);
+        }
+    }
+
+    /// <summary>A source ProfileItems row changed a REACTIVE field in place (ping/speedtest result,
+    /// selection). Mirror just that state onto the matching displayed row (by IndexId) so the ping
+    /// spinner and result appear without a full reconcile. Runs on the UI thread (the engine marshals
+    /// SetSpeedTestResult through the main scheduler).</summary>
+    private void OnSourceItemChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (sender is not ProfileItemModel src)
+        {
+            return;
+        }
+        switch (e.PropertyName)
+        {
+            case nameof(ProfileItemModel.Delay):
+            case nameof(ProfileItemModel.DelayVal):
+            case nameof(ProfileItemModel.SpeedVal):
+            case nameof(ProfileItemModel.IpInfo):
+            case nameof(ProfileItemModel.IsActive):
+                break;
+            default:
+                return;
+        }
+
+        var row = FindRowByIndexId(src.IndexId);
+        if (row == null || ReferenceEquals(row, src))
+        {
+            return;   // no displayed copy, or the row IS the source (INPC already propagates)
+        }
+        row.Delay = src.Delay;
+        row.DelayVal = src.DelayVal;
+        row.SpeedVal = src.SpeedVal;
+        row.IpInfo = src.IpInfo;
+        row.IsActive = src.IsActive;
+    }
+
+    private ProfileItemModel? FindRowByIndexId(string? indexId)
+    {
+        if (string.IsNullOrEmpty(indexId))
+        {
+            return null;
+        }
+        foreach (var g in ServerGroups)
+        {
+            foreach (var r in g.Servers)
+            {
+                if (string.Equals(r.IndexId, indexId, StringComparison.Ordinal))
+                {
+                    return r;
+                }
+            }
+        }
+        return null;
     }
 
     /// <summary>The desired shape of one group for a reconcile pass (no view objects allocated yet).</summary>
@@ -662,6 +748,11 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         {
             Profiles.ProfileItems.CollectionChanged -= OnProfileItemsChanged;
         }
+        foreach (var it in _observedItems)
+        {
+            it.PropertyChanged -= OnSourceItemChanged;
+        }
+        _observedItems.Clear();
         L.Instance.LanguageChanged -= OnLanguageChanged;
         StopUptimeTick();
         _coreStateSub?.Dispose();
