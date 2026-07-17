@@ -31,7 +31,7 @@ public sealed partial class L
         Add("Settings_Ipv6Hint", "Включить IPv6-адресацию в туннеле", "Enable IPv6 addressing in the tunnel");
         Add("Settings_Ping", "Пинг", "Ping");
         Add("Settings_LocalProxy", "Локальный прокси", "Local proxy");
-        Add("Settings_LocalProxyHint", "SOCKS5-авторизация, память, доступ по сети", "SOCKS5 authentication, memory, network access");
+        Add("Settings_LocalProxyHint", "Порт, логин и пароль SOCKS5-подключения", "Port, username and password for the SOCKS5 connection");
         Add("Settings_Port", "Порт", "Port");
         Add("Settings_Socks5Auth", "SOCKS5-авторизация", "SOCKS5 authentication");
         Add("Settings_Username", "Логин", "Username");
@@ -51,7 +51,7 @@ public sealed partial class L
 
         Add("Settings_SecInterface", "Интерфейс", "Interface");
         Add("Settings_Appearance", "Оформление", "Appearance");
-        Add("Settings_Monochrome", "Чёрно-белая", "Monochrome");
+        Add("Settings_Monochrome", "Монохром", "Monochrome");
         Add("Settings_MonochromeHint", "Монохромный режим поверх тёмной или светлой темы", "Monochrome mode over the dark or light theme");
         Add("Settings_Language", "Язык", "Language");
         Add("Settings_Autostart", "Запуск при загрузке", "Launch at startup");

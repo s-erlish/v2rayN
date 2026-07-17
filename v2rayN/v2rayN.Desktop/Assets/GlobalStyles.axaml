@@ -601,6 +601,54 @@
         <Setter Property="Background" Value="{DynamicResource Brush.SelectedFill}" />
     </Style>
 
+    <!--  ==================================================================== -->
+    <!--  Строка настроек (SettingRow) — продвинута из SettingsView (P2). minHeight 56,     -->
+    <!--  паддинг 16/12, hover = прямоугольное затемнение Brush.Hover ВНУТРИ скруглённой     -->
+    <!--  карты (карта клипует углы), press-scale 0.98 из центра, focus = авто-кольцо        -->
+    <!--  FocusAdorner (строка становится Focusable/IsTabStop в code-behind, как AccountChip).-->
+    <!--                                                                                      -->
+    <!--  Асимметрия press: нажатие = Ease.OutQuart 90мс (быстрый уход вниз), отпускание =     -->
+    <!--  Ease.OutQuint 160мс (уверенное оседание) — базовый переход держит возврат, класс     -->
+    <!--  .pressed приносит быстрый вход. Ховер МГНОВЕННЫЙ (без BrushTransition на Background): -->
+    <!--  при прокрутке колесом подсвечивается ровно одна строка (паритет ServerRow).           -->
+    <!--  ==================================================================== -->
+    <Style Selector="Border.SettingRow">
+        <Setter Property="RenderTransformOrigin" Value="50%,50%" />
+        <Setter Property="MinHeight" Value="{DynamicResource Size.Row}" />
+        <Setter Property="Padding" Value="16,12" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.16" Easing="{StaticResource Ease.OutQuint}" />
+            </Transitions>
+        </Setter>
+        <!--  Кольцо фокуса ВНУТРЕННЕЕ (отступ 3, радиус 12): строка во всю ширину карты, внешнее
+              кольцо вылезло бы за скруглённый край карты. Мгновенно, переживает lite (a11y > движение).  -->
+        <Setter Property="FocusAdorner">
+            <FocusAdornerTemplate>
+                <Border Margin="3" BorderThickness="2" CornerRadius="12"
+                        BorderBrush="{DynamicResource Brush.Accent}" />
+            </FocusAdornerTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="Border.SettingRow:pointerover">
+        <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
+    </Style>
+    <!--  Строки-сегменты (Mode/Appearance): тело строки НЕ тап-таргет — действуют только сегмент-чипы
+          справа. Полноширинный hover-фон подсвечивал бы строку без действия (ложный аффорданс), поэтому
+          у .segmentRow ховер тела подавлен (реагируют сами чипы). Специфичнее базового → перекрывает.  -->
+    <Style Selector="Border.SettingRow.segmentRow:pointerover">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Border.SettingRow.pressed">
+        <Setter Property="RenderTransform" Value="scale(0.98)" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" Easing="{StaticResource Ease.OutQuart}" />
+            </Transitions>
+        </Setter>
+    </Style>
+
     <!--  Поиск-пилюля (bg_search_pill): Surface, radius 14, 1px OutlineVariant.  -->
     <Style Selector="Border.SearchPill">
         <Setter Property="Background" Value="{DynamicResource Brush.Surface}" />
@@ -1000,6 +1048,17 @@
         </Setter>
     </Style>
 
+    <!--  Сегмент-чип (Radius.Chip 12 → кольцо 14): инлайн-переключатели Режим/Оформление
+          в настройках теперь реальные фокусируемые контролы — даём им единое кольцо фокуса.  -->
+    <Style Selector="ToggleButton.Segment">
+        <Setter Property="FocusAdorner">
+            <FocusAdornerTemplate>
+                <Border Margin="-2" BorderThickness="2" CornerRadius="14"
+                        BorderBrush="{DynamicResource Brush.Accent}" />
+            </FocusAdornerTemplate>
+        </Setter>
+    </Style>
+
     <!--  Primary/Tall — ВНУТРЕННЕЕ кольцо OnAccent @40% (радиус 16, без -2 отступа).  -->
     <Style Selector="Button.Primary">
         <Setter Property="FocusAdorner">
@@ -1332,6 +1391,34 @@
     <!--  Скроллбар: ширина/opacity/цвет ползунка переключаются МГНОВЕННО под lite.
           Стиль перекрывает Transitions из ControlTheme ползунка (Style > ControlTheme).  -->
     <Style Selector=":is(Window).lite ScrollBar /template/ Thumb#thumb">
+        <Setter Property="Transitions">
+            <Transitions />
+        </Setter>
+    </Style>
+
+    <!--  Строка настроек: press-scale 0.98 мгновенно под lite (паритет ServerRow).  -->
+    <Style Selector=":is(Window).lite Border.SettingRow">
+        <Setter Property="Transitions">
+            <Transitions />
+        </Setter>
+    </Style>
+
+    <!--  iOS-тумблер (P0-фикс): его переходы трека/кнопки/заливки живут ВНУТРИ шаблона
+          ControlTheme, поэтому оконный gate «:is(Window).lite ToggleButton» их НЕ достаёт
+          (он гасит Transitions самого контрола, а не его template-children). Гасим переходы
+          прямо на частях шаблона — под lite тумблер СНАПает без хода кнопки и кроссфейда трека.
+          Селектор бьёт по любому ToggleSwitch с iOS-шаблоном (части track/knobFill только у него).  -->
+    <Style Selector=":is(Window).lite ToggleSwitch /template/ Border#track">
+        <Setter Property="Transitions">
+            <Transitions />
+        </Setter>
+    </Style>
+    <Style Selector=":is(Window).lite ToggleSwitch /template/ Panel#PART_SwitchKnob">
+        <Setter Property="Transitions">
+            <Transitions />
+        </Setter>
+    </Style>
+    <Style Selector=":is(Window).lite ToggleSwitch /template/ Ellipse#knobFill">
         <Setter Property="Transitions">
             <Transitions />
         </Setter>

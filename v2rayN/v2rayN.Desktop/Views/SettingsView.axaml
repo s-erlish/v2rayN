@@ -39,6 +39,8 @@
         <StreamGeometry x:Key="Geo.Set.Fragment">M469.2,802.1l-81.7,-24.6L554.8,221.9l81.7,24.6L469.2,802.1zM362.7,654.5l-124.7,-141.7 124.8,-143.5 -64.4,-56 -173.8,199.8 174,197.7 64.1,-56.3zM899.4,513.1l-173.8,-199.8 -64.4,56 124.8,143.5 -124.7,141.7 64.1,56.4 174,-197.7z</StreamGeometry>
         <!--  Шеврон-вправо (ic_chevron_right)  -->
         <StreamGeometry x:Key="Geo.Set.Chevron">M8.6,4.6L7.2,6l6,6l-6,6l1.4,1.4L16,12z</StreamGeometry>
+        <!--  Развернуть (unfold_more) — двойная стрелка вверх/вниз: «значение циклится здесь».  -->
+        <StreamGeometry x:Key="Geo.Set.UnfoldMore">M12,5.83 15.17,9 16.58,7.59 12,3 7.41,7.59 8.83,9 12,5.83z M12,18.17 8.83,15 7.41,16.41 12,21 16.59,16.41 15.17,15 12,18.17z</StreamGeometry>
         <!--  Масштаб / размер интерфейса (format_size — большая «A» и маленькая рядом)  -->
         <StreamGeometry x:Key="Geo.Set.Scale">M9,4v3h5v12h3V7h5V4H9zM3,12h3v7h3v-7h3V9H3v3z</StreamGeometry>
         <!--  Палитра (ic_palette_24dp)  -->
@@ -134,27 +136,8 @@
     </UserControl.Resources>
 
     <UserControl.Styles>
-        <!--  Плитка green: кисть Brush.Tile.Green есть глобально, но класса Border.Tile.Green
-              в GlobalStyles НЕТ — добавляем локально (флаг в отчёте: продвинуть в GlobalStyles).  -->
-        <Style Selector="Border.Tile.Green">
-            <Setter Property="Background" Value="{DynamicResource Brush.Tile.Green}" />
-        </Style>
-
-        <!--  Строка настроек (setting row): minHeight 56, паддинг 16/12, прямоугольный
-              hover-ЗАТЕМНЕНИЕ (Brush.Hover) внутри скруглённой карты (карта клипует углы) —
-              единый жест наведения с Home/аккаунтом/навигацией (не подъём к SurfaceHigh).  -->
-        <Style Selector="Border.SettingRow">
-            <Setter Property="MinHeight" Value="{DynamicResource Size.Row}" />
-            <Setter Property="Padding" Value="16,12" />
-            <Setter Property="Background" Value="Transparent" />
-            <!--  Hover мгновенный (без BrushTransition на Background): при прокрутке колесом
-                  подсвечивается ровно одна строка, а не две «затухающих» одновременно.  -->
-        </Style>
-        <Style Selector="Border.SettingRow:pointerover">
-            <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
-        </Style>
-
-        <!--  Поле ввода локального прокси: одна высота 44, recessed SurfaceHigh, синий каретка.  -->
+        <!--  Border.SettingRow (база + hover + press-scale + focus-кольцо + lite-gate) продвинут в
+              GlobalStyles (P2). Здесь остаются только строко-специфичные потомки-селекторы.  -->
 
         <!--  Разделитель 1px, инсет слева 72 (16 паддинг + 40 плитка + 16 отступ).  -->
         <Style Selector="Border.SettingDivider">
@@ -171,8 +154,20 @@
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
 
-        <!--  Шеврон 18, tint OnSurfaceVariant, отступ слева 4.  -->
+        <!--  Шеврон 18, tint OnSurfaceVariant, отступ слева 4. ТОЛЬКО для строк-НАВИГАЦИЙ
+              (тап открывает суб-страницу) и раскрытия локального прокси (вращается 0↔90).  -->
         <Style Selector="PathIcon.Chevron">
+            <Setter Property="Width" Value="18" />
+            <Setter Property="Height" Value="18" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="4,0,0,0" />
+        </Style>
+
+        <!--  Unfold (unfold_more) 18, tint OnSurfaceVariant — честный аффорданс «значение меняется
+              ЗДЕСЬ» для строк с циклом значения ≥3 (Язык/Автообновление/Число Mux/Масштаб). НЕ шеврон:
+              шеврон = «уходит вперёд на суб-страницу», а эти строки продвигают значение на месте.  -->
+        <Style Selector="PathIcon.Unfold">
             <Setter Property="Width" Value="18" />
             <Setter Property="Height" Value="18" />
             <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
@@ -205,10 +200,15 @@
             <Setter Property="MaxWidth" Value="150" />
         </Style>
 
-        <!--  iOS-тумблер строки: тема применяется в разметке; здесь только отступ.  -->
+        <!--  iOS-тумблер строки: тема применяется в разметке; здесь отступ + снятие фокуса.
+              Focusable/IsTabStop=False — таб-стоп и Enter/Space принадлежат самой СТРОКЕ (56dp),
+              иначе на каждую тумблер-строку было бы два стопа (строка + тумблер). Мышь по тумблеру
+              работает как прежде (переключает напрямую, guard OriginatedInToggle гасит двойной ход).  -->
         <Style Selector="ToggleSwitch.RowSwitch">
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="Margin" Value="8,0,0,0" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="IsTabStop" Value="False" />
         </Style>
     </UserControl.Styles>
 
@@ -223,15 +223,16 @@
             <TextBlock Classes="SectionHeader SettingsSection" Text="{loc:T Settings_SecConnection}" />
 
             <Border
-                Margin="16,0"
+                Margin="16,0,16,8"
                 Classes="Card"
                 ClipToBounds="True"
                 Padding="0">
                 <StackPanel>
 
-                    <!--  Режим → TUN  -->
-                    <Border x:Name="RowMode" Classes="SettingRow">
-                        <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                    <!--  Режим → инлайн-сегмент TUN / Прокси. ЕДИНСТВЕННАЯ синяя плитка-идентичность
+                          в списке (щит = ядро VPN-режима): один акцент, остальные плитки нейтральны.  -->
+                    <Border x:Name="RowMode" Classes="SettingRow segmentRow">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
                             <Border
                                 Grid.Column="0"
                                 Classes="Tile Blue"
@@ -243,19 +244,27 @@
                             </Border>
                             <TextBlock
                                 Grid.Column="1"
-                                Margin="16,0,0,0"
+                                Margin="16,0,8,0"
                                 VerticalAlignment="Center"
                                 Classes="Body"
                                 Text="{loc:T Settings_Mode}" />
-                            <TextBlock
-                                x:Name="ValueMode"
+                            <!--  2-состояния → сегмент: показывает ОБА варианта и текущий сразу; тап меняет
+                                  на месте (не навигация — потому нет шеврона). Single-select + отражение
+                                  состояния ведёт code-behind (клик по сегменту → Vm.SetTunMode).  -->
+                            <StackPanel
                                 Grid.Column="2"
-                                Classes="Subtitle RowValue"
-                                Text="{Binding ModeText}" />
-                            <PathIcon
-                                Grid.Column="3"
-                                Classes="Chevron"
-                                Data="{StaticResource Geo.Set.Chevron}" />
+                                VerticalAlignment="Center"
+                                Orientation="Horizontal"
+                                Spacing="6">
+                                <ToggleButton
+                                    x:Name="SegModeTun"
+                                    Classes="Segment"
+                                    Content="TUN" />
+                                <ToggleButton
+                                    x:Name="SegModeProxy"
+                                    Classes="Segment"
+                                    Content="{loc:T Settings_ModeProxy}" />
+                            </StackPanel>
                         </Grid>
                     </Border>
 
@@ -266,12 +275,12 @@
                         <Grid ColumnDefinitions="Auto,*,Auto,Auto">
                             <Border
                                 Grid.Column="0"
-                                Classes="Tile Orange"
+                                Classes="Tile"
                                 VerticalAlignment="Center">
                                 <PathIcon
                                     Classes="Glyph"
                                     Data="{StaticResource Geo.Set.Grid}"
-                                    Foreground="{DynamicResource Brush.Icon.Orange}" />
+                                    Foreground="{DynamicResource Brush.OnSurface}" />
                             </Border>
                             <TextBlock
                                 Grid.Column="1"
@@ -298,12 +307,12 @@
                         <Grid ColumnDefinitions="Auto,*,Auto,Auto">
                             <Border
                                 Grid.Column="0"
-                                Classes="Tile Green"
+                                Classes="Tile"
                                 VerticalAlignment="Center">
                                 <PathIcon
                                     Classes="Glyph"
                                     Data="{StaticResource Geo.Set.Globe}"
-                                    Foreground="{DynamicResource Brush.Green}" />
+                                    Foreground="{DynamicResource Brush.OnSurface}" />
                             </Border>
                             <StackPanel
                                 Grid.Column="1"
@@ -332,12 +341,12 @@
                         <Grid ColumnDefinitions="Auto,*,Auto,Auto">
                             <Border
                                 Grid.Column="0"
-                                Classes="Tile Green"
+                                Classes="Tile"
                                 VerticalAlignment="Center">
                                 <PathIcon
                                     Classes="Glyph"
                                     Data="{StaticResource Geo.Set.Globe}"
-                                    Foreground="{DynamicResource Brush.Green}" />
+                                    Foreground="{DynamicResource Brush.OnSurface}" />
                             </Border>
                             <StackPanel
                                 Grid.Column="1"
@@ -366,12 +375,12 @@
                         <Grid ColumnDefinitions="Auto,*,Auto,Auto">
                             <Border
                                 Grid.Column="0"
-                                Classes="Tile Purple"
+                                Classes="Tile"
                                 VerticalAlignment="Center">
                                 <PathIcon
                                     Classes="Glyph"
                                     Data="{StaticResource Geo.Set.Privacy}"
-                                    Foreground="{DynamicResource Brush.Accent}" />
+                                    Foreground="{DynamicResource Brush.OnSurface}" />
                             </Border>
                             <TextBlock
                                 Grid.Column="1"
@@ -398,12 +407,12 @@
                         <Grid ColumnDefinitions="Auto,*,Auto,Auto">
                             <Border
                                 Grid.Column="0"
-                                Classes="Tile Yellow"
+                                Classes="Tile"
                                 VerticalAlignment="Center">
                                 <PathIcon
                                     Classes="Glyph"
                                     Data="{StaticResource Geo.Set.Ping}"
-                                    Foreground="{DynamicResource Brush.Icon.Yellow}" />
+                                    Foreground="{DynamicResource Brush.OnSurface}" />
                             </Border>
                             <TextBlock
                                 Grid.Column="1"
@@ -430,12 +439,12 @@
                         <Grid ColumnDefinitions="Auto,*,Auto,Auto">
                             <Border
                                 Grid.Column="0"
-                                Classes="Tile Red"
+                                Classes="Tile"
                                 VerticalAlignment="Center">
                                 <PathIcon
                                     Classes="Glyph"
                                     Data="{StaticResource Geo.Set.Router}"
-                                    Foreground="{DynamicResource Brush.Red}" />
+                                    Foreground="{DynamicResource Brush.OnSurface}" />
                             </Border>
                             <StackPanel
                                 Grid.Column="1"
@@ -513,7 +522,7 @@
             <TextBlock Classes="SectionHeader SettingsSection" Text="{loc:T Settings_SecBypass}" />
 
             <Border
-                Margin="16,0"
+                Margin="16,0,16,8"
                 Classes="Card"
                 ClipToBounds="True"
                 Padding="0">
@@ -524,12 +533,12 @@
                         <Grid ColumnDefinitions="Auto,*,Auto,Auto">
                             <Border
                                 Grid.Column="0"
-                                Classes="Tile Blue"
+                                Classes="Tile"
                                 VerticalAlignment="Center">
                                 <PathIcon
                                     Classes="Glyph"
                                     Data="{StaticResource Geo.Set.Mux}"
-                                    Foreground="{DynamicResource Brush.Accent}" />
+                                    Foreground="{DynamicResource Brush.OnSurface}" />
                             </Border>
                             <StackPanel
                                 Grid.Column="1"
@@ -561,12 +570,12 @@
                         <Grid ColumnDefinitions="Auto,*,Auto,Auto">
                             <Border
                                 Grid.Column="0"
-                                Classes="Tile Blue"
+                                Classes="Tile"
                                 VerticalAlignment="Center">
                                 <PathIcon
                                     Classes="Glyph"
                                     Data="{StaticResource Geo.Set.Speed}"
-                                    Foreground="{DynamicResource Brush.Accent}" />
+                                    Foreground="{DynamicResource Brush.OnSurface}" />
                             </Border>
                             <TextBlock
                                 Grid.Column="1"
@@ -581,8 +590,8 @@
                                 Text="{Binding MuxConcurrencyText}" />
                             <PathIcon
                                 Grid.Column="3"
-                                Classes="Chevron"
-                                Data="{StaticResource Geo.Set.Chevron}" />
+                                Classes="Unfold"
+                                Data="{StaticResource Geo.Set.UnfoldMore}" />
                         </Grid>
                     </Border>
 
@@ -596,12 +605,12 @@
                         <Grid ColumnDefinitions="Auto,*,Auto,Auto">
                             <Border
                                 Grid.Column="0"
-                                Classes="Tile Purple"
+                                Classes="Tile"
                                 VerticalAlignment="Center">
                                 <PathIcon
                                     Classes="Glyph"
                                     Data="{StaticResource Geo.Set.Fragment}"
-                                    Foreground="{DynamicResource Brush.Accent}" />
+                                    Foreground="{DynamicResource Brush.OnSurface}" />
                             </Border>
                             <StackPanel
                                 Grid.Column="1"
@@ -632,7 +641,7 @@
             <TextBlock Classes="SectionHeader SettingsSection" Text="{loc:T Settings_SecPerformance}" />
 
             <Border
-                Margin="16,0"
+                Margin="16,0,16,8"
                 Classes="Card"
                 ClipToBounds="True"
                 Padding="0">
@@ -643,12 +652,12 @@
                         <Grid ColumnDefinitions="Auto,*,Auto,Auto">
                             <Border
                                 Grid.Column="0"
-                                Classes="Tile Yellow"
+                                Classes="Tile"
                                 VerticalAlignment="Center">
                                 <PathIcon
                                     Classes="Glyph"
                                     Data="{StaticResource Geo.Set.Speed}"
-                                    Foreground="{DynamicResource Brush.Icon.Yellow}" />
+                                    Foreground="{DynamicResource Brush.OnSurface}" />
                             </Border>
                             <StackPanel
                                 Grid.Column="1"
@@ -677,39 +686,46 @@
             <TextBlock Classes="SectionHeader SettingsSection" Text="{loc:T Settings_SecInterface}" />
 
             <Border
-                Margin="16,0"
+                Margin="16,0,16,8"
                 Classes="Card"
                 ClipToBounds="True"
                 Padding="0">
                 <StackPanel>
 
-                    <!--  Оформление → переключение темы (тап циклит значение, применяется вживую)  -->
-                    <Border x:Name="RowAppearance" Classes="SettingRow">
-                        <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                    <!--  Оформление → инлайн-сегмент Тёмная / Светлая. Тап по сегменту применяет базовую
+                          тему вживую; тот же тап-поинт задаёт origin theme-flood (радиальная заливка новой
+                          темы из точки нажатия, 520мс) — поэтому здесь НЕТ конкурирующей value-анимации.  -->
+                    <Border x:Name="RowAppearance" Classes="SettingRow segmentRow">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
                             <Border
                                 Grid.Column="0"
-                                Classes="Tile Purple"
+                                Classes="Tile"
                                 VerticalAlignment="Center">
                                 <PathIcon
                                     Classes="Glyph"
                                     Data="{StaticResource Geo.Set.Palette}"
-                                    Foreground="{DynamicResource Brush.Accent}" />
+                                    Foreground="{DynamicResource Brush.OnSurface}" />
                             </Border>
                             <TextBlock
                                 Grid.Column="1"
-                                Margin="16,0,0,0"
+                                Margin="16,0,8,0"
                                 VerticalAlignment="Center"
                                 Classes="Body"
                                 Text="{loc:T Settings_Appearance}" />
-                            <TextBlock
-                                x:Name="ValueAppearance"
+                            <StackPanel
                                 Grid.Column="2"
-                                Classes="Subtitle RowValue"
-                                Text="{Binding AppearanceText}" />
-                            <PathIcon
-                                Grid.Column="3"
-                                Classes="Chevron"
-                                Data="{StaticResource Geo.Set.Chevron}" />
+                                VerticalAlignment="Center"
+                                Orientation="Horizontal"
+                                Spacing="6">
+                                <ToggleButton
+                                    x:Name="SegThemeDark"
+                                    Classes="Segment"
+                                    Content="{loc:T Settings_ThemeDark}" />
+                                <ToggleButton
+                                    x:Name="SegThemeLight"
+                                    Classes="Segment"
+                                    Content="{loc:T Settings_ThemeLight}" />
+                            </StackPanel>
                         </Grid>
                     </Border>
 
@@ -722,12 +738,12 @@
                         <Grid ColumnDefinitions="Auto,*,Auto,Auto">
                             <Border
                                 Grid.Column="0"
-                                Classes="Tile Purple"
+                                Classes="Tile"
                                 VerticalAlignment="Center">
                                 <PathIcon
                                     Classes="Glyph"
                                     Data="{StaticResource Geo.Set.Moon}"
-                                    Foreground="{DynamicResource Brush.Accent}" />
+                                    Foreground="{DynamicResource Brush.OnSurface}" />
                             </Border>
                             <StackPanel
                                 Grid.Column="1"
@@ -761,12 +777,12 @@
                         <Grid ColumnDefinitions="Auto,*,Auto,Auto">
                             <Border
                                 Grid.Column="0"
-                                Classes="Tile Blue"
+                                Classes="Tile"
                                 VerticalAlignment="Center">
                                 <PathIcon
                                     Classes="Glyph"
                                     Data="{StaticResource Geo.Set.Scale}"
-                                    Foreground="{DynamicResource Brush.Accent}" />
+                                    Foreground="{DynamicResource Brush.OnSurface}" />
                             </Border>
                             <TextBlock
                                 Grid.Column="1"
@@ -781,8 +797,8 @@
                                 Text="{Binding UiScaleText}" />
                             <PathIcon
                                 Grid.Column="3"
-                                Classes="Chevron"
-                                Data="{StaticResource Geo.Set.Chevron}" />
+                                Classes="Unfold"
+                                Data="{StaticResource Geo.Set.UnfoldMore}" />
                         </Grid>
                     </Border>
 
@@ -793,12 +809,12 @@
                         <Grid ColumnDefinitions="Auto,*,Auto,Auto">
                             <Border
                                 Grid.Column="0"
-                                Classes="Tile Green"
+                                Classes="Tile"
                                 VerticalAlignment="Center">
                                 <PathIcon
                                     Classes="Glyph"
                                     Data="{StaticResource Geo.Set.Globe}"
-                                    Foreground="{DynamicResource Brush.Green}" />
+                                    Foreground="{DynamicResource Brush.OnSurface}" />
                             </Border>
                             <TextBlock
                                 Grid.Column="1"
@@ -813,8 +829,8 @@
                                 Text="{Binding LanguageText}" />
                             <PathIcon
                                 Grid.Column="3"
-                                Classes="Chevron"
-                                Data="{StaticResource Geo.Set.Chevron}" />
+                                Classes="Unfold"
+                                Data="{StaticResource Geo.Set.UnfoldMore}" />
                         </Grid>
                     </Border>
 
@@ -825,12 +841,12 @@
                         <Grid ColumnDefinitions="Auto,*,Auto,Auto">
                             <Border
                                 Grid.Column="0"
-                                Classes="Tile Orange"
+                                Classes="Tile"
                                 VerticalAlignment="Center">
                                 <PathIcon
                                     Classes="Glyph"
                                     Data="{StaticResource Geo.Set.Power}"
-                                    Foreground="{DynamicResource Brush.Icon.Orange}" />
+                                    Foreground="{DynamicResource Brush.OnSurface}" />
                             </Border>
                             <StackPanel
                                 Grid.Column="1"
@@ -859,7 +875,7 @@
             <TextBlock Classes="SectionHeader SettingsSection" Text="{loc:T Settings_SecSubscription}" />
 
             <Border
-                Margin="16,0"
+                Margin="16,0,16,8"
                 Classes="Card"
                 ClipToBounds="True"
                 Padding="0">
@@ -870,12 +886,12 @@
                         <Grid ColumnDefinitions="Auto,*,Auto,Auto">
                             <Border
                                 Grid.Column="0"
-                                Classes="Tile Blue"
+                                Classes="Tile"
                                 VerticalAlignment="Center">
                                 <PathIcon
                                     Classes="Glyph"
                                     Data="{StaticResource Geo.Set.Refresh}"
-                                    Foreground="{DynamicResource Brush.Accent}" />
+                                    Foreground="{DynamicResource Brush.OnSurface}" />
                             </Border>
                             <TextBlock
                                 Grid.Column="1"
@@ -890,8 +906,8 @@
                                 Text="{Binding SubAutoUpdateText}" />
                             <PathIcon
                                 Grid.Column="3"
-                                Classes="Chevron"
-                                Data="{StaticResource Geo.Set.Chevron}" />
+                                Classes="Unfold"
+                                Data="{StaticResource Geo.Set.UnfoldMore}" />
                         </Grid>
                     </Border>
 
@@ -902,12 +918,12 @@
                         <Grid ColumnDefinitions="Auto,*,Auto,Auto">
                             <Border
                                 Grid.Column="0"
-                                Classes="Tile Purple"
+                                Classes="Tile"
                                 VerticalAlignment="Center">
                                 <PathIcon
                                     Classes="Glyph"
                                     Data="{StaticResource Geo.Set.Routing}"
-                                    Foreground="{DynamicResource Brush.Accent}" />
+                                    Foreground="{DynamicResource Brush.OnSurface}" />
                             </Border>
                             <TextBlock
                                 Grid.Column="1"
@@ -929,12 +945,12 @@
                         <Grid ColumnDefinitions="Auto,*,Auto">
                             <Border
                                 Grid.Column="0"
-                                Classes="Tile Green"
+                                Classes="Tile"
                                 VerticalAlignment="Center">
                                 <PathIcon
                                     Classes="Glyph"
                                     Data="{StaticResource Geo.Set.File}"
-                                    Foreground="{DynamicResource Brush.Green}" />
+                                    Foreground="{DynamicResource Brush.OnSurface}" />
                             </Border>
                             <TextBlock
                                 Grid.Column="1"
@@ -956,7 +972,7 @@
             <TextBlock Classes="SectionHeader SettingsSection" Text="{loc:T Settings_About}" />
 
             <Border
-                Margin="16,0"
+                Margin="16,0,16,8"
                 Classes="Card"
                 ClipToBounds="True"
                 Padding="0">
@@ -967,12 +983,12 @@
                         <Grid ColumnDefinitions="Auto,*,Auto,Auto">
                             <Border
                                 Grid.Column="0"
-                                Classes="Tile Blue"
+                                Classes="Tile"
                                 VerticalAlignment="Center">
                                 <PathIcon
                                     Classes="Glyph"
                                     Data="{StaticResource Geo.Set.About}"
-                                    Foreground="{DynamicResource Brush.Accent}" />
+                                    Foreground="{DynamicResource Brush.OnSurface}" />
                             </Border>
                             <TextBlock
                                 Grid.Column="1"
@@ -999,12 +1015,12 @@
                         <Grid ColumnDefinitions="Auto,*,Auto">
                             <Border
                                 Grid.Column="0"
-                                Classes="Tile Green"
+                                Classes="Tile"
                                 VerticalAlignment="Center">
                                 <PathIcon
                                     Classes="Glyph"
                                     Data="{StaticResource Geo.Set.Backup}"
-                                    Foreground="{DynamicResource Brush.Green}" />
+                                    Foreground="{DynamicResource Brush.OnSurface}" />
                             </Border>
                             <TextBlock
                                 Grid.Column="1"
@@ -1026,12 +1042,12 @@
                         <Grid ColumnDefinitions="Auto,*,Auto">
                             <Border
                                 Grid.Column="0"
-                                Classes="Tile Purple"
+                                Classes="Tile"
                                 VerticalAlignment="Center">
                                 <PathIcon
                                     Classes="Glyph"
                                     Data="{StaticResource Geo.Set.UrlScheme}"
-                                    Foreground="{DynamicResource Brush.Accent}" />
+                                    Foreground="{DynamicResource Brush.OnSurface}" />
                             </Border>
                             <StackPanel
                                 Grid.Column="1"

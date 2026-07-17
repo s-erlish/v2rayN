@@ -6,7 +6,7 @@ namespace v2rayN.Desktop.ViewModels;
 /// reuses the shared engine view-models, mirroring the reference <c>OptionSettingViewModel</c> /
 /// <c>StatusBarViewModel</c> / <c>ThemeSettingViewModel</c>:
 ///
-///   • TUN mode        → row tap toggles <c>TunModeItem.EnableTun</c> (passive — see <see cref="ToggleTun"/>);
+///   • TUN mode        → inline segment sets <c>TunModeItem.EnableTun</c> (passive — see <see cref="SetTunMode"/>);
 ///   • bypass-LAN      → <c>Inbound[0].AllowLANConn</c>          (== OptionSettingViewModel.AllowLANConn);
 ///   • IPv6            → <c>TunModeItem.EnableIPv6Address</c>    (== OptionSettingViewModel.TunEnableIPv6Address);
 ///   • Mux             → <c>Mux4SboxItem.Protocol</c> on/off     (== OptionSettingViewModel.Mux4SboxProtocol);
@@ -73,6 +73,15 @@ public class SettingsViewModel : MyReactiveObject
     #region One-way display values (read from the real config)
 
     [Reactive] public string ModeText { get; set; } = string.Empty;
+
+    /// <summary>Инлайн-сегмент «Режим»: true = TUN, false = Прокси. Держится в синхроне с общим
+    /// <c>StatusBarViewModel.EnableTun</c> (подписка ниже) — сегмент отражает и внешние смены TUN.</summary>
+    [Reactive] public bool IsTunMode { get; set; }
+
+    /// <summary>Инлайн-сегмент «Оформление»: true = Светлая, false = Тёмная базовая тема.
+    /// Независим от отдельного монохром-оверлея (<see cref="BlackTheme"/>).</summary>
+    [Reactive] public bool IsLightTheme { get; set; }
+
     [Reactive] public string PerAppText { get; set; } = string.Empty;
     [Reactive] public string DnsText { get; set; } = string.Empty;
     [Reactive] public string PingMethodText { get; set; } = string.Empty;
@@ -97,11 +106,15 @@ public class SettingsViewModel : MyReactiveObject
         LoadFromConfig();
         WirePersistence();
 
-        // Mode row reflects the shared TUN state (single source of truth). Its tap flips the config
-        // directly (see ToggleTun) — passively, never routing through the reload/UAC path.
+        // Mode row reflects the shared TUN state (single source of truth). Its segment sets the config
+        // directly (see SetTunMode) — passively, never routing through the reload/UAC path.
         StatusBarViewModel.Instance
             .WhenAnyValue(x => x.EnableTun)
-            .Subscribe(tun => ModeText = tun ? "TUN" : Common.L.T("Settings_ModeProxy"));
+            .Subscribe(tun =>
+            {
+                ModeText = tun ? "TUN" : Common.L.T("Settings_ModeProxy");
+                IsTunMode = tun; // keep the inline Режим segment in sync with external TUN changes
+            });
 
         // Строка «Масштаб интерфейса» держится в синхроне с оболочкой: когда пользователь меняет zoom
         // горячими клавишами (Ctrl +/Ctrl −/Ctrl 0 в MainWindow), UiScaleState.Changed обновляет подпись
@@ -117,6 +130,8 @@ public class SettingsViewModel : MyReactiveObject
     {
         _designMode = true;
         ModeText = "TUN";
+        IsTunMode = true;
+        IsLightTheme = false;
         PerAppText = "Выкл";
         DnsText = "Cloudflare";
         PingMethodText = "Реальная";
@@ -155,6 +170,8 @@ public class SettingsViewModel : MyReactiveObject
         ProxyPass = inbound?.Pass ?? string.Empty;
 
         ModeText = StatusBarViewModel.Instance.EnableTun ? "TUN" : Common.L.T("Settings_ModeProxy");
+        IsTunMode = StatusBarViewModel.Instance.EnableTun;
+        IsLightTheme = _config.UiItem.CurrentTheme == nameof(ETheme.Light);
         PerAppText = ResolvePerAppText();
         DnsText = ResolveDnsText();
         PingMethodText = ResolvePingMethodText();
@@ -295,21 +312,22 @@ public class SettingsViewModel : MyReactiveObject
     #region Row actions (invoked from the view code-behind on tap)
 
     /// <summary>
-    /// Режим row: flip TUN ↔ Прокси as a PASSIVE setting. Consumer-VPN OFF model — a settings tap must
-    /// never start the core or relaunch the app. So we do NOT route through
-    /// <see cref="StatusBarViewModel.EnableTun"/> (whose <c>DoEnableTun</c> unconditionally reloads and,
-    /// on non-admin Windows, calls <c>RebootAsAdmin()</c> with a UAC prompt). Instead we write the real
-    /// config directly, persist it, and re-apply live ONLY when the core is already running. If TUN needs
-    /// admin rights, that escalation belongs to the connect action, not this row.
+    /// Режим-сегмент: set TUN vs Прокси to a SPECIFIC value (the segment picks one, it does not blind-
+    /// toggle). PASSIVE setting — consumer-VPN OFF model: a settings tap must never start the core or
+    /// relaunch the app. So we do NOT route through <see cref="StatusBarViewModel.EnableTun"/>'s
+    /// <c>DoEnableTun</c> (which unconditionally reloads and, on non-admin Windows, calls
+    /// <c>RebootAsAdmin()</c> with a UAC prompt). Instead we write the real config directly FIRST, persist,
+    /// then mirror the shared VM (DoEnableTun early-returns because config already equals the new value),
+    /// and re-apply live ONLY when the core is already running. Idempotent: no-op if already at
+    /// <paramref name="enable"/>. TUN admin escalation belongs to the connect action, not this row.
     /// </summary>
-    public async Task ToggleTun()
+    public async Task SetTunMode(bool enable)
     {
-        if (_designMode)
+        if (_designMode || _config.TunModeItem.EnableTun == enable)
         {
             return;
         }
 
-        var enable = !_config.TunModeItem.EnableTun;
         _config.TunModeItem.EnableTun = enable;
         await ConfigHandler.SaveConfig(_config);
 
@@ -317,6 +335,7 @@ public class SettingsViewModel : MyReactiveObject
         // early-returns because _config.TunModeItem.EnableTun already equals the value we assign here.
         StatusBarViewModel.Instance.EnableTun = enable;
         ModeText = enable ? "TUN" : Common.L.T("Settings_ModeProxy");
+        IsTunMode = enable;
 
         // Re-apply live only if the core is already up; a disconnected app stays disconnected.
         if (IsCoreRunning())
@@ -423,22 +442,30 @@ public class SettingsViewModel : MyReactiveObject
         RefreshDisplayValues();
     }
 
-    /// <summary>Оформление row: toggle Тёмная ↔ Светлая base variant. Persists <c>UiItem.CurrentTheme</c>
-    /// and applies it live through <c>App.ApplyTheme</c> — which also re-composits the separate
-    /// «Чёрная (AMOLED)» overlay if it is on, so switching base never drops the black overlay. Both
-    /// base variants carry full Incy light/dark tokens (GlobalResources ThemeDictionaries).</summary>
-    public async Task CycleAppearanceAsync()
+    /// <summary>Оформление-сегмент: set a SPECIFIC base variant (Светлая when <paramref name="light"/>,
+    /// иначе Тёмная). Persists <c>UiItem.CurrentTheme</c> and applies it live through <c>App.ApplyTheme</c>
+    /// — which also re-composits the separate «Монохром» overlay if it is on, so switching base never drops
+    /// the overlay. The theme-flood (radial reveal of the new theme from the tapped point, 520ms) IS the
+    /// feedback; App.ApplyTheme routes through it. Idempotent: no-op if already at the target variant.
+    /// Both base variants carry full Incy light/dark tokens (GlobalResources ThemeDictionaries).</summary>
+    public async Task SetAppearance(bool light)
     {
         if (_designMode)
         {
             return;
         }
 
-        var next = _config.UiItem.CurrentTheme == nameof(ETheme.Light) ? nameof(ETheme.Dark) : nameof(ETheme.Light);
-        _config.UiItem.CurrentTheme = next;
+        var target = light ? nameof(ETheme.Light) : nameof(ETheme.Dark);
+        if (_config.UiItem.CurrentTheme == target)
+        {
+            return;
+        }
+
+        _config.UiItem.CurrentTheme = target;
         await ConfigHandler.SaveConfig(_config);
-        v2rayN.Desktop.App.ApplyTheme(next, _config.UiItem.BlackTheme);
+        v2rayN.Desktop.App.ApplyTheme(target, _config.UiItem.BlackTheme);
         AppearanceText = ResolveThemeText();
+        IsLightTheme = light;
     }
 
     /// <summary>Масштаб интерфейса row: цикл по пресетам 80…200% (следующий СТРОГО больше текущего, с
@@ -478,11 +505,13 @@ public class SettingsViewModel : MyReactiveObject
             return;
         }
         ModeText = StatusBarViewModel.Instance.EnableTun ? "TUN" : Common.L.T("Settings_ModeProxy");
+        IsTunMode = StatusBarViewModel.Instance.EnableTun;
         PerAppText = ResolvePerAppText();
         DnsText = ResolveDnsText();
         PingMethodText = ResolvePingMethodText();
         SubAutoUpdateText = ResolveAutoUpdateText();
         AppearanceText = ResolveThemeText();
+        IsLightTheme = _config.UiItem.CurrentTheme == nameof(ETheme.Light);
         LanguageText = ResolveLanguageText();
     }
 

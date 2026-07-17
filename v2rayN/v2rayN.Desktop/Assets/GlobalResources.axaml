@@ -336,9 +336,10 @@
                         Height="32"
                         Background="{DynamicResource Brush.SurfaceHighest}"
                         CornerRadius="16">
+                    <!--  Трек-цвет off↔on = двусторонний кроссфейд Ease.Standard 220мс (был линейный).  -->
                     <Border.Transitions>
                         <Transitions>
-                            <BrushTransition Property="Background" Duration="0:0:0.22" />
+                            <BrushTransition Property="Background" Duration="0:0:0.22" Easing="{StaticResource Ease.Standard}" />
                         </Transitions>
                     </Border.Transitions>
                     <!--  PART_MovingKnobs / PART_SwitchKnob — обязательные части ToggleSwitch (AVLN2205).  -->
@@ -348,12 +349,29 @@
                                Height="26"
                                HorizontalAlignment="Left"
                                VerticalAlignment="Center">
+                            <!--  Ход кнопки = Ease.OutQuint 220мс (уверенное оседание, без пружины; чуть
+                                  ведёт цвет трека). Трансформ движения (translateX) живёт на этой панели.  -->
                             <Panel.Transitions>
                                 <Transitions>
-                                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.22" />
+                                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.22" Easing="{StaticResource Ease.OutQuint}" />
                                 </Transitions>
                             </Panel.Transitions>
-                            <Ellipse Width="26" Height="26" Fill="White" />
+                            <!--  Squash при нажатии масштабирует ТОЛЬКО заливку (knobFill), а не панель с
+                                  translateX — так сжатие не конфликтует с ходом кнопки. Волосяная 0.5px
+                                  обводка даёт кромку на светлом off-треке. Origin = центр (squash из центра).  -->
+                            <Ellipse x:Name="knobFill"
+                                     Width="26"
+                                     Height="26"
+                                     Fill="White"
+                                     RenderTransformOrigin="50%,50%"
+                                     Stroke="#22000000"
+                                     StrokeThickness="0.5">
+                                <Ellipse.Transitions>
+                                    <Transitions>
+                                        <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" Easing="{StaticResource Ease.OutQuart}" />
+                                    </Transitions>
+                                </Ellipse.Transitions>
+                            </Ellipse>
                         </Panel>
                     </Panel>
                 </Border>
@@ -364,6 +382,16 @@
         </Style>
         <Style Selector="^:checked /template/ Panel#PART_SwitchKnob">
             <Setter Property="RenderTransform" Value="translateX(20px)" />
+        </Style>
+        <!--  Press-squash кнопки (масштаб заливки 0.9 из центра) — тактильный отклик. Работает и в
+              off, и в on (translateX держит панель-родитель, здесь масштабируется только эллипс).  -->
+        <Style Selector="^:pressed /template/ Ellipse#knobFill">
+            <Setter Property="RenderTransform" Value="scale(0.9)" />
+        </Style>
+        <!--  Disabled: 0.38 (архетип; выключенных тумблеров в настройках сейчас нет). Ввод контрол
+              и так гасит по disabled, поэтому только визуальная прозрачность.  -->
+        <Style Selector="^:disabled">
+            <Setter Property="Opacity" Value="0.38" />
         </Style>
     </ControlTheme>
 
