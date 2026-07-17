@@ -163,7 +163,15 @@
         </Style>
     </UserControl.Styles>
 
-    <Grid Background="{DynamicResource Brush.Bg}" RowDefinitions="Auto,*">
+    <!--  Фон = радиальный Brush.HomeGradient (тот же, что у Онбординга): убирает шов «градиент→плоскость»
+          на push-переходе онбординг→вход, где общий щит-логотип служит элементом непрерывности — теперь
+          бренд-радиал держится под щитом на ОБОИХ экранах. Тема-словарный (dark/light/mono), все 3 темы
+          следуют. Бесшовный тулбар сохраняет собственный Brush.Bg-пол (глобальный SubToolbar), поэтому
+          радиал несёт тело скролла — где и стоит щит. Контраст на светлейшем стопе #1B2D50: подзаголовок/
+          поля (SurfaceVariant-заливка) / RedText-ошибки держат ≥4.5:1 (подзаголовок ≈4.6:1, как онбординг;
+          поля несут собственную заливку/рамку, ошибки — крупный RedText). Никакого glow/ring за щитом —
+          он бренд-марка, а не индикатор состояния (это язык connect-героя).  -->
+    <Grid Background="{DynamicResource Brush.HomeGradient}" RowDefinitions="Auto,*">
 
         <!--  ============ Бесшовный тулбар суб-страницы: «← Вход» ============  -->
         <Border Grid.Row="0" Classes="SubToolbar">
@@ -204,14 +212,18 @@
                         HorizontalAlignment="Stretch"
                         RenderTransformOrigin="50%,50%">
 
-                        <!--  Фирменный щит-логотип: плитка 64, радиус 20, фон Tile.Blue, глиф Accent 30.  -->
+                        <!--  Фирменный щит-логотип: плитка 64, радиус 20, фон Tile.Blue, глиф Accent 30.
+                              RenderTransformOrigin 50%,50% — чтобы entrance scale-in 0.90→1 (§3b, общий с
+                              connect-героем) центрировался, а не «проваливался» в угол.  -->
                         <Border
+                            x:Name="ShieldTile"
                             Width="64"
                             Height="64"
                             Margin="0,16,0,0"
                             HorizontalAlignment="Center"
                             Background="{DynamicResource Brush.Tile.Blue}"
-                            CornerRadius="{DynamicResource Radius.Card}">
+                            CornerRadius="{DynamicResource Radius.Card}"
+                            RenderTransformOrigin="50%,50%">
                             <PathIcon
                                 Width="30"
                                 Height="30"

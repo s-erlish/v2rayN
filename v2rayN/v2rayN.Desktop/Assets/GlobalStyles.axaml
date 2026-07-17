@@ -355,9 +355,11 @@
         <Setter Property="FontSize" Value="15" />
         <Setter Property="HorizontalContentAlignment" Value="Center" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
+        <!--  Press-feedback: scale(0.97) с Ease.OutQuart @120мс (был линейный ramp 90мс). OutQuart
+              даёт уверенный decelerate в обе стороны — «кусает» решительно, оседает мягко, без bounce.  -->
         <Setter Property="Transitions">
             <Transitions>
-                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" />
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" Easing="{StaticResource Ease.OutQuart}" />
             </Transitions>
         </Setter>
     </Style>
@@ -376,6 +378,18 @@
           «Пополнить» (TopUpButton), теперь ГЛОБАЛЬНО. Покой (Brush.Accent) и текст
           (Brush.OnAccent) не трогаем; press-scale 0.97 остаётся выше. Едино в dark/
           light/mono (значения — прямой затемнённый акцент, не тема-зависимы).  -->
+    <!--  Ховер-тинт CTA: плавный кроссфейд фона 150мс Ease.Standard (был жёсткий флип #4C8DFF→#3D7EF0).
+          Только цвет PART_ContentPresenter — press-затемнение (#3877E0) читается поверх. Аттачится
+          ТОЛЬКО не под .lite (селектор :not(.lite), приём скроллбара/спиннера): под lite ховер
+          мгновенный (0 движения), не полагаясь на Button-level гашение, которое до template-части не
+          достаёт. Едино dark/light/mono (значения — прямой затемнённый акцент).  -->
+    <Style Selector=":is(Window):not(.lite) Button.Primary /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.15" Easing="{StaticResource Ease.Standard}" />
+            </Transitions>
+        </Setter>
+    </Style>
     <Style Selector="Button.Primary:pointerover /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="#3D7EF0" />
     </Style>
@@ -404,9 +418,10 @@
         <Setter Property="FontSize" Value="15" />
         <Setter Property="HorizontalContentAlignment" Value="Center" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
+        <!--  Press-feedback: тот же Ease.OutQuart @120мс, что у Primary (был линейный 90мс).  -->
         <Setter Property="Transitions">
             <Transitions>
-                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" />
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" Easing="{StaticResource Ease.OutQuart}" />
             </Transitions>
         </Setter>
     </Style>
@@ -415,6 +430,15 @@
     </Style>
     <Style Selector="Button.Tonal:disabled">
         <Setter Property="Opacity" Value="0.38" />
+    </Style>
+    <!--  Ховер-тинт тонали: тот же 150мс Ease.Standard кроссфейд Brush.Hover (был жёсткий флип).
+          Аттачится только не под .lite (см. Primary выше); press-тинт тот же Brush.Hover поверх.  -->
+    <Style Selector=":is(Window):not(.lite) Button.Tonal /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.15" Easing="{StaticResource Ease.Standard}" />
+            </Transitions>
+        </Setter>
     </Style>
     <!--  Тот же фикс: без переопределения :pointerover тема Semi подменяла бы фон
           тонали своим токеном (СВЕТЛЕЕ / уход в акцент). Затемняем СУБТИЛЬНО тем же
@@ -447,7 +471,7 @@
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="Transitions">
             <Transitions>
-                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" />
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" Easing="{StaticResource Ease.OutQuart}" />
             </Transitions>
         </Setter>
     </Style>
@@ -492,7 +516,7 @@
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Transitions">
             <Transitions>
-                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" />
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" Easing="{StaticResource Ease.OutQuart}" />
             </Transitions>
         </Setter>
     </Style>
@@ -876,9 +900,10 @@
         <Setter Property="HorizontalContentAlignment" Value="Center" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="Cursor" Value="Hand" />
+        <!--  Press-feedback: тот же Ease.OutQuart @120мс, что у Primary/Tonal (был линейный 90мс).  -->
         <Setter Property="Transitions">
             <Transitions>
-                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" />
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" Easing="{StaticResource Ease.OutQuart}" />
             </Transitions>
         </Setter>
     </Style>
@@ -909,7 +934,7 @@
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="Transitions">
             <Transitions>
-                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" />
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" Easing="{StaticResource Ease.OutQuart}" />
             </Transitions>
         </Setter>
     </Style>

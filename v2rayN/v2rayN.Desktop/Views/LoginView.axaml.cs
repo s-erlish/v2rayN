@@ -853,22 +853,39 @@ public partial class LoginView : UserControl
 
     // ── Entrance-стаггер (§P2 9) ────────────────────────────────────────────
 
-    /// <summary>Стаггерит колонку метода сверху вниз: ≤6 групп (первые 5 по одной, хвост — вместе).</summary>
+    /// <summary>
+    /// Раскрывает колонку метода 4 АВТОРСКИМИ битами (не равномерный drip), паритет с онбордингом (§3a):
+    /// щит → идентичность → CTA Telegram+разделитель → форма входа (как одна группа). Щит (бит 1) —
+    /// scale 0.90→1 (§3b, общий с connect-героем); остальное — rise translateY 8→0. Итог ≈500мс.
+    /// </summary>
     private void PlayEntryStagger()
     {
         var children = MethodBlock.Children;
         for (var i = 0; i < children.Count; i++)
         {
-            // Полей/2FA/регистрации/ошибки — «одна группа» на 6-м слоте (fields count as one group).
-            var group = Math.Min(i, 5);
-            var delay = (int)(Motion.Dur.Stagger.TotalMilliseconds * group);
-            _ = PlayReveal((Control)children[i], delay);
+            var delay = BeatDelayMs(i);
+            var from = i == 0 ? _scale090 : _rise8;
+            var to = i == 0 ? _scale1 : _rise0;
+            _ = PlayReveal((Control)children[i], delay, from, to);
         }
     }
 
-    /// <summary>Раскрывает элемент: opacity 0→1 + translateY 8→0, 300мс OutQuint, с задержкой стаггера.
-    /// FillMode.None + восстановление базы — чтобы не затенять :pressed-scale кнопок.</summary>
-    private static async Task PlayReveal(Control el, int delayMs)
+    /// <summary>
+    /// Задержка entrance-бита по роли ребёнка MethodBlock (§3a). Порядок XAML: 0 щит; 1–2 идентичность
+    /// (заголовок + подзаголовок); 3–4 CTA Telegram + разделитель; 5+ форма входа (email/ошибка/пароль/
+    /// сайт/2FA/регистрация/строка ошибки) как ОДНА группа. Члены бита делят его задержку — 4 бита.
+    /// </summary>
+    private static int BeatDelayMs(int childIndex) => childIndex switch
+    {
+        0 => 0,          // бит 1 · щит-марка
+        1 or 2 => 60,    // бит 2 · идентичность
+        3 or 4 => 140,   // бит 3 · CTA Telegram + разделитель
+        _ => 200,        // бит 4 · форма входа как одна группа
+    };
+
+    /// <summary>Раскрывает элемент: opacity 0→1 + RenderTransform from→to, 300мс OutQuint, с задержкой
+    /// бита. FillMode.None + восстановление базы — чтобы не затенять :pressed-scale кнопок.</summary>
+    private static async Task PlayReveal(Control el, int delayMs, ITransform from, ITransform to)
     {
         el.Opacity = 0;
         var anim = new Animation
@@ -879,8 +896,8 @@ public partial class LoginView : UserControl
             FillMode = FillMode.None,
             Children =
             {
-                new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(Visual.OpacityProperty, 0d), new Setter(Visual.RenderTransformProperty, _rise8) } },
-                new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(Visual.OpacityProperty, 1d), new Setter(Visual.RenderTransformProperty, _rise0) } },
+                new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(Visual.OpacityProperty, 0d), new Setter(Visual.RenderTransformProperty, from) } },
+                new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(Visual.OpacityProperty, 1d), new Setter(Visual.RenderTransformProperty, to) } },
             },
         };
 

@@ -17,9 +17,10 @@ namespace v2rayN.Desktop.Views;
 /// сайт открывает форму email/пароля. Шелл скрыт, пока пусто, поэтому вход показываем оверлеем; «назад»
 /// возвращает к онбордингу.
 ///
-/// Движение (§6/P1): один хореографированный entrance-стаггер при первом показе — щит scale 0.92→1,
-/// остальное rise translateY 8→0 + fade, 300мс OutQuint, шаг 40мс сверху вниз (~620мс), затем ПОЛНАЯ
-/// статика (product-register: без ambient-петель). Императивно в code-behind, чтобы под reduced-motion
+/// Движение (§6/P1 + §3a/§3b P2): один хореографированный entrance при первом показе — 4 АВТОРСКИХ бита
+/// (щит → идентичность → «завести доступ» → «войти»), щит scale 0.90→1 (общий с connect-героем), остальное
+/// rise translateY 8→0 + fade, 300мс OutQuint, ≈500мс всего, затем ПОЛНАЯ статика (product-register: без
+/// ambient-петель; щит остаётся неподвижен — бренд-марка, а не индикатор). Императивно в code-behind, чтобы под reduced-motion
 /// (<see cref="MotionState.IsLite"/>) / preview (PREVIEW_VIEW) / дизайн-режимом сразу отдать
 /// полностью-видимый дефолт (reveal ОБЯЗАН улучшать уже-видимое; headless/preview не должен быть пустым).
 /// Хит-тест НИКОГДА не гейтится анимацией — кнопки кликабельны всё время (только opacity/transform).
@@ -30,7 +31,9 @@ public partial class OnboardingView : UserControl
     // LoginView). Масштаб щита центрируется по RenderTransformOrigin="50%,50%" плитки.
     private static readonly ITransform _rise8 = TransformOperations.Parse("translateY(8px)");
     private static readonly ITransform _rise0 = TransformOperations.Parse("translateY(0px)");
-    private static readonly ITransform _scale092 = TransformOperations.Parse("scale(0.92)");
+    // Щит въезжает scale 0.90→1 — единый scale-in-словарь с connect-героем (§3b): одна и та же марка,
+    // одно и то же семейство появления, но здесь БЕЗ последующего «дыхания» (бренд-марка, не индикатор).
+    private static readonly ITransform _scale090 = TransformOperations.Parse("scale(0.9)");
     private static readonly ITransform _scale1 = TransformOperations.Parse("scale(1)");
 
     // Колонка пред-скрыта в ctor под entrance-стаггер — стаггер ещё не сыгран.
@@ -116,20 +119,35 @@ public partial class OnboardingView : UserControl
     // ── Entrance-стаггер (§6) ────────────────────────────────────────────────
 
     /// <summary>
-    /// Раскрывает колонку сверху вниз: щит (первый) — scale 0.92→1, остальное — rise translateY 8→0;
-    /// оба + fade, 300мс OutQuint, шаг 40мс (Motion.Dur.Stagger). Один проход, затем статика.
+    /// Раскрывает колонку 4 АВТОРСКИМИ битами (не равномерный 40мс-drip): щит → идентичность →
+    /// «завести доступ» → «войти». Щит (бит 1) — scale 0.90→1; остальное — rise translateY 8→0; оба +
+    /// fade, 300мс OutQuint. Члены одного бита делят задержку бита (групповое появление читается как
+    /// смысловая единица). Итог ≈500мс (200 + 300), затем ПОЛНАЯ статика — без ambient-петель.
     /// </summary>
     private void PlayEntryStagger()
     {
         var children = Column.Children;
         for (var i = 0; i < children.Count; i++)
         {
-            var delay = (int)(Motion.Dur.Stagger.TotalMilliseconds * i);
-            var from = i == 0 ? _scale092 : _rise8;
+            var delay = BeatDelayMs(i);
+            var from = i == 0 ? _scale090 : _rise8;
             var to = i == 0 ? _scale1 : _rise0;
             _ = PlayReveal((Control)children[i], delay, from, to);
         }
     }
+
+    /// <summary>
+    /// Задержка entrance-бита по роли ребёнка колонки (§3a). Порядок XAML: 0 щит; 1–3 идентичность
+    /// (вордмарк + заголовок + подзаголовок); 4–5 «завести доступ» (QR + буфер); 6–8 «войти»
+    /// (разделитель + Telegram + сайт). Члены бита делят его задержку — 4 бита, а не 9-шаговый drip.
+    /// </summary>
+    private static int BeatDelayMs(int childIndex) => childIndex switch
+    {
+        0 => 0,               // бит 1 · щит-марка
+        1 or 2 or 3 => 60,    // бит 2 · идентичность
+        4 or 5 => 140,        // бит 3 · завести доступ
+        _ => 200,             // бит 4 · войти (и любой хвост)
+    };
 
     /// <summary>
     /// Раскрывает элемент: opacity 0→1 + RenderTransform from→to, 300мс OutQuint, с задержкой стаггера.
