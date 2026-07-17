@@ -69,6 +69,7 @@ public sealed partial class L
             "Confirm the sign-in in the app that opened, then come back here — we'll take care of the rest.");
         Add("Login_OpenTelegram", "Открыть Telegram", "Open Telegram");
         Add("Login_StartOver", "Начать заново", "Start over");
+        Add("Login_ChooseAnother", "Другой способ входа", "Use another method");
 
         // Login error family (login-flow diagnostics; shown in the error line).
         Add("Login_ErrBadCreds", "Неверный email или пароль", "Incorrect email or password");

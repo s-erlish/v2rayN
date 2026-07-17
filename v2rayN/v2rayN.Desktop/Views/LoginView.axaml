@@ -13,16 +13,17 @@
 
     <!--
         Экран «Вход» departament (порт Android LoginActivity.kt + strings_auth.xml).
-        Переработан под КОМПАКТНОЕ окно (~360–380px): бесшовный тулбар «← Вход», единая
-        центрированная колонка контента (MaxWidth 440 — красиво и на широком окне) с gutter 16,
-        фирменный щит-логотип, заголовок + подзаголовок, CTA Telegram (акцент, самолётик) и CTA
-        сайта (тональная), поля Incy, блок 2FA. Два экрана состояния переключает code-behind:
+        КОМПАКТНОЕ окно (~360–380px): бесшовный тулбар «← Вход», единая центрированная колонка
+        контента (MaxWidth 440), фирменный щит-логотип, заголовок + подзаголовок, CTA Telegram
+        (акцент, самолётик) и CTA сайта (тональная), поля Incy, блок 2FA (6 сегментных ячеек).
+        Два экрана состояния переключает code-behind С ДВИЖЕНИЕМ (кроссфейд, а не мгновенный IsVisible):
           • MethodBlock — выбор способа входа + форма сайта + 2FA + строка ошибки;
-          • AwaitingBlock — сфокусированное ожидание подтверждения в Telegram (спиннер + текст +
-            «Открыть Telegram» + «Начать заново»).
+          • AwaitingBlock — сфокусированное ожидание подтверждения в Telegram (кольцо + «дышащий»
+            самолётик + текст + «Открыть Telegram» + «Начать заново» + «Другой способ входа»).
         Incy: pure dark + один синий #4C8DFF, Space Grotesk, sentence-case Russian, сетка 4/8/12/16/24,
         radius chip 12 / input 14 / button 16 / card 20. Состояния (idle / awaiting-TG / loading-site /
-        2FA / error) — по AccountViewModel.CurrentLoginState (WhenAnyValue на UI-шедулере).
+        2FA / success / error) — по AccountViewModel.CurrentLoginState. Моушен-токены Ease.*/Dur.* и
+        Geo.Check / Brush.RedText берутся из GlobalResources (Фаза 0). Поле = ГЛОБАЛЬНЫЙ TextBox.Incy.
     -->
 
     <UserControl.Resources>
@@ -37,139 +38,78 @@
         <StreamGeometry x:Key="Geo.Login.Eye">M12,4.5C7,4.5 2.73,7.61 1,12c1.73,4.39 6,7.5 11,7.5s9.27,-3.11 11,-7.5c-1.73,-4.39 -6,-7.5 -11,-7.5zM12,17c-2.76,0 -5,-2.24 -5,-5s2.24,-5 5,-5 5,2.24 5,5 -2.24,5 -5,5zM12,9c-1.66,0 -3,1.34 -3,3s1.34,3 3,3 3,-1.34 3,-3 -1.34,-3 -3,-3z</StreamGeometry>
         <StreamGeometry x:Key="Geo.Login.EyeOff">M12,7c2.76,0 5,2.24 5,5 0,0.65 -0.13,1.26 -0.36,1.83l2.92,2.92c1.51,-1.26 2.7,-2.89 3.43,-4.75 -1.73,-4.39 -6,-7.5 -11,-7.5 -1.4,0 -2.74,0.25 -3.98,0.7l2.16,2.16C10.74,7.13 11.35,7 12,7zM2,4.27l2.28,2.28 0.46,0.46C3.08,8.3 1.78,10.02 1,12c1.73,4.39 6,7.5 11,7.5 1.55,0 3.03,-0.3 4.38,-0.84l0.42,0.42L19.73,22 21,20.73 3.27,3 2,4.27zM7.53,9.8l1.55,1.55c-0.05,0.21 -0.08,0.43 -0.08,0.65 0,1.66 1.34,3 3,3 0.22,0 0.44,-0.03 0.65,-0.08l1.55,1.55c-0.67,0.33 -1.41,0.53 -2.2,0.53 -2.76,0 -5,-2.24 -5,-5 0,-0.79 0.2,-1.53 0.53,-2.2zM11.84,9.02l3.15,3.15 0.02,-0.16c0,-1.66 -1.34,-3 -3,-3l-0.17,0.01z</StreamGeometry>
 
-        <!--
-            [ЛОКАЛЬНО, к продвижению в GlobalResources] Тема текстового поля Incy
-            (замена Widget.Material3.TextInputLayout.OutlinedBox): фон SurfaceVariant,
-            1px OutlineVariant #20242B, радиус 14 (= Radius.Search), фокус = рамка Accent
-            #4C8DFF, текст OnSurface #F2F4F8, плейсхолдер OnSurfaceVariant #9BA1AD
-            (контраст 6.2:1 ≥ 4.5:1). Полная ControlTheme, чтобы тема Semi не
-            перекрашивала pointerover/focus своими токенами.
-        -->
-        <ControlTheme x:Key="TextBox.Incy" TargetType="TextBox">
-            <Setter Property="Background" Value="{DynamicResource Brush.SurfaceVariant}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineVariant}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="{DynamicResource Radius.Search}" />
-            <Setter Property="MinHeight" Value="52" />
-            <Setter Property="Padding" Value="16,0" />
-            <Setter Property="FontSize" Value="15" />
-            <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
-            <Setter Property="CaretBrush" Value="{DynamicResource Brush.Accent}" />
-            <Setter Property="SelectionBrush" Value="#334C8DFF" />
-            <Setter Property="SelectionForegroundBrush" Value="{DynamicResource Brush.OnSurface}" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
-            <Setter Property="Cursor" Value="IBeam" />
-            <Setter Property="Template">
-                <ControlTemplate>
-                    <Border
-                        x:Name="PART_BorderElement"
-                        Background="{TemplateBinding Background}"
-                        BorderBrush="{TemplateBinding BorderBrush}"
-                        BorderThickness="{TemplateBinding BorderThickness}"
-                        CornerRadius="{TemplateBinding CornerRadius}">
-                        <Border.Transitions>
-                            <Transitions>
-                                <BrushTransition Property="BorderBrush" Duration="0:0:0.15" />
-                            </Transitions>
-                        </Border.Transitions>
-                        <Grid ColumnDefinitions="*,Auto" Margin="{TemplateBinding Padding}">
-                            <Panel Grid.Column="0" VerticalAlignment="{TemplateBinding VerticalContentAlignment}">
-                                <TextBlock
-                                    x:Name="PART_Watermark"
-                                    VerticalAlignment="Center"
-                                    Foreground="{DynamicResource Brush.OnSurfaceVariant}"
-                                    IsVisible="{TemplateBinding Text, Converter={x:Static StringConverters.IsNullOrEmpty}}"
-                                    Text="{TemplateBinding Watermark}"
-                                    TextAlignment="{TemplateBinding TextAlignment}"
-                                    TextWrapping="NoWrap" />
-                                <ScrollViewer
-                                    x:Name="PART_ScrollViewer"
-                                    HorizontalScrollBarVisibility="Hidden"
-                                    VerticalScrollBarVisibility="Disabled">
-                                    <TextPresenter
-                                        x:Name="PART_TextPresenter"
-                                        VerticalAlignment="Center"
-                                        CaretBrush="{TemplateBinding CaretBrush}"
-                                        CaretIndex="{TemplateBinding CaretIndex}"
-                                        LineHeight="{TemplateBinding LineHeight}"
-                                        PasswordChar="{TemplateBinding PasswordChar}"
-                                        RevealPassword="{TemplateBinding RevealPassword}"
-                                        SelectionBrush="{TemplateBinding SelectionBrush}"
-                                        SelectionEnd="{TemplateBinding SelectionEnd}"
-                                        SelectionForegroundBrush="{TemplateBinding SelectionForegroundBrush}"
-                                        SelectionStart="{TemplateBinding SelectionStart}"
-                                        Text="{TemplateBinding Text, Mode=TwoWay}"
-                                        TextAlignment="{TemplateBinding TextAlignment}"
-                                        TextWrapping="{TemplateBinding TextWrapping}" />
-                                </ScrollViewer>
-                            </Panel>
-                            <ContentPresenter
-                                Grid.Column="1"
-                                VerticalAlignment="Center"
-                                Content="{TemplateBinding InnerRightContent}" />
-                        </Grid>
-                    </Border>
-                </ControlTemplate>
-            </Setter>
-            <Style Selector="^:pointerover /template/ Border#PART_BorderElement">
-                <Setter Property="BorderBrush" Value="{DynamicResource Brush.Outline}" />
-            </Style>
-            <Style Selector="^:focus /template/ Border#PART_BorderElement">
-                <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
-            </Style>
-            <Style Selector="^:disabled">
-                <Setter Property="Opacity" Value="0.38" />
-            </Style>
-        </ControlTheme>
+        <!--  Тема поля Incy теперь ГЛОБАЛЬНАЯ (GlobalResources.axaml → TextBox.Incy). Локальный дубль
+              удалён (P0): поля ссылаются на Theme="{StaticResource TextBox.Incy}" — рендерятся 1:1.  -->
     </UserControl.Resources>
 
     <UserControl.Styles>
-        <!--  Кнопка «назад» тулбара — глобальный Button.BackNav (см. GlobalStyles): 40 круг,
-              глиф 22, hover-затемнение Brush.Hover, pressed scale 0.92, БЕЗ ripple/glow.
-              Локального стиля больше нет — тулбар унифицирован с остальными суб-страницами.  -->
+        <!--  Кнопка «назад» тулбара — глобальный Button.BackNav. Линк-действие (LinkAction),
+              тональная 48h, Primary/Tall, focus-кольца — тоже глобальные (GlobalStyles).  -->
 
-        <!--
-            [ЛОКАЛЬНО, к продвижению] Линк-действие («Начать заново» / «Регистрация на сайте»):
-            текстовая кнопка акцента без рамки, 40h (тач-таргет), pressed scale 0.97.
-        -->
-        <Style Selector="Button.LinkAction">
-            <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
-            <Setter Property="Height" Value="40" />
-            <Setter Property="Padding" Value="12,0" />
-            <Setter Property="CornerRadius" Value="{DynamicResource Radius.Chip}" />
-            <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
-            <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
-            <Setter Property="FontWeight" Value="Medium" />
-            <Setter Property="FontSize" Value="14" />
-            <Setter Property="HorizontalContentAlignment" Value="Center" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
-            <Setter Property="RenderTransformOrigin" Value="50%,50%" />
-            <Setter Property="Transitions">
-                <Transitions>
-                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" />
-                </Transitions>
-            </Setter>
-        </Style>
-        <Style Selector="Button.LinkAction:pressed">
-            <Setter Property="RenderTransform" Value="scale(0.97)" />
+        <!--  LinkAction hover (P2): текст-действия получают тихий фон-подложку Brush.Hover при
+              наведении (базовый класс — глобальный; дублировать его не нужно).  -->
+        <Style Selector="Button.LinkAction:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
         </Style>
 
-        <!--
-            [ЛОКАЛЬНО, к продвижению] Высокая тональная (52h) — вторичный CTA формы сайта,
-            чтобы совпадать по высоте с Primary.Tall (глобально .Tall задан только для Primary).
-        -->
+        <!--  Высокая тональная (52h) — вторичный CTA формы сайта, чтобы совпадать по высоте с
+              Primary.Tall (глобально .Tall задан только для Primary).  -->
         <Style Selector="Button.Tonal.Tall">
             <Setter Property="Height" Value="52" />
         </Style>
 
+        <!--  Флеш-рамка поля при Unauthorized (§3.5): класс .fieldError красит ВНУТРЕННЮЮ рамку
+              PART_BorderElement в Brush.Red. UserControl-стиль перекрывает :focus/:pointerover темы
+              (приоритет источника выше ControlTheme), поэтому вспышка видна даже на сфокусированном
+              поле. Возврат к OutlineVariant/Accent идёт по BrushTransition шаблона (150мс) —
+              никакого shake/bounce, только цвет.  -->
+        <Style Selector="TextBox.fieldError /template/ Border#PART_BorderElement">
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Red}" />
+        </Style>
+
+        <!--  Скрытое реальное поле 2FA под сегментными ячейками: прозрачная рамка/фон даже в
+              фокусе/наведении (визуал несут ячейки + focus-адорнер вокруг всей группы).  -->
+        <Style Selector="TextBox.CodeInput /template/ Border#PART_BorderElement">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+        </Style>
+
+        <!--  Сегментная ячейка кода 2FA: 52h, radius 12, фон SurfaceVariant, 1px OutlineVariant.
+              filled — рамка чуть плотнее (Outline); active — рамка Accent (следующая к вводу).
+              Смена цвета плавная (BrushTransition 150мс), без движения.  -->
+        <Style Selector="Border.CodeCell">
+            <Setter Property="Height" Value="52" />
+            <Setter Property="Margin" Value="3,0" />
+            <Setter Property="Background" Value="{DynamicResource Brush.SurfaceVariant}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineVariant}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{DynamicResource Radius.Chip}" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="BorderBrush" Duration="0:0:0.15" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Border.CodeCell.filled">
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Outline}" />
+        </Style>
+        <Style Selector="Border.CodeCell.active">
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+        </Style>
+        <Style Selector="TextBlock.CodeDigit">
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="FontFamily" Value="{DynamicResource Font.Numeric}" />
+            <Setter Property="FontFeatures" Value="tnum,lnum,zero" />
+            <Setter Property="FontSize" Value="20" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
+        </Style>
+
         <!--
             Спиннер: дуга ~25% окружности (Ellipse со штрих-пунктиром, приём ConnectHeroView),
-            равномерное вращение только с классом .spinning (навешивает code-behind).
-            Вращение центрируется относительным origin «50%,50%» на самом Ellipse (см. разметку) —
-            instance-центра у этих спиннеров нет.
-            «Облегчённый режим»: под lite-окном keyframe НЕ аттачится (селектор
-            :is(Window):not(.lite) не совпадает) — конкурирующий стиль не отменяет уже запущенную
-            анимацию, поэтому гасим на уровне СЕЛЕКТОРА, как глобальный Ellipse.Spinner.spinning.
+            равномерное вращение только с классом .spinning (навешивает code-behind), центр —
+            относительный origin «50%,50%» на самом Ellipse. Под lite keyframe НЕ аттачится
+            (селектор :is(Window):not(.lite) не совпадает) — гасим на уровне СЕЛЕКТОРА.
         -->
         <Style Selector="Ellipse.Spinner">
             <Setter Property="IsHitTestVisible" Value="False" />
@@ -189,14 +129,43 @@
                 </Animation>
             </Style.Animations>
         </Style>
+
+        <!--
+            «Слушающее дыхание» самолётика в ожидании (§3.2, P2): opacity 0.55↔1 + scale 0.94↔1,
+            период 1.6с, симметрично, бесконечно — второй, более медленный ритм поверх вращения дуги
+            (1.1с). Класс .breathing навешивает code-behind ТОЛЬКО пока виден AwaitingBlock и не lite
+            (не тикает за кадром). Второй предохранитель — селектор :is(Window):not(.lite): под lite
+            анимация не аттачится вовсе (самолётик статичен). Центр — origin «50%,50%» на PathIcon.
+        -->
+        <Style Selector=":is(Window):not(.lite) PathIcon.PlaneBreathe.breathing">
+            <Style.Animations>
+                <Animation
+                    Easing="{StaticResource Ease.Standard}"
+                    IterationCount="Infinite"
+                    Duration="0:0:1.6">
+                    <KeyFrame Cue="0%">
+                        <Setter Property="Opacity" Value="1.0" />
+                        <Setter Property="ScaleTransform.ScaleX" Value="1.0" />
+                        <Setter Property="ScaleTransform.ScaleY" Value="1.0" />
+                    </KeyFrame>
+                    <KeyFrame Cue="50%">
+                        <Setter Property="Opacity" Value="0.55" />
+                        <Setter Property="ScaleTransform.ScaleX" Value="0.94" />
+                        <Setter Property="ScaleTransform.ScaleY" Value="0.94" />
+                    </KeyFrame>
+                    <KeyFrame Cue="100%">
+                        <Setter Property="Opacity" Value="1.0" />
+                        <Setter Property="ScaleTransform.ScaleX" Value="1.0" />
+                        <Setter Property="ScaleTransform.ScaleY" Value="1.0" />
+                    </KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
     </UserControl.Styles>
 
     <Grid Background="{DynamicResource Brush.Bg}" RowDefinitions="Auto,*">
 
-        <!--  ============ Бесшовный тулбар суб-страницы: «← Вход» ============
-              Глобальные Border.SubToolbar (56h, фон Bg, gutter 16) + Button.BackNav
-              (40 круг, глиф 22, hover-затемнение Brush.Hover, press scale 0.92) —
-              единый тулбар со всеми суб-страницами оболочки.  -->
+        <!--  ============ Бесшовный тулбар суб-страницы: «← Вход» ============  -->
         <Border Grid.Row="0" Classes="SubToolbar">
             <Grid ColumnDefinitions="Auto,*">
                 <Button
@@ -222,13 +191,18 @@
             Grid.Row="1"
             HorizontalScrollBarVisibility="Disabled"
             VerticalScrollBarVisibility="Auto">
-            <!--  HorizontalAlignment=Stretch + MaxWidth: колонка заполняет компактное окно
-                  (за вычетом gutter 16) и центрируется-обрезается на широком.  -->
             <Panel Margin="16,8,16,28">
-                <StackPanel MaxWidth="440" HorizontalAlignment="Stretch">
+                <!--  Обёртка = Panel (z-стек): MethodBlock и AwaitingBlock ПЕРЕКРЫВАЮТСЯ в одной ячейке,
+                      чтобы кроссфейд между ними шёл без пустого кадра. HAlign=Stretch + MaxWidth 440:
+                      заполняет компактное окно, центрируется на широком.  -->
+                <Panel MaxWidth="440" HorizontalAlignment="Stretch">
 
                     <!--  ==================== MethodBlock: выбор способа входа ====================  -->
-                    <StackPanel x:Name="MethodBlock" HorizontalAlignment="Stretch">
+                    <StackPanel
+                        x:Name="MethodBlock"
+                        VerticalAlignment="Top"
+                        HorizontalAlignment="Stretch"
+                        RenderTransformOrigin="50%,50%">
 
                         <!--  Фирменный щит-логотип: плитка 64, радиус 20, фон Tile.Blue, глиф Accent 30.  -->
                         <Border
@@ -245,9 +219,9 @@
                                 Foreground="{DynamicResource Brush.Accent}" />
                         </Border>
 
-                        <!--  Заголовок + подзаголовок (по центру, sentence-case).  -->
+                        <!--  Заголовок + подзаголовок (по центру, sentence-case). Ритм: title 16.  -->
                         <TextBlock
-                            Margin="0,20,0,0"
+                            Margin="0,16,0,0"
                             HorizontalAlignment="Stretch"
                             Classes="Headline"
                             Text="{loc:T Login_Title}"
@@ -262,8 +236,8 @@
                             TextAlignment="Center"
                             TextWrapping="Wrap" />
 
-                        <!--  Первичный CTA — вход через Telegram (акцент, самолётик). НЕ гейтится формой
-                              сайта: всегда активен, кроме времени опроса подтверждения (SetAwaiting).  -->
+                        <!--  Первичный CTA — вход через Telegram (акцент, самолётик). Активен всегда,
+                              кроме времени опроса подтверждения (SetAwaiting).  -->
                         <Button
                             x:Name="TelegramButton"
                             Margin="0,24,0,0"
@@ -285,8 +259,8 @@
                             </StackPanel>
                         </Button>
 
-                        <!--  Разделитель «или»: две тонкие линии + подпись по центру.  -->
-                        <Grid Margin="0,20,0,0" ColumnDefinitions="*,Auto,*">
+                        <!--  Разделитель «или»: две тонкие линии + подпись по центру. Ритм: divider 24.  -->
+                        <Grid Margin="0,24,0,0" ColumnDefinitions="*,Auto,*">
                             <Border
                                 Grid.Column="0"
                                 Height="1"
@@ -304,19 +278,19 @@
                                 Background="{DynamicResource Brush.OutlineVariant}" />
                         </Grid>
 
-                        <!--  Email (auth_email_hint). Enter переводит фокус на пароль.  -->
+                        <!--  Email (auth_email_hint). Enter переводит фокус на пароль. Ритм: email 24.  -->
                         <TextBox
                             x:Name="EmailBox"
-                            Margin="0,20,0,0"
+                            Margin="0,24,0,0"
                             Text="{Binding LoginEmail, Mode=TwoWay}"
                             Theme="{StaticResource TextBox.Incy}"
                             Watermark="{loc:T Login_Email}" />
-                        <!--  Живая подсказка невалидного email (auth_email_invalid), как в Android.  -->
+                        <!--  Живая подсказка невалидного email (auth_email_invalid). Текст = RedText.  -->
                         <TextBlock
                             x:Name="EmailError"
                             Margin="4,6,4,0"
                             FontSize="12"
-                            Foreground="{DynamicResource Brush.Red}"
+                            Foreground="{DynamicResource Brush.RedText}"
                             IsVisible="False"
                             Text="{loc:T Login_EmailInvalid}"
                             TextWrapping="Wrap" />
@@ -332,8 +306,8 @@
                             <TextBox.InnerRightContent>
                                 <Button
                                     x:Name="TogglePasswordButton"
-                                    Width="36"
-                                    Height="36"
+                                    Width="40"
+                                    Height="40"
                                     Padding="0"
                                     Classes="IconButton"
                                     ToolTip.Tip="{loc:T Login_ShowPassword}">
@@ -400,23 +374,42 @@
                                 Text="{loc:T Login_EnterCode}"
                                 TextAlignment="Center"
                                 TextWrapping="Wrap" />
-                            <TextBox
-                                x:Name="CodeBox"
-                                Margin="0,12,0,0"
-                                FontFamily="{DynamicResource Font.Numeric}"
-                                FontFeatures="tnum,lnum,zero"
-                                FontSize="20"
-                                MaxLength="6"
-                                Text="{Binding TwoFaCode, Mode=TwoWay}"
-                                TextAlignment="Center"
-                                Theme="{StaticResource TextBox.Incy}"
-                                Watermark="000000" />
-                            <!--  Живая подсказка (auth_code_invalid).  -->
+
+                            <!--  6 сегментных ячеек + скрытое реальное поле-источник истины поверх.
+                                  Реальный TextBox (CodeBox) держит ввод/вставку/клавиатуру/автофокус;
+                                  ячейки — только визуал, отражают цифры. Прозрачный CodeBox сверху
+                                  ловит клики/фокус (Transparent hit-testable), его текст/каретка скрыты.  -->
+                            <Panel Margin="0,12,0,0">
+                                <UniformGrid x:Name="CodeCells" Columns="6">
+                                    <Border Classes="CodeCell"><TextBlock Classes="CodeDigit" /></Border>
+                                    <Border Classes="CodeCell"><TextBlock Classes="CodeDigit" /></Border>
+                                    <Border Classes="CodeCell"><TextBlock Classes="CodeDigit" /></Border>
+                                    <Border Classes="CodeCell"><TextBlock Classes="CodeDigit" /></Border>
+                                    <Border Classes="CodeCell"><TextBlock Classes="CodeDigit" /></Border>
+                                    <Border Classes="CodeCell"><TextBlock Classes="CodeDigit" /></Border>
+                                </UniformGrid>
+                                <TextBox
+                                    x:Name="CodeBox"
+                                    Classes="CodeInput"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    CaretBrush="Transparent"
+                                    FontFamily="{DynamicResource Font.Numeric}"
+                                    FontFeatures="tnum,lnum,zero"
+                                    FontSize="20"
+                                    Foreground="Transparent"
+                                    MaxLength="6"
+                                    SelectionBrush="Transparent"
+                                    Text="{Binding TwoFaCode, Mode=TwoWay}"
+                                    TextAlignment="Center"
+                                    Theme="{StaticResource TextBox.Incy}" />
+                            </Panel>
+                            <!--  Живая подсказка (auth_code_invalid). Текст = RedText.  -->
                             <TextBlock
                                 x:Name="CodeError"
                                 Margin="4,6,4,0"
                                 FontSize="12"
-                                Foreground="{DynamicResource Brush.Red}"
+                                Foreground="{DynamicResource Brush.RedText}"
                                 IsVisible="False"
                                 Text="{loc:T Login_CodeIs6}"
                                 TextAlignment="Center"
@@ -459,27 +452,31 @@
                             Classes="LinkAction"
                             Content="{loc:T Login_SignUp}" />
 
-                        <!--  Строка ошибки (tv_error): Red, по центру, только реальный диагностик.  -->
+                        <!--  Строка ошибки (tv_error): RedText, по центру, только реальный диагностик.  -->
                         <TextBlock
                             x:Name="ErrorLine"
                             Margin="0,16,0,0"
                             HorizontalAlignment="Stretch"
                             Classes="Body"
-                            Foreground="{DynamicResource Brush.Red}"
+                            Foreground="{DynamicResource Brush.RedText}"
                             IsVisible="False"
                             TextAlignment="Center"
                             TextWrapping="Wrap" />
                     </StackPanel>
 
                     <!--  ==================== AwaitingBlock: ожидание подтверждения в Telegram ====================
-                          Сфокусированный экран: заменяет MethodBlock, пока идёт опрос (AwaitingTelegram / Polling).
-                          Показывает спиннер, статус и повторное действие «Открыть Telegram» + «Начать заново».  -->
+                          Сфокусированный экран: на время опроса ЗАМЕНЯЕТ MethodBlock (кроссфейд, code-behind).
+                          Кольцо (трек + дуга) + «дышащий» самолётик, статус, «Открыть Telegram»,
+                          «Начать заново» и «Другой способ входа». AwaitingRingFull/AwaitingCheck скрыты —
+                          проявляются в success-моменте (дуга→полное кольцо, самолётик→галочка).  -->
                     <StackPanel
                         x:Name="AwaitingBlock"
                         Margin="0,40,0,0"
+                        VerticalAlignment="Top"
                         HorizontalAlignment="Stretch"
-                        IsVisible="False">
-                        <!--  Спиннер акцента 48, по центру (крутится только с классом .spinning).  -->
+                        IsVisible="False"
+                        RenderTransformOrigin="50%,50%">
+                        <!--  64 кольцо: статичный трек + вращающаяся дуга (Accent) + самолётик.  -->
                         <Panel
                             Width="64"
                             Height="64"
@@ -488,6 +485,14 @@
                                 Width="64"
                                 Height="64"
                                 Stroke="{DynamicResource Brush.OutlineVariant}"
+                                StrokeThickness="3" />
+                            <!--  Полное кольцо для success-момента (проявляется, дуга гаснет).  -->
+                            <Ellipse
+                                x:Name="AwaitingRingFull"
+                                Width="64"
+                                Height="64"
+                                Opacity="0"
+                                Stroke="{DynamicResource Brush.Accent}"
                                 StrokeThickness="3" />
                             <Ellipse
                                 x:Name="AwaitingSpinner"
@@ -500,17 +505,33 @@
                                 StrokeLineCap="Round"
                                 StrokeThickness="3" />
                             <PathIcon
+                                x:Name="AwaitingPlane"
                                 Width="26"
                                 Height="26"
+                                Classes="PlaneBreathe"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
                                 Data="{StaticResource Geo.Login.Telegram}"
-                                Foreground="{DynamicResource Brush.Accent}" />
+                                Foreground="{DynamicResource Brush.Accent}"
+                                RenderTransformOrigin="50%,50%" />
+                            <!--  Галочка success (проявляется в success-моменте, scale 0.9→1).  -->
+                            <PathIcon
+                                x:Name="AwaitingCheck"
+                                Width="30"
+                                Height="30"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Data="{StaticResource Geo.Check}"
+                                Foreground="{DynamicResource Brush.Accent}"
+                                Opacity="0"
+                                RenderTransformOrigin="50%,50%" />
                         </Panel>
+                        <!--  Заголовок ожидания = Headline (24): сфокусированный момент якорится так же
+                              сильно, как idle-герой (§3.2, P1).  -->
                         <TextBlock
                             Margin="0,20,0,0"
                             HorizontalAlignment="Stretch"
-                            Classes="Title"
+                            Classes="Headline"
                             Text="{loc:T Login_WaitingConfirm}"
                             TextAlignment="Center"
                             TextWrapping="Wrap" />
@@ -542,15 +563,46 @@
                                 <TextBlock VerticalAlignment="Center" Text="{loc:T Login_OpenTelegram}" />
                             </StackPanel>
                         </Button>
+                        <!--  «Начать заново» — новый Telegram deep link (перезапуск того же способа).  -->
                         <Button
                             x:Name="RestartButton"
                             Margin="0,8,0,0"
                             HorizontalAlignment="Center"
                             Classes="LinkAction"
                             Content="{loc:T Login_StartOver}" />
+                        <!--  «Другой способ входа» (§7, P1) — CancelLogin → возврат к MethodBlock В СТРАНИЦЕ
+                              (не покидая экран), закрывает единственный навигационный тупик ожидания.  -->
+                        <Button
+                            x:Name="ChooseAnotherButton"
+                            Margin="0,4,0,0"
+                            HorizontalAlignment="Center"
+                            Classes="LinkAction"
+                            Content="{loc:T Login_ChooseAnother}"
+                            Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
                     </StackPanel>
 
-                </StackPanel>
+                    <!--  Транзиентная success-плашка (§3.4 fallback): показывается ТОЛЬКО когда success
+                          пришёл, не показав AwaitingBlock (путь сайт/2FA) — 64 галочка там, где стоял CTA,
+                          форма гаснет под ней. Оверлей синхронизации перекрывает хэндофф без пустого кадра.  -->
+                    <Border
+                        x:Name="SuccessBadge"
+                        Width="64"
+                        Height="64"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Background="{DynamicResource Brush.Tile.Blue}"
+                        CornerRadius="{DynamicResource Radius.Card}"
+                        IsVisible="False"
+                        Opacity="0"
+                        RenderTransformOrigin="50%,50%">
+                        <PathIcon
+                            Width="30"
+                            Height="30"
+                            Data="{StaticResource Geo.Check}"
+                            Foreground="{DynamicResource Brush.Accent}" />
+                    </Border>
+
+                </Panel>
             </Panel>
         </ScrollViewer>
     </Grid>
