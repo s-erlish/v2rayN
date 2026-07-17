@@ -85,6 +85,17 @@ public sealed partial class L
 
         // ── Account sync overlay (AccountSyncView) ──
         Add("Account_SyncTitle", "Добавляем аккаунт", "Adding your account");
+        // Live stage line — tracks the real post-login phase (checking → subscriptions → servers).
+        Add("Account_SyncStageAccount", "Проверяем аккаунт", "Checking your account");
         Add("Account_SyncSubtitle", "Загружаем подписки…", "Loading subscriptions…");
+        Add("Account_SyncStageServers", "Обновляем серверы", "Refreshing servers");
+
+        // Sync error surface (a failed import shows retry, not an eternal spinner).
+        Add("Account_SyncErrorTitle", "Не удалось синхронизировать", "Sync didn't finish");
+        Add("Account_SyncErrorHint",
+            "Проверьте соединение и попробуйте снова.",
+            "Check your connection and try again.");
+        Add("Account_SyncRetry", "Повторить", "Try again");
+        Add("Account_SyncReLogin", "Войти заново", "Sign in again");
     }
 }

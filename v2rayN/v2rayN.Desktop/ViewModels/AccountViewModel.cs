@@ -16,6 +16,19 @@ public class AccountViewModel : MyReactiveObject
     private readonly AccountRepository _repo;
     private readonly AuthManager _authManager;
 
+    /// <summary>
+    /// The single runtime instance (set by the runtime ctor; null in design mode). Consumed by
+    /// <c>AccountSyncView</c>, a static overlay in the MainWindow shell that has no inherited DataContext
+    /// path to this VM, so it can bind the live sync stage line and invoke the retry / re-login commands
+    /// without requiring a MainWindow change.
+    /// </summary>
+    public static AccountViewModel? Shared { get; private set; }
+
+    // Which sync phase is live — kept so the caption can be re-derived on a language switch mid-sync.
+    private SyncPhase _syncPhase = SyncPhase.Account;
+
+    private enum SyncPhase { Account, Subs, Servers }
+
     // Cache of the last subscription fetch so we can re-merge the synthesized root when the profile
     // (which supplies the root's auto-renew flag + remnawave uuid) arrives after the sub list.
     private PrimarySubscriptionDto? _lastPrimary;
@@ -68,6 +81,25 @@ public class AccountViewModel : MyReactiveObject
     /// the login gate immediately — no loading state.
     /// </summary>
     [Reactive] public bool IsStartupLoading { get; set; }
+
+    /// <summary>
+    /// [Phase-3 signal] Live post-login sync stage caption — «Проверяем аккаунт» → «Загружаем подписки…»
+    /// → «Обновляем серверы» — advanced as each real phase await begins (<see cref="RunSyncPhases"/>).
+    /// AccountSyncView binds this as its single (ellipsis, non-reflowing) stage line. Empty when no sync
+    /// is running; re-derived on a live language switch.
+    /// </summary>
+    [Reactive] public string SyncStageText { get; set; } = string.Empty;
+
+    /// <summary>
+    /// [Phase-3 signal] True when a post-login (<see cref="OnAuthenticated"/>) or cold-start
+    /// (<see cref="StartupLoad"/>) sync phase THREW. On failure the raising gate flag
+    /// (<see cref="IsImportingAccount"/> / <see cref="IsStartupLoading"/>) is deliberately left TRUE so the
+    /// MainWindow shell keeps the sync overlay up (no MainWindow change needed), and AccountSyncView swaps
+    /// in place to the retry surface (alert glyph + «Повторить» / «Войти заново»). Cleared by
+    /// <see cref="SyncRetry"/> (re-run) and <see cref="SyncReLogin"/> (clear session). This is what turns a
+    /// failed import into an actionable state instead of an eternal spinner or a false hand-off to Home.
+    /// </summary>
+    [Reactive] public bool SyncFailed { get; set; }
 
     [Reactive] public PublicConfigDto? PublicConfig { get; set; }
 
@@ -142,6 +174,12 @@ public class AccountViewModel : MyReactiveObject
     public ReactiveCommand<Unit, Unit> LogoutCmd { get; }
     public ReactiveCommand<Unit, Unit> RetryCmd { get; }
 
+    /// <summary>Sync-error «Повторить» — re-runs the post-login phase sequence (distinct from <see cref="RetryCmd"/>).</summary>
+    public ReactiveCommand<Unit, Unit> SyncRetryCmd { get; }
+
+    /// <summary>Sync-error «Войти заново» — clears the session so the shell returns to login/onboarding.</summary>
+    public ReactiveCommand<Unit, Unit> SyncReLoginCmd { get; }
+
     /// <summary>Balance top-up: opens a Platega checkout for <see cref="TopUpAmount"/>.</summary>
     public ReactiveCommand<Unit, Unit> TopUpCmd { get; }
 
@@ -154,6 +192,11 @@ public class AccountViewModel : MyReactiveObject
         // the engine (AppManager.Config) is only touched later, on user action, by the sync manager.
         _repo = new AccountRepository();
         _authManager = new AuthManager();
+
+        // The single runtime instance. AccountSyncView (a static overlay in the MainWindow shell with no
+        // inherited access to this VM) resolves it here to bind the live stage line and wire the retry /
+        // re-login commands — self-wiring, so no MainWindow change is needed. Stays null in design mode.
+        Shared = this;
 
         // Evaluate the persisted session ONCE. When a session exists, raise the cold-start gate BEFORE
         // IsLoggedIn is first assigned (and before any await), so the shell never gets a chance to paint
@@ -178,6 +221,8 @@ public class AccountViewModel : MyReactiveObject
         Submit2FaCmd = ReactiveCommand.CreateFromTask(Submit2Fa);
         LogoutCmd = ReactiveCommand.CreateFromTask(Logout);
         RetryCmd = ReactiveCommand.CreateFromTask(Retry);
+        SyncRetryCmd = ReactiveCommand.CreateFromTask(SyncRetry);
+        SyncReLoginCmd = ReactiveCommand.CreateFromTask(SyncReLogin);
         TopUpCmd = ReactiveCommand.CreateFromTask(TopUp);
 
         // Safety net: a stray command exception surfaces as the error state instead of crashing.
@@ -192,18 +237,37 @@ public class AccountViewModel : MyReactiveObject
                 Submit2FaCmd.ThrownExceptions,
                 LogoutCmd.ThrownExceptions,
                 RetryCmd.ThrownExceptions,
+                SyncRetryCmd.ThrownExceptions,
+                SyncReLoginCmd.ThrownExceptions,
                 TopUpCmd.ThrownExceptions)
             .Subscribe(ex => RunOnUi(() =>
             {
                 Report(ex as ApiError ?? new ApiError.NetworkError(ex));
+                // Defensive stuck-overlay guard: if a sync overlay is currently up (IsImportingAccount /
+                // IsStartupLoading), any unhandled command exception — including one thrown by a sync
+                // command's pre-phase setup that runs OUTSIDE RunSyncPhases' own try — must surface the
+                // actionable error column (Повторить / Войти заново), never freeze on the spinner.
+                if (IsImportingAccount || IsStartupLoading)
+                {
+                    IsLoading = false;
+                    SyncFailed = true;
+                }
                 Recompute();
             }));
 
         AccountSession.StateChanged += OnSessionStateChanged;
 
         // Live language switch: re-derive every display string (balance caption, «Действует до …»,
-        // device counts, referral line, error text) so open bindings pick up the new language.
-        L.Instance.LanguageChanged += (_, _) => RunOnUi(Recompute);
+        // device counts, referral line, error text) so open bindings pick up the new language. Also
+        // re-apply the sync stage caption if a sync is mid-flight, so the loading line follows the switch.
+        L.Instance.LanguageChanged += (_, _) => RunOnUi(() =>
+        {
+            if (IsImportingAccount || IsStartupLoading)
+            {
+                SetSyncStage(_syncPhase);
+            }
+            Recompute();
+        });
 
         Recompute();
 
@@ -223,16 +287,13 @@ public class AccountViewModel : MyReactiveObject
     /// <summary>Returning-user startup: auto-import subscriptions (→ refresh Home) then load the tab.</summary>
     private async Task StartupLoad()
     {
-        try
+        // Same phase sequence as a fresh login MINUS the extra subscription fetch (parity with the original
+        // returning-user path: import + load only). On success clear the cold-start gate so the loading
+        // surface hands directly to the populated Home/Account instead of the empty login gate. On FAILURE
+        // RunSyncPhases raises SyncFailed and leaves IsStartupLoading TRUE, so the sync overlay shows the
+        // retry surface rather than flashing the logged-out login gate.
+        if (await RunSyncPhases(includeSubFetch: false))
         {
-            await AutoImportAndRefreshHome();
-            await LoadAll();
-        }
-        finally
-        {
-            // Clear the cold-start gate only AFTER import + Home refresh + account/subscription load
-            // resolve (success OR failure), so the loading surface hands directly to the populated
-            // Home/Account instead of the empty login gate.
             RunOnUi(() =>
             {
                 IsStartupLoading = false;
@@ -614,6 +675,8 @@ public class AccountViewModel : MyReactiveObject
             // Raise the sync signal in the SAME tick as IsLoggedIn (before the first await below), so the
             // Wave 2a overlay is already up when LoginView closes on IsLoggedIn — no empty onboarding flash.
             IsImportingAccount = true;
+            SyncFailed = false;
+            SetSyncStage(SyncPhase.Account);
             Profile = profile;
             _pendingFirstLoad = true;
             IsLoading = true;
@@ -621,16 +684,12 @@ public class AccountViewModel : MyReactiveObject
             Recompute();
         });
 
-        try
+        // Fresh-login sync phases (import → subscription fetch → account/Home load). On success clear the
+        // sync signal AFTER all phases resolve, so the overlay hands directly to the populated Home. On
+        // FAILURE RunSyncPhases raises SyncFailed and leaves IsImportingAccount TRUE — the overlay stays up
+        // on the retry surface instead of resolving into a false success over a half-empty frame.
+        if (await RunSyncPhases(includeSubFetch: true))
         {
-            await AutoImportAndRefreshHome();   // import + RefreshServers (flips Home IsEmpty=false)
-            await FetchAndApplySubscriptions();
-            await LoadAll();
-        }
-        finally
-        {
-            // Clear the sync signal only AFTER import + fetch + Home refresh resolve (success OR failure),
-            // so the overlay hands directly to the populated Home instead of a half-empty frame.
             RunOnUi(() =>
             {
                 IsLoading = false;
@@ -638,6 +697,122 @@ public class AccountViewModel : MyReactiveObject
                 Recompute();
             });
         }
+    }
+
+    /// <summary>
+    /// Runs the post-login sync phases — account import (+ Home server refresh) → [subscription fetch] →
+    /// account/Home load — advancing the live <see cref="SyncStageText"/> before each real await. Returns
+    /// true when every phase completes; on ANY exception it raises <see cref="SyncFailed"/> (so
+    /// AccountSyncView swaps in place to the retry surface) and returns false WITHOUT clearing the caller's
+    /// overlay gate — so a failed import never resolves into a false success and never strands an eternal
+    /// spinner. <paramref name="includeSubFetch"/> mirrors the two existing call sites: fresh login runs the
+    /// extra <see cref="FetchAndApplySubscriptions"/>, returning-user cold start does not.
+    /// </summary>
+    private async Task<bool> RunSyncPhases(bool includeSubFetch)
+    {
+        try
+        {
+            RunOnUi(() => SetSyncStage(SyncPhase.Account));
+            await AutoImportAndRefreshHome();   // import + RefreshServers (flips Home IsEmpty=false)
+            if (includeSubFetch)
+            {
+                RunOnUi(() => SetSyncStage(SyncPhase.Subs));
+                await FetchAndApplySubscriptions();
+            }
+            RunOnUi(() => SetSyncStage(SyncPhase.Servers));
+            await LoadAll();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            // Surface the failure WITHOUT clearing the gate flag: the caller keeps IsImportingAccount /
+            // IsStartupLoading true, so the shell keeps the overlay up and AccountSyncView shows the retry
+            // surface. No stuck-invisible state, no false hand-off to a half-empty Home.
+            Logging.SaveLog("AccountSync", ex);
+            RunOnUi(() =>
+            {
+                IsLoading = false;
+                SyncFailed = true;
+                Recompute();
+            });
+            return false;
+        }
+    }
+
+    /// <summary>Advances the live sync stage + its localized caption (re-derivable on a language switch).</summary>
+    private void SetSyncStage(SyncPhase phase)
+    {
+        _syncPhase = phase;
+        SyncStageText = phase switch
+        {
+            SyncPhase.Account => L.T("Account_SyncStageAccount"),
+            SyncPhase.Subs => L.T("Account_SyncSubtitle"),
+            SyncPhase.Servers => L.T("Account_SyncStageServers"),
+            _ => L.T("Account_SyncSubtitle"),
+        };
+    }
+
+    /// <summary>
+    /// Sync-error «Повторить»: re-runs the post-login phase sequence in place. Clears
+    /// <see cref="SyncFailed"/> (AccountSyncView crossfades back to the loading column) and keeps the
+    /// sync overlay up, then re-runs the phases; on success clears BOTH sync gates so the overlay hands to
+    /// Home (whichever gate — fresh or cold-start — raised it), on failure RunSyncPhases re-raises
+    /// SyncFailed and the overlay keeps the retry surface. Distinct from the Account-tab <see cref="Retry"/>.
+    /// </summary>
+    private async Task SyncRetry()
+    {
+        if (!IsLoggedIn)
+        {
+            // The session was wiped externally (e.g. a background 401) while the error surface was up —
+            // don't leave an inert button. Drop the sync gates so the shell returns to login/onboarding,
+            // exactly like «Войти заново».
+            RunOnUi(() =>
+            {
+                SyncFailed = false;
+                IsImportingAccount = false;
+                IsStartupLoading = false;
+                Recompute();
+            });
+            return;
+        }
+        RunOnUi(() =>
+        {
+            SyncFailed = false;
+            IsImportingAccount = true;   // keep the overlay up during the retry (idempotent if already up)
+            _pendingFirstLoad = true;
+            IsLoading = true;
+            SetSyncStage(SyncPhase.Account);
+            Recompute();
+        });
+
+        if (await RunSyncPhases(includeSubFetch: true))
+        {
+            RunOnUi(() =>
+            {
+                IsLoading = false;
+                IsImportingAccount = false;
+                IsStartupLoading = false;
+                Recompute();
+            });
+        }
+    }
+
+    /// <summary>
+    /// Sync-error «Войти заново»: clears the failed session and returns the shell to the login/onboarding
+    /// gate. Runs the full logout teardown FIRST (wipes the persisted session → IsLoggedIn=false) while the
+    /// overlay is still up (IsImportingAccount stays true, so no Home flash), THEN drops the sync gates so
+    /// the shell crossfades straight to onboarding/login.
+    /// </summary>
+    private async Task SyncReLogin()
+    {
+        await Logout();
+        RunOnUi(() =>
+        {
+            SyncFailed = false;
+            IsImportingAccount = false;
+            IsStartupLoading = false;
+            Recompute();
+        });
     }
 
     /// <summary>
