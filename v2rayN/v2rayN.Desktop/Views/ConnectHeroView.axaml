@@ -19,13 +19,40 @@
           =================================================================================  -->
 
     <UserControl.Styles>
-        <!--  Connecting-дуга: равномерное (линейное) вращение, только пока класс .spinning.  -->
+        <!--  Connecting-дуга: равномерное (линейное) вращение, только пока класс .spinning.
+              Период 1.2с (был 1.1) — с glow/shield-breathe (850мс) образует спокойное 3:2-подобное
+              соотношение, три connecting-темпа читаются как ОДНА система, а не три биения.  -->
         <Style Selector="Ellipse.ConnectArc.spinning">
             <Style.Animations>
                 <Animation
-                    Duration="0:0:1.1"
+                    Duration="0:0:1.2"
                     Easing="LinearEasing"
                     IterationCount="Infinite">
+                    <KeyFrame Cue="0%">
+                        <Setter Property="RotateTransform.Angle" Value="0" />
+                    </KeyFrame>
+                    <KeyFrame Cue="100%">
+                        <Setter Property="RotateTransform.Angle" Value="360" />
+                    </KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+
+        <!--  Wind-up дуги (P0-3): ОДНОРАЗОВЫЙ разгон из покоя при входе в connecting — полный оборот
+              0→360° за 200мс ease_out_quint, FillMode=Forward. Затем код-behind снимает .arc-windup и
+              вешает .spinning: угол 360°≡0° совпадает со стартом ровного спина → БЕЗ снапа/скачка. Дуга
+              «набегает» из покоя (в паре с opacity-fade 0→1 и пружиной диска обратно к 1.0), а не
+              вспыхивает на полной скорости. Reduced-motion/lite: дуги нет вообще (см. SetArc).  -->
+        <Style Selector="Ellipse.ConnectArc.arc-windup">
+            <Style.Animations>
+                <Animation
+                    Duration="0:0:0.2"
+                    FillMode="Forward"
+                    IterationCount="1">
+                    <!--  Ease.OutQuint (0.22,1,0.36,1) — инлайн (см. ниже).  -->
+                    <Animation.Easing>
+                        <SplineEasing X1="0.22" Y1="1" X2="0.36" Y2="1" />
+                    </Animation.Easing>
                     <KeyFrame Cue="0%">
                         <Setter Property="RotateTransform.Angle" Value="0" />
                     </KeyFrame>
@@ -101,6 +128,32 @@
                     <KeyFrame Cue="100%">
                         <Setter Property="ScaleTransform.ScaleX" Value="1.6" />
                         <Setter Property="ScaleTransform.ScaleY" Value="1.6" />
+                        <Setter Property="Opacity" Value="0" />
+                    </KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+
+        <!--  Второй, более тихий эхо-пинг сонара (P2-1): стартует α 0.5 (тусклее ведущего кольца),
+              scale 1→1.5, тот же 600мс OutQuint, ОДИН РАЗ. Код-behind вешает класс с задержкой ~120мс
+              после ведущего сонара → «осевший» двойной пинг («залочено»), максимум ДВА кольца, не радар.  -->
+        <Style Selector="Ellipse.Sonar.pulsing-echo">
+            <Style.Animations>
+                <Animation
+                    Duration="0:0:0.6"
+                    FillMode="Forward"
+                    IterationCount="1">
+                    <Animation.Easing>
+                        <SplineEasing X1="0.22" Y1="1" X2="0.36" Y2="1" />
+                    </Animation.Easing>
+                    <KeyFrame Cue="0%">
+                        <Setter Property="ScaleTransform.ScaleX" Value="1" />
+                        <Setter Property="ScaleTransform.ScaleY" Value="1" />
+                        <Setter Property="Opacity" Value="0.5" />
+                    </KeyFrame>
+                    <KeyFrame Cue="100%">
+                        <Setter Property="ScaleTransform.ScaleX" Value="1.5" />
+                        <Setter Property="ScaleTransform.ScaleY" Value="1.5" />
                         <Setter Property="Opacity" Value="0" />
                     </KeyFrame>
                 </Animation>
@@ -240,6 +293,15 @@
                 </Animation>
             </Style.Animations>
         </Style>
+
+        <!--  Hover-lift диска (P0-1): наведение на диск поднимает поверхность на шаг (SurfaceHigh→
+              Highest, тема-реактивно через DynamicResource) — БЕЗ scale и БЕЗ glow. Класс .hover
+              навешивает код-behind (PointerEntered/Exited); плавность даёт BrushTransition на самом
+              Border (120мс OutQuart в движении, 0мс в lite). Специфичнее базового Border.ConnectDisc
+              (2 класса против 1) → перекрывает фон покоя, пока указатель над диском.  -->
+        <Style Selector="Border.ConnectDisc.hover">
+            <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHighest}" />
+        </Style>
     </UserControl.Styles>
 
     <!--  Корень прозрачный: панель лежит поверх радиального фона Главной (Brush.HomeGradient).  -->
@@ -289,10 +351,12 @@
                         RenderTransformOrigin="50%,50%"
                         Stroke="{DynamicResource Brush.Ring.Inner}"
                         StrokeThickness="1.5" />
+                    <!--  База 222 (была 220): пик вдоха (×1.04 ≈ 231) читается как ОДНО расширяющееся
+                          кольцо наружу за статичное 228, а не как биение впритык к нему (де-муар).  -->
                     <Ellipse
                         x:Name="AmbientRing"
-                        Width="220"
-                        Height="220"
+                        Width="222"
+                        Height="222"
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
                         Classes="AmbientRing"
@@ -343,6 +407,21 @@
                         VerticalAlignment="Center"
                         Stroke="{DynamicResource Brush.Ring.Inner}"
                         StrokeThickness="1.5" />
+                    <!--  Hover-brighten (P0-1): накладной дубль внешнего кольца, Opacity 0 в покое →
+                          проявляется код-behind при наведении на диск (компоновщик-only fade, БЕЗ scale/
+                          glow), усиливая кромку кольца. Так «brighten» не трогает утверждённый rest-вид
+                          (RingOuter уже на Opacity 1) и остаётся чистым opacity-переходом. IsHitTestVisible
+                          =False — никогда не перехватывает тап по диску; лежит ПОД диском.  -->
+                    <Ellipse
+                        x:Name="RingHoverGlow"
+                        Width="228"
+                        Height="228"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        IsHitTestVisible="False"
+                        Opacity="0"
+                        Stroke="{DynamicResource Brush.Ring.Inner}"
+                        StrokeThickness="1.5" />
                     <Ellipse
                         x:Name="RingInner"
                         Width="210"
@@ -367,6 +446,21 @@
                         RenderTransformOrigin="50%,50%"
                         Stroke="{DynamicResource Brush.Ring.Inner}"
                         StrokeThickness="2" />
+                    <!--  Второе (эхо) кольцо двойного пинга: тот же силуэт, чуть тоньше, стартует
+                          тусклее (α 0.5 в keyframe) с задержкой ~120мс. Голый ScaleTransform без центра
+                          → origin = относительный центр «50%,50%» (как ведущий сонар).  -->
+                    <Ellipse
+                        x:Name="SonarPulseEcho"
+                        Width="200"
+                        Height="200"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Classes="Sonar"
+                        IsVisible="False"
+                        Opacity="0"
+                        RenderTransformOrigin="50%,50%"
+                        Stroke="{DynamicResource Brush.Ring.Inner}"
+                        StrokeThickness="1.5" />
 
                     <!--  (4) тонкая connecting-дуга Ø190 толщина 3 (акцент): одиночный сегмент
                           пунктиром, крутится тонким кольцом вплотную к диску (176). Видна только
@@ -410,22 +504,39 @@
                     <!--  origin ОСТАВЛЕН «0.5,0.5» (=0.5px ≈ 0,0) НАМЕРЕННО: press-scale диска центрирует
                           себя САМ через self-centering TransformGroup в code-behind (translate −88 / scale /
                           translate +88, 88 = 176/2). Относительный «50%,50%» удвоил бы центр → диск в угол.  -->
+                    <!--  Фон НЕ задаём локально: его ставит стиль Border.ConnectDisc (Brush.SurfaceHigh).
+                          Локальный атрибут был бы LocalValue и перекрыл бы hover-стиль (.ConnectDisc.hover
+                          = SurfaceHighest) — тогда наведение не поднимало бы поверхность. Стиль покоя даёт
+                          тот же SurfaceHigh, поэтому вид покоя не меняется, а hover теперь работает.  -->
                     <Border
                         x:Name="ConnectDisc"
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
-                        Background="{DynamicResource Brush.SurfaceHigh}"
                         Classes="ConnectDisc"
                         Cursor="Hand"
                         RenderTransformOrigin="0.5,0.5">
-                        <!--  Viewbox центрирует узкую геометрию щита в квадрате диска (Stretch+явные
-                              Width/Height у Path прижимали её к краю → щит уходил влево).  -->
-                        <Viewbox
-                            Width="{StaticResource Size.ShieldGlyph}"
-                            Height="{StaticResource Size.ShieldGlyph}"
-                            HorizontalAlignment="Center"
-                            VerticalAlignment="Center"
-                            Stretch="Uniform">
+                        <Panel>
+                            <!--  Press-«колодец» (P1-2): чёрный скрим 0→~12% при нажатии — диск темнеет
+                                  «в лунку» под глифом (щит рисуется ПОВЕРХ, остаётся крепким). Эллипс
+                                  ровно накрывает круг диска (176 = CornerRadius 88), поэтому не выходит
+                                  за скруглённую кромку. IsHitTestVisible=False — тап идёт по диску.
+                                  Переход (длительность/кривую) ведёт код-behind в унисон с press-scale.  -->
+                            <Ellipse
+                                x:Name="PressScrim"
+                                Fill="#000000"
+                                IsHitTestVisible="False"
+                                Opacity="0" />
+                            <!--  Viewbox центрирует узкую геометрию щита в квадрате диска (Stretch+явные
+                                  Width/Height у Path прижимали её к краю → щит уходил влево). Собственный
+                                  self-centering ScaleTransform (parallax-dip 1.0→0.97 на press) ставит
+                                  код-behind — глиф «вдавливается» в диск чуть глубже самого диска.  -->
+                            <Viewbox
+                                x:Name="ShieldViewbox"
+                                Width="{StaticResource Size.ShieldGlyph}"
+                                Height="{StaticResource Size.ShieldGlyph}"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Stretch="Uniform">
                           <Panel Width="24" Height="24">
                             <!--  Контур-щит (ic_shield_outline, evenodd-дырка): idle серый / connecting синий.  -->
                             <Path
@@ -468,7 +579,8 @@
                                 </Path.Transitions>
                             </Path>
                           </Panel>
-                        </Viewbox>
+                            </Viewbox>
+                        </Panel>
                     </Border>
                 </Panel>
 
@@ -498,6 +610,8 @@
                       сам диск-щит остаётся кнопкой connect, поэтому тап по нему = повторная попытка.
                       Приглушённый OnSurfaceVariant, sentence-case, активный глагол. Скрыта по умолчанию;
                       видимость ведёт code-behind (RetryHint.IsVisible = state == Error).  -->
+                <!--  Opacity=0 в покое; вход в Error плавно проявляет подсказку (fade 0→1, 220мс
+                      Standard) — один спокойный сигнал, переход навешивает код-behind (lite = мгновенно).  -->
                 <TextBlock
                     x:Name="RetryHint"
                     Margin="24,4,24,0"
@@ -506,6 +620,7 @@
                     Classes="Caption"
                     Foreground="{DynamicResource Brush.OnSurfaceVariant}"
                     IsVisible="False"
+                    Opacity="0"
                     Text="{loc:T Home_RetryHint}"
                     TextAlignment="Center"
                     TextTrimming="CharacterEllipsis" />

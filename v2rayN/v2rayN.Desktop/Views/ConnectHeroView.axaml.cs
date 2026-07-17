@@ -125,9 +125,37 @@ public partial class ConnectHeroView : UserControl
 
     //  Press-scale диска: собственный ScaleTransform, чей ScaleX/Y анимируем через его же
     //  переходы — длительность+кривую перекл. по направлению (quart-in 90 / quint-out 160).
+    //  ЭТОТ ЖЕ ScaleTransform ведёт connect-bloom (1.0→1.04→1.0) и error-contract (1.0→0.98→1.0):
+    //  оба — оседания через те же переходы (симметрично прочитанные обе ноги, БЕЗ overshoot/bounce).
     private readonly ScaleTransform _discScale = new(1, 1);
     private readonly DoubleTransition _discScaleX = new() { Property = ScaleTransform.ScaleXProperty, Duration = TimeSpan.FromMilliseconds(160) };
     private readonly DoubleTransition _discScaleY = new() { Property = ScaleTransform.ScaleYProperty, Duration = TimeSpan.FromMilliseconds(160) };
+
+    //  Глиф-щит parallax-dip на press (1.0→0.97): вложенный self-centering ScaleTransform на Viewbox —
+    //  глиф «вдавливается» в диск чуть глубже самого диска (0.94). Тайминг зеркалит press-scale (90/160).
+    private readonly ScaleTransform _glyphScale = new(1, 1);
+    private readonly DoubleTransition _glyphScaleX = new() { Property = ScaleTransform.ScaleXProperty, Duration = TimeSpan.FromMilliseconds(160) };
+    private readonly DoubleTransition _glyphScaleY = new() { Property = ScaleTransform.ScaleYProperty, Duration = TimeSpan.FromMilliseconds(160) };
+
+    //  Press-скрим диска (0→~0.12): чёрная «лунка» под глифом на press. Тайминг зеркалит press-scale.
+    private readonly DoubleTransition _scrimOpacity = new() { Property = Visual.OpacityProperty, Duration = TimeSpan.FromMilliseconds(160) };
+
+    //  Opacity-переход дуги: 200мс OutQuint на wind-up (fade-in из покоя) / 220мс Standard на dissolve
+    //  (растворение в glow на connect-confirm). Длительность/кривую перекл. код-behind по сайту.
+    private readonly DoubleTransition _arcOpacity = new() { Property = Visual.OpacityProperty, Duration = TimeSpan.FromMilliseconds(220) };
+
+    //  Hover-переходы (P0-1): поверхность диска (Brush) + накладное кольцо (Opacity) на наведении.
+    //  120мс OutQuart в движении, 0мс в lite (мгновенный swap, без «моушена» — только цвет/яркость).
+    private const double HoverMs = 120;
+    private readonly BrushTransition _discSurface = new() { Property = Border.BackgroundProperty, Duration = TimeSpan.FromMilliseconds(HoverMs) };
+    private readonly DoubleTransition _ringHoverOpacity = new() { Property = Visual.OpacityProperty, Duration = TimeSpan.FromMilliseconds(HoverMs) };
+
+    //  Retry-hint fade (Error): 220мс Standard в движении, 0мс в lite (мгновенно виден).
+    private readonly DoubleTransition _retryHintOpacity = new() { Property = Visual.OpacityProperty, Duration = TimeSpan.FromMilliseconds(220) };
+
+    //  Указатель над диском — держим флаг, чтобы hover-exit был идемпотентен (PointerExited приходит
+    //  и как отмена press, и как выход hover) и чтобы не «залипнуть» в hover-виде.
+    private bool _hovering;
 
     //  Переходы crossfade/tint/glow из XAML — длительность (и кривую glow) перекл. на реверсе (75%).
     private DoubleTransition? _outlineOpacity;
@@ -179,7 +207,9 @@ public partial class ConnectHeroView : UserControl
         //  группу: сдвиг центра диска (88,88) в (0,0) → масштаб → сдвиг обратно = масштаб строго вокруг
         //  центра. Переход живёт на самом ScaleTransform (асимметрия 90/160 сохраняется).
         _discScale.Transitions = new Transitions { _discScaleX, _discScaleY };
-        ConnectDisc.Transitions = new Transitions();
+        //  Переход фона диска (hover surface-lift) живёт на самом Border; press-scale — отдельный
+        //  вложенный ScaleTransform (ниже), поэтому эти два отклика не мешают друг другу.
+        ConnectDisc.Transitions = new Transitions { _discSurface };
         const double discHalf = 88; // Size.ConnectDisc (176) / 2
         ConnectDisc.RenderTransform = new TransformGroup
         {
@@ -191,11 +221,39 @@ public partial class ConnectHeroView : UserControl
             },
         };
 
-        //  Диск — кнопка connect: press-scale + клик = переключение.
+        //  Глиф-щит: self-centering ScaleTransform (parallax-dip). Тот же приём, что диск — origin НЕ
+        //  применяется к анимируемым render-transform в этой сборке, поэтому центрируем явным сдвигом
+        //  (−40 → scale → +40, 40 = Size.ShieldGlyph 80 / 2), иначе глиф «уезжал» бы в левый-верх.
+        _glyphScale.Transitions = new Transitions { _glyphScaleX, _glyphScaleY };
+        const double glyphHalf = 40; // Size.ShieldGlyph (80) / 2
+        ShieldViewbox.RenderTransform = new TransformGroup
+        {
+            Children =
+            {
+                new TranslateTransform { X = -glyphHalf, Y = -glyphHalf },
+                _glyphScale,
+                new TranslateTransform { X = glyphHalf, Y = glyphHalf },
+            },
+        };
+
+        //  Переходы, которыми управляет код-behind по сайту вызова (длительность/кривая/направление).
+        PressScrim.Transitions = new Transitions { _scrimOpacity };
+        ConnectingArc.Transitions = new Transitions { _arcOpacity };
+        RingHoverGlow.Transitions = new Transitions { _ringHoverOpacity };
+        RetryHint.Transitions = new Transitions { _retryHintOpacity };
+
+        //  Кривые hover/retry-переходов + начальные длительности по режиму (lite = 0мс).
+        _discSurface.Easing = _ringHoverOpacity.Easing = EaseOutQuart;
+        _retryHintOpacity.Easing = EaseStandard;
+        ApplyMotionGatedDurations();
+
+        //  Диск — кнопка connect: press-scale + клик = переключение; hover = surface-lift + ring-brighten.
         ConnectDisc.PointerPressed += OnDiscPointerPressed;
         ConnectDisc.PointerReleased += OnDiscPointerReleased;
         ConnectDisc.PointerCaptureLost += OnDiscPressCancel;
         ConnectDisc.PointerExited += OnDiscPressCancel;
+        ConnectDisc.PointerEntered += OnDiscPointerEntered;
+        ConnectDisc.PointerExited += OnDiscHoverExit;
 
         AddQrButton.Click += (_, _) => AddByQrRequested?.Invoke(this, EventArgs.Empty);
         AddClipboardButton.Click += (_, _) => AddFromClipboardRequested?.Invoke(this, EventArgs.Empty);
@@ -272,6 +330,12 @@ public partial class ConnectHeroView : UserControl
         //  Opacity контура (иначе анимация перекрыла бы crossfade контур→залив).
         SetShieldPulse(state == ConnectVisualState.Connecting);
 
+        //  Вход в состояние (а не re-apply/восстановление): считаем по ПРЕДЫДУЩЕМУ _visualState (он
+        //  ещё старый — обновляется в конце метода). Ведёт wind-up дуги и error-contract — оба
+        //  приходят с animate:false, поэтому «свежесть» перехода нельзя брать из motion.
+        var enteringConnecting = state == ConnectVisualState.Connecting && _visualState != ConnectVisualState.Connecting;
+        var enteringError = state == ConnectVisualState.Error && _visualState != ConnectVisualState.Error;
+
         switch (state)
         {
             case ConnectVisualState.Connecting:
@@ -281,7 +345,8 @@ public partial class ConnectHeroView : UserControl
                 StatusText.Text = L.T("Status_Connecting");
                 StatusText.Foreground = AccentBrush;
                 ServerInfo.IsVisible = true;
-                SetArc(true);
+                //  Разгон из покоя только на СВЕЖЕМ входе; re-apply уже в connecting → ровный спин.
+                SetArc(true, windUp: enteringConnecting);
                 SetGlow(connecting: true, connected: false);
                 HideSonar();
                 break;
@@ -293,16 +358,19 @@ public partial class ConnectHeroView : UserControl
                 StatusText.Text = L.T("Status_Connected");
                 StatusText.Foreground = AccentBrush;
                 ServerInfo.IsVisible = true;
-                SetArc(false);
                 SetGlow(connecting: false, connected: true);
-                //  Сонар — одноразовый confirm; не проигрываем, пока окно скрыто (никто не увидит,
-                //  а на восстановлении re-apply идёт с animate:false — повтор сонара не нужен).
+                //  Payoff — одноразовый; играется ТОЛЬКО на живом переходе (motion) и на экране: дуга
+                //  растворяется (не моргает), диск «приземляется» bloom-ом, двойной пинг сонара. На
+                //  восстановлении/rebind (animate:false) — прыжок в конечный вид без повтора payoff.
                 if (motion && !MotionSuppressed)
                 {
+                    DissolveArc();
                     PlaySonar();
+                    PlayConnectBloom();
                 }
                 else
                 {
+                    SetArc(false);
                     HideSonar();
                 }
 
@@ -322,13 +390,21 @@ public partial class ConnectHeroView : UserControl
                 SetArc(false);
                 SetGlow(connecting: false, connected: false);
                 HideSonar();
+                //  Один спокойный «вдав» при входе (P1-3) — тихое подтверждение обрыва, НЕ shake/bounce.
+                if (enteringError && !ReducedMotion && !MotionSuppressed)
+                {
+                    PlayErrorContract();
+                }
+
                 UpSpeed.Text = "0 KB/s";
                 DownSpeed.Text = "0 KB/s";
                 Uptime.Text = "00:00:00";
                 break;
 
             default: // Idle
-                ShieldOutline.Fill = ShieldIdleBrush;
+                //  Если указатель всё ещё над диском (in-place возврат в Idle / смена темы re-assert'ит
+                //  Fill), сохраняем hover-подогрев глифа — иначе он «остыл» бы к серому под курсором.
+                ShieldOutline.Fill = _hovering && hasServer ? OnSurfaceBrush : ShieldIdleBrush;
                 ShieldOutline.Opacity = hasServer ? 1 : 0.38;
                 ShieldFilled.Opacity = 0;
                 StatusText.Text = hasServer ? L.T("Home_NotConnected") : L.T("Home_ChooseServer");
@@ -349,7 +425,34 @@ public partial class ConnectHeroView : UserControl
         SetAmbient(state);
 
         //  Подсказка-ретрай видна ТОЛЬКО в Error — тихая аффорданс «тапни щит, чтобы повторить».
-        RetryHint.IsVisible = state == ConnectVisualState.Error;
+        //  На свежем входе в Error плавно проявляем (fade 0→1); иначе (lite/suppressed/re-apply) —
+        //  мгновенно (переход 0мс в lite). Вне Error — скрываем и сбрасываем Opacity для след. входа.
+        if (state == ConnectVisualState.Error)
+        {
+            RetryHint.IsVisible = true;
+            if (enteringError && !ReducedMotion && !MotionSuppressed)
+            {
+                RetryHint.Opacity = 0;
+                Dispatcher.UIThread.Post(
+                    () =>
+                    {
+                        if (_visualState == ConnectVisualState.Error)
+                        {
+                            RetryHint.Opacity = 1;
+                        }
+                    },
+                    DispatcherPriority.Background);
+            }
+            else
+            {
+                RetryHint.Opacity = 1;
+            }
+        }
+        else
+        {
+            RetryHint.IsVisible = false;
+            RetryHint.Opacity = 0;
+        }
 
         _visualState = state;
     }
@@ -455,6 +558,7 @@ public partial class ConnectHeroView : UserControl
             //  Тот же teardown, что и при выходе из connecting/connected — снимаем ВСЕ петли.
             _animationsPaused = true;
             ConnectingArc.Classes.Remove("spinning");
+            ConnectingArc.Classes.Remove("arc-windup");
             GlowHalo.Classes.Remove("breathing");
             ShieldOutline.Classes.Remove("shieldbreathe");
             HideSonar();
@@ -486,10 +590,12 @@ public partial class ConnectHeroView : UserControl
         }
         _deactivated = true;
         ConnectingArc.Classes.Remove("spinning");
+        ConnectingArc.Classes.Remove("arc-windup");
         GlowHalo.Classes.Remove("breathing");
         ShieldOutline.Classes.Remove("shieldbreathe");
         HideSonar();
         RemoveAmbientLoops();
+        ClearHover();
     }
 
     public void Activate()
@@ -519,6 +625,9 @@ public partial class ConnectHeroView : UserControl
         //  Task 2: показатели скорости/аптайма над кнопкой пропадают в lite.
         StatsRow.IsVisible = !ReducedMotion;
 
+        //  Hover/retry-переходы мгновенны в lite (0мс) — «swap без моушена».
+        ApplyMotionGatedDurations();
+
         if (!reapply)
         {
             return;
@@ -527,13 +636,25 @@ public partial class ConnectHeroView : UserControl
         //  Рантайм-переключение: убиваем любую идущую петлю анимаций и прыгаем в текущий конечный вид.
         //  (При выключении lite SetConnectState заново навесит нужные петли, т.к. ReducedMotion=false.)
         ConnectingArc.Classes.Remove("spinning");
+        ConnectingArc.Classes.Remove("arc-windup");
         GlowHalo.Classes.Remove("breathing");
         ShieldOutline.Classes.Remove("shieldbreathe");
         HideSonar();
         RemoveAmbientLoops();
+        ClearHover();
         HeroFrame.Classes.Remove("assembling");
         EnsureHeroVisible();
         SetConnectState(_visualState, hasServer: _hasServer, animate: false);
+    }
+
+    //  Длительности hover/retry-переходов по режиму движения: в lite/reduced-motion — 0мс (мгновенный
+    //  swap без «моушена»), иначе штатные 120/220мс. Зовём из ctor и на смену режима (ApplyLiteMode).
+    private void ApplyMotionGatedDurations()
+    {
+        var hover = ReducedMotion ? TimeSpan.Zero : TimeSpan.FromMilliseconds(HoverMs);
+        _discSurface.Duration = hover;
+        _ringHoverOpacity.Duration = hover;
+        _retryHintOpacity.Duration = ReducedMotion ? TimeSpan.Zero : TimeSpan.FromMilliseconds(220);
     }
 
     // ── Темп переходов (forward 220/300 ↔ реверс 165/225; reduced-motion → 0) ──────────
@@ -575,6 +696,13 @@ public partial class ConnectHeroView : UserControl
         _discScaleX.Duration = _discScaleY.Duration = TimeSpan.FromMilliseconds(90);
         _discScaleX.Easing = _discScaleY.Easing = EaseOutQuart;
         _discScale.ScaleX = _discScale.ScaleY = 0.94;
+
+        //  Глубина нажатия (P1-2): скрим-«лунка» темнеет 0→0.12 и глиф чуть глубже диска (→0.97),
+        //  в унисон с press-scale (90мс OutQuart). БЕЗ ripple/glow — только физический «вдав».
+        _scrimOpacity.Duration = _glyphScaleX.Duration = _glyphScaleY.Duration = TimeSpan.FromMilliseconds(90);
+        _scrimOpacity.Easing = _glyphScaleX.Easing = _glyphScaleY.Easing = EaseOutQuart;
+        PressScrim.Opacity = 0.12;
+        _glyphScale.ScaleX = _glyphScale.ScaleY = 0.97;
     }
 
     private void OnDiscPointerReleased(object? sender, PointerReleasedEventArgs e)
@@ -603,10 +731,56 @@ public partial class ConnectHeroView : UserControl
         _discScaleX.Duration = _discScaleY.Duration = TimeSpan.FromMilliseconds(160);
         _discScaleX.Easing = _discScaleY.Easing = EaseOutQuint;
         _discScale.ScaleX = _discScale.ScaleY = 1.0;
+
+        //  Отпускание: скрим гаснет и глиф возвращается вместе с диском (160мс OutQuint).
+        _scrimOpacity.Duration = _glyphScaleX.Duration = _glyphScaleY.Duration = TimeSpan.FromMilliseconds(160);
+        _scrimOpacity.Easing = _glyphScaleX.Easing = _glyphScaleY.Easing = EaseOutQuint;
+        PressScrim.Opacity = 0;
+        _glyphScale.ScaleX = _glyphScale.ScaleY = 1.0;
+    }
+
+    // ── Hover диска (P0-1): surface-lift + ring-brighten + (в Idle) glyph-warm ──────────────
+    //  Desktop-герой обязан отвечать на указатель. Отклик — БЕЗ scale и БЕЗ glow (glow зарезервирован
+    //  под connected-payoff): диск поднимается на шаг поверхности (Brush.SurfaceHigh→Highest через
+    //  класс .hover, тема-реактивно), внешнее кольцо ярче (накладной RingHoverGlow), а в Idle глиф
+    //  теплеет к чернилам (OnSurfaceVariant→OnSurface — НЕ к акценту). Переходы 120мс (0мс в lite).
+    private void OnDiscPointerEntered(object? sender, PointerEventArgs e)
+    {
+        _hovering = true;
+        ConnectDisc.Classes.Add("hover");
+        RingHoverGlow.Opacity = 0.5;
+
+        //  Glyph-warm имеет смысл только в Idle (в остальных состояниях Fill щита ведёт state-машина
+        //  и re-assert перекроет hover); при отсутствии сервера не «приглашаем» (щит приглушён).
+        if (_visualState == ConnectVisualState.Idle && _hasServer)
+        {
+            ShieldOutline.Fill = OnSurfaceBrush;
+        }
+    }
+
+    private void OnDiscHoverExit(object? sender, PointerEventArgs e) => ClearHover();
+
+    //  Снять hover-вид. Идемпотентно (PointerExited приходит и как отмена press, и как выход hover;
+    //  зовётся также из teardown-ов раскладки/lite). Glyph восстанавливаем ТОЛЬКО если всё ещё Idle —
+    //  иначе Fill уже выставлен верной state-веткой.
+    private void ClearHover()
+    {
+        if (!_hovering)
+        {
+            return;
+        }
+
+        _hovering = false;
+        ConnectDisc.Classes.Remove("hover");
+        RingHoverGlow.Opacity = 0;
+        if (_visualState == ConnectVisualState.Idle)
+        {
+            ShieldOutline.Fill = ShieldIdleBrush;
+        }
     }
 
     // ── Дуга / glow / сонар ───────────────────────────────────────────────────────────
-    private void SetArc(bool on)
+    private void SetArc(bool on, bool windUp = false)
     {
         //  В lite/reduced-motion дуги НЕТ ВООБЩЕ (не статичная, а полностью скрыта): владелец
         //  не хочет «замёрзшую» синюю дугу в облегчённом режиме. Само состояние connecting всё
@@ -620,12 +794,104 @@ public partial class ConnectHeroView : UserControl
         //  он «облетал» шит, т.к. не имел RenderTransformOrigin в центре.
         if (on && !ReducedMotion && !MotionSuppressed)
         {
-            ConnectingArc.Classes.Add("spinning");
+            //  Вход в connecting с движения = разгон из покоя (P0-3); re-apply/восстановление уже
+            //  в connecting = сразу ровный спин (без повторного wind-up).
+            if (windUp)
+            {
+                StartArcWindup();
+            }
+            else
+            {
+                ConnectingArc.Classes.Remove("arc-windup");
+                ConnectingArc.Opacity = 1;
+                ConnectingArc.Classes.Add("spinning");
+            }
         }
         else
         {
+            //  Off / suppressed / lite: снимаем обе фазы, сбрасываем Opacity (статик-видимая дуга под
+            //  паузой = полностью непрозрачна; следующий wind-up сам стартует с 0).
             ConnectingArc.Classes.Remove("spinning");
+            ConnectingArc.Classes.Remove("arc-windup");
+            ConnectingArc.Opacity = 1;
         }
+    }
+
+    //  Wind-up (P0-3): дуга «набегает» из покоя — Opacity 0→1 (200мс OutQuint) + одноразовый разгон
+    //  вращения 0→360° (200мс OutQuint, .arc-windup), затем хэндофф на ровный .spinning. Угол 360°≡0°
+    //  → стык бесшовный. Всё в рамках !ReducedMotion && !MotionSuppressed (гарантировано вызывающим).
+    private void StartArcWindup()
+    {
+        ConnectingArc.Classes.Remove("spinning");
+        ConnectingArc.Classes.Remove("arc-windup");
+        _arcOpacity.Duration = TimeSpan.FromMilliseconds(200);
+        _arcOpacity.Easing = EaseOutQuint;
+        ConnectingArc.Opacity = 0;
+
+        //  Стартуем fade+ramp на следующем цикле (переход ловит 0→1), затем через 200мс хэндофф в спин.
+        //  Стартуем fade+ramp на следующем цикле (переход ловит 0→1). Таймер хэндоффа в спин ставим
+        //  ВНУТРИ этого Post — так его 200мс отсчитываются ОТ старта wind-up-анимации, а не от вызова
+        //  метода. Иначе таймер опережал бы анимацию на ~1 кадр и на стыке был микро-откат угла
+        //  (wind-up ещё ~356°, а spin стартует с 0° → заметный дёрг). Плюс это устраняет гонку очереди:
+        //  RunOnce теперь ставится только ПОСЛЕ того, как Post реально навесил arc-windup.
+        Dispatcher.UIThread.Post(
+            () =>
+            {
+                if (_visualState != ConnectVisualState.Connecting || ReducedMotion || MotionSuppressed || !ConnectingArc.IsVisible)
+                {
+                    return;
+                }
+
+                ConnectingArc.Opacity = 1;
+                ConnectingArc.Classes.Add("arc-windup");
+
+                DispatcherTimer.RunOnce(
+                    () =>
+                    {
+                        ConnectingArc.Classes.Remove("arc-windup");
+                        if (_visualState != ConnectVisualState.Connecting || ReducedMotion || MotionSuppressed || !ConnectingArc.IsVisible)
+                        {
+                            return;
+                        }
+
+                        ConnectingArc.Opacity = 1;
+                        ConnectingArc.Classes.Add("spinning");
+                    },
+                    TimeSpan.FromMilliseconds(200));
+            },
+            DispatcherPriority.Background);
+    }
+
+    //  Arc dissolve (P0-2): на Connecting→Connected НЕ гасим дугу мгновенно (IsVisible=false на кадре
+    //  payoff = моргание), а растворяем Opacity 1→0 (220мс Standard) ОДНОВРЕМЕННО с сонаром — дуга
+    //  «стекает» в glow, продолжая вращаться. IsVisible=false выставляем ПОСЛЕ фейда. Зовётся только на
+    //  живой connect (motion && !MotionSuppressed).
+    private void DissolveArc()
+    {
+        if (!ConnectingArc.IsVisible)
+        {
+            return;
+        }
+
+        _arcOpacity.Duration = TimeSpan.FromMilliseconds(220);
+        _arcOpacity.Easing = EaseStandard;
+        ConnectingArc.Opacity = 0; // .spinning/.arc-windup остаётся → растворяется в движении
+
+        DispatcherTimer.RunOnce(
+            () =>
+            {
+                //  Финализируем только если всё ещё connected (не откатились обратно в connecting).
+                if (_visualState != ConnectVisualState.Connected)
+                {
+                    return;
+                }
+
+                ConnectingArc.Classes.Remove("spinning");
+                ConnectingArc.Classes.Remove("arc-windup");
+                ConnectingArc.IsVisible = false;
+                ConnectingArc.Opacity = 1; // сброс для следующего connect
+            },
+            TimeSpan.FromMilliseconds(220));
     }
 
     //  Connecting-«дыхание» щита: спокойный вторичный сигнал в унисон с glow-breathe (те же 850мс
@@ -657,7 +923,9 @@ public partial class ConnectHeroView : UserControl
 
         var idle = state == ConnectVisualState.Idle;
         var live = state == ConnectVisualState.Connected;
-        var show = (idle || live) && !ReducedMotion && !_empty;
+        //  P0-4: в Idle без активного сервера приглашать нечего → ambient OFF (не тикаем компоновщик,
+        //  когда подключаться не к чему). В Connected сервер очевидно есть, поэтому (live || _hasServer).
+        var show = (idle || live) && !ReducedMotion && !_empty && (live || _hasServer);
 
         AmbientRing.IsVisible = show;
         AmbientSonar.IsVisible = show;
@@ -727,10 +995,13 @@ public partial class ConnectHeroView : UserControl
 
     private void PlaySonar()
     {
-        //  ОДНО кольцо: 1.0→1.6 + alpha 1→0 за emphasis (600мс, quint). Класс снимаем и вешаем
-        //  на следующем цикле диспетчера, чтобы одноразовая анимация чисто перезапускалась.
+        //  Осевший ДВОЙНОЙ пинг (≤2 кольца): ведущее 1.0→1.6 + alpha 1→0 (600мс quint), затем тихое
+        //  эхо (старт α 0.5, 1→1.5) с задержкой ~120мс → «залочено», не радар-петля. Классы снимаем и
+        //  вешаем на следующем цикле диспетчера, чтобы одноразовые анимации чисто перезапускались.
         SonarPulse.Classes.Remove("pulsing");
+        SonarPulseEcho.Classes.Remove("pulsing-echo");
         SonarPulse.IsVisible = true;
+        SonarPulseEcho.IsVisible = true;
         Dispatcher.UIThread.Post(
             () =>
             {
@@ -740,12 +1011,67 @@ public partial class ConnectHeroView : UserControl
                 }
             },
             DispatcherPriority.Background);
+
+        //  Эхо +120мс. Re-guard: если за это время ушли из connected или окно скрылось — не запускаем
+        //  (не тикаем компоновщик за экраном одноразовым эхо).
+        DispatcherTimer.RunOnce(
+            () =>
+            {
+                if (_visualState == ConnectVisualState.Connected && !MotionSuppressed)
+                {
+                    SonarPulseEcho.Classes.Add("pulsing-echo");
+                }
+            },
+            TimeSpan.FromMilliseconds(120));
     }
 
     private void HideSonar()
     {
         SonarPulse.Classes.Remove("pulsing");
+        SonarPulseEcho.Classes.Remove("pulsing-echo");
         SonarPulse.IsVisible = false;
+        SonarPulseEcho.IsVisible = false;
+    }
+
+    //  Connect-bloom (P1-1): диск «приземляется» — 1.0→1.04 (180мс) → 1.04→1.0 (260мс), ОБЕ ноги
+    //  OutQuint. Это оседание, НЕ bounce: пик ≤1.04, ниже покоя НЕ уходит, кривой elastic нет. Реюзает
+    //  тот же self-centering _discScale, поэтому центр гарантирован. Второй leg (заканчивается ~440мс)
+    //  оседает уже поверх полного glow (reveal 300мс) — в бюджете Emphasis (600мс).
+    private void PlayConnectBloom() => PlayDiscSettle(1.04, 180, 260);
+
+    //  Error-contract (P1-3): один спокойный «вдав» 1.0→0.98→1.0 (150+150мс OutQuint) — тихое
+    //  подтверждение «связь сорвалась», без shake/bounce. Пик 0.98, без осцилляции.
+    private void PlayErrorContract() => PlayDiscSettle(0.98, 150, 150);
+
+    //  Двух-ногое оседание диска через press-scale переходы. Вызывающий уже проверил движение и не-
+    //  suppressed; здесь ещё раз страхуемся от ReducedMotion. Если во время оседания начали press —
+    //  прекращаем (press-scale перехватит), чтобы не бороться за _discScale.
+    private async void PlayDiscSettle(double peak, int leg1Ms, int leg2Ms)
+    {
+        if (ReducedMotion || _pressing)
+        {
+            return;
+        }
+
+        try
+        {
+            _discScaleX.Easing = _discScaleY.Easing = EaseOutQuint;
+            _discScaleX.Duration = _discScaleY.Duration = TimeSpan.FromMilliseconds(leg1Ms);
+            _discScale.ScaleX = _discScale.ScaleY = peak;
+
+            await Task.Delay(leg1Ms);
+            if (_pressing)
+            {
+                return; // press взял управление диском — не дёргаем обратно
+            }
+
+            _discScaleX.Duration = _discScaleY.Duration = TimeSpan.FromMilliseconds(leg2Ms);
+            _discScale.ScaleX = _discScale.ScaleY = 1.0;
+        }
+        catch
+        {
+            //  Оседание — чистая косметика; любая гонка/отсоединение не должны падать в connect-путь.
+        }
     }
 
     // ── Cold-start «сборка» героя (ОДИН раз за процесс) ─────────────────────────────────
