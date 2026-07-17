@@ -268,10 +268,23 @@
         </Style>
     </Window.Styles>
 
-    <dialogHost:DialogHost
-        Background="#B3000000"
-        CloseOnClickAway="True"
-        DisableOpeningAnimation="True">
+    <!--  ==================== In-app UI-масштаб + ресайз-грипы (обёртка корня окна) ====================
+          windowRoot — новый корень окна. LayoutTransformControl (uiScaleHost) даёт ИСТИННЫЙ zoom всего
+          интерфейса (масштабирует И layout, И рендер) через ScaleTransform, НЕЗАВИСИМО от OS DPI: на 4K при
+          100% OS-масштабе интерфейс был физически крошечным — теперь пользователь увеличивает его целиком
+          (Ctrl +/Ctrl −/Ctrl 0 и строка настроек «Масштаб интерфейса»), фактор персистится (UiItem.UiScale)
+          и применяется на старте. Ресайз-грипы (resizeGripHost) лежат ЗА трансформом → держат ФИЗИЧЕСКИЕ края
+          окна при любом zoom и тащат нативный ресайз безрамочного окна (Window.BeginResizeDrag).  -->
+    <Panel x:Name="windowRoot">
+        <LayoutTransformControl x:Name="uiScaleHost">
+            <LayoutTransformControl.LayoutTransform>
+                <!--  Тождественный старт; фактический фактор ставит code-behind (ApplyUiScaleToWindow).  -->
+                <ScaleTransform ScaleX="1" ScaleY="1" />
+            </LayoutTransformControl.LayoutTransform>
+            <dialogHost:DialogHost
+                Background="#B3000000"
+                CloseOnClickAway="True"
+                DisableOpeningAnimation="True">
         <Panel>
             <Grid x:Name="chromeRoot" RowDefinitions="28,*">
 
@@ -621,5 +634,70 @@
                     Stretch="Fill" />
             </Border>
         </Panel>
-    </dialogHost:DialogHost>
+            </dialogHost:DialogHost>
+        </LayoutTransformControl>
+
+        <!--  ==================== Ресайз-грипы безрамочного окна (8 зон) ====================
+              8 тонких (6px) ПРОЗРАЧНЫХ зон по краям и углам поверх всего интерфейса. Прозрачный фон =
+              зона участвует в хит-тесте; ЦЕНТР Grid (1,1) пуст → клики уходят в контент под ним (грипы не
+              крадут нажатия у кнопок/списков — перехватывают только крайние 6px, как нативная рамка). На
+              PointerPressed каждая зона зовёт кроссплатформенный Window.BeginResizeDrag(WindowEdge, e)
+              (см. WireResizeGrips в code-behind) — ОС ведёт нативный цикл ресайза и уважает MinWidth/
+              MinHeight (мы масштабируем их под UI-zoom). Курсоры: углы — диагональные, края — H/V. Грипы ЗА
+              LayoutTransformControl, поэтому держат ФИЗИЧЕСКИЕ края окна при любом zoom. Видимы только в
+              Normal (в maximized/minimized ресайз бессмыслен — переключает code-behind по WindowState).  -->
+        <Grid
+            x:Name="resizeGripHost"
+            ColumnDefinitions="4,*,4"
+            RowDefinitions="4,*,4">
+            <Border
+                x:Name="gripNW"
+                Grid.Row="0"
+                Grid.Column="0"
+                Background="Transparent"
+                Cursor="TopLeftCorner" />
+            <Border
+                x:Name="gripN"
+                Grid.Row="0"
+                Grid.Column="1"
+                Background="Transparent"
+                Cursor="SizeNorthSouth" />
+            <Border
+                x:Name="gripNE"
+                Grid.Row="0"
+                Grid.Column="2"
+                Background="Transparent"
+                Cursor="TopRightCorner" />
+            <Border
+                x:Name="gripW"
+                Grid.Row="1"
+                Grid.Column="0"
+                Background="Transparent"
+                Cursor="SizeWestEast" />
+            <Border
+                x:Name="gripE"
+                Grid.Row="1"
+                Grid.Column="2"
+                Background="Transparent"
+                Cursor="SizeWestEast" />
+            <Border
+                x:Name="gripSW"
+                Grid.Row="2"
+                Grid.Column="0"
+                Background="Transparent"
+                Cursor="BottomLeftCorner" />
+            <Border
+                x:Name="gripS"
+                Grid.Row="2"
+                Grid.Column="1"
+                Background="Transparent"
+                Cursor="SizeNorthSouth" />
+            <Border
+                x:Name="gripSE"
+                Grid.Row="2"
+                Grid.Column="2"
+                Background="Transparent"
+                Cursor="BottomRightCorner" />
+        </Grid>
+    </Panel>
 </Window>

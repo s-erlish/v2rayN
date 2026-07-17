@@ -39,6 +39,16 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     private const double CompactToggleWidth = 372.0;
     private const double CompactToggleHeight = 630.0;
 
+    // ==================== In-app UI-масштаб (zoom всего интерфейса, независимо от OS DPI) ====================
+    // Фактор zoom применяется к КОРНЮ контента через LayoutTransformControl (uiScaleHost/uiScaleTransform):
+    // на 4K-мониторе при 100% OS-масштабе всё физически крошечное — этот слой даёт пользователю увеличить
+    // интерфейс целиком (Ctrl +/Ctrl −/Ctrl 0 и строка настроек), НЕ трогая OS DPI. Базовые MinWidth/MinHeight
+    // (из XAML) масштабируются под фактор — иначе на высоком zoom контенту не хватает места и он клиппится.
+    // Значение живёт в UiScaleState (мгновенный обмен с настройками/клавишами) и персистится в UiItem.UiScale.
+    private double _uiScale = 1.0;
+    private double _baseMinWidth;   // == MinWidth в XAML при zoom 1.0 (снимается в ctor до правок мин-размера)
+    private double _baseMinHeight;  // == MinHeight в XAML при zoom 1.0
+
     // Драг-к-краю: когда пользователь тащит компактное окно к верхнему/боковому краю рабочей
     // области — разворачиваем в широкую. Порог в физ. пикселях; _edgeSnapSuspended гасит ложные
     // срабатывания во время программного репозиционирования (клампы/тумблер).
@@ -93,6 +103,23 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         InitializeComponent();
 
         _config = AppManager.Instance.Config;
+
+        // ==================== Масштаб интерфейса (in-app zoom) ====================
+        // Снимаем базовые мин-размеры из XAML (340×560) ДО каких-либо правок, затем засеваем фактор из
+        // конфига (клампится) и применяем его к корневому ScaleTransform + мин-размерам окна. Подписка на
+        // UiScaleState.Changed держит трансформ, мин-размер и брейкпоинт раскладки в синхроне при изменении
+        // масштаба из настроек ИЛИ по горячим клавишам (единый путь применения — OnUiScaleChanged/ApplyUiScale).
+        _baseMinWidth = MinWidth;
+        _baseMinHeight = MinHeight;
+        UiScaleState.Initialize(_config.UiItem.UiScale);
+        _uiScale = UiScaleState.Current;
+        UiScaleState.Changed += OnUiScaleChanged;
+        ApplyUiScaleToWindow();   // трансформ + мин-размеры на старте (WindowBase.OnLoaded затем клампит окно)
+
+        // Ресайз-грипы безрамочного окна: 8 зон → BeginResizeDrag. Видимость грипов = только Normal-состояние.
+        WireResizeGrips();
+        this.GetObservable(WindowStateProperty)
+            .Subscribe(s => resizeGripHost.IsVisible = s == WindowState.Normal);
 
         // «Облегчённый режим» (reduced-motion) теперь РЕАКТИВЕН: единый источник — MotionState.
         // MainWindow сеет его из конфига и подписывается на изменения; SettingsViewModel двигает флаг
@@ -185,7 +212,10 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         // Первичная раскладка + вотчер ширины окна. Наблюдаем Bounds окна (ширина клиентской
         // области); при пересечении брейкпоинта раскладка меняется РОВНО один раз (гистерезис).
         ApplyLayoutMode(_compactMode);
-        this.GetObservable(BoundsProperty).Subscribe(b => UpdateLayoutMode(b.Width));
+        // Брейкпоинт компакт/широкая живёт в КООРДИНАТАХ КОНТЕНТА (после UI-zoom): LayoutTransformControl
+        // масштабирует контент на _uiScale, поэтому контент видит ширину Bounds.Width/_uiScale. Делим здесь,
+        // чтобы зумнутое окно переключало раскладку осмысленно (при _uiScale=1.0 — прежнее поведение 1:1).
+        this.GetObservable(BoundsProperty).Subscribe(b => UpdateLayoutMode(b.Width / _uiScale));
 
         // Общий AccountViewModel на вкладку «Аккаунт» (в рантайме DataContext ставит MainWindow,
         // не сама вью — тот же экземпляр уедет в LoginView). «Управление»-строки и CTA входа
@@ -988,7 +1018,8 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
             if (_edgeExpandRequested)
             {
                 _edgeExpandRequested = false;
-                ResizeClamped(WideToggleWidth, WideToggleHeight);
+                // Масштабируем цель на _uiScale (см. ToggleLayoutSize): раскладка живёт в координатах контента.
+                ResizeClamped(WideToggleWidth * _uiScale, WideToggleHeight * _uiScale);
             }
         }
     }
@@ -1002,13 +1033,16 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         {
             WindowState = WindowState.Normal;
         }
+        // Цели тумблера — в ФИЗ. размере окна, поэтому масштабируем на _uiScale: тумблер задаёт РАСКЛАДКУ,
+        // а брейкпоинт живёт в координатах контента (Bounds/_uiScale). Без умножения на высоком zoom «широкая»
+        // цель в контенте оказалась бы < 760 и раскладка не переключилась бы. ApplySizeCentered клампит в экран.
         if (_compactMode)
         {
-            AnimateWindowSize(WideToggleWidth, WideToggleHeight);
+            AnimateWindowSize(WideToggleWidth * _uiScale, WideToggleHeight * _uiScale);
         }
         else
         {
-            AnimateWindowSize(CompactToggleWidth, CompactToggleHeight);
+            AnimateWindowSize(CompactToggleWidth * _uiScale, CompactToggleHeight * _uiScale);
         }
     }
 
@@ -1186,6 +1220,133 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         Height = h;
     }
 
+    // ==================== Ресайз безрамочного окна (грипы → BeginResizeDrag) ====================
+    // 8 прозрачных грипов (XAML resizeGripHost) на PointerPressed зовут кроссплатформенный
+    // Window.BeginResizeDrag(WindowEdge, e). Он сосуществует с остальным chrome без конфликтов:
+    //   • title-drag: North-грип лежит ПОВЕРХ верхних 6px title-bar → хит-тест выбирает грип (верхний
+    //     z-order), нажатие ниже 6px уходит в titleBar → перенос. Разные зоны, не спорят.
+    //   • edge-snap (OnPositionChanged): гейтится _titleDragging, который ресайз НЕ взводит → не мигает.
+    //   • auto-swap 760: ресайз меняет Bounds → Bounds-вотчер живьём переключает раскладку (желаемо).
+    //   • max-кнопка: грипы видимы только в Normal (WindowStateProperty-вотчер), BeginResize тоже гейтит.
+    private void WireResizeGrips()
+    {
+        gripNW.PointerPressed += (_, e) => BeginResize(WindowEdge.NorthWest, e);
+        gripN.PointerPressed += (_, e) => BeginResize(WindowEdge.North, e);
+        gripNE.PointerPressed += (_, e) => BeginResize(WindowEdge.NorthEast, e);
+        gripW.PointerPressed += (_, e) => BeginResize(WindowEdge.West, e);
+        gripE.PointerPressed += (_, e) => BeginResize(WindowEdge.East, e);
+        gripSW.PointerPressed += (_, e) => BeginResize(WindowEdge.SouthWest, e);
+        gripS.PointerPressed += (_, e) => BeginResize(WindowEdge.South, e);
+        gripSE.PointerPressed += (_, e) => BeginResize(WindowEdge.SouthEast, e);
+    }
+
+    // Стартует нативный ресайз за указанный край/угол. Только ЛКМ и только в Normal (в maximized/minimized
+    // ресайз бессмыслен). Handled — чтобы нажатие не «протекло» дальше. BeginResizeDrag кроссплатформенный
+    // (на Windows блокирует до конца тяги, на X11/Wayland отдаёт WM) и сам уважает MinWidth/MinHeight —
+    // потолка по ширине нет, поэтому окно тянется вплоть до края экрана.
+    private void BeginResize(WindowEdge edge, PointerPressedEventArgs e)
+    {
+        if (WindowState != WindowState.Normal || !e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        {
+            return;
+        }
+        e.Handled = true;
+        BeginResizeDrag(edge, e);
+    }
+
+    #region In-app UI-масштаб (zoom)
+
+    // Реакция на смену фактора извне (настройки/горячие клавиши). Единый путь применения: трансформ +
+    // мин-размеры + пере-кламп окна + пере-оценка брейкпоинта. Персист делает ИНИЦИАТОР (SetUiScale/настройки),
+    // здесь только применение, поэтому смена из настроек и из клавиш дают идентичный результат.
+    private void OnUiScaleChanged(object? sender, double scale)
+    {
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            ApplyUiScale(scale);
+        }
+        else
+        {
+            Dispatcher.UIThread.Post(() => ApplyUiScale(scale));
+        }
+    }
+
+    private void ApplyUiScale(double scale)
+    {
+        _uiScale = UiScaleState.Clamp(scale);
+        ApplyUiScaleToWindow();
+
+        // Окно могло стать меньше нового мин-размера (zoom вырос) — переклампим текущий размер в экран
+        // (вырастет до мин, останется по центру, не уедет за край). ResizeClamped уже уважает MinWidth/Height.
+        if (WindowState == WindowState.Normal)
+        {
+            ResizeClamped(Width, Height);
+        }
+
+        // Брейкпоинт компакт/широкая — в координатах контента (Bounds/_uiScale). На старте Bounds=0 → no-op.
+        if (Bounds.Width > 0)
+        {
+            UpdateLayoutMode(Bounds.Width / _uiScale);
+        }
+    }
+
+    // Применяет ТЕКУЩИЙ _uiScale к корневому ScaleTransform и к мин-размерам окна. Мин-размер контента
+    // растёт с zoom (контенту нужно _base*scale физ. DIP, иначе клип); клампим под рабочую область, чтобы
+    // MinWidth/Height НИКОГДА не превысили экран (иначе Avalonia распёрла бы окно за его пределы). НЕ
+    // персистит и не трогает layout-режим сам по себе.
+    private void ApplyUiScaleToWindow()
+    {
+        // Ставим/обновляем масштаб корня через сам LayoutTransformControl (у ScaleTransform внутри
+        // property-элемента компилятор XAML не генерирует поле — обращаемся к хосту).
+        if (uiScaleHost is not null)
+        {
+            uiScaleHost.LayoutTransform = new ScaleTransform(_uiScale, _uiScale);
+        }
+
+        // По умолчанию (в т.ч. если экран ещё не доступен — вызов из ctor до реализации окна) — просто
+        // base*scale без клампа; фактический размер окна на старте всё равно клампит WindowBase.OnLoaded, а
+        // MainWindow.OnLoaded ниже повторно зовёт этот метод уже с доступным экраном.
+        var minW = _baseMinWidth * _uiScale;
+        var minH = _baseMinHeight * _uiScale;
+        try
+        {
+            var screen = Screens.ScreenFromWindow(this) ?? Screens.Primary;
+            if (screen is not null)
+            {
+                var scaling = screen.Scaling > 0 ? screen.Scaling : 1.0;
+                // Клампим мин под рабочую область: MinWidth/Height НИКОГДА не должны превысить экран, иначе
+                // Avalonia распёрла бы окно за его пределы (высокий zoom на маленьком дисплее).
+                minW = Math.Min(minW, screen.WorkingArea.Width / scaling);
+                minH = Math.Min(minH, screen.WorkingArea.Height / scaling);
+            }
+        }
+        catch { }
+        MinWidth = minW;
+        MinHeight = minH;
+    }
+
+    // Горячие клавиши: сдвиг на шаг (Ctrl +/Ctrl −) и установка точного значения (Ctrl 0 = сброс).
+    private void NudgeUiScale(double delta) => SetUiScale(_uiScale + delta);
+
+    private void SetUiScale(double scale)
+    {
+        var clamped = UiScaleState.Clamp(scale);
+        if (Math.Abs(clamped - _uiScale) < 0.0001)
+        {
+            return;   // уже на границе — незачем писать конфиг/дёргать применение
+        }
+        PersistUiScale(clamped);
+        UiScaleState.Set(clamped);   // → OnUiScaleChanged применит трансформ/мин/раскладку (+ строку настроек)
+    }
+
+    private void PersistUiScale(double scale)
+    {
+        _config.UiItem.UiScale = scale;
+        _ = ConfigHandler.SaveConfig(_config);
+    }
+
+    #endregion In-app UI-масштаб (zoom)
+
     #endregion Nav & Chrome
 
     #region Theme transition (круговая заливка смены темы)
@@ -1203,8 +1364,12 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     private Point? _lastPointerInWindow;
     private static readonly TimeSpan ThemeRevealDuration = TimeSpan.FromMilliseconds(520);
 
+    // Точку старта заливки берём относительно chromeRoot (а НЕ окна): именно chromeRoot снимается в bitmap
+    // и его Bounds задают w/h заливки. Под UI-zoom окно и chromeRoot в РАЗНЫХ координатах (контент масштабирован
+    // LayoutTransformControl); координаты chromeRoot совпадают с w/h при любом факторе. При _uiScale=1.0 —
+    // тождественно прежнему GetPosition(this) (chromeRoot в начале координат окна).
     private void OnAnyPointerPressed(object? sender, PointerPressedEventArgs e)
-        => _lastPointerInWindow = e.GetPosition(this);
+        => _lastPointerInWindow = e.GetPosition(chromeRoot);
 
     // Хук из App.ApplyTheme. applySwap = мгновенная перекраска (RequestedThemeVariant + моно-оверлей).
     private void RunThemeTransition(Action applySwap)
@@ -1469,6 +1634,36 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
 
     private async void MainWindow_KeyDown(object? sender, KeyEventArgs e)
     {
+        // Ctrl (или ⌘) присутствует — но НЕ обязательно один: Ctrl «+» на большинстве раскладок = Ctrl+Shift+=,
+        // поэтому масштаб проверяем по НАЛИЧИЮ Control/Meta (допуская Shift), а V/S/F5 — по прежней точной маске.
+        var zoomMod = e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.KeyModifiers.HasFlag(KeyModifiers.Meta);
+        if (zoomMod)
+        {
+            switch (e.Key)
+            {
+                // Увеличить: Ctrl «=» / Ctrl «+» (OemPlus) и «+» цифрового блока (Add).
+                case Key.OemPlus:
+                case Key.Add:
+                    NudgeUiScale(UiScaleState.Step);
+                    e.Handled = true;
+                    return;
+
+                // Уменьшить: Ctrl «−» (OemMinus) и «−» цифрового блока (Subtract).
+                case Key.OemMinus:
+                case Key.Subtract:
+                    NudgeUiScale(-UiScaleState.Step);
+                    e.Handled = true;
+                    return;
+
+                // Сброс к 100%: Ctrl 0 (верхний ряд / цифровой блок).
+                case Key.D0:
+                case Key.NumPad0:
+                    SetUiScale(UiScaleState.Default);
+                    e.Handled = true;
+                    return;
+            }
+        }
+
         if (e.KeyModifiers is KeyModifiers.Control or KeyModifiers.Meta)
         {
             switch (e.Key)
@@ -1570,6 +1765,9 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     protected override void OnLoaded(object? sender, RoutedEventArgs e)
     {
         base.OnLoaded(sender, e);
+        // Экран теперь доступен — переклампим мин-размеры под UI-масштаб корректно (в ctor Screens мог быть
+        // ещё не готов). base.OnLoaded уже вписал стартовый размер окна в рабочую область.
+        ApplyUiScaleToWindow();
         if (_config.UiItem.AutoHideStartup)
         {
             ShowHideWindow(false);

@@ -36,6 +36,11 @@ public class SettingsViewModel : MyReactiveObject
     private static readonly int[] AutoUpdateOptions = [60, 360, 720, 1440];
     private static readonly int[] MuxConcurrencyOptions = [4, 8, 16, 32, 64, 128];
 
+    // «Масштаб интерфейса» пресеты (in-app zoom, доля). Тап по строке продвигает к следующему пресету
+    // строго больше текущего (обрабатывая и промежуточные значения с горячих клавиш Ctrl +/−), с оборотом
+    // на минимум. Диапазон совпадает с UiScaleState.Min..Max (0.8..2.0).
+    private static readonly double[] UiScaleOptions = [0.8, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0];
+
     #region Toggle-backed settings (two-way from the iOS switches → real config)
 
     [Reactive] public bool BypassLan { get; set; }
@@ -73,6 +78,11 @@ public class SettingsViewModel : MyReactiveObject
     [Reactive] public string PingMethodText { get; set; } = string.Empty;
     [Reactive] public string MuxConcurrencyText { get; set; } = string.Empty;
     [Reactive] public string AppearanceText { get; set; } = string.Empty;
+
+    /// <summary>«Масштаб интерфейса» row value — текущий in-app zoom как «NN%». Держится в синхроне с
+    /// оболочкой (MainWindow горячие клавиши Ctrl +/−/0) через <c>UiScaleState.Changed</c>.</summary>
+    [Reactive] public string UiScaleText { get; set; } = string.Empty;
+
     [Reactive] public string LanguageText { get; set; } = string.Empty;
     [Reactive] public string SubAutoUpdateText { get; set; } = string.Empty;
     [Reactive] public string AboutText { get; set; } = string.Empty;
@@ -92,7 +102,15 @@ public class SettingsViewModel : MyReactiveObject
         StatusBarViewModel.Instance
             .WhenAnyValue(x => x.EnableTun)
             .Subscribe(tun => ModeText = tun ? "TUN" : Common.L.T("Settings_ModeProxy"));
+
+        // Строка «Масштаб интерфейса» держится в синхроне с оболочкой: когда пользователь меняет zoom
+        // горячими клавишами (Ctrl +/Ctrl −/Ctrl 0 в MainWindow), UiScaleState.Changed обновляет подпись
+        // здесь. Единственный рантайм-экземпляр (keep-alive SettingsView) живёт всё приложение, поэтому
+        // отписка не нужна (тот же паттерн, что MotionState в MainWindow).
+        v2rayN.Desktop.Common.UiScaleState.Changed += OnUiScaleStateChanged;
     }
+
+    private void OnUiScaleStateChanged(object? sender, double scale) => UiScaleText = FormatUiScale(scale);
 
     /// <summary>Design-time constructor — sample strings only, never touches AppManager/config.</summary>
     private SettingsViewModel(bool design)
@@ -104,6 +122,7 @@ public class SettingsViewModel : MyReactiveObject
         PingMethodText = "Реальная";
         MuxConcurrencyText = "8";
         AppearanceText = "Тёмная";
+        UiScaleText = "100%";
         LanguageText = "Русский";
         SubAutoUpdateText = "24 ч.";
         AboutText = Utils.GetVersionInfo();
@@ -144,6 +163,11 @@ public class SettingsViewModel : MyReactiveObject
         LanguageText = ResolveLanguageText();
         SubAutoUpdateText = ResolveAutoUpdateText();
         AboutText = Utils.GetVersionInfo();
+
+        // Читаем фактор ПРЯМО из конфига (клампя), а не из UiScaleState.Current: этот VM конструируется в
+        // field-init MainWindow ДО того, как MainWindow засеет UiScaleState из конфига, поэтому Current тут
+        // ещё дефолтный. Дальше подпись ведёт подписка OnUiScaleStateChanged.
+        UiScaleText = FormatUiScale(v2rayN.Desktop.Common.UiScaleState.Clamp(_config.UiItem.UiScale));
     }
 
     #endregion Load
@@ -416,6 +440,34 @@ public class SettingsViewModel : MyReactiveObject
         v2rayN.Desktop.App.ApplyTheme(next, _config.UiItem.BlackTheme);
         AppearanceText = ResolveThemeText();
     }
+
+    /// <summary>Масштаб интерфейса row: цикл по пресетам 80…200% (следующий СТРОГО больше текущего, с
+    /// оборотом на минимум — корректно и после произвольных значений с горячих клавиш Ctrl +/−). Толкает
+    /// фактор в общий <c>UiScaleState</c> → оболочка (MainWindow) применяет zoom мгновенно (трансформ + мин-
+    /// размер + брейкпоинт), и персистит в <c>UiItem.UiScale</c>. Подпись обновит подписка на Changed;
+    /// выставляем и напрямую для мгновенной отзывчивости.</summary>
+    public void CycleUiScale()
+    {
+        if (_designMode)
+        {
+            return;
+        }
+
+        var cur = v2rayN.Desktop.Common.UiScaleState.Current;
+        // Первый пресет строго больше текущего; если текущий ≥ максимума — оборот на минимум.
+        var next = UiScaleOptions.FirstOrDefault(o => o > cur + 0.001);
+        if (next < UiScaleOptions[0])
+        {
+            next = UiScaleOptions[0];
+        }
+
+        v2rayN.Desktop.Common.UiScaleState.Set(next);
+        _config.UiItem.UiScale = next;
+        _ = ConfigHandler.SaveConfig(_config);
+        UiScaleText = FormatUiScale(next);
+    }
+
+    private static string FormatUiScale(double scale) => $"{Math.Round(scale * 100)}%";
 
     /// <summary>Re-read values that a sub-screen (per-app / ping / provider / etc.) may have changed,
     /// so the row value labels stay truthful after the dialog closes.</summary>

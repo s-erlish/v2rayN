@@ -129,6 +129,15 @@ public class UIItem
     // shared flag, additive + defaults false, so existing JSON configs deserialize unchanged.
     public bool LiteMode { get; set; }
 
+    // departament: «Масштаб интерфейса» (in-app UI zoom) — a pure UI factor the user controls to make the
+    // WHOLE desktop interface larger/smaller INDEPENDENT of the OS DPI scale. Fixes «всё крошечное» on a 4K
+    // monitor left at 100% OS scaling: the OS renders 1:1 (physically small), so instead of fighting the OS
+    // scale we let the user zoom the app itself. The desktop shell wraps its root content in a
+    // LayoutTransformControl whose ScaleTransform reads this factor (range 0.8–2.0, default 1.0). Additive:
+    // the default 1.0 initializer means old JSON configs (missing the field) deserialize as 1.0, and the
+    // consumer (UiScaleState.Clamp) treats any 0/out-of-range value as 1.0 too, so nothing breaks.
+    public double UiScale { get; set; } = 1.0;
+
     // departament: «Прокси по приложениям» (split-tunnel) UI state for the desktop Settings screen.
     // The EFFECTIVE routing lives in the active RoutingItem.RuleSet (managed RulesItem with
     // process_name/process_path, injected on save); these fields only persist what the picker shows.

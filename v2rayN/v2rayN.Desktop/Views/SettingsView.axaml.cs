@@ -51,6 +51,9 @@ public partial class SettingsView : UserControl
         RowLanguage.Tapped += (_, _) => _ = Vm?.CycleLanguageAsync();
         RowSubAutoUpdate.Tapped += (_, _) => _ = Vm?.CycleAutoUpdateAsync();
         RowAppearance.Tapped += (_, _) => _ = Vm?.CycleAppearanceAsync();
+        // Масштаб интерфейса: тап циклит пресеты zoom (те же значения — на Ctrl +/Ctrl −). Оболочка
+        // (MainWindow) применяет фактор мгновенно через общий UiScaleState.
+        RowUiScale.Tapped += (_, _) => Vm?.CycleUiScale();
 
         // --- Строки, открывающие реальные Incy суб-СТРАНИЦЫ (in-app, БЕЗ отдельных окон) ---
         RowPerApp.Tapped += (_, _) => OpenPage(new PerAppProxyPage(), refresh: true);
