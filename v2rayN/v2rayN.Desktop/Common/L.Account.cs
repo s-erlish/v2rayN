@@ -58,6 +58,46 @@ public sealed partial class L
         Add("Account_PrevSub", "Предыдущая", "Previous");
         Add("Account_NextSub", "Следующая", "Next");
 
+        // ── Subscription card (redesign: named sub · state-led meters · auto-renew · renew flow) ──
+        Add("Account_YourSubscription", "Ваша подписка", "Your subscription");
+        Add("Account_SubscriptionN", "Подписка {0}", "Subscription {0}");
+        Add("Account_ActiveUntil", "Активна до {0}", "Active until {0}");
+        Add("Account_ExpiredOnDate", "Истекла {0}", "Expired {0}");
+        Add("Account_DevicesShort", "{0} / {1} устройств", "{0} / {1} devices");
+        Add("Account_DevicesUnlimited", "Безлимит устройств", "Unlimited devices");
+        Add("Account_TrafficUnlimited", "{0} · безлимит", "{0} · unlimited");
+        Add("Account_AutoRenew", "Автопродление", "Auto-renew");
+        Add("Account_AutoRenewNext", "Продлится {0} — спишем {1}", "Renews {0} — we'll charge {1}");
+        Add("Account_AutoRenewOn", "Автопродление включено", "Auto-renew is on");
+        Add("Account_AutoRenewOff", "Автопродление выключено", "Auto-renew is off");
+        Add("Account_AutoRenewNudge",
+            "Включите автопродление, чтобы не прерывать",
+            "Turn on auto-renew so it doesn't lapse");
+        Add("Account_RenewFromBalance", "С баланса · {0}", "From balance · {0}");
+        Add("Account_RenewWithCard", "Оплатить картой", "Pay by card");
+        Add("Account_RenewDone", "Подписка продлена", "Subscription renewed");
+        Add("Account_PickPlan", "Выбрать тариф", "Pick a plan");
+
+        // ── Linking block (Способы входа) ──
+        Add("Account_LinkingTitle", "Способы входа", "Sign-in methods");
+        Add("Account_LinkEmail", "Email и пароль", "Email & password");
+        Add("Account_WebCabinet", "Веб-кабинет", "Web cabinet");
+        Add("Account_Linked", "Привязан", "Linked");
+        Add("Account_LinkAction", "Привязать", "Link");
+        Add("Account_AddAction", "Добавить", "Add");
+        Add("Account_OpenAction", "Открыть", "Open");
+        Add("Account_SoonAction", "Скоро", "Soon");
+        Add("Account_TgLinkCode", "Код: {0}", "Code: {0}");
+        Add("Account_OpenBot", "Открыть бота", "Open the bot");
+        Add("Account_TgLinkWaiting", "Ждём подтверждения в Telegram…", "Waiting for Telegram…");
+        Add("Account_EmailLinkTitle", "Привязать почту", "Link an email");
+        Add("Account_EmailLinkHint",
+            "Пришлём ссылку для подтверждения на этот адрес.",
+            "We'll email a confirmation link to this address.");
+        Add("Account_EmailSent", "Письмо отправлено на {0}", "Email sent to {0}");
+        Add("Account_Send", "Отправить", "Send");
+        Add("Account_LinkDone", "Готово", "Done");
+
         // ── Login screen (LoginView) ──
         Add("Login_SignIn", "Вход", "Sign in");
         Add("Login_Title", "Вход в departament", "Sign in to departament");

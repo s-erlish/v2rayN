@@ -1,3 +1,4 @@
+using Avalonia.Media;
 using v2rayN.Desktop.Account;
 using v2rayN.Desktop.Account.Dto;
 using v2rayN.Desktop.Common;
@@ -44,6 +45,22 @@ public class AccountViewModel : MyReactiveObject
     // Bounded post-top-up profile re-poll (a Platega top-up completes in the external browser with no
     // in-app return callback). Cancelled on logout or a subsequent top-up.
     private CancellationTokenSource? _topUpRefreshCts;
+
+    // Bounded poll after a scoped CARD renewal (webhook-confirmed in the browser) — mirrors BuyViewModel.
+    private CancellationTokenSource? _renewPollCts;
+    private AccountSubCard? _renewPollCard;
+
+    // Bounded poll of /me after a Telegram-link code is issued (until telegramLinked flips true).
+    private CancellationTokenSource? _linkPollCts;
+
+    // The Telegram bot handle to reopen from «Открыть бота» while a link is pending.
+    private string _linkBotUsername = string.Empty;
+
+    /// <summary>Payment statuses that count as webhook-confirmed while re-polling GET /client/payments.</summary>
+    private static readonly HashSet<string> PaidStatuses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "paid", "success", "succeeded", "completed", "confirmed", "done",
+    };
 
     #region reactive state (raw)
 
@@ -163,6 +180,25 @@ public class AccountViewModel : MyReactiveObject
     // Logged-out CTA (nav-gating is deferred, so the tab shows a Telegram login prompt itself).
     [Reactive] public bool ShowLoginCta { get; set; }
 
+    // ── Linking block («Способы входа») ──
+    [Reactive] public bool ShowLinking { get; set; }
+    [Reactive] public bool TelegramLinked { get; set; }
+    [Reactive] public string TelegramLinkedId { get; set; } = string.Empty;
+    [Reactive] public bool GoogleLinked { get; set; }
+    [Reactive] public string GoogleLinkedId { get; set; } = string.Empty;
+    [Reactive] public bool EmailLinked { get; set; }
+    [Reactive] public string EmailLinkedId { get; set; } = string.Empty;
+
+    /// <summary>True while the Telegram-link code is shown and we poll /me for the linked flag to flip.</summary>
+    [Reactive] public bool TelegramLinkPending { get; set; }
+    [Reactive] public string TelegramLinkCodeText { get; set; } = string.Empty;
+
+    /// <summary>Show the «Привязать» action only when Telegram is neither linked nor pending.</summary>
+    [Reactive] public bool TelegramCanLink { get; set; }
+
+    /// <summary>The email the user types in the «Привязать почту» flyout.</summary>
+    [Reactive] public string LinkEmailInput { get; set; } = string.Empty;
+
     #endregion reactive state (derived display)
 
     #region login state / inputs
@@ -205,6 +241,12 @@ public class AccountViewModel : MyReactiveObject
     /// <summary>Balance top-up: opens a Platega checkout for <see cref="TopUpAmount"/>.</summary>
     public ReactiveCommand<Unit, Unit> TopUpCmd { get; }
 
+    // ── Linking actions ──
+    public ReactiveCommand<Unit, Unit> LinkTelegramCmd { get; }
+    public ReactiveCommand<Unit, Unit> OpenLinkBotCmd { get; }
+    public ReactiveCommand<Unit, Unit> LinkEmailCmd { get; }
+    public ReactiveCommand<Unit, Unit> OpenWebCabinetCmd { get; }
+
     #endregion commands
 
     /// <summary>Runtime constructor: seeds from the persisted session and loads real data when logged in.</summary>
@@ -246,6 +288,10 @@ public class AccountViewModel : MyReactiveObject
         SyncRetryCmd = ReactiveCommand.CreateFromTask(SyncRetry);
         SyncReLoginCmd = ReactiveCommand.CreateFromTask(SyncReLogin);
         TopUpCmd = ReactiveCommand.CreateFromTask(TopUp);
+        LinkTelegramCmd = ReactiveCommand.CreateFromTask(StartLinkTelegram);
+        OpenLinkBotCmd = ReactiveCommand.Create(OpenLinkBot);
+        LinkEmailCmd = ReactiveCommand.CreateFromTask(SubmitLinkEmail);
+        OpenWebCabinetCmd = ReactiveCommand.CreateFromTask(OpenWebCabinet);
 
         // Safety net: a stray command exception surfaces as the error state instead of crashing.
         Observable.Merge(
@@ -261,7 +307,11 @@ public class AccountViewModel : MyReactiveObject
                 RetryCmd.ThrownExceptions,
                 SyncRetryCmd.ThrownExceptions,
                 SyncReLoginCmd.ThrownExceptions,
-                TopUpCmd.ThrownExceptions)
+                TopUpCmd.ThrownExceptions,
+                LinkTelegramCmd.ThrownExceptions,
+                OpenLinkBotCmd.ThrownExceptions,
+                LinkEmailCmd.ThrownExceptions,
+                OpenWebCabinetCmd.ThrownExceptions)
             .Subscribe(ex => RunOnUi(() =>
             {
                 Report(ex as ApiError ?? new ApiError.NetworkError(ex));
@@ -900,6 +950,8 @@ public class AccountViewModel : MyReactiveObject
     {
         _telegramCts?.Cancel();
         _topUpRefreshCts?.Cancel();
+        _renewPollCts?.Cancel();
+        _linkPollCts?.Cancel();
         // Wipe stops the VPN and DELETES the account-imported subscriptions + their servers (tracked by
         // AuthTokenStore.ManagedGuids — a user's OWN manually-added subs are never in that set, so they
         // survive logout). Refresh the Home server list afterwards so the removed servers disappear and
@@ -1022,6 +1074,321 @@ public class AccountViewModel : MyReactiveObject
 
     #endregion login / logout actions
 
+    #region renew / auto-renew / linking actions
+
+    private static PaymentRequestDto BuildRenewRequest(AccountSubCard card) => new()
+    {
+        TariffId = card.TariffId,
+        TariffPriceOptionId = card.PriceOptionId,
+        Scope = card.Scope,
+        SubscriptionId = card.SubscriptionId,
+        Currency = card.Currency,
+    };
+
+    /// <summary>Scoped renewal from the wallet (POST /payments/balance) — settles immediately, then reloads.</summary>
+    public async Task RenewWithBalance(AccountSubCard card)
+    {
+        if (!card.CanRenew || card.IsRenewing)
+        {
+            return;
+        }
+        RunOnUi(() => card.IsRenewing = true);
+        var result = await _repo.PayWithBalance(BuildRenewRequest(card));
+        RunOnUi(() =>
+        {
+            card.IsRenewing = false;
+            result
+                .OnSuccess(ok =>
+                {
+                    AppEvents.SendSnackMsgRequested.Publish(L.T("Account_RenewDone"));
+                    _ = Retry();
+                })
+                .OnFailure(err => AppEvents.SendSnackMsgRequested.Publish(MessageFor(err)));
+        });
+    }
+
+    /// <summary>
+    /// Scoped card renewal (POST /payments/tariff/platega): opens the provider checkout in the browser,
+    /// then re-polls GET /client/payments until the webhook confirms — mirrors BuyViewModel's poll.
+    /// </summary>
+    public async Task RenewWithCard(AccountSubCard card)
+    {
+        if (!card.CanRenew || card.IsRenewing)
+        {
+            return;
+        }
+        RunOnUi(() => card.IsRenewing = true);
+        var result = await _repo.RenewTariffCard(BuildRenewRequest(card));
+        RunOnUi(() =>
+        {
+            result
+                .OnSuccess(init =>
+                {
+                    var url = init.PaymentUrl;
+                    if (url.IsNullOrEmpty())
+                    {
+                        card.IsRenewing = false;
+                        AppEvents.SendSnackMsgRequested.Publish(L.T("Common_CouldntOpenPayment"));
+                        return;
+                    }
+                    try
+                    {
+                        ProcUtils.ProcessStart(url);
+                        AppEvents.SendSnackMsgRequested.Publish(L.T("Common_CompletePaymentInBrowser"));
+                        ScheduleRenewPoll(card, init);
+                    }
+                    catch
+                    {
+                        card.IsRenewing = false;
+                        AppEvents.SendSnackMsgRequested.Publish(L.T("Common_CouldntOpenPayment"));
+                    }
+                })
+                .OnFailure(err =>
+                {
+                    card.IsRenewing = false;
+                    AppEvents.SendSnackMsgRequested.Publish(MessageFor(err));
+                });
+        });
+    }
+
+    /// <summary>Re-poll payment history a few times after a card renewal opens in the browser (no in-app return).</summary>
+    private void ScheduleRenewPoll(AccountSubCard card, PaymentInitDto init)
+    {
+        _renewPollCts?.Cancel();
+        // The cancelled task lands in its catch and returns; it can't reliably clear its own spinner
+        // without racing a re-poll of the SAME card. So drop the spinner of the superseded card here —
+        // but only when it's a DIFFERENT card (re-renewing the same card keeps spinning).
+        if (_renewPollCard != null && !ReferenceEquals(_renewPollCard, card))
+        {
+            _renewPollCard.IsRenewing = false;
+        }
+        _renewPollCard = card;
+        var cts = new CancellationTokenSource();
+        _renewPollCts = cts;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                for (var attempt = 0; attempt < 5 && !cts.IsCancellationRequested; attempt++)
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(8), cts.Token);
+                    var payments = await _repo.GetPayments();
+                    if (cts.IsCancellationRequested)
+                    {
+                        return;
+                    }
+                    var items = payments.GetOrNull()?.Items ?? new List<PaymentDto>();
+                    var confirmed = items.Any(p =>
+                        PaidStatuses.Contains(p.Status.Trim()) &&
+                        ((init.OrderId.IsNotEmpty() && p.OrderId == init.OrderId) ||
+                         (init.PaymentId.IsNotEmpty() && p.Id == init.PaymentId)));
+                    if (confirmed)
+                    {
+                        RunOnUi(() =>
+                        {
+                            card.IsRenewing = false;
+                            AppEvents.SendSnackMsgRequested.Publish(L.T("Account_RenewDone"));
+                            _ = Retry();
+                        });
+                        return;
+                    }
+                }
+                RunOnUi(() => card.IsRenewing = false);
+            }
+            catch (OperationCanceledException)
+            {
+                // Superseded by a newer renewal or logout.
+            }
+        });
+    }
+
+    /// <summary>
+    /// Flips a subscription's auto-renew and persists it (PATCH /client/auto-renew for the root, or the
+    /// secondary endpoint by id). On failure the toggle is reverted so the UI never lies.
+    /// </summary>
+    public async Task SetAutoRenew(AccountSubCard card, bool enabled)
+    {
+        var result = card.Scope == "root"
+            ? await _repo.TogglePrimaryAutoRenew(enabled)
+            : await _repo.ToggleAutoRenew(card.SubscriptionId ?? string.Empty, enabled);
+        RunOnUi(() =>
+        {
+            result
+                .OnSuccess(_ =>
+                {
+                    card.AutoRenewCaption = enabled ? L.T("Account_AutoRenewOn") : L.T("Account_AutoRenewOff");
+                    // Persist the flag on EVERY in-memory representation a later rebuild could read from,
+                    // so neither a re-merge (from Profile / _lastAll) nor a plain Recompute (which reuses
+                    // the existing Subscriptions list) flips the toggle back. The root is keyed by Type
+                    // (its SubInfoDto id may be blank); a secondary by its id — which is exactly the gap
+                    // that made secondaries revert within seconds of the next poll.
+                    if (card.Scope == "root")
+                    {
+                        if (Profile != null)
+                        {
+                            Profile.AutoRenewEnabled = enabled;
+                        }
+                        ApplyAutoRenewFlag(s => string.Equals(s.Type, "root", StringComparison.OrdinalIgnoreCase), enabled);
+                    }
+                    else
+                    {
+                        var id = card.SubscriptionId;
+                        ApplyAutoRenewFlag(s => id.IsNotEmpty() && s.Id == id, enabled);
+                    }
+                })
+                .OnFailure(err =>
+                {
+                    card.SetAutoRenewSilently(!enabled);
+                    AppEvents.SendSnackMsgRequested.Publish(MessageFor(err));
+                });
+        });
+    }
+
+    /// <summary>Writes the auto-renew flag onto every matching in-memory <see cref="SubInfoDto"/> (both the
+    /// live <see cref="Subscriptions"/> list and the cached <c>_lastAll</c> a re-merge reads from), so a
+    /// rebuild reflects the persisted state instead of reverting the toggle.</summary>
+    private void ApplyAutoRenewFlag(Func<SubInfoDto, bool> match, bool enabled)
+    {
+        foreach (var s in Subscriptions)
+        {
+            if (match(s))
+            {
+                s.AutoRenewEnabled = enabled;
+            }
+        }
+        foreach (var s in _lastAll)
+        {
+            if (match(s))
+            {
+                s.AutoRenewEnabled = enabled;
+            }
+        }
+    }
+
+    /// <summary>Requests a Telegram-link code, opens the bot, and polls /me until telegramLinked flips.</summary>
+    private async Task StartLinkTelegram()
+    {
+        if (TelegramLinked)
+        {
+            return;
+        }
+        var result = await _repo.RequestLinkTelegram();
+        RunOnUi(() =>
+        {
+            result
+                .OnSuccess(dto =>
+                {
+                    _linkBotUsername = FirstNonBlank(dto.BotUsername, PublicConfig?.TelegramBotUsername, BackendConfig.BotUsername);
+                    TelegramLinkCodeText = L.F("Account_TgLinkCode", dto.Code);
+                    TelegramLinkPending = true;
+                    TelegramCanLink = false;
+                    OpenLinkBot();
+                    ScheduleLinkPoll();
+                })
+                .OnFailure(err => AppEvents.SendSnackMsgRequested.Publish(MessageFor(err)));
+        });
+    }
+
+    private void OpenLinkBot()
+    {
+        if (_linkBotUsername.IsNullOrEmpty())
+        {
+            return;
+        }
+        try
+        {
+            ProcUtils.ProcessStart($"https://t.me/{_linkBotUsername.TrimStart('@')}");
+        }
+        catch
+        {
+            // Opening the browser failed — the code is still visible for a manual send.
+        }
+    }
+
+    private void ScheduleLinkPoll()
+    {
+        _linkPollCts?.Cancel();
+        var cts = new CancellationTokenSource();
+        _linkPollCts = cts;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                for (var attempt = 0; attempt < 40 && !cts.IsCancellationRequested; attempt++)
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(3), cts.Token);
+                    await RefreshProfile();
+                    if (Profile?.TelegramLinked == true)
+                    {
+                        RunOnUi(() =>
+                        {
+                            TelegramLinkPending = false;
+                            AppEvents.SendSnackMsgRequested.Publish(L.T("Account_LinkDone"));
+                        });
+                        return;
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Cancelled by logout or a newer link attempt.
+            }
+        });
+    }
+
+    /// <summary>Requests an email-link confirmation for the typed address (anti-enumeration: same reply either way).</summary>
+    private async Task SubmitLinkEmail()
+    {
+        var email = LinkEmailInput?.Trim() ?? string.Empty;
+        if (email.IsNullOrEmpty() || !email.Contains('@'))
+        {
+            AppEvents.SendSnackMsgRequested.Publish(L.T("Login_EmailInvalid"));
+            return;
+        }
+        var result = await _repo.RequestLinkEmail(email);
+        RunOnUi(() =>
+        {
+            result
+                .OnSuccess(_ =>
+                {
+                    AppEvents.SendSnackMsgRequested.Publish(L.F("Account_EmailSent", email));
+                    LinkEmailInput = string.Empty;
+                })
+                .OnFailure(err => AppEvents.SendSnackMsgRequested.Publish(MessageFor(err)));
+        });
+    }
+
+    /// <summary>Opens the web cabinet already signed in via an app→site SSO handoff code.</summary>
+    private async Task OpenWebCabinet()
+    {
+        var result = await _repo.CreateAppHandoff();
+        RunOnUi(() =>
+        {
+            result
+                .OnSuccess(dto =>
+                {
+                    var site = FirstNonBlank(PublicConfig?.SiteUrl, PublicConfig?.PublicAppUrl).TrimEnd('/');
+                    var url = site.IsNotEmpty() ? $"{site}/tg-login?code={dto.Code}" : string.Empty;
+                    if (url.IsNullOrEmpty())
+                    {
+                        AppEvents.SendSnackMsgRequested.Publish(L.T("Common_SomethingWrong"));
+                        return;
+                    }
+                    try
+                    {
+                        ProcUtils.ProcessStart(url);
+                    }
+                    catch
+                    {
+                        AppEvents.SendSnackMsgRequested.Publish(L.T("Common_SomethingWrong"));
+                    }
+                })
+                .OnFailure(err => AppEvents.SendSnackMsgRequested.Publish(MessageFor(err)));
+        });
+    }
+
+    #endregion renew / auto-renew / linking actions
+
     #region tariff badge resolution (public helpers)
 
     /// <summary>Resolves a tariff's display name from its tariff id against the loaded catalog.</summary>
@@ -1084,6 +1451,11 @@ public class AccountViewModel : MyReactiveObject
             ReferralText = string.Empty;
             ReferralCode = string.Empty;
             HasReferral = false;
+            ShowLinking = false;
+            TelegramLinked = GoogleLinked = EmailLinked = false;
+            TelegramLinkedId = GoogleLinkedId = EmailLinkedId = string.Empty;
+            TelegramLinkPending = false;
+            TelegramCanLink = false;
         }
         else
         {
@@ -1099,6 +1471,24 @@ public class AccountViewModel : MyReactiveObject
             HasReferral = profile.ReferralCode.IsNotEmpty();
             ReferralCode = HasReferral ? profile.ReferralCode : string.Empty;
             ReferralText = HasReferral ? L.F("Account_ReferralCode", profile.ReferralCode) : string.Empty;
+
+            // Linking block: how this account is reachable / recoverable. Each row reads linked (green
+            // chip + muted identifier) or offers an accent action. A Telegram link stays "pending" until
+            // /me flips telegramLinked (the poll below), so the code stays on screen across a Recompute.
+            ShowLinking = true;
+            TelegramLinked = profile.TelegramLinked;
+            TelegramLinkedId = TelegramLinked
+                ? (profile.TelegramUsername.IsNotEmpty() ? "@" + profile.TelegramUsername!.TrimStart('@') : string.Empty)
+                : string.Empty;
+            if (TelegramLinked)
+            {
+                TelegramLinkPending = false;
+            }
+            TelegramCanLink = !TelegramLinked && !TelegramLinkPending;
+            GoogleLinked = profile.GoogleLinked;
+            GoogleLinkedId = GoogleLinked ? profile.Email : string.Empty;
+            EmailLinked = profile.HasPassword && profile.Email.IsNotEmpty();
+            EmailLinkedId = EmailLinked ? profile.Email : string.Empty;
         }
 
         // Active subscription block (first/root of the merged list)
@@ -1224,15 +1614,18 @@ public class AccountViewModel : MyReactiveObject
     /// <summary>Health state of a subscription, derived purely from its expiry date. Colour-blind-safe: paired with copy.</summary>
     private enum SubHealth { Active, Expiring, Expired }
 
-    /// <summary>Builds one carousel card view of a subscription (name · tariff caption · health · expiry · devices).</summary>
+    /// <summary>
+    /// Builds one carousel card of a subscription. The card is now a self-complete object: state-led
+    /// title («Ваша подписка» / «Подписка N»), health chip, THREE grouped meters (expiry · traffic ·
+    /// devices), a real scoped renewal + an auto-renew toggle with its next-charge line. The tariff word
+    /// is deliberately absent — it lives once, on the hero identity line.
+    /// </summary>
     private AccountSubCard BuildCard(SubInfoDto sub, int index)
     {
-        var name = FirstNonBlank(sub.DisplayName, sub.TariffDisplayName, sub.DefaultLabel, L.T("Account_MySubs"));
-
-        var badge = TariffNameFor(sub.TariffId) ?? TariffNameForPriceOptionId(sub.TariffPriceOptionId) ?? sub.TariffBadgeName();
-        var tariffCaption = badge.IsNotEmpty()
-            ? L.F("Account_TariffCaption", badge!)
-            : (sub.IsTrial ? L.T("Account_TrialPeriod") : string.Empty);
+        // Title: the user's rename if set, else «Ваша подписка» (root/first), else «Подписка N».
+        var name = sub.DisplayName.IsNotEmpty()
+            ? sub.DisplayName!
+            : (index == 0 ? L.T("Account_YourSubscription") : L.F("Account_SubscriptionN", index + 1));
 
         var (health, expiryText, urgent) = ResolveHealth(sub);
         var healthLabel = health switch
@@ -1242,37 +1635,89 @@ public class AccountViewModel : MyReactiveObject
             _ => L.T("Account_HealthActive"),
         };
 
-        // Devices: the connected count is only fetched for the active/root sub (index 0), so only that card
-        // shows the honest used/total bar (finite plans); secondaries advertise their total device slots.
         var raw = sub.Subscription?.Raw();
-        var unlimited = raw?.IsUnlimitedDevices() == true;
-        var total = sub.TotalDevices;
-        var used = index == 0 ? (DeviceCount ?? 0) : 0;
-        var showUsage = index == 0 && !unlimited && total > 0;
 
-        string devicesText;
-        double usageWidth = 0;
-        if (index == 0)
+        // Traffic meter (NEW — reuses Home's renderer): used vs limit; unlimited → empty track + label.
+        var showTrafficPill = raw != null;
+        var trafficUnlimited = raw?.IsUnlimitedTraffic() != false;
+        long trafficUsed = raw?.TrafficUsed ?? raw?.UserTraffic?.UsedTrafficBytes ?? 0;
+        var trafficLimit = raw?.TrafficLimitBytes ?? 0;
+        string trafficText;
+        double trafficWidth = 0;
+        if (trafficUnlimited)
         {
-            // Active sub: keep the real used count even when devices are unlimited ("{used} из ∞").
-            var totalStr = unlimited ? "∞" : total.ToString();
-            devicesText = L.F("Account_DevicesUsage", used, totalStr);
-            if (showUsage)
+            trafficText = L.F("Account_TrafficUnlimited", FormatBytes(trafficUsed));
+        }
+        else
+        {
+            trafficText = $"{FormatBytes(trafficUsed)} / {FormatBytes(trafficLimit)}";
+            // Guard a non-null limit of 0 (backend normally uses null for unlimited): avoids 0/0 = NaN
+            // width (an unfilled, but harmless, bar) and keeps the fill honest.
+            trafficWidth = trafficLimit > 0
+                ? TrafficPillWidth * Math.Clamp((double)trafficUsed / trafficLimit, 0.0, 1.0)
+                : 0.0;
+        }
+
+        // Device meter (kept, honestly labelled — no more "0 из ∞"). Only the active/root card knows the
+        // live connected count; secondaries advertise their total device slots.
+        var unlimitedDevices = raw?.IsUnlimitedDevices() == true || sub.TotalDevices <= 0;
+        var total = sub.TotalDevices;
+        var usedDevices = index == 0 ? (DeviceCount ?? 0) : 0;
+        var showDeviceBar = index == 0 && !unlimitedDevices;
+        string devicesText;
+        double deviceWidth = 0;
+        if (unlimitedDevices)
+        {
+            devicesText = L.T("Account_DevicesUnlimited");
+        }
+        else if (index == 0)
+        {
+            devicesText = L.F("Account_DevicesShort", usedDevices, total);
+            deviceWidth = TrafficPillWidth * Math.Clamp((double)usedDevices / total, 0.0, 1.0);
+        }
+        else
+        {
+            devicesText = L.F("Account_DevicesTotal", total);
+        }
+
+        // Scoped renewal target. scope "root"|"secondary"; subscriptionId = client (account) id for root,
+        // else the secondary sub id. Renew is a re-buy of the same tariff, so it needs the tariff id.
+        var scope = string.Equals(sub.Type, "root", StringComparison.OrdinalIgnoreCase) ? "root" : "secondary";
+        var subscriptionId = scope == "root" ? (Profile?.Id ?? string.Empty) : sub.Id;
+        var tariffId = sub.TariffId;
+        var canRenew = tariffId.IsNotEmpty();
+        var currency = sub.TariffCurrency.IsNotEmpty() ? sub.TariffCurrency! : "RUB";
+        var balanceLabel = Profile != null
+            ? L.F("Account_RenewFromBalance", FormatMoney(Profile.Balance, Profile.Currency))
+            : string.Empty;
+
+        // Auto-renew line. The toggle targets the primary endpoint for the root sub (no id) or the
+        // secondary endpoint by id; the next-charge line is only known for the root (from the primary
+        // payload). Expiring + off → a gentle nudge instead of the plain "off".
+        var autoRenewOn = sub.AutoRenewEnabled;
+        var showAutoRenew = scope == "root" || sub.Id.IsNotEmpty();
+        string autoRenewCaption;
+        if (autoRenewOn)
+        {
+            if (index == 0 && _lastPrimary?.AutoRenewNextChargeAt.IsNotEmpty() == true && _lastPrimary.AutoRenewNextChargeAmount is { } amt)
             {
-                var frac = Math.Clamp((double)used / total, 0.0, 1.0);
-                usageWidth = TrafficPillWidth * frac;
+                var when = FormatIsoShort(_lastPrimary.AutoRenewNextChargeAt);
+                var cur = _lastPrimary.AutoRenewCurrency.IsNotEmpty() ? _lastPrimary.AutoRenewCurrency! : currency;
+                autoRenewCaption = L.F("Account_AutoRenewNext", when, FormatMoney(amt, cur));
+            }
+            else
+            {
+                autoRenewCaption = L.T("Account_AutoRenewOn");
             }
         }
         else
         {
-            devicesText = L.F("Account_DevicesTotal", unlimited ? "∞" : total.ToString());
+            autoRenewCaption = health == SubHealth.Expiring ? L.T("Account_AutoRenewNudge") : L.T("Account_AutoRenewOff");
         }
 
-        return new AccountSubCard(this)
+        var card = new AccountSubCard(this)
         {
             Name = name,
-            TariffCaption = tariffCaption,
-            HasTariffCaption = tariffCaption.IsNotEmpty(),
             HealthLabel = healthLabel,
             IsHealthActive = health == SubHealth.Active,
             IsHealthExpiring = health == SubHealth.Expiring,
@@ -1280,15 +1725,65 @@ public class AccountViewModel : MyReactiveObject
             ExpiryText = expiryText,
             ExpiryUrgent = urgent && health == SubHealth.Expiring,
             ExpiryExpired = health == SubHealth.Expired,
+            MetersDim = health == SubHealth.Expired,
+
+            ShowTrafficPill = showTrafficPill,
+            TrafficText = trafficText,
+            TrafficBrush = TrafficFillBrush,
+            TrafficFillWidth = trafficWidth,
+
             DevicesText = devicesText,
-            ShowUsageBar = showUsage,
-            UsageWidth = usageWidth,
+            ShowUsageBar = showDeviceBar,
+            UsageWidth = deviceWidth,
+
             RenewPrimary = health != SubHealth.Active,
+            CanRenew = canRenew,
+            BalanceMethodLabel = balanceLabel,
+            TariffId = tariffId,
+            PriceOptionId = sub.TariffPriceOptionId,
+            Scope = scope,
+            SubscriptionId = subscriptionId,
+            Currency = currency,
+
+            ShowAutoRenew = showAutoRenew,
+            AutoRenewCaption = autoRenewCaption,
         };
+        card.SetAutoRenewSilently(autoRenewOn);
+        card.Arm();
+        return card;
     }
 
     /// <summary>The traffic-pill track width (px), mirrored from <c>Size.TrafficPill</c>, used to size the usage-bar fill.</summary>
     private const double TrafficPillWidth = 160.0;
+
+    /// <summary>
+    /// The light→accent traffic-fill gradient (the ONE sanctioned gradient — it encodes a value), built
+    /// once and shared by every card. Tuned for the pure-dark Incy surface (start ≈ near-white), matching
+    /// Home's <c>SubscriptionMetaView.BuildTrafficBrush</c> so the two surfaces never drift.
+    /// </summary>
+    private static readonly IBrush TrafficFillBrush = BuildTrafficFillBrush();
+
+    private static IBrush BuildTrafficFillBrush()
+    {
+        var accent = Color.Parse("#4C8DFF");
+        var start = BlendToWhite(accent, 0.82);
+        return new LinearGradientBrush
+        {
+            StartPoint = new RelativePoint(0d, 0.5d, RelativeUnit.Relative),
+            EndPoint = new RelativePoint(1d, 0.5d, RelativeUnit.Relative),
+            GradientStops =
+            {
+                new GradientStop(start, 0d),
+                new GradientStop(accent, 1d),
+            },
+        };
+    }
+
+    private static Color BlendToWhite(Color a, double t)
+    {
+        byte Mix(byte x) => (byte)Math.Round(x + (255 - x) * t);
+        return Color.FromArgb(0xFF, Mix(a.R), Mix(a.G), Mix(a.B));
+    }
 
     /// <summary>Resolves a subscription's health + urgency copy from its expiry date (no expiry ⇒ perpetual/active).</summary>
     private static (SubHealth health, string expiryText, bool urgent) ResolveHealth(SubInfoDto sub)
@@ -1304,17 +1799,17 @@ public class AccountViewModel : MyReactiveObject
             var days = (expire - DateTimeOffset.UtcNow).TotalDays;
             if (days < 0)
             {
-                return (SubHealth.Expired, L.T("Account_ExpiredOn"), true);
+                return (SubHealth.Expired, L.F("Account_ExpiredOnDate", FormatIsoDate(iso)), true);
             }
             if (days <= 7)
             {
                 var n = Math.Max(1, (int)Math.Ceiling(days));
                 return (SubHealth.Expiring, L.F("Account_ExpiresInDays", n), true);
             }
-            return (SubHealth.Active, L.F("Account_ExpiresUntil", FormatIsoDate(iso)), false);
+            return (SubHealth.Active, L.F("Account_ActiveUntil", FormatIsoDate(iso)), false);
         }
         // Unparseable date — show it verbatim and treat as active rather than inventing urgency.
-        return (SubHealth.Active, L.F("Account_ExpiresUntil", FormatIsoDate(iso)), false);
+        return (SubHealth.Active, L.F("Account_ActiveUntil", FormatIsoDate(iso)), false);
     }
 
     private void OnSessionStateChanged(AccountState state)
@@ -1369,6 +1864,46 @@ public class AccountViewModel : MyReactiveObject
         return parts.Length == 3 ? $"{parts[2]}.{parts[1]}.{parts[0]}" : datePart;
     }
 
+    /// <summary>Short "dd.MM" for the auto-renew next-charge line (year is redundant next to «спишем»).</summary>
+    private static string FormatIsoShort(string? iso)
+    {
+        if (iso.IsNullOrEmpty())
+        {
+            return string.Empty;
+        }
+        var parts = iso!.Split('T')[0].Split('-');
+        return parts.Length == 3 ? $"{parts[2]}.{parts[1]}" : FormatIsoDate(iso);
+    }
+
+    /// <summary>
+    /// Localized byte formatter — ported 1:1 from Home's <c>SubscriptionMetaView.FormatBytes</c> so the
+    /// account traffic pill reads identically to Home's («18,4 ГБ» in RU, «18.4 GB» in EN). Base 1024.
+    /// </summary>
+    private static string FormatBytes(long bytes)
+    {
+        if (bytes <= 0)
+        {
+            return L.T("Common_ZeroBytes");
+        }
+        var units = L.T("Common_ByteUnits").Split(',');
+        double value = bytes;
+        var unit = 0;
+        while (value >= 1024 && unit < units.Length - 1)
+        {
+            value /= 1024;
+            unit++;
+        }
+        var culture = CultureInfo.GetCultureInfo(L.Instance.CurrentLang == "en" ? "en-US" : "ru-RU");
+        var digits = unit == 0 ? 0 : 1;
+        var text = value.ToString("N" + digits, culture);
+        var trailingZero = culture.NumberFormat.NumberDecimalSeparator + "0";
+        if (digits == 1 && text.EndsWith(trailingZero, StringComparison.Ordinal))
+        {
+            text = text[..^trailingZero.Length];
+        }
+        return $"{text} {units[unit]}";
+    }
+
     private static string Monogram(string primary)
     {
         var trimmed = primary.Trim().TrimStart('@');
@@ -1413,16 +1948,22 @@ public class AccountViewModel : MyReactiveObject
 }
 
 /// <summary>
-/// One subscription rendered as a carousel card: identity (name + tariff caption), a health chip
-/// (active/expiring/expired — colour + copy), urgency-aware expiry, an honest device-usage bar and a
-/// health-weighted «Продлить» CTA. Built by <see cref="AccountViewModel.BuildCard"/>; its CTAs call the
-/// shared VM's intent hooks, so a card never needs a view reference and MainWindow stays untouched.
+/// One subscription rendered as a self-complete carousel card: a state-led title («Ваша подписка» /
+/// «Подписка N»), a health chip, THREE grouped meters (expiry · traffic pill · device pill), a real
+/// scoped renewal (wallet or card), and an auto-renew toggle with its next-charge line. The tariff is
+/// intentionally NOT on the card — it lives once, on the hero. Built by
+/// <see cref="AccountViewModel.BuildCard"/>; actions call back into the shared VM, so a card never needs
+/// a view reference and MainWindow stays untouched.
 /// </summary>
 public sealed class AccountSubCard : ReactiveObject
 {
+    private readonly AccountViewModel _owner;
+
+    // Guards the auto-renew network call: the toggle's initial value is set (SetAutoRenewSilently) BEFORE
+    // Arm(), so building a card never fires a spurious PATCH; only a genuine user flip does.
+    private bool _armed;
+
     public string Name { get; init; } = string.Empty;
-    public string TariffCaption { get; init; } = string.Empty;
-    public bool HasTariffCaption { get; init; }
 
     public string HealthLabel { get; init; } = string.Empty;
     public bool IsHealthActive { get; init; }
@@ -1437,6 +1978,16 @@ public sealed class AccountSubCard : ReactiveObject
     /// <summary>Expired — the expiry line reads in the destructive tone.</summary>
     public bool ExpiryExpired { get; init; }
 
+    /// <summary>Expired ⇒ dim the (inactive) meters to 0.5 so the eye goes to «Продлить».</summary>
+    public bool MetersDim { get; init; }
+
+    // Traffic meter (NEW — reuses Home's fill gradient + byte formatter).
+    public bool ShowTrafficPill { get; init; }
+    public string TrafficText { get; init; } = string.Empty;
+    public IBrush? TrafficBrush { get; init; }
+    public double TrafficFillWidth { get; init; }
+
+    // Device meter (kept, honestly labelled).
     public string DevicesText { get; init; } = string.Empty;
     public bool ShowUsageBar { get; init; }
     public double UsageWidth { get; init; }
@@ -1444,15 +1995,60 @@ public sealed class AccountSubCard : ReactiveObject
     /// <summary>Expiring/expired ⇒ the «Продлить» CTA is promoted to Primary; active ⇒ it stays quiet (Tonal).</summary>
     public bool RenewPrimary { get; init; }
 
+    /// <summary>True when the sub carries a tariff id to re-buy; false ⇒ the CTA falls back to the Buy screen.</summary>
+    public bool CanRenew { get; init; }
+
+    /// <summary>«С баланса · 1 490 ₽» label for the wallet renewal option.</summary>
+    public string BalanceMethodLabel { get; init; } = string.Empty;
+
+    /// <summary>True while a renewal is settling / the browser poll runs — the CTA shows an in-slot spinner.</summary>
+    [Reactive] public bool IsRenewing { get; set; }
+
+    // Auto-renew.
+    public bool ShowAutoRenew { get; init; }
+    [Reactive] public bool AutoRenewOn { get; set; }
+    [Reactive] public string AutoRenewCaption { get; set; } = string.Empty;
+
+    // Scoped renewal target (see AccountViewModel.BuildCard).
+    internal string? TariffId { get; init; }
+    internal string? PriceOptionId { get; init; }
+    internal string Scope { get; init; } = "root";
+    internal string? SubscriptionId { get; init; }
+    internal string Currency { get; init; } = "RUB";
+
     /// <summary>Fixed card width (px) the carousel assigns from its viewport; reactive so a resize reflows every card.</summary>
     [Reactive] public double CardWidth { get; set; } = 320;
 
-    public ReactiveCommand<Unit, Unit> RenewCmd { get; }
+    public ReactiveCommand<Unit, Unit> RenewBalanceCmd { get; }
+    public ReactiveCommand<Unit, Unit> RenewCardCmd { get; }
+    public ReactiveCommand<Unit, Unit> OpenBuyCmd { get; }
     public ReactiveCommand<Unit, Unit> DevicesCmd { get; }
 
     public AccountSubCard(AccountViewModel owner)
     {
-        RenewCmd = ReactiveCommand.Create(owner.RequestBuy);
+        _owner = owner;
+        RenewBalanceCmd = ReactiveCommand.CreateFromTask(() => owner.RenewWithBalance(this));
+        RenewCardCmd = ReactiveCommand.CreateFromTask(() => owner.RenewWithCard(this));
+        OpenBuyCmd = ReactiveCommand.Create(owner.RequestBuy);
         DevicesCmd = ReactiveCommand.Create(owner.RequestDevices);
+        this.WhenAnyValue(x => x.AutoRenewOn).Subscribe(v =>
+        {
+            if (_armed)
+            {
+                _ = owner.SetAutoRenew(this, v);
+            }
+        });
     }
+
+    /// <summary>Sets the toggle without triggering the network call (initial build + failure revert).</summary>
+    public void SetAutoRenewSilently(bool value)
+    {
+        var wasArmed = _armed;
+        _armed = false;
+        AutoRenewOn = value;
+        _armed = wasArmed;
+    }
+
+    /// <summary>Arms the toggle so subsequent user flips persist to the backend.</summary>
+    public void Arm() => _armed = true;
 }

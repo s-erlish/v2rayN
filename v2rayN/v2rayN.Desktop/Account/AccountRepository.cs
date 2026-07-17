@@ -105,6 +105,9 @@ public sealed class AccountRepository
     /// <summary>Renew is a Platega purchase of the given tariff/price-option for an existing subscription.</summary>
     public Task<ApiResult<PaymentInitDto>> Renew(PaymentRequestDto req) => Guard(() => _api.PayPlatega(req));
 
+    /// <summary>Scoped card renewal of a chosen (root/secondary) subscription — POST /payments/tariff/platega.</summary>
+    public Task<ApiResult<PaymentInitDto>> RenewTariffCard(PaymentRequestDto req) => Guard(() => _api.PayTariffPlatega(req));
+
     public Task<ApiResult<UpgradeQuoteDto>> UpgradeQuote(string targetTariffId) => Guard(() => _api.GetUpgradeQuote(targetTariffId));
 
     public Task<ApiResult<PaymentInitDto>> Upgrade(string targetTariffId, string method, string subscriptionUuid, string? paymentMethod = null) =>
@@ -138,4 +141,12 @@ public sealed class AccountRepository
         Guard(async () => { await _api.SetPrimaryAutoRenew(autoRenew); return true; });
 
     public Task<ApiResult<ReferralStatsDto>> GetReferralStats() => Guard(() => _api.GetReferralStats());
+
+    // Account linking (attach a missing sign-in method to the current account)
+    public Task<ApiResult<LinkTelegramRequestDto>> RequestLinkTelegram() => Guard(() => _api.RequestLinkTelegram());
+
+    public Task<ApiResult<MessageResponseDto>> RequestLinkEmail(string email) => Guard(() => _api.RequestLinkEmail(email));
+
+    /// <summary>App↔site SSO handoff — mint a code, open the site's tg-login page already signed in.</summary>
+    public Task<ApiResult<AppHandoffDto>> CreateAppHandoff() => Guard(() => _api.CreateAppHandoff());
 }
