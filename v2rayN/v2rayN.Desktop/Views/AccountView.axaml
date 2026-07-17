@@ -163,6 +163,75 @@
                 </Animation>
             </Style.Animations>
         </Style>
+
+        <!--  Чип способа оплаты (флайаут пополнения): покой = контур OutlineVariant + muted текст;
+              выбран = заливка SelectedFill + рамка/текст Accent. press-scale 0.97 (как сегмент-чип).  -->
+        <Style Selector="Button.MethodChip">
+            <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
+            <Setter Property="RenderTransformOrigin" Value="50%,50%" />
+            <Setter Property="Height" Value="40" />
+            <Setter Property="MaxWidth" Value="220" />
+            <Setter Property="Padding" Value="12,0" />
+            <Setter Property="CornerRadius" Value="{StaticResource Radius.Chip}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineVariant}" />
+            <Setter Property="BorderThickness" Value="1.5" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
+            <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+            <Setter Property="FontWeight" Value="Medium" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" Easing="{StaticResource Ease.OutQuart}" />
+                    <BrushTransition Property="BorderBrush" Duration="0:0:0.15" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Button.MethodChip /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="Button.MethodChip:not(.selected):pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
+        </Style>
+        <Style Selector="Button.MethodChip:pressed">
+            <Setter Property="RenderTransform" Value="scale(0.97)" />
+        </Style>
+        <Style Selector="Button.MethodChip.selected">
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+        </Style>
+        <Style Selector="Button.MethodChip.selected /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource Brush.SelectedFill}" />
+        </Style>
+
+        <!--  Строка-мера «Устройства» как тап-таргет: прозрачная, hover = тихое затемнение,
+              press-scale 0.99 (идиома строк). Шеврон справа сообщает «ведёт дальше».  -->
+        <Style Selector="Button.MeterRow">
+            <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
+            <Setter Property="RenderTransformOrigin" Value="50%,50%" />
+            <Setter Property="Padding" Value="0,6" />
+            <!--  ≥48dp тап-таргет (правило касания): строка «Устройства» ведёт на экран устройств.  -->
+            <Setter Property="MinHeight" Value="48" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" Easing="{StaticResource Ease.OutQuart}" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Button.MeterRow /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="Button.MeterRow:pressed">
+            <Setter Property="RenderTransform" Value="scale(0.99)" />
+        </Style>
     </UserControl.Styles>
 
     <!--  Прозрачный фон: общий Incy-градиент рисуется под хостом страниц (MainWindow), показываем его.
@@ -287,69 +356,125 @@
                                         Text="{loc:T Account_TopUp}" />
                                 </StackPanel>
                                 <Button.Flyout>
-                                    <Flyout Placement="Bottom">
+                                    <!--  Дарк-Incy-флайаут (см. FlyoutPresenter в GlobalStyles): сумма → инлайн-
+                                          валидация → способ оплаты (чипы при 2+ методах / подпись при одном) →
+                                          «Продолжить» (активна только при валидной сумме). Открывается ВНИЗ.  -->
+                                    <Flyout Placement="Bottom" FlyoutPresenterTheme="{StaticResource IncyFlyoutTheme}">
                                         <StackPanel
-                                            Width="248"
+                                            Width="264"
                                             Spacing="12"
                                             x:DataType="vms:AccountViewModel">
                                             <TextBlock Classes="Title" Text="{loc:T Account_TopUpTitle}" />
-                                            <TextBlock Classes="Caption" Text="{loc:T Account_TopUpHint}" />
+                                            <TextBlock
+                                                Classes="Caption"
+                                                Text="{loc:T Account_TopUpHint}"
+                                                TextWrapping="Wrap" />
                                             <TextBox
                                                 x:Name="TopUpAmountBox"
                                                 FontFamily="{DynamicResource Font.Numeric}"
                                                 FontFeatures="tnum,lnum,zero"
                                                 Text="{Binding TopUpAmount, Mode=TwoWay}"
-                                                Watermark="{loc:T Account_AmountRub}" />
+                                                Watermark="{loc:T Account_AmountRub}">
+                                                <!--  Enter в поле суммы = «Продолжить» (клавиатурный путь без мыши).  -->
+                                                <TextBox.KeyBindings>
+                                                    <KeyBinding Command="{Binding TopUpCmd}" Gesture="Enter" />
+                                                </TextBox.KeyBindings>
+                                            </TextBox>
+                                            <!--  Инлайн-ошибка: невалидная сумма падает ВИДИМО, флайаут не закрывается.  -->
+                                            <TextBlock
+                                                Classes="Caption"
+                                                Foreground="{DynamicResource Brush.RedText}"
+                                                IsVisible="{Binding HasTopUpError}"
+                                                Text="{Binding TopUpError}"
+                                                TextWrapping="Wrap" />
+                                            <!--  Выбор способа оплаты (порт рабочего Buy-чекаута): чипы при 2+ методах.  -->
+                                            <StackPanel IsVisible="{Binding ShowTopUpMethods}" Spacing="8">
+                                                <TextBlock Classes="Caption" Text="{loc:T Account_TopUpMethod}" />
+                                                <ItemsControl ItemsSource="{Binding TopUpMethods}">
+                                                    <ItemsControl.ItemsPanel>
+                                                        <ItemsPanelTemplate>
+                                                            <WrapPanel Orientation="Horizontal" />
+                                                        </ItemsPanelTemplate>
+                                                    </ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate x:DataType="vms:TopUpMethodItem">
+                                                            <Button
+                                                                Margin="0,0,8,8"
+                                                                Classes="MethodChip"
+                                                                Classes.selected="{Binding IsSelected}"
+                                                                Command="{Binding SelectCmd}"
+                                                                Content="{Binding Label}" />
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </StackPanel>
+                                            <!--  Один метод — чипов нет, но метод назван тихой подписью.  -->
+                                            <TextBlock
+                                                Classes="Caption"
+                                                IsVisible="{Binding HasTopUpMethodCaption}"
+                                                Text="{Binding TopUpMethodCaption}" />
                                             <Button
                                                 HorizontalAlignment="Stretch"
                                                 HorizontalContentAlignment="Center"
                                                 Classes="Primary"
                                                 Command="{Binding TopUpCmd}"
-                                                Content="{loc:T Account_Continue}" />
+                                                Content="{loc:T Account_Continue}"
+                                                IsEnabled="{Binding CanTopUp}" />
                                         </StackPanel>
                                     </Flyout>
                                 </Button.Flyout>
                             </Button>
                         </Grid>
-                    </StackPanel>
-                </Border>
 
-                <!--  Реф-код: тихая строка ПОД hero-картой. Три слова пользы + чип с кодом + копирование.  -->
-                <Border
-                    x:Name="ReferralRow"
-                    Margin="0,12,0,0"
-                    Classes="RefRow"
-                    IsVisible="{Binding HasReferral}">
-                    <StackPanel
-                        Orientation="Horizontal"
-                        Spacing="8"
-                        VerticalAlignment="Center">
-                        <TextBlock
-                            VerticalAlignment="Center"
-                            Classes="Caption"
-                            Text="{loc:T Account_ReferralBenefit}" />
+                        <!--  Реф-код — ТРЕТЬЯ тихая строка hero под вторым волоском: идентичность + деньги +
+                              код друга читаются как ОДИН объект (а не карта плюс оторванная строка снизу).
+                              Появляется только при наличии кода.  -->
                         <Border
-                            Padding="12,8"
-                            VerticalAlignment="Center"
-                            Background="{DynamicResource Brush.SurfaceVariant}"
-                            CornerRadius="{StaticResource Radius.Chip}">
-                            <TextBlock
-                                Classes="Caption Numeric"
-                                FontFamily="{DynamicResource Font.Numeric}"
-                                FontFeatures="tnum,lnum,zero"
-                                Foreground="{DynamicResource Brush.OnSurface}"
-                                MaxWidth="200"
-                                Text="{Binding ReferralCode}"
-                                TextTrimming="CharacterEllipsis"
-                                TextWrapping="NoWrap" />
+                            Height="1"
+                            Margin="0,16,0,0"
+                            Background="{DynamicResource Brush.OutlineVariant}"
+                            IsVisible="{Binding HasReferral}" />
+                        <Border
+                            x:Name="ReferralRow"
+                            Margin="0,16,0,0"
+                            Classes="RefRow"
+                            IsVisible="{Binding HasReferral}">
+                            <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
+                                <StackPanel
+                                    Grid.Column="0"
+                                    Orientation="Horizontal"
+                                    Spacing="8"
+                                    VerticalAlignment="Center">
+                                    <TextBlock
+                                        VerticalAlignment="Center"
+                                        Classes="Caption"
+                                        Text="{loc:T Account_ReferralBenefit}" />
+                                    <Border
+                                        Padding="12,8"
+                                        VerticalAlignment="Center"
+                                        Background="{DynamicResource Brush.SurfaceVariant}"
+                                        CornerRadius="{StaticResource Radius.Chip}">
+                                        <TextBlock
+                                            Classes="Caption Numeric"
+                                            FontFamily="{DynamicResource Font.Numeric}"
+                                            FontFeatures="tnum,lnum,zero"
+                                            Foreground="{DynamicResource Brush.OnSurface}"
+                                            MaxWidth="180"
+                                            Text="{Binding ReferralCode}"
+                                            TextTrimming="CharacterEllipsis"
+                                            TextWrapping="NoWrap" />
+                                    </Border>
+                                </StackPanel>
+                                <Button
+                                    x:Name="CopyReferralButton"
+                                    Grid.Column="1"
+                                    VerticalAlignment="Center"
+                                    Classes="IconButton40 Row"
+                                    ToolTip.Tip="{loc:T Account_CopyReferralCode}">
+                                    <PathIcon Data="{StaticResource Geo.Acc.Copy}" />
+                                </Button>
+                            </Grid>
                         </Border>
-                        <Button
-                            x:Name="CopyReferralButton"
-                            VerticalAlignment="Center"
-                            Classes="IconButton40 Row"
-                            ToolTip.Tip="{loc:T Account_CopyReferralCode}">
-                            <PathIcon Data="{StaticResource Geo.Acc.Copy}" />
-                        </Button>
                     </StackPanel>
                 </Border>
 
@@ -449,7 +574,7 @@
                                                                     Data="{StaticResource Geo.Acc.More}"
                                                                     Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
                                                                 <Button.Flyout>
-                                                                    <Flyout Placement="BottomEdgeAlignedRight">
+                                                                    <Flyout Placement="BottomEdgeAlignedRight" FlyoutPresenterTheme="{StaticResource IncyFlyoutTheme}">
                                                                         <Panel Width="272" x:DataType="vms:AccountSubCard">
 
                                                                             <!--  Панель 1 — меню: два вторичных действия.  -->
@@ -719,36 +844,52 @@
                                                                     TextTrimming="CharacterEllipsis" />
                                                             </Grid>
 
-                                                            <!--  Устройства: честная шкала (used/total) или «Безлимит устройств».  -->
-                                                            <Grid ColumnDefinitions="Auto,*" VerticalAlignment="Center">
-                                                                <Border
-                                                                    Grid.Column="0"
-                                                                    VerticalAlignment="Center"
-                                                                    Classes="TrafficPill"
-                                                                    IsVisible="{Binding ShowUsageBar}"
-                                                                    Width="{StaticResource Size.TrafficPill}">
+                                                            <!--  Устройства: честная шкала (used/total) или «Безлимит устройств». ВСЯ строка —
+                                                                  первоклассный аффорданс (шеврон) на экран устройств, а не оторванная синяя ссылка.  -->
+                                                            <Button
+                                                                Classes="MeterRow"
+                                                                Command="{Binding DevicesCmd}"
+                                                                ToolTip.Tip="{loc:T Account_Devices}">
+                                                                <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
                                                                     <Border
-                                                                        Classes="TrafficPill Fill UsageFill"
-                                                                        Width="{Binding UsageWidth}" />
-                                                                </Border>
-                                                                <TextBlock
-                                                                    Grid.Column="1"
-                                                                    Margin="12,0,0,0"
-                                                                    VerticalAlignment="Center"
-                                                                    Classes="Caption Numeric"
-                                                                    Text="{Binding DevicesText}"
-                                                                    TextTrimming="CharacterEllipsis" />
-                                                            </Grid>
+                                                                        Grid.Column="0"
+                                                                        VerticalAlignment="Center"
+                                                                        Classes="TrafficPill"
+                                                                        IsVisible="{Binding ShowUsageBar}"
+                                                                        Width="{StaticResource Size.TrafficPill}">
+                                                                        <Border
+                                                                            Classes="TrafficPill Fill UsageFill"
+                                                                            Width="{Binding UsageWidth}" />
+                                                                    </Border>
+                                                                    <TextBlock
+                                                                        Grid.Column="1"
+                                                                        Margin="12,0,8,0"
+                                                                        VerticalAlignment="Center"
+                                                                        Classes="Caption Numeric"
+                                                                        Text="{Binding DevicesText}"
+                                                                        TextTrimming="CharacterEllipsis" />
+                                                                    <PathIcon
+                                                                        Grid.Column="2"
+                                                                        Width="16"
+                                                                        Height="16"
+                                                                        VerticalAlignment="Center"
+                                                                        Data="{StaticResource Geo.Acc.Chevron}"
+                                                                        Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+                                                                </Grid>
+                                                            </Button>
                                                         </StackPanel>
 
-                                                        <!--  (c) Действия: «Продлить» (Tonal → Primary при истечении) со спиннером-в-слоте
-                                                              и флайаутом выбора оплаты (баланс / карта) + тихая ссылка «Устройства».  -->
-                                                        <Grid Margin="0,16,0,0" ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
+                                                        <!--  (c) Действие: ОДНА акцентная кнопка «Продлить» на всю ширину (единственный
+                                                              primary карты). С тарифом → раскрывает выбор оплаты ВНУТРИ карты (баланс /
+                                                              карта) — без флайаута-наезда на карту; без тарифа → сразу в «Купить».
+                                                              Спиннер-в-слоте на время расчёта/поллинга; под lite статичен.  -->
+                                                        <StackPanel Margin="0,16,0,0" Spacing="12">
                                                             <Button
-                                                                Grid.Column="0"
-                                                                MinWidth="120"
-                                                                Classes.Primary="{Binding RenewPrimary}"
-                                                                Classes.Tonal="{Binding !RenewPrimary}"
+                                                                HorizontalAlignment="Stretch"
+                                                                HorizontalContentAlignment="Center"
+                                                                Classes.Primary="{Binding RenewTopPrimary}"
+                                                                Classes.Tonal="{Binding !RenewTopPrimary}"
+                                                                Command="{Binding PrimaryRenewCmd}"
                                                                 IsEnabled="{Binding !IsRenewing}">
                                                                 <Panel>
                                                                     <TextBlock
@@ -756,7 +897,6 @@
                                                                         VerticalAlignment="Center"
                                                                         IsVisible="{Binding !IsRenewing}"
                                                                         Text="{loc:T Account_Renew}" />
-                                                                    <!--  Спиннер в ТОМ ЖЕ слоте (ничего не сдвигается); под lite статичен.  -->
                                                                     <Ellipse
                                                                         Width="18"
                                                                         Height="18"
@@ -773,44 +913,23 @@
                                                                         </Ellipse.RenderTransform>
                                                                     </Ellipse>
                                                                 </Panel>
-                                                                <Button.Flyout>
-                                                                    <Flyout Placement="Top">
-                                                                        <StackPanel
-                                                                            Width="248"
-                                                                            Spacing="8"
-                                                                            x:DataType="vms:AccountSubCard">
-                                                                            <!--  Есть тариф → выбор оплаты; иначе — переход в «Купить».  -->
-                                                                            <Button
-                                                                                HorizontalAlignment="Stretch"
-                                                                                HorizontalContentAlignment="Center"
-                                                                                Classes="Tonal"
-                                                                                Command="{Binding RenewBalanceCmd}"
-                                                                                Content="{Binding BalanceMethodLabel}"
-                                                                                IsVisible="{Binding CanRenew}" />
-                                                                            <Button
-                                                                                HorizontalAlignment="Stretch"
-                                                                                HorizontalContentAlignment="Center"
-                                                                                Classes="Primary"
-                                                                                Command="{Binding RenewCardCmd}"
-                                                                                Content="{loc:T Account_RenewWithCard}"
-                                                                                IsVisible="{Binding CanRenew}" />
-                                                                            <Button
-                                                                                HorizontalAlignment="Stretch"
-                                                                                HorizontalContentAlignment="Center"
-                                                                                Classes="Primary"
-                                                                                Command="{Binding OpenBuyCmd}"
-                                                                                Content="{loc:T Account_PickPlan}"
-                                                                                IsVisible="{Binding !CanRenew}" />
-                                                                        </StackPanel>
-                                                                    </Flyout>
-                                                                </Button.Flyout>
                                                             </Button>
-                                                            <Button
-                                                                Grid.Column="2"
-                                                                Classes="LinkAction"
-                                                                Command="{Binding DevicesCmd}"
-                                                                Content="{loc:T Account_Devices}" />
-                                                        </Grid>
+                                                            <!--  Инлайн-выбор оплаты (раскрывается только при наличии тарифа): баланс / карта.  -->
+                                                            <StackPanel IsVisible="{Binding RenewExpanded}" Spacing="8">
+                                                                <Button
+                                                                    HorizontalAlignment="Stretch"
+                                                                    HorizontalContentAlignment="Center"
+                                                                    Classes="Tonal"
+                                                                    Command="{Binding RenewBalanceCmd}"
+                                                                    Content="{Binding BalanceMethodLabel}" />
+                                                                <Button
+                                                                    HorizontalAlignment="Stretch"
+                                                                    HorizontalContentAlignment="Center"
+                                                                    Classes="Primary"
+                                                                    Command="{Binding RenewCardCmd}"
+                                                                    Content="{loc:T Account_RenewWithCard}" />
+                                                            </StackPanel>
+                                                        </StackPanel>
 
                                                         <!--  Авто-продление: тумблер iOS + строка следующего списания / нудж.  -->
                                                         <Grid
@@ -1094,7 +1213,7 @@
                                                 Content="{loc:T Account_AddAction}"
                                                 IsVisible="{Binding !EmailLinked}">
                                                 <Button.Flyout>
-                                                    <Flyout Placement="Bottom">
+                                                    <Flyout Placement="Bottom" FlyoutPresenterTheme="{StaticResource IncyFlyoutTheme}">
                                                         <StackPanel
                                                             Width="264"
                                                             Spacing="12"

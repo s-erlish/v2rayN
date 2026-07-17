@@ -22,6 +22,8 @@ public sealed partial class L
             "Enter an amount in rubles — the payment page will open.");
         Add("Account_AmountRub", "Сумма, ₽", "Amount, ₽");
         Add("Account_Continue", "Продолжить", "Continue");
+        Add("Account_TopUpMethod", "Способ оплаты", "Payment method");
+        Add("Account_TopUpVia", "Оплата · {0}", "Payment · {0}");
         Add("Account_CopyReferralCode", "Скопировать код", "Copy code");
         Add("Account_FirstSub", "Оформи первую подписку", "Set up your first subscription");
         Add("Account_NoSubHint",
@@ -69,6 +71,7 @@ public sealed partial class L
         Add("Account_AutoRenew", "Автопродление", "Auto-renew");
         Add("Account_AutoRenewNext", "Продлится {0} — спишем {1}", "Renews {0} — we'll charge {1}");
         Add("Account_AutoRenewOn", "Автопродление включено", "Auto-renew is on");
+        Add("Account_AutoRenewOnDate", "Продлится {0}", "Renews {0}");
         Add("Account_AutoRenewOff", "Автопродление выключено", "Auto-renew is off");
         Add("Account_AutoRenewNudge",
             "Включите автопродление, чтобы не прерывать",

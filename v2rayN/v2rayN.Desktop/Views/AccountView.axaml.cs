@@ -37,7 +37,6 @@ public partial class AccountView : UserControl
     private const double DragThreshold = 6.0;  // порог, после которого тап превращается в перетаскивание
 
     private AccountViewModel? _vm;
-    private IDisposable? _topUpSub;
     private IDisposable? _cardsSub;
     private IDisposable? _balanceSub;
 
@@ -90,8 +89,6 @@ public partial class AccountView : UserControl
 
     private void HookVm()
     {
-        _topUpSub?.Dispose();
-        _topUpSub = null;
         _cardsSub?.Dispose();
         _cardsSub = null;
         _balanceSub?.Dispose();
@@ -100,6 +97,7 @@ public partial class AccountView : UserControl
         {
             _vm.BuyIntentRequested -= OnBuyIntent;
             _vm.DevicesIntentRequested -= OnDevicesIntent;
+            _vm.TopUpCheckoutOpened -= OnTopUpCheckoutOpened;
         }
 
         _vm = DataContext as AccountViewModel;
@@ -108,8 +106,9 @@ public partial class AccountView : UserControl
             return;
         }
 
-        // Закрываем флайаут пополнения после выполнения TopUpCmd (эмитит по завершении).
-        _topUpSub = _vm.TopUpCmd.Subscribe(_ => TopUpButton.Flyout?.Hide());
+        // Закрываем флайаут пополнения ТОЛЬКО при успехе (открылся чекаут): невалидная сумма
+        // оставляет флайаут открытым, чтобы показать инлайн-ошибку.
+        _vm.TopUpCheckoutOpened += OnTopUpCheckoutOpened;
         _vm.BuyIntentRequested += OnBuyIntent;
         _vm.DevicesIntentRequested += OnDevicesIntent;
 
@@ -118,6 +117,8 @@ public partial class AccountView : UserControl
         // Изменение баланса (только РЕАЛЬНОЕ, не первичное) → кроссфейд суммы.
         _balanceSub = _vm.WhenAnyValue(x => x.BalanceAmountText).Skip(1).Subscribe(_ => OnBalanceChanged());
     }
+
+    private void OnTopUpCheckoutOpened(object? sender, EventArgs e) => TopUpButton.Flyout?.Hide();
 
     private void OnBuyIntent(object? sender, EventArgs e) => BuyRequested?.Invoke(this, EventArgs.Empty);
 

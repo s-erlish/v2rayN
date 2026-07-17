@@ -54,7 +54,7 @@ public sealed class TariffDto
     public string Currency { get; set; } = "";
     public List<PriceOptionDto> PriceOptions { get; set; } = new();
 
-    public bool IsUnlimitedTraffic() => TrafficLimitBytes == null;
+    public bool IsUnlimitedTraffic() => TrafficLimitBytes is null or <= 0;
 }
 
 /// <summary>A duration/price option for a tariff.</summary>

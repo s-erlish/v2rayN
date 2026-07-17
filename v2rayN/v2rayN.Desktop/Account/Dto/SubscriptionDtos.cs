@@ -199,8 +199,13 @@ public sealed class RawSubDto
         }
     }
 
-    /// <summary>trafficLimitBytes == null means an unlimited traffic plan.</summary>
-    public bool IsUnlimitedTraffic() => TrafficLimitBytes == null;
+    /// <summary>
+    /// A non-positive (null OR &lt;= 0) traffic limit means an unlimited plan. The backend usually sends
+    /// null for unlimited, but occasionally sends a concrete 0 — that must NOT read as a real 0-byte cap
+    /// (which produced the "used / 0 Б" + empty-bar bug). Matches <see cref="IsUnlimitedDevices"/> and
+    /// Home's <c>total &lt;= 0</c> parity check.
+    /// </summary>
+    public bool IsUnlimitedTraffic() => TrafficLimitBytes is null or <= 0;
 
     /// <summary>hwidDeviceLimit &lt;= 0 means an unlimited device plan.</summary>
     public bool IsUnlimitedDevices() => HwidDeviceLimit <= 0;

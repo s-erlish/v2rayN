@@ -51,6 +51,9 @@ public class AccountViewModel : MyReactiveObject
     // in-app return callback). Cancelled on logout or a subsequent top-up.
     private CancellationTokenSource? _topUpRefreshCts;
 
+    // The Platega method code (2..13) chosen in the top-up flyout; null until PublicConfig lands / user picks.
+    private int? _selectedTopUpMethod;
+
     // Bounded poll after a scoped CARD renewal (webhook-confirmed in the browser) — mirrors BuyViewModel.
     private CancellationTokenSource? _renewPollCts;
     private AccountSubCard? _renewPollCard;
@@ -225,6 +228,23 @@ public class AccountViewModel : MyReactiveObject
     /// <summary>The balance top-up amount (₽) the user typed in the «Пополнить» flyout.</summary>
     [Reactive] public string TopUpAmount { get; set; } = string.Empty;
 
+    /// <summary>Selectable Platega methods for the top-up flyout (mirrors the working Buy checkout). Empty until config loads.</summary>
+    [Reactive] public List<TopUpMethodItem> TopUpMethods { get; set; } = new();
+
+    /// <summary>Show the inline method chooser only when there is a real CHOICE (2+ methods); one method shows a caption instead.</summary>
+    [Reactive] public bool ShowTopUpMethods { get; set; }
+
+    /// <summary>«Оплата · СБП» caption shown when exactly one method exists (no chooser needed, but the method is still named).</summary>
+    [Reactive] public string TopUpMethodCaption { get; set; } = string.Empty;
+    [Reactive] public bool HasTopUpMethodCaption { get; set; }
+
+    /// <summary>True only for a valid positive amount — gates the «Продолжить» button so it never reads as a dead action.</summary>
+    [Reactive] public bool CanTopUp { get; set; }
+
+    /// <summary>Inline validation error under the amount field (so an invalid amount fails visibly, not silently).</summary>
+    [Reactive] public string TopUpError { get; set; } = string.Empty;
+    [Reactive] public bool HasTopUpError { get; set; }
+
     /// <summary>Non-null tempToken when the last site login requires a 2FA code; null otherwise.</summary>
     [Reactive] public string? TwoFaTempToken { get; set; }
 
@@ -357,6 +377,10 @@ public class AccountViewModel : MyReactiveObject
                 Recompute();
             }));
 
+        // Live-validate the top-up amount as the user types: enables «Продолжить» only for a valid
+        // positive amount and clears a stale inline error once the input becomes valid.
+        this.WhenAnyValue(x => x.TopUpAmount).Subscribe(_ => ValidateTopUpAmount());
+
         AccountSession.StateChanged += OnSessionStateChanged;
 
         // Live language switch: re-derive every display string (balance caption, «Действует до …»,
@@ -449,6 +473,10 @@ public class AccountViewModel : MyReactiveObject
 
     /// <summary>Raised when a carousel card's «Устройства» link is tapped; the view forwards to <c>DevicesRequested</c>.</summary>
     public event EventHandler? DevicesIntentRequested;
+
+    /// <summary>Raised only when a top-up checkout URL was successfully opened, so the view hides the flyout on SUCCESS (a
+    /// validation failure keeps it open to show the inline error).</summary>
+    public event EventHandler? TopUpCheckoutOpened;
 
     /// <summary>Card CTA hook: request the Buy screen (renew this subscription).</summary>
     public void RequestBuy() => BuyIntentRequested?.Invoke(this, EventArgs.Empty);
@@ -627,8 +655,89 @@ public class AccountViewModel : MyReactiveObject
     private async Task LoadPublicConfig()
     {
         var result = await _repo.LoadPublicConfig();
-        RunOnUi(() => result.OnSuccess(c => PublicConfig = c).OnFailure(Report));
+        RunOnUi(() => result
+            .OnSuccess(c =>
+            {
+                PublicConfig = c;
+                BuildTopUpMethods();
+            })
+            .OnFailure(Report));
     }
+
+    /// <summary>
+    /// Builds the top-up flyout's payment-method chips from <see cref="PublicConfigDto.PlategaMethods"/>
+    /// (same source the working Buy checkout uses). Selects the first by default. With a single method the
+    /// chooser is hidden and a «Оплата · …» caption names it instead; the id feeds <see cref="TopUp"/>'s
+    /// <c>PaymentMethod</c> so the checkout actually opens.
+    /// </summary>
+    private void BuildTopUpMethods()
+    {
+        var methods = PublicConfig?.PlategaMethods ?? new List<PlategaMethodDto>();
+        var items = methods
+            .Select(m => new TopUpMethodItem(this, int.TryParse(m.Id, out var code) ? code : (int?)null, m.Label))
+            .ToList();
+        for (var i = 0; i < items.Count; i++)
+        {
+            items[i].IsSelected = i == 0;
+        }
+        TopUpMethods = items;
+        ShowTopUpMethods = items.Count > 1;
+        _selectedTopUpMethod = items.FirstOrDefault()?.MethodCode;
+        if (items.Count == 1)
+        {
+            HasTopUpMethodCaption = true;
+            TopUpMethodCaption = L.F("Account_TopUpVia", items[0].Label);
+        }
+        else
+        {
+            HasTopUpMethodCaption = false;
+            TopUpMethodCaption = string.Empty;
+        }
+        // Methods can arrive AFTER the user has typed an amount (config loads async), so re-derive the
+        // gate now — otherwise «Продолжить» would stay disabled until the next keystroke.
+        ValidateTopUpAmount();
+    }
+
+    /// <summary>Selects one top-up method chip (single-select) and remembers its code for the next checkout.</summary>
+    public void SelectTopUpMethod(TopUpMethodItem item)
+    {
+        _selectedTopUpMethod = item.MethodCode;
+        foreach (var it in TopUpMethods)
+        {
+            it.IsSelected = ReferenceEquals(it, item);
+        }
+    }
+
+    /// <summary>Parses a ₽ amount in either invariant or the current culture (handles "1490" and "1 490,00").</summary>
+    private static bool TryParseAmount(string? raw, out double amount)
+    {
+        amount = 0;
+        var t = raw?.Trim();
+        if (t.IsNullOrEmpty())
+        {
+            return false;
+        }
+        return double.TryParse(t, NumberStyles.Any, CultureInfo.InvariantCulture, out amount)
+            || double.TryParse(t, NumberStyles.Any, CultureInfo.CurrentCulture, out amount);
+    }
+
+    /// <summary>Re-derives <see cref="CanTopUp"/> from the typed amount AND the availability of a usable
+    /// payment method, then clears a stale inline error once valid. Gating on the method (not just the
+    /// amount) is what stops «Продолжить» from firing with a null method and dead-ending on the same
+    /// "couldn't open payment" error the working Buy flow already guards against.</summary>
+    private void ValidateTopUpAmount()
+    {
+        CanTopUp = TryParseAmount(TopUpAmount, out var amount) && amount > 0 && HasUsableTopUpMethod();
+        if (CanTopUp && HasTopUpError)
+        {
+            HasTopUpError = false;
+            TopUpError = string.Empty;
+        }
+    }
+
+    /// <summary>True when at least one loaded top-up method carries a real (numeric) provider code.</summary>
+    private bool HasUsableTopUpMethod()
+        => TopUpMethods.Any(m => m.MethodCode is not null);
 
     private async Task LoadActiveDevices()
     {
@@ -1094,23 +1203,35 @@ public class AccountViewModel : MyReactiveObject
     /// </summary>
     private async Task TopUp()
     {
-        var raw = TopUpAmount?.Trim();
-        if (raw.IsNullOrEmpty()
-            || !(double.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out var amount)
-                 || double.TryParse(raw, NumberStyles.Any, CultureInfo.CurrentCulture, out amount))
-            || amount <= 0)
+        // Invalid amount → INLINE error (kept visible in the flyout) + snack, and NO checkout: the flyout
+        // stays open so the failure is never silent. (The button is also gated on CanTopUp.)
+        if (!TryParseAmount(TopUpAmount, out var amount) || amount <= 0)
         {
+            HasTopUpError = true;
+            TopUpError = L.T("Account_AmountGtZero");
+            CanTopUp = false;
             AppEvents.SendSnackMsgRequested.Publish(L.T("Account_AmountGtZero"));
             return;
         }
 
-        var result = await _repo.Buy(new PaymentRequestDto { Amount = amount, Currency = "RUB" });
+        // Mirror the WORKING Buy checkout: a Platega top-up REQUIRES a PaymentMethod, or the provider
+        // returns no checkout URL (the "nothing happens" bug). Use the selected chip, else the first method.
+        var methodCode = _selectedTopUpMethod ?? TopUpMethods.FirstOrDefault(m => m.MethodCode is not null)?.MethodCode;
+        if (methodCode is null)
+        {
+            // No payment method loaded (config failed / not yet loaded) — surface it inline instead of
+            // dead-ending on the generic "couldn't open payment" like the old code did.
+            HasTopUpError = true;
+            TopUpError = L.T("Buy_NoPaymentMethods");
+            AppEvents.SendSnackMsgRequested.Publish(L.T("Buy_NoPaymentMethods"));
+            return;
+        }
+        var result = await _repo.Buy(new PaymentRequestDto { Amount = amount, Currency = "RUB", PaymentMethod = methodCode });
         RunOnUi(() =>
         {
             result
                 .OnSuccess(init =>
                 {
-                    TopUpAmount = string.Empty;
                     var url = init.PaymentUrl;
                     if (url.IsNullOrEmpty())
                     {
@@ -1121,6 +1242,11 @@ public class AccountViewModel : MyReactiveObject
                     {
                         ProcUtils.ProcessStart(url);
                         AppEvents.SendSnackMsgRequested.Publish(L.T("Common_CompletePaymentInBrowser"));
+                        TopUpAmount = string.Empty;
+                        HasTopUpError = false;
+                        TopUpError = string.Empty;
+                        // Hide the flyout only now (success): a validation return above kept it open.
+                        TopUpCheckoutOpened?.Invoke(this, EventArgs.Empty);
                         // The top-up completes in the external browser with no in-app return callback, so
                         // re-poll the profile until the balance lands — BalanceText updates without a
                         // manual retry.
@@ -1822,8 +1948,18 @@ public class AccountViewModel : MyReactiveObject
             HasTariffBadge = badge.IsNotEmpty();
             TariffBadge = badge ?? string.Empty;
 
-            HasSubExpiry = sub.ExpireAtIso.IsNotEmpty();
-            SubExpiry = HasSubExpiry ? L.F("Account_ValidUntil", FormatIsoDate(sub.ExpireAtIso)) : string.Empty;
+            // Hero expiry line agrees with the card: a far-future sentinel reads «Бессрочно», not a fake
+            // 04.06.2099. A genuinely blank expiry stays hidden (unknown), not «Бессрочно».
+            if (sub.ExpireAtIso.IsNotEmpty() && IsEffectivelyPerpetual(sub.ExpireAtIso))
+            {
+                HasSubExpiry = true;
+                SubExpiry = L.T("Account_Perpetual");
+            }
+            else
+            {
+                HasSubExpiry = sub.ExpireAtIso.IsNotEmpty();
+                SubExpiry = HasSubExpiry ? L.F("Account_ValidUntil", FormatIsoDate(sub.ExpireAtIso)) : string.Empty;
+            }
 
             var unlimited = sub.Subscription?.Raw()?.IsUnlimitedDevices() == true;
             var totalStr = unlimited ? "∞" : sub.TotalDevices.ToString();
@@ -2015,6 +2151,13 @@ public class AccountViewModel : MyReactiveObject
                 var cur = _lastPrimary.AutoRenewCurrency.IsNotEmpty() ? _lastPrimary.AutoRenewCurrency! : currency;
                 autoRenewCaption = L.F("Account_AutoRenewNext", when, FormatMoney(amt, cur));
             }
+            else if (sub.ExpireAtIso.IsNotEmpty() && !IsEffectivelyPerpetual(sub.ExpireAtIso))
+            {
+                // No explicit next-charge (secondary sub, or the primary payload lacked it): still lead
+                // with the same «Продлится …» voice using the known expiry date, so ON never flips between
+                // «Продлится 03.06 — спишем 150 ₽» and the bare «Автопродление включено».
+                autoRenewCaption = L.F("Account_AutoRenewOnDate", FormatIsoShort(sub.ExpireAtIso));
+            }
             else
             {
                 autoRenewCaption = L.T("Account_AutoRenewOn");
@@ -2176,11 +2319,31 @@ public class AccountViewModel : MyReactiveObject
         return Color.FromArgb(0xFF, Mix(a.R), Mix(a.G), Mix(a.B));
     }
 
-    /// <summary>Resolves a subscription's health + urgency copy from its expiry date (no expiry ⇒ perpetual/active).</summary>
+    /// <summary>
+    /// True when an ISO expiry is a far-future "forever" sentinel — a concrete backend date of
+    /// year ≥ 2099 (the sample sends 2099-06-04) or more than ~10 years out — so it renders «Бессрочно»
+    /// instead of a specific, fake-looking calendar date. A blank/absent expiry is ALSO perpetual; an
+    /// unparseable value is not (shown verbatim as active). Used by BOTH the card health and the hero line.
+    /// </summary>
+    private static bool IsEffectivelyPerpetual(string? iso)
+    {
+        if (iso.IsNullOrEmpty())
+        {
+            return true;
+        }
+        if (DateTimeOffset.TryParse(iso, CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var expire))
+        {
+            return expire.Year >= 2099 || (expire - DateTimeOffset.UtcNow).TotalDays > 3650;
+        }
+        return false;
+    }
+
+    /// <summary>Resolves a subscription's health + urgency copy from its expiry date (no/far-future expiry ⇒ perpetual/active).</summary>
     private static (SubHealth health, string expiryText, bool urgent) ResolveHealth(SubInfoDto sub)
     {
         var iso = sub.ExpireAtIso;
-        if (iso.IsNullOrEmpty())
+        if (IsEffectivelyPerpetual(iso))
         {
             return (SubHealth.Active, L.T("Account_Perpetual"), false);
         }
@@ -2395,6 +2558,28 @@ public sealed class AccountSubCard : ReactiveObject
     /// <summary>True while a renewal is settling / the browser poll runs — the CTA shows an in-slot spinner.</summary>
     [Reactive] public bool IsRenewing { get; set; }
 
+    /// <summary>
+    /// The renew choice (баланс / карта) is revealed INLINE inside the card (not a flyover popup) when
+    /// «Продлить» is tapped on a renewable card — removing the whole flyout-placement class of bug (the
+    /// popup that flipped over the card + meters). A card with no tariff to re-buy skips this and goes
+    /// straight to the Buy screen.
+    /// </summary>
+    private bool _renewExpanded;
+    public bool RenewExpanded
+    {
+        get => _renewExpanded;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _renewExpanded, value);
+            this.RaisePropertyChanged(nameof(RenewTopPrimary));
+        }
+    }
+
+    /// <summary>The top «Продлить» button is the ONE primary only while the inline pay-choice is collapsed;
+    /// once expanded, the inner «Оплатить картой» owns the single accent, so the top demotes to Tonal
+    /// (never two filled primaries stacked in the expiring/expired state).</summary>
+    public bool RenewTopPrimary => RenewPrimary && !RenewExpanded;
+
     // Auto-renew.
     public bool ShowAutoRenew { get; init; }
     [Reactive] public bool AutoRenewOn { get; set; }
@@ -2448,6 +2633,10 @@ public sealed class AccountSubCard : ReactiveObject
     public ReactiveCommand<Unit, Unit> OpenBuyCmd { get; }
     public ReactiveCommand<Unit, Unit> DevicesCmd { get; }
 
+    /// <summary>The single «Продлить» CTA action: on a renewable card it toggles the inline pay-method choice;
+    /// on a card with no tariff to re-buy it goes straight to the Buy screen (never a one-button popup).</summary>
+    public ReactiveCommand<Unit, Unit> PrimaryRenewCmd { get; }
+
     // Overflow picker navigation + actions.
     public ReactiveCommand<Unit, Unit> OpenDevicePickerCmd { get; }
     public ReactiveCommand<Unit, Unit> OpenUpgradePickerCmd { get; }
@@ -2466,6 +2655,17 @@ public sealed class AccountSubCard : ReactiveObject
         RenewCardCmd = ReactiveCommand.CreateFromTask(() => owner.RenewWithCard(this));
         OpenBuyCmd = ReactiveCommand.Create(owner.RequestBuy);
         DevicesCmd = ReactiveCommand.Create(owner.RequestDevices);
+        PrimaryRenewCmd = ReactiveCommand.Create(() =>
+        {
+            if (CanRenew)
+            {
+                RenewExpanded = !RenewExpanded;
+            }
+            else
+            {
+                owner.RequestBuy();
+            }
+        });
 
         OpenDevicePickerCmd = ReactiveCommand.Create(() => owner.OpenDevicePicker(this));
         OpenUpgradePickerCmd = ReactiveCommand.Create(() => owner.OpenUpgradePicker(this));
@@ -2552,5 +2752,26 @@ public sealed class UpgradeTargetOption : ReactiveObject
         // Safety net: this command isn't part of the VM/card ThrownExceptions merge, so route its stray
         // exceptions to the same error surface instead of the Rx default handler (which could crash).
         SelectCmd.ThrownExceptions.Subscribe(owner.ReportCommandException);
+    }
+}
+
+/// <summary>One selectable Platega method chip in the balance top-up flyout (mirrors the working Buy
+/// checkout's method sheet). Tapping it sets the method used for the next top-up checkout.</summary>
+public sealed class TopUpMethodItem : ReactiveObject
+{
+    /// <summary>The Platega method code (2..13) sent as <c>PaymentMethod</c>; null when the id isn't numeric.</summary>
+    public int? MethodCode { get; }
+    public string Label { get; }
+
+    /// <summary>Single-select state — drives the chip's selected styling.</summary>
+    [Reactive] public bool IsSelected { get; set; }
+
+    public ReactiveCommand<Unit, Unit> SelectCmd { get; }
+
+    public TopUpMethodItem(AccountViewModel owner, int? methodCode, string label)
+    {
+        MethodCode = methodCode;
+        Label = label;
+        SelectCmd = ReactiveCommand.Create(() => owner.SelectTopUpMethod(this));
     }
 }

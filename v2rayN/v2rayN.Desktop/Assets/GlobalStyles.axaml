@@ -16,6 +16,46 @@
         <CornerRadius x:Key="Radius.Button">16</CornerRadius>
 
         <!-- ==================================================================== -->
+        <!--  Flyout Incy (замена светло-серого дефолта Semi FlyoutPresenter).       -->
+        <!--  ТОЛЬКО для наших флайаутов вкладки «Аккаунт» (пополнение, kebab «Ещё»,  -->
+        <!--  привязка почты) — применяется ТОЧЕЧНО через FlyoutPresenterTheme, а НЕ  -->
+        <!--  implicit-по-типу: implicit-версия налезала бы на легаси-флайауты        -->
+        <!--  (настройки фрагмента, add-server, backup, тема) и клипала их из-за      -->
+        <!--  MaxWidth/паддинга. Тёмная SurfaceHigh (#1A1D21) — на шаг выше карты,     -->
+        <!--  поэтому флайаут поверх карты отделяется; 1px OutlineVariant, радиус 20,  -->
+        <!--  паддинг 16, мягкая тень. Без MaxWidth (контент сам задаёт ширину);       -->
+        <!--  ScrollViewer + MaxHeight 480 — длинный список апгрейда скроллится.       -->
+        <!-- ==================================================================== -->
+        <ControlTheme x:Key="IncyFlyoutTheme" TargetType="FlyoutPresenter">
+            <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineVariant}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{DynamicResource Radius.Card}" />
+            <Setter Property="Padding" Value="16" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        BoxShadow="0 12 32 0 #66000000"
+                        CornerRadius="{TemplateBinding CornerRadius}">
+                        <ScrollViewer
+                            HorizontalScrollBarVisibility="Disabled"
+                            MaxHeight="480"
+                            VerticalScrollBarVisibility="Auto">
+                            <ContentPresenter
+                                Padding="{TemplateBinding Padding}"
+                                Content="{TemplateBinding Content}"
+                                ContentTemplate="{TemplateBinding ContentTemplate}" />
+                        </ScrollViewer>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </ControlTheme>
+
+        <!-- ==================================================================== -->
         <!--  Incy-скроллбар (замена уродливого дефолта Semi). АВТО-СКРЫТИЕ оверлей: -->
         <!--  в покое ползунок НЕВИДИМ (opacity 0). При наведении курсора на область -->
         <!--  скролла / прокрутке ScrollBar получает :expanded (ScrollViewer.Allow-   -->
