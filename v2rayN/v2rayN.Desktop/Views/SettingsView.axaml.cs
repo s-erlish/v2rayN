@@ -97,15 +97,17 @@ public partial class SettingsView : UserControl
 
     private SettingsViewModel? Vm => DataContext as SettingsViewModel;
 
-    // ===================== Строки: клавиатура + press-фидбек =====================
+    // ===================== Строки: активация тапом + клавиатурой =====================
 
-    /// <summary>Делает строку-действие фокусируемой (таб-стоп + Enter/Space = тот же жест, что тап) и
-    /// добавляет press-scale 0.98 по указателю. Порядок Tab = порядок в разметке (сверху вниз).</summary>
+    /// <summary>Делает строку-действие фокусируемой (таб-стоп + Enter/Space = тот же жест, что тап).
+    /// Единственный указательный путь — Tapped (жест «нажал+отпустил на строке»): ровно один вызов на
+    /// тап, без PointerPressed-перехвата, который раньше гасил жест. Порядок Tab = порядок в разметке.
+    /// Press-фидбек намеренно НЕ навешивается — владелец не хочет «продавливания» строки (scale-down);
+    /// покой→ховер (Brush.Hover) остаётся, кольцо фокуса — тоже.</summary>
     private void WireRow(Border row, Action activate)
     {
         row.Focusable = true;
         row.IsTabStop = true;
-        AddPressFeedback(row);
         row.Tapped += (_, _) => activate();
         row.KeyDown += (_, e) =>
         {
@@ -119,12 +121,12 @@ public partial class SettingsView : UserControl
 
     /// <summary>Тумблер-строка: тап по всей строке (guard OriginatedInToggle гасит двойной ход, когда
     /// источник — сам тумблер) + Enter/Space переключают привязанный тумблер. Строка — единственный
-    /// таб-стоп (сам тумблер снят с фокуса в стиле RowSwitch).</summary>
+    /// таб-стоп (сам тумблер снят с фокуса в стиле RowSwitch). Как и WireRow — Tapped-only, без
+    /// PointerPressed/press-scale: один тап = одно переключение, надёжно.</summary>
     private void WireToggleRow(Border row, ToggleSwitch sw)
     {
         row.Focusable = true;
         row.IsTabStop = true;
-        AddPressFeedback(row);
         row.Tapped += (_, e) => ToggleFromRow(sw, e);
         row.KeyDown += (_, e) =>
         {
@@ -134,23 +136,6 @@ public partial class SettingsView : UserControl
                 e.Handled = true;
             }
         };
-    }
-
-    /// <summary>Класс .pressed по нажатию/отпусканию указателя (стиль Border.SettingRow.pressed даёт
-    /// scale 0.98 из центра: вниз OutQuart 90мс, возврат OutQuint 160мс; мгновенно под lite). Сброс на
-    /// release/capture-lost/exit — чтобы масштаб не «залипал» при переходе на суб-страницу.</summary>
-    private static void AddPressFeedback(Border row)
-    {
-        row.PointerPressed += (_, _) =>
-        {
-            if (!row.Classes.Contains("pressed"))
-            {
-                row.Classes.Add("pressed");
-            }
-        };
-        row.PointerReleased += (_, _) => row.Classes.Remove("pressed");
-        row.PointerCaptureLost += (_, _) => row.Classes.Remove("pressed");
-        row.PointerExited += (_, _) => row.Classes.Remove("pressed");
     }
 
     // ===================== Инлайн-сегменты (Режим / Оформление) =====================

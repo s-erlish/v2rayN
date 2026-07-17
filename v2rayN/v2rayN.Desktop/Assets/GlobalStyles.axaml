@@ -604,24 +604,20 @@
     <!--  ==================================================================== -->
     <!--  Строка настроек (SettingRow) — продвинута из SettingsView (P2). minHeight 56,     -->
     <!--  паддинг 16/12, hover = прямоугольное затемнение Brush.Hover ВНУТРИ скруглённой     -->
-    <!--  карты (карта клипует углы), press-scale 0.98 из центра, focus = авто-кольцо        -->
-    <!--  FocusAdorner (строка становится Focusable/IsTabStop в code-behind, как AccountChip).-->
+    <!--  карты (карта клипует углы), focus = авто-кольцо FocusAdorner (строка становится     -->
+    <!--  Focusable/IsTabStop в code-behind, как AccountChip).                                -->
     <!--                                                                                      -->
-    <!--  Асимметрия press: нажатие = Ease.OutQuart 90мс (быстрый уход вниз), отпускание =     -->
-    <!--  Ease.OutQuint 160мс (уверенное оседание) — базовый переход держит возврат, класс     -->
-    <!--  .pressed приносит быстрый вход. Ховер МГНОВЕННЫЙ (без BrushTransition на Background): -->
-    <!--  при прокрутке колесом подсвечивается ровно одна строка (паритет ServerRow).           -->
+    <!--  БЕЗ press-scale: владелец не хочет «продавливания» строки при тапе. Прежний класс     -->
+    <!--  .pressed (scale 0.98 по PointerPressed) не только визуально «сжимал» строку, но и      -->
+    <!--  съезжал под курсором на нажатии — жест Tapped отменялся, и тап срабатывал «через раз».  -->
+    <!--  Отклик на нажатие несёт сам ховер (Brush.Hover) под курсором; кольцо фокуса — a11y.      -->
+    <!--  Ховер МГНОВЕННЫЙ (без BrushTransition на Background): при прокрутке колесом подсвечена    -->
+    <!--  ровно одна строка (паритет ServerRow).                                                    -->
     <!--  ==================================================================== -->
     <Style Selector="Border.SettingRow">
-        <Setter Property="RenderTransformOrigin" Value="50%,50%" />
         <Setter Property="MinHeight" Value="{DynamicResource Size.Row}" />
         <Setter Property="Padding" Value="16,12" />
         <Setter Property="Background" Value="Transparent" />
-        <Setter Property="Transitions">
-            <Transitions>
-                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.16" Easing="{StaticResource Ease.OutQuint}" />
-            </Transitions>
-        </Setter>
         <!--  Кольцо фокуса ВНУТРЕННЕЕ (отступ 3, радиус 12): строка во всю ширину карты, внешнее
               кольцо вылезло бы за скруглённый край карты. Мгновенно, переживает lite (a11y > движение).  -->
         <Setter Property="FocusAdorner">
@@ -639,14 +635,6 @@
           у .segmentRow ховер тела подавлен (реагируют сами чипы). Специфичнее базового → перекрывает.  -->
     <Style Selector="Border.SettingRow.segmentRow:pointerover">
         <Setter Property="Background" Value="Transparent" />
-    </Style>
-    <Style Selector="Border.SettingRow.pressed">
-        <Setter Property="RenderTransform" Value="scale(0.98)" />
-        <Setter Property="Transitions">
-            <Transitions>
-                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" Easing="{StaticResource Ease.OutQuart}" />
-            </Transitions>
-        </Setter>
     </Style>
 
     <!--  Поиск-пилюля (bg_search_pill): Surface, radius 14, 1px OutlineVariant.  -->
@@ -1391,13 +1379,6 @@
     <!--  Скроллбар: ширина/opacity/цвет ползунка переключаются МГНОВЕННО под lite.
           Стиль перекрывает Transitions из ControlTheme ползунка (Style > ControlTheme).  -->
     <Style Selector=":is(Window).lite ScrollBar /template/ Thumb#thumb">
-        <Setter Property="Transitions">
-            <Transitions />
-        </Setter>
-    </Style>
-
-    <!--  Строка настроек: press-scale 0.98 мгновенно под lite (паритет ServerRow).  -->
-    <Style Selector=":is(Window).lite Border.SettingRow">
         <Setter Property="Transitions">
             <Transitions />
         </Setter>

@@ -136,8 +136,8 @@
     </UserControl.Resources>
 
     <UserControl.Styles>
-        <!--  Border.SettingRow (база + hover + press-scale + focus-кольцо + lite-gate) продвинут в
-              GlobalStyles (P2). Здесь остаются только строко-специфичные потомки-селекторы.  -->
+        <!--  Border.SettingRow (база + hover + focus-кольцо) продвинут в GlobalStyles (P2). Без
+              press-scale (владелец не хочет «продавливания»). Здесь — только строко-специфичные потомки.  -->
 
         <!--  Разделитель 1px, инсет слева 72 (16 паддинг + 40 плитка + 16 отступ).  -->
         <Style Selector="Border.SettingDivider">
