@@ -24,12 +24,6 @@ namespace v2rayN.Desktop.Views;
 /// </summary>
 public partial class LoginView : UserControl
 {
-    /// <summary>
-    /// Основной сайт для регистрации (НЕ API-хост из BackendConfig). Порт константы
-    /// LoginActivity.REGISTER_URL.
-    /// </summary>
-    private const string RegisterUrl = "https://departament.site";
-
     /// <summary>Прагматичная проверка email (аналог Android Patterns.EMAIL_ADDRESS).</summary>
     private static readonly Regex _emailRegex = new(@"^[^@\s]+@[^@\s]+\.[^@\s]{2,}$", RegexOptions.Compiled);
 
@@ -54,6 +48,32 @@ public partial class LoginView : UserControl
 
     // Блок 2FA видим (TwoFaTempToken != null) — спиннер занятости идёт на «Подтвердить».
     private bool _twoFaVisible;
+
+    // Форма в режиме регистрации (сегмент «Регистрация») — иначе режим входа.
+    private bool _registerMode;
+
+    // Запрос регистрации в полёте (LoginState.RegisterLoading) — спиннер на «Создать аккаунт».
+    private bool _registerBusy;
+
+    // Какой из трёх блоков колонки контента показан сейчас (управляет кроссфейдом/CTA/дугой).
+    private ViewBlock _viewBlock = ViewBlock.Method;
+
+    // Вид активного пред-состояния «письмо отправлено» (задаёт заголовок/подсказку/действие «отправить снова»).
+    private PendingKind _pendingKind = PendingKind.Verify;
+
+    private enum ViewBlock
+    {
+        Method,
+        Awaiting,
+        EmailPending,
+    }
+
+    private enum PendingKind
+    {
+        Verify,
+        Magic,
+        Reset,
+    }
 
     // Ключ ошибки ИМЕННО логин-потока (LoginState.Error → auth_err_*); имеет приоритет над общим
     // AccountViewModel.ErrorText. Храним КЛЮЧ (не текст), чтобы строка переводилась вживую.
@@ -106,12 +126,20 @@ public partial class LoginView : UserControl
         RestartButton.Click += OnRestartClick;
         ChooseAnotherButton.Click += OnChooseAnotherClick;
         OpenTelegramButton.Click += OnOpenTelegramClick;
-        RegisterButton.Click += (_, _) => ProcUtils.ProcessStart(RegisterUrl);
         TogglePasswordButton.Click += OnTogglePasswordClick;
+
+        // Сегмент «Вход | Регистрация» — переключает режим формы (ApplyMode).
+        SignInTab.Click += (_, _) => SetMode(false);
+        RegisterTab.Click += (_, _) => SetMode(true);
+
+        // Пред-состояния «письмо отправлено»: повторная отправка (по виду) и возврат ко входу.
+        ResendButton.Click += OnResendClick;
+        BackToSignInButton.Click += OnBackToSignInClick;
 
         // Отправка с клавиатуры (паритет imeOptions actionNext/actionDone).
         EmailBox.KeyDown += OnEmailKeyDown;
         PasswordBox.KeyDown += OnPasswordKeyDown;
+        ConfirmPasswordBox.KeyDown += OnConfirmPasswordKeyDown;
         CodeBox.KeyDown += OnCodeKeyDown;
         // Активная ячейка 2FA подсвечивается только в фокусе — перерисовываем при смене фокуса.
         CodeBox.GotFocus += (_, _) => RenderCodeCells();
@@ -143,6 +171,7 @@ public partial class LoginView : UserControl
 
         Rebind();
         RenderCodeCells();
+        ApplyMode();
     }
 
     // ── Первая раскладка: entrance-стаггер / фиксация _firstRenderDone ────────
@@ -206,10 +235,20 @@ public partial class LoginView : UserControl
             .Subscribe(Apply2Fa)
             .DisposeWith(d);
 
-        // Живая валидация: submit активен только при валидном вводе.
+        // Живая валидация: submit активен только при валидном вводе (обе формы — вход и регистрация).
         _vm.WhenAnyValue(x => x.LoginEmail, x => x.LoginPassword)
             .ObserveOn(RxSchedulers.MainThreadScheduler)
-            .Subscribe(_ => UpdateSiteGate())
+            .Subscribe(_ =>
+            {
+                UpdateSiteGate();
+                UpdateRegisterGate();
+            })
+            .DisposeWith(d);
+
+        // Повтор пароля (регистрация): пере-считываем гейт «Создать аккаунт» + подсказку несовпадения.
+        _vm.WhenAnyValue(x => x.RegisterConfirmPassword)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .Subscribe(_ => UpdateRegisterGate())
             .DisposeWith(d);
 
         _vm.WhenAnyValue(x => x.TwoFaCode)
@@ -262,6 +301,13 @@ public partial class LoginView : UserControl
     {
         UpdateErrorLine();
         ToolTip.SetTip(TogglePasswordButton, L.T(_revealPassword ? "Login_HidePassword" : "Login_ShowPassword"));
+        // Re-derive the imperative mode labels (title/subtitle/toolbar/watermark) in the new language.
+        ApplyMode();
+        // Re-derive the pending-screen copy if it's up.
+        if (_viewBlock == ViewBlock.EmailPending)
+        {
+            ConfigureEmailPending(_pendingKind, _vm?.LoginEmail?.Trim() ?? string.Empty);
+        }
     }
 
     private void Unbind()
@@ -289,11 +335,53 @@ public partial class LoginView : UserControl
                 SetLoginError(string.Empty);
                 break;
 
+            case LoginState.RegisterLoading:
+                SetLoginError(string.Empty);
+                if (_viewBlock == ViewBlock.EmailPending)
+                {
+                    // «Отправить снова» с экрана verify-email — остаёмся на месте, крутим кольцо.
+                    var spin = !IsReducedMotion();
+                    SetSpinning(PendingSpinner, spin);
+                    PendingSpinner.Opacity = spin ? 1 : 0;
+                }
+                else
+                {
+                    // Первичная регистрация из формы — спиннер на «Создать аккаунт».
+                    SetSiteBusy(false);
+                    SetRegisterBusy(true);
+                }
+                break;
+
+            case LoginState.AwaitingEmailVerification verify:
+                SetSiteBusy(false);
+                SetRegisterBusy(false);
+                SetLoginError(string.Empty);
+                ConfigureEmailPending(PendingKind.Verify, verify.Email);
+                ShowBlock(ViewBlock.EmailPending);
+                break;
+
+            case LoginState.MagicLinkSent magic:
+                SetSiteBusy(false);
+                SetRegisterBusy(false);
+                SetLoginError(string.Empty);
+                ConfigureEmailPending(PendingKind.Magic, magic.Email);
+                ShowBlock(ViewBlock.EmailPending);
+                break;
+
+            case LoginState.PasswordResetSent reset:
+                SetSiteBusy(false);
+                SetRegisterBusy(false);
+                SetLoginError(string.Empty);
+                ConfigureEmailPending(PendingKind.Reset, reset.Email);
+                ShowBlock(ViewBlock.EmailPending);
+                break;
+
             case LoginState.Success:
                 // НЕ возвращаемся в MethodBlock здесь — success-момент играется на том блоке, что виден
                 // (кольцо ожидания → галочка, или транзиентная плашка над формой), затем отпускает
                 // хэндофф. SetSiteBusy(false) гасит инлайн-спиннер кнопки под ним.
                 SetSiteBusy(false);
+                SetRegisterBusy(false);
                 SetLoginError(string.Empty);
                 PlaySuccessBeat();
                 break;
@@ -301,6 +389,7 @@ public partial class LoginView : UserControl
             case LoginState.Error error:
                 SetAwaiting(false);
                 SetSiteBusy(false);
+                SetRegisterBusy(false);
                 SetLoginError(MessageKeyFor(error.ErrorValue));
                 // Неверные учётные данные → вспышка рамок email+пароль в Red (без shake, §3.5).
                 if (error.ErrorValue is ApiError.Unauthorized)
@@ -312,58 +401,80 @@ public partial class LoginView : UserControl
             default: // Idle. Ошибку НЕ трогаем: Idle приходит и сразу после показа ошибки.
                 SetAwaiting(false);
                 SetSiteBusy(false);
+                SetRegisterBusy(false);
                 break;
         }
     }
 
+    /// <summary>Совместимость: вход/выход из ожидания Telegram — тонкая обёртка над <see cref="ShowBlock"/>.</summary>
+    private void SetAwaiting(bool awaiting) => ShowBlock(awaiting ? ViewBlock.Awaiting : ViewBlock.Method);
+
     /// <summary>
-    /// Ожидание подтверждения в Telegram (layout_awaiting): AwaitingBlock ЗАМЕНЯЕТ MethodBlock.
-    /// Смена идёт КРОССФЕЙДОМ (220мс Ease.Standard, микро-scale, общий самолётик как элемент
-    /// непрерывности), кроме первого кадра/lite — там мгновенный снап (Telegram-вход открывается
-    /// сразу в ожидании, самоанимироваться нельзя).
+    /// Показывает один из трёх блоков колонки контента (форма / ожидание Telegram / «письмо отправлено»),
+    /// ЗАМЕНЯЯ текущий КРОССФЕЙДОМ (220мс Ease.Standard, микро-scale), кроме первого кадра/lite — там
+    /// мгновенный снап. Управляет активностью CTA Telegram, вращением дуги ожидания и «дыханием» самолётика.
     /// </summary>
-    private void SetAwaiting(bool awaiting)
+    private void ShowBlock(ViewBlock target)
     {
-        var changed = awaiting != _awaiting;
-        _awaiting = awaiting;
+        var changed = target != _viewBlock;
+        var prev = _viewBlock;
+        _viewBlock = target;
+        _awaiting = target == ViewBlock.Awaiting;
 
         // CTA Telegram неактивен ТОЛЬКО пока идёт опрос (паритет showAwaiting).
-        TelegramButton.IsEnabled = !awaiting;
+        TelegramButton.IsEnabled = !_awaiting;
         // Дуга крутится только пока видно ожидание (класс + селектор :not(.lite)).
-        SetSpinning(AwaitingSpinner, awaiting);
+        SetSpinning(AwaitingSpinner, _awaiting);
         // «Дыхание» самолётика — только пока видно ожидание и не lite.
         UpdateBreathe();
+        // Кольцо пред-состояния крутится только внутри EmailPending (verify-email); гасим при выходе.
+        if (target != ViewBlock.EmailPending)
+        {
+            SetSpinning(PendingSpinner, false);
+        }
 
         if (!_firstRenderDone || IsReducedMotion())
         {
-            SnapBlocks(awaiting);
+            SnapBlocks(target);
             return;
         }
         if (!changed)
         {
             return;
         }
-        CrossfadeTo(awaiting);
+        CrossfadeBlocks(BlockControl(target), BlockControl(prev));
     }
 
+    private Control BlockControl(ViewBlock block) => block switch
+    {
+        ViewBlock.Awaiting => AwaitingBlock,
+        ViewBlock.EmailPending => EmailPendingBlock,
+        _ => MethodBlock,
+    };
+
     /// <summary>Мгновенно ставит нужный блок (первый кадр / lite / reduced-motion).</summary>
-    private void SnapBlocks(bool awaiting)
+    private void SnapBlocks(ViewBlock target)
     {
         _blockCts?.Cancel();
         _blockCts = null;
-        AwaitingBlock.IsVisible = awaiting;
-        AwaitingBlock.Opacity = 1;
-        AwaitingBlock.RenderTransform = null;
-        MethodBlock.IsVisible = !awaiting;
-        MethodBlock.Opacity = 1;
-        MethodBlock.RenderTransform = null;
+        void Set(Control c, bool vis)
+        {
+            c.IsVisible = vis;
+            c.Opacity = 1;
+            c.RenderTransform = null;
+        }
+        Set(MethodBlock, target == ViewBlock.Method);
+        Set(AwaitingBlock, target == ViewBlock.Awaiting);
+        Set(EmailPendingBlock, target == ViewBlock.EmailPending);
     }
 
     /// <summary>Кроссфейд между блоками (оба видны в перекрытии → нет пустого кадра).</summary>
-    private async void CrossfadeTo(bool awaiting)
+    private async void CrossfadeBlocks(Control incoming, Control outgoing)
     {
-        var incoming = awaiting ? (Control)AwaitingBlock : MethodBlock;
-        var outgoing = awaiting ? (Control)MethodBlock : AwaitingBlock;
+        if (ReferenceEquals(incoming, outgoing))
+        {
+            return;
+        }
 
         _blockCts?.Cancel();
         var cts = new CancellationTokenSource();
@@ -445,6 +556,81 @@ public partial class LoginView : UserControl
         Update2FaGate();
     }
 
+    /// <summary>Занятость регистрации: инлайн-спиннер на «Создать аккаунт», submit заблокирован.</summary>
+    private void SetRegisterBusy(bool busy)
+    {
+        _registerBusy = busy;
+        // Как и site-спиннер: под reduced-motion/lite дугу не крутим (её keyframe выключен селектором),
+        // просто держим лейбл и заблокированную (притушенную) кнопку.
+        var showSpin = busy && !IsReducedMotion();
+        RegisterSpinner.IsVisible = showSpin;
+        SetSpinning(RegisterSpinner, showSpin);
+        RegisterButtonLabel.IsVisible = !showSpin;
+        UpdateRegisterGate();
+    }
+
+    /// <summary>Переключает режим формы (вход ⇄ регистрация): сбрасывает ошибку и пере-применяет вид.</summary>
+    private void SetMode(bool register)
+    {
+        if (_registerMode == register)
+        {
+            return;
+        }
+        _registerMode = register;
+        SetLoginError(string.Empty);
+        ApplyMode();
+    }
+
+    /// <summary>
+    /// Применяет режим формы к видимости/лейблам: сегмент, заголовок/подзаголовок/тулбар, watermark
+    /// пароля, поля регистрации (повтор пароля + подсказка + «Создать аккаунт») против sign-in-элементов
+    /// (кнопка сайта + пассворлесс-ссылки + блок 2FA). Пере-считывает гейты валидации под новый режим.
+    /// </summary>
+    private void ApplyMode()
+    {
+        SetClass(SignInTab, "segActive", !_registerMode);
+        SetClass(RegisterTab, "segActive", _registerMode);
+
+        ToolbarTitle.Text = L.T(_registerMode ? "Login_TabRegister" : "Login_SignIn");
+        TitleText.Text = L.T(_registerMode ? "Login_TitleRegister" : "Login_Title");
+        SubtitleText.Text = L.T(_registerMode ? "Login_SubtitleRegister" : "Login_Subtitle");
+        PasswordBox.Watermark = L.T(_registerMode ? "Login_PasswordRegister" : "Login_Password");
+
+        // Только регистрация.
+        RegisterPasswordHint.IsVisible = _registerMode;
+        ConfirmPasswordBox.IsVisible = _registerMode;
+        RegisterButtonHost.IsVisible = _registerMode;
+
+        // Только вход.
+        SiteButtonHost.IsVisible = !_registerMode;
+        PasswordlessLinks.IsVisible = !_registerMode;
+        // Блок 2FA осмыслен только во входе; в регистрации всегда скрыт (иначе — по tempToken).
+        TwoFaBlock.IsVisible = !_registerMode && _twoFaVisible;
+
+        UpdateSiteGate();
+        UpdateRegisterGate();
+    }
+
+    /// <summary>Настраивает пред-экран «письмо отправлено» под вид состояния (verify / magic / reset).</summary>
+    private void ConfigureEmailPending(PendingKind kind, string email)
+    {
+        _pendingKind = kind;
+        var (titleKey, hintKey) = kind switch
+        {
+            PendingKind.Magic => ("Login_MagicSentTitle", "Login_MagicSentHint"),
+            PendingKind.Reset => ("Login_ResetSentTitle", "Login_ResetSentHint"),
+            _ => ("Login_VerifyTitle", "Login_VerifyHint"),
+        };
+        PendingTitle.Text = L.T(titleKey);
+        PendingHint.Text = L.F(hintKey, email);
+
+        // Только verify-email реально поллит логин → крутим кольцо; magic/reset — спокойный статичный
+        // «отправлено» (дуга скрыта, остаётся трек + конверт). Под lite дугу не показываем вовсе.
+        var spin = kind == PendingKind.Verify && !IsReducedMotion();
+        SetSpinning(PendingSpinner, spin);
+        PendingSpinner.Opacity = spin ? 1 : 0;
+    }
+
     /// <summary>Показывает/прячет блок 2FA по tempToken (паритет onTwoFactor) с reveal + автофокусом.</summary>
     private void Apply2Fa(string? tempToken)
     {
@@ -484,7 +670,8 @@ public partial class LoginView : UserControl
 
     // ── Валидация ввода ─────────────────────────────────────────────────────
 
-    /// <summary>Кнопка «Войти через сайт» активна только при валидном email + пароле.</summary>
+    /// <summary>Кнопка «Войти через сайт» активна только при валидном email + пароле. Пассворлесс-ссылки
+    /// («Войти по ссылке» / «Забыли пароль?») активны при валидном email (пароль не нужен).</summary>
     private void UpdateSiteGate()
     {
         var email = _vm?.LoginEmail?.Trim() ?? string.Empty;
@@ -492,6 +679,28 @@ public partial class LoginView : UserControl
 
         EmailError.IsVisible = email.Length > 0 && !IsEmail(email);
         SiteButton.IsEnabled = !_siteBusy && IsEmail(email) && password.Length > 0;
+
+        var emailOk = IsEmail(email);
+        MagicLinkButton.IsEnabled = emailOk;
+        ForgotPasswordButton.IsEnabled = emailOk;
+    }
+
+    /// <summary>«Создать аккаунт» активна при валидном email, пароле ≥8 и совпадающем повторе.</summary>
+    private void UpdateRegisterGate()
+    {
+        var email = _vm?.LoginEmail?.Trim() ?? string.Empty;
+        var password = _vm?.LoginPassword ?? string.Empty;
+        var confirm = _vm?.RegisterConfirmPassword ?? string.Empty;
+
+        // Валидность email отражаем в общей строке EmailError (обе формы делят поле).
+        EmailError.IsVisible = email.Length > 0 && !IsEmail(email);
+        ConfirmPasswordError.IsVisible = _registerMode && confirm.Length > 0 && confirm != password;
+
+        RegisterSubmitButton.IsEnabled = !_registerBusy
+            && IsEmail(email)
+            && password.Length >= 8
+            && confirm.Length > 0
+            && confirm == password;
     }
 
     /// <summary>
@@ -636,6 +845,8 @@ public partial class LoginView : UserControl
     {
         // 401/403 на входе через сайт — почти всегда неверные учётные данные.
         ApiError.Unauthorized => "Login_ErrBadCreds",
+        // 409 — registration hit an existing account (backend returns Conflict).
+        ApiError.Server { Code: 409 } => "Login_ErrEmailTaken",
         ApiError.GoneError => "Login_ErrLinkExpired",
         ApiError.ServiceUnavailable => "Common_ServiceUnavailable",
         ApiError.NetworkError or ApiError.TimeoutError => "Common_NetworkError",
@@ -734,19 +945,21 @@ public partial class LoginView : UserControl
         await Task.Delay(120);
     }
 
-    /// <summary>Success без AwaitingBlock (сайт/2FA): 64-галочка проявляется, форма гаснет под ней.</summary>
+    /// <summary>Success без AwaitingBlock (сайт/2FA/регистрация/verify-email): 64-галочка проявляется,
+    /// текущий видимый блок (форма или пред-экран) гаснет под ней.</summary>
     private async Task PlayBadgeSuccess(bool lite)
     {
+        var active = BlockControl(_viewBlock);
         SuccessBadge.IsVisible = true;
         if (lite)
         {
-            MethodBlock.Opacity = 0;
+            active.Opacity = 0;
             SuccessBadge.Opacity = 1;
             SuccessBadge.RenderTransform = null;
             await Task.Delay(120);
             return;
         }
-        _ = Fade(MethodBlock, MethodBlock.Opacity, 0d, Motion.Dur.PressOut, Motion.Ease.Standard);
+        _ = Fade(active, active.Opacity, 0d, Motion.Dur.PressOut, Motion.Ease.Standard);
         await ScaleFadeIn(SuccessBadge, Motion.Dur.State, Motion.Ease.OutQuint);
         await Task.Delay(120);
     }
@@ -788,6 +1001,34 @@ public partial class LoginView : UserControl
         _vm?.CancelLogin();
     }
 
+    /// <summary>«Отправить снова» на пред-экране — повторяет запрос ПО ВИДУ состояния (verify/magic/reset).</summary>
+    private void OnResendClick(object? sender, RoutedEventArgs e)
+    {
+        switch (_pendingKind)
+        {
+            case PendingKind.Magic:
+                Execute(_vm?.MagicLinkCmd);
+                break;
+            case PendingKind.Reset:
+                Execute(_vm?.PasswordResetCmd);
+                break;
+            default:
+                // Verify-email: повторная регистрация переотправляет письмо и перезапускает поллинг.
+                Execute(_vm?.RegisterCmd);
+                break;
+        }
+    }
+
+    /// <summary>«Вернуться ко входу»: отменяет поллинг/запрос и возвращает к форме (Idle → кроссфейд к MethodBlock).</summary>
+    private void OnBackToSignInClick(object? sender, RoutedEventArgs e)
+    {
+        SetLoginError(string.Empty);
+        // The button says «Вернуться ко входу» — land on the sign-in form, not the register form we may
+        // have come from (register → verify-email → back).
+        SetMode(register: false);
+        _vm?.CancelLogin();
+    }
+
     private void OnTogglePasswordClick(object? sender, RoutedEventArgs e)
     {
         _revealPassword = !_revealPassword;
@@ -812,7 +1053,24 @@ public partial class LoginView : UserControl
     {
         if (e.Key is Key.Enter or Key.Return)
         {
-            SubmitSite();
+            // В регистрации Enter ведёт к повтору пароля; во входе — сразу вход.
+            if (_registerMode)
+            {
+                ConfirmPasswordBox.Focus();
+            }
+            else
+            {
+                SubmitSite();
+            }
+            e.Handled = true;
+        }
+    }
+
+    private void OnConfirmPasswordKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key is Key.Enter or Key.Return)
+        {
+            SubmitRegister();
             e.Handled = true;
         }
     }
@@ -839,6 +1097,24 @@ public partial class LoginView : UserControl
             return;
         }
         Execute(_vm.LoginSiteCmd);
+    }
+
+    /// <summary>Валидирует поля регистрации и запускает создание аккаунта (кнопка и Enter — один путь).</summary>
+    private void SubmitRegister()
+    {
+        if (_vm is null || _registerBusy)
+        {
+            return;
+        }
+        TrimEmail();
+        var email = _vm.LoginEmail ?? string.Empty;
+        var password = _vm.LoginPassword ?? string.Empty;
+        var confirm = _vm.RegisterConfirmPassword ?? string.Empty;
+        if (!IsEmail(email) || password.Length < 8 || confirm != password)
+        {
+            return;
+        }
+        Execute(_vm.RegisterCmd);
     }
 
     /// <summary>Валидирует 6-значный код и завершает вход 2FA.</summary>

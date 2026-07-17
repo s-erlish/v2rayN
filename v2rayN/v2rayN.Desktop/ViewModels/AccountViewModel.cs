@@ -42,6 +42,11 @@ public class AccountViewModel : MyReactiveObject
 
     private CancellationTokenSource? _telegramCts;
 
+    // Bounded poll after an email+password registration that requires verification (poll login until the
+    // emailed link is clicked). Also owns the in-flight magic-link / password-reset requests. Cancelled on
+    // logout, on «другой способ входа», and whenever a new start-page auth flow begins.
+    private CancellationTokenSource? _registerCts;
+
     // Bounded post-top-up profile re-poll (a Platega top-up completes in the external browser with no
     // in-app return callback). Cancelled on logout or a subsequent top-up.
     private CancellationTokenSource? _topUpRefreshCts;
@@ -52,6 +57,11 @@ public class AccountViewModel : MyReactiveObject
 
     // Bounded poll of /me after a Telegram-link code is issued (until telegramLinked flips true).
     private CancellationTokenSource? _linkPollCts;
+
+    // Bounded poll of GET /client/payments after a CARD device-top-up / upgrade opens in the browser
+    // (webhook-confirmed there, no in-app return). Cancelled on logout or a newer card action.
+    private CancellationTokenSource? _cardActionPollCts;
+    private AccountSubCard? _cardActionCard;
 
     // The Telegram bot handle to reopen from «Открыть бота» while a link is pending.
     private string _linkBotUsername = string.Empty;
@@ -206,6 +216,10 @@ public class AccountViewModel : MyReactiveObject
     [Reactive] public LoginState CurrentLoginState { get; set; } = new LoginState.Idle();
     [Reactive] public string LoginEmail { get; set; } = string.Empty;
     [Reactive] public string LoginPassword { get; set; } = string.Empty;
+
+    /// <summary>The «повторите пароль» field of the start-page registration form (must equal <see cref="LoginPassword"/>).</summary>
+    [Reactive] public string RegisterConfirmPassword { get; set; } = string.Empty;
+
     [Reactive] public string TwoFaCode { get; set; } = string.Empty;
 
     /// <summary>The balance top-up amount (₽) the user typed in the «Пополнить» flyout.</summary>
@@ -228,6 +242,16 @@ public class AccountViewModel : MyReactiveObject
     public ReactiveCommand<Unit, Unit> LoadDevicesCmd { get; }
     public ReactiveCommand<Unit, Unit> LoginTelegramCmd { get; }
     public ReactiveCommand<Unit, Unit> LoginSiteCmd { get; }
+
+    /// <summary>Start-page email+password registration (also the «отправить снова» action on the verify screen).</summary>
+    public ReactiveCommand<Unit, Unit> RegisterCmd { get; }
+
+    /// <summary>«Войти по ссылке» — request a passwordless magic sign-in link for <see cref="LoginEmail"/>.</summary>
+    public ReactiveCommand<Unit, Unit> MagicLinkCmd { get; }
+
+    /// <summary>«Забыли пароль?» — request a password-reset link for <see cref="LoginEmail"/>.</summary>
+    public ReactiveCommand<Unit, Unit> PasswordResetCmd { get; }
+
     public ReactiveCommand<Unit, Unit> Submit2FaCmd { get; }
     public ReactiveCommand<Unit, Unit> LogoutCmd { get; }
     public ReactiveCommand<Unit, Unit> RetryCmd { get; }
@@ -282,6 +306,9 @@ public class AccountViewModel : MyReactiveObject
         LoadDevicesCmd = ReactiveCommand.CreateFromTask(LoadActiveDevices);
         LoginTelegramCmd = ReactiveCommand.CreateFromTask(StartTelegramLogin);
         LoginSiteCmd = ReactiveCommand.CreateFromTask(LoginSite);
+        RegisterCmd = ReactiveCommand.CreateFromTask(Register);
+        MagicLinkCmd = ReactiveCommand.CreateFromTask(RequestMagicLink);
+        PasswordResetCmd = ReactiveCommand.CreateFromTask(RequestPasswordReset);
         Submit2FaCmd = ReactiveCommand.CreateFromTask(Submit2Fa);
         LogoutCmd = ReactiveCommand.CreateFromTask(Logout);
         RetryCmd = ReactiveCommand.CreateFromTask(Retry);
@@ -302,6 +329,9 @@ public class AccountViewModel : MyReactiveObject
                 LoadDevicesCmd.ThrownExceptions,
                 LoginTelegramCmd.ThrownExceptions,
                 LoginSiteCmd.ThrownExceptions,
+                RegisterCmd.ThrownExceptions,
+                MagicLinkCmd.ThrownExceptions,
+                PasswordResetCmd.ThrownExceptions,
                 Submit2FaCmd.ThrownExceptions,
                 LogoutCmd.ThrownExceptions,
                 RetryCmd.ThrownExceptions,
@@ -686,6 +716,10 @@ public class AccountViewModel : MyReactiveObject
     {
         _telegramCts?.Cancel();
         _telegramCts = null;
+        // Also stop any start-page register/verify poll or in-flight magic-link/reset request, so leaving
+        // an email flow (back / «другой способ входа») never leaves a background poll running.
+        _registerCts?.Cancel();
+        _registerCts = null;
         RunOnUi(() =>
         {
             if (!IsLoggedIn)
@@ -720,6 +754,66 @@ public class AccountViewModel : MyReactiveObject
         {
             RunOnUi(() => CurrentLoginState = new LoginState.Error(e));
         }
+    }
+
+    /// <summary>
+    /// Start-page email+password registration. Enters <see cref="LoginState.RegisterLoading"/>, then hands
+    /// off to <see cref="AuthManager.BeginRegister"/> which emits either a straight
+    /// <see cref="LoginState.Success"/> (verification off — same path as email login) or
+    /// <see cref="LoginState.AwaitingEmailVerification"/> plus a bounded login poll. Every emit routes
+    /// through <see cref="ApplyLoginState"/> on the UI thread. Doubles as the verify-screen «отправить
+    /// снова» action: a fresh call cancels the previous poll, re-sends the email, and restarts polling.
+    /// </summary>
+    private async Task Register()
+    {
+        _telegramCts?.Cancel();
+        _registerCts?.Cancel();
+        var cts = new CancellationTokenSource();
+        _registerCts = cts;
+        TwoFaTempToken = null;
+        CurrentLoginState = new LoginState.RegisterLoading();
+        await _authManager.BeginRegister(
+            LoginEmail?.Trim() ?? string.Empty,
+            LoginPassword ?? string.Empty,
+            state => RunOnUi(() => ApplyLoginState(state)),
+            cts.Token);
+    }
+
+    /// <summary>«Войти по ссылке»: requests a magic sign-in link and moves to the «ссылка отправлена» state.</summary>
+    private async Task RequestMagicLink()
+    {
+        var email = LoginEmail?.Trim() ?? string.Empty;
+        if (email.IsNullOrEmpty() || !email.Contains('@'))
+        {
+            RunOnUi(() => CurrentLoginState = new LoginState.Error(new ApiError.Unauthorized()));
+            return;
+        }
+        _registerCts?.Cancel();
+        // «Отправить снова» приходит уже с экрана «ссылка отправлена» — НЕ перекидываем на форму
+        // (SiteLoading увёл бы с pending-экрана); при первом запросе с формы показываем спиннер.
+        if (CurrentLoginState is not LoginState.MagicLinkSent)
+        {
+            CurrentLoginState = new LoginState.SiteLoading();
+        }
+        await _authManager.BeginMagicLink(email, state => RunOnUi(() => ApplyLoginState(state)));
+    }
+
+    /// <summary>«Забыли пароль?»: requests a password-reset link and moves to the «письмо отправлено» state.</summary>
+    private async Task RequestPasswordReset()
+    {
+        var email = LoginEmail?.Trim() ?? string.Empty;
+        if (email.IsNullOrEmpty() || !email.Contains('@'))
+        {
+            RunOnUi(() => CurrentLoginState = new LoginState.Error(new ApiError.Unauthorized()));
+            return;
+        }
+        _registerCts?.Cancel();
+        // Как и magic-link: повторная отправка не должна уводить с экрана «письмо отправлено».
+        if (CurrentLoginState is not LoginState.PasswordResetSent)
+        {
+            CurrentLoginState = new LoginState.SiteLoading();
+        }
+        await _authManager.BeginPasswordReset(email, state => RunOnUi(() => ApplyLoginState(state)));
     }
 
     private async Task Submit2Fa()
@@ -949,8 +1043,10 @@ public class AccountViewModel : MyReactiveObject
     private async Task Logout()
     {
         _telegramCts?.Cancel();
+        _registerCts?.Cancel();
         _topUpRefreshCts?.Cancel();
         _renewPollCts?.Cancel();
+        _cardActionPollCts?.Cancel();
         _linkPollCts?.Cancel();
         // Wipe stops the VPN and DELETES the account-imported subscriptions + their servers (tracked by
         // AuthTokenStore.ManagedGuids — a user's OWN manually-added subs are never in that set, so they
@@ -972,6 +1068,7 @@ public class AccountViewModel : MyReactiveObject
             Tariffs = new List<TariffGroupDto>();
             TwoFaTempToken = null;
             TelegramDeepLink = null;
+            RegisterConfirmPassword = string.Empty;
             CurrentLoginState = new LoginState.Idle();
             _pendingFirstLoad = false;
             Recompute();
@@ -1202,6 +1299,213 @@ public class AccountViewModel : MyReactiveObject
         });
     }
 
+    #region overflow: add-devices + upgrade
+
+    /// <summary>Opens the device-top-up panel of a card's overflow flyout (resets to +1 and re-estimates).</summary>
+    public void OpenDevicePicker(AccountSubCard card)
+    {
+        card.ExtraDevices = 1;
+        RecomputeDevicePrice(card);
+        card.SetPanel(AccountSubCard.PanelMode.Devices);
+    }
+
+    /// <summary>Opens the upgrade panel (list of eligible target tariffs).</summary>
+    public void OpenUpgradePicker(AccountSubCard card) => card.SetPanel(AccountSubCard.PanelMode.Upgrade);
+
+    /// <summary>Steps the extra-device count within [1 .. maxExtraDevices] and re-estimates the price.</summary>
+    public void StepDevices(AccountSubCard card, int delta)
+    {
+        var max = card.MaxExtraDevices > 0 ? card.MaxExtraDevices : 1;
+        card.ExtraDevices = Math.Clamp(card.ExtraDevices + delta, 1, max);
+        RecomputeDevicePrice(card);
+    }
+
+    private void RecomputeDevicePrice(AccountSubCard card)
+    {
+        card.DevicePriceText = L.F("Account_DeviceEstimate", FormatMoney(EstimateDevicePrice(card), card.Currency));
+    }
+
+    /// <summary>
+    /// Buys extra devices for a card's subscription. "balance" settles immediately (refresh the card);
+    /// "platega" returns a checkout URL → open the browser + poll GET /client/payments (webhook-confirmed).
+    /// </summary>
+    public async Task BuyDevices(AccountSubCard card, string method)
+    {
+        if (card.IsDeviceBusy || !card.CanBuyDevices || card.SubscriptionId.IsNullOrEmpty())
+        {
+            return;
+        }
+        RunOnUi(() => card.IsDeviceBusy = true);
+        var result = await _repo.PurchaseDevices(card.Scope, card.SubscriptionId!, card.ExtraDevices, method);
+        RunOnUi(() =>
+        {
+            result
+                .OnSuccess(dto =>
+                {
+                    if (dto.RequiresCheckout())
+                    {
+                        OpenCheckoutAndPoll(card, dto.PaymentUrl, dto.OrderId, dto.PaymentId,
+                            () => card.IsDeviceBusy = false, "Account_DevicesAdded");
+                    }
+                    else if (dto.Ok == false)
+                    {
+                        // Balance settle that returned 200 but ok:false (e.g. insufficient funds) — do NOT
+                        // claim success.
+                        card.IsDeviceBusy = false;
+                        AppEvents.SendSnackMsgRequested.Publish(MessageFor(new ApiError.Server(200)));
+                    }
+                    else
+                    {
+                        card.IsDeviceBusy = false;
+                        AppEvents.SendSnackMsgRequested.Publish(L.T("Account_DevicesAdded"));
+                        _ = Retry();
+                    }
+                })
+                .OnFailure(err =>
+                {
+                    card.IsDeviceBusy = false;
+                    AppEvents.SendSnackMsgRequested.Publish(MessageFor(err));
+                });
+        });
+    }
+
+    /// <summary>Fetches a live upgrade quote for the chosen target and swaps the flyout to the confirm panel.</summary>
+    public async Task SelectUpgradeTarget(AccountSubCard card, string targetTariffId, string targetName)
+    {
+        if (card.IsUpgradeBusy || targetTariffId.IsNullOrEmpty())
+        {
+            return;
+        }
+        RunOnUi(() => card.IsUpgradeBusy = true);
+        var result = await _repo.UpgradeQuote(targetTariffId);
+        RunOnUi(() =>
+        {
+            card.IsUpgradeBusy = false;
+            result
+                .OnSuccess(quote =>
+                {
+                    card.SelectedUpgradeTariffId = targetTariffId;
+                    card.UpgradeConfirmTitle = L.F("Account_UpgradeTo", targetName);
+                    var cur = quote.Currency.IsNotEmpty() ? quote.Currency : card.Currency;
+                    card.UpgradeConfirmDetail = L.F("Account_UpgradeQuote", FormatMoney(quote.Amount, cur), quote.EffectiveDays);
+                    card.SetPanel(AccountSubCard.PanelMode.UpgradeConfirm);
+                })
+                .OnFailure(err => AppEvents.SendSnackMsgRequested.Publish(MessageFor(err)));
+        });
+    }
+
+    /// <summary>
+    /// Confirms the upgrade to the selected target. "balance" settles immediately; "platega" returns a
+    /// checkout URL → open the browser + poll GET /client/payments.
+    /// </summary>
+    public async Task ConfirmUpgrade(AccountSubCard card, string method)
+    {
+        if (card.IsUpgradeBusy || card.SelectedUpgradeTariffId.IsNullOrEmpty())
+        {
+            return;
+        }
+        RunOnUi(() => card.IsUpgradeBusy = true);
+        var result = await _repo.Upgrade(card.SelectedUpgradeTariffId!, method, card.RemnawaveUuidValue ?? string.Empty);
+        RunOnUi(() =>
+        {
+            result
+                .OnSuccess(init =>
+                {
+                    // Balance upgrade settles immediately (no checkout URL); card upgrade returns a URL.
+                    if (init.PaymentUrl.IsNotEmpty())
+                    {
+                        OpenCheckoutAndPoll(card, init.PaymentUrl, init.OrderId, init.PaymentId,
+                            () => card.IsUpgradeBusy = false, "Account_UpgradeDone");
+                    }
+                    else
+                    {
+                        card.IsUpgradeBusy = false;
+                        AppEvents.SendSnackMsgRequested.Publish(L.T("Account_UpgradeDone"));
+                        _ = Retry();
+                    }
+                })
+                .OnFailure(err =>
+                {
+                    card.IsUpgradeBusy = false;
+                    AppEvents.SendSnackMsgRequested.Publish(MessageFor(err));
+                });
+        });
+    }
+
+    /// <summary>
+    /// Opens a provider checkout URL in the browser and re-polls GET /client/payments until the webhook
+    /// confirms the order (mirrors <see cref="ScheduleRenewPoll"/>). On confirm: clear busy + reload the
+    /// tab; on give-up/timeout: just clear busy. Shared by the card device-top-up and upgrade card paths.
+    /// </summary>
+    private void OpenCheckoutAndPoll(AccountSubCard card, string url, string? orderId, string? paymentId, Action clearBusy, string doneKey)
+    {
+        if (url.IsNullOrEmpty())
+        {
+            clearBusy();
+            AppEvents.SendSnackMsgRequested.Publish(L.T("Common_CouldntOpenPayment"));
+            return;
+        }
+        try
+        {
+            ProcUtils.ProcessStart(url);
+            AppEvents.SendSnackMsgRequested.Publish(L.T("Common_CompletePaymentInBrowser"));
+        }
+        catch
+        {
+            clearBusy();
+            AppEvents.SendSnackMsgRequested.Publish(L.T("Common_CouldntOpenPayment"));
+            return;
+        }
+
+        _cardActionPollCts?.Cancel();
+        // Drop the spinner of a superseded DIFFERENT card so it doesn't hang; same card keeps spinning.
+        if (_cardActionCard != null && !ReferenceEquals(_cardActionCard, card))
+        {
+            _cardActionCard.IsDeviceBusy = false;
+            _cardActionCard.IsUpgradeBusy = false;
+        }
+        _cardActionCard = card;
+        var cts = new CancellationTokenSource();
+        _cardActionPollCts = cts;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                for (var attempt = 0; attempt < 5 && !cts.IsCancellationRequested; attempt++)
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(8), cts.Token);
+                    var payments = await _repo.GetPayments();
+                    if (cts.IsCancellationRequested)
+                    {
+                        return;
+                    }
+                    var items = payments.GetOrNull()?.Items ?? new List<PaymentDto>();
+                    var confirmed = items.Any(p =>
+                        PaidStatuses.Contains(p.Status.Trim()) &&
+                        ((orderId.IsNotEmpty() && p.OrderId == orderId) ||
+                         (paymentId.IsNotEmpty() && p.Id == paymentId)));
+                    if (confirmed)
+                    {
+                        RunOnUi(() =>
+                        {
+                            clearBusy();
+                            AppEvents.SendSnackMsgRequested.Publish(L.T(doneKey));
+                            _ = Retry();
+                        });
+                        return;
+                    }
+                }
+                RunOnUi(clearBusy);
+            }
+            catch (OperationCanceledException)
+            {
+                // Superseded by a newer card action or logout.
+            }
+        });
+    }
+
+    #endregion overflow: add-devices + upgrade
+
     /// <summary>
     /// Flips a subscription's auto-renew and persists it (PATCH /client/auto-renew for the root, or the
     /// secondary endpoint by id). On failure the toggle is reverted so the UI never lies.
@@ -1428,6 +1732,12 @@ public class AccountViewModel : MyReactiveObject
         Error = error;
         _pendingFirstLoad = false;
     }
+
+    /// <summary>Routes a stray command exception (from a command not in the VM-level ThrownExceptions
+    /// merge, e.g. an <see cref="UpgradeTargetOption"/>'s SelectCmd) to the error surface on the UI thread,
+    /// mirroring the merge so it never reaches the Rx default handler.</summary>
+    public void ReportCommandException(Exception ex)
+        => RunOnUi(() => Report(ex as ApiError ?? new ApiError.NetworkError(ex)));
 
     private void MarkLoaded()
     {
@@ -1715,6 +2025,20 @@ public class AccountViewModel : MyReactiveObject
             autoRenewCaption = health == SubHealth.Expiring ? L.T("Account_AutoRenewNudge") : L.T("Account_AutoRenewOff");
         }
 
+        // Overflow «Ещё»: device top-up + upgrade eligibility (both keyed off the loaded catalog). The
+        // active (root, index 0) card is the only one whose used-device count we know; either card can
+        // still top up / upgrade. Trials cannot be upgraded (backend rule); a top-up needs remaining time.
+        var tariff = Tariffs.SelectMany(g => g.Tariffs).FirstOrDefault(t => t.Id == tariffId);
+        var remainingDays = ComputeRemainingDays(sub.ExpireAtIso);
+        var maxExtra = tariff?.MaxExtraDevices ?? 0;
+        var pricePerExtra = tariff?.PricePerExtraDevice ?? 0;
+        var remnawaveUuid = sub.RemnawaveUuid;
+        var canBuyDevices = !sub.IsTrial
+            && maxExtra > 0
+            && pricePerExtra > 0
+            && remainingDays > 0
+            && subscriptionId.IsNotEmpty();
+
         var card = new AccountSubCard(this)
         {
             Name = name,
@@ -1747,10 +2071,77 @@ public class AccountViewModel : MyReactiveObject
 
             ShowAutoRenew = showAutoRenew,
             AutoRenewCaption = autoRenewCaption,
+
+            MaxExtraDevices = maxExtra,
+            PricePerExtraDevice = pricePerExtra,
+            RemainingDays = remainingDays,
+            CanBuyDevices = canBuyDevices,
+            RemnawaveUuidValue = remnawaveUuid,
         };
+
+        // Eligible upgrades: catalog tariffs strictly above the current one (by price), excluding trials
+        // and the current tariff. Built after the card so each option can call back into it.
+        var currentPrice = tariff?.Price ?? sub.TariffPrice ?? 0;
+        // Only offer upgrades when we actually know the current price (> 0). If the active tariff isn't
+        // in the loaded catalog AND its price is unknown, currentPrice would be 0 and EVERY paid tariff —
+        // including cheaper/lateral ones — would falsely qualify as an "upgrade".
+        if (!sub.IsTrial && remnawaveUuid.IsNotEmpty() && currentPrice > 0)
+        {
+            var targets = new List<UpgradeTargetOption>();
+            foreach (var t in Tariffs.SelectMany(g => g.Tariffs))
+            {
+                if (t.Id == tariffId || t.Id.IsNullOrEmpty() || t.Price <= currentPrice)
+                {
+                    continue;
+                }
+                targets.Add(new UpgradeTargetOption(this, card, t.Id, t.Name,
+                    FormatMoney(t.Price, t.Currency.IsNotEmpty() ? t.Currency : currency)));
+            }
+            card.UpgradeTargets = targets;
+            card.HasUpgradeTargets = targets.Count > 0;
+        }
+
+        card.ShowMore = canBuyDevices || card.HasUpgradeTargets;
+        if (canBuyDevices)
+        {
+            card.ExtraDevices = 1;
+            card.DevicePriceText = L.F("Account_DeviceEstimate", FormatMoney(EstimateDevicePrice(card), currency));
+        }
+
         card.SetAutoRenewSilently(autoRenewOn);
         card.Arm();
         return card;
+    }
+
+    /// <summary>Whole days remaining until an ISO expiry (0 if past / unparseable / perpetual).</summary>
+    private static int ComputeRemainingDays(string? iso)
+    {
+        if (iso.IsNullOrEmpty())
+        {
+            return 0;
+        }
+        if (DateTimeOffset.TryParse(iso, CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var expire))
+        {
+            var days = (int)Math.Ceiling((expire - DateTimeOffset.UtcNow).TotalDays);
+            return Math.Max(0, days);
+        }
+        return 0;
+    }
+
+    /// <summary>
+    /// CLIENT-SIDE device-top-up estimate (there is no device price-quote endpoint):
+    /// pricePerExtraDevice × extras × (100 − tierDiscount)/100 × remainingDays/30. The volume
+    /// <c>deviceDiscountTiers</c> are NOT exposed on the tariff DTO the client already holds (that DTO is
+    /// owned by the API layer and out of scope here), so the tier discount is treated as 0 — the estimate
+    /// is therefore an upper bound; the backend applies any real tier discount at purchase (hence the «≈»).
+    /// </summary>
+    private static double EstimateDevicePrice(AccountSubCard card)
+    {
+        const double tierDiscount = 0.0;
+        var remainingFactor = card.RemainingDays / 30.0;
+        var price = card.PricePerExtraDevice * card.ExtraDevices * ((100.0 - tierDiscount) / 100.0) * remainingFactor;
+        return Math.Max(0, price);
     }
 
     /// <summary>The traffic-pill track width (px), mirrored from <c>Size.TrafficPill</c>, used to size the usage-bar fill.</summary>
@@ -2019,10 +2410,54 @@ public sealed class AccountSubCard : ReactiveObject
     /// <summary>Fixed card width (px) the carousel assigns from its viewport; reactive so a resize reflows every card.</summary>
     [Reactive] public double CardWidth { get; set; } = 320;
 
+    // ── Overflow «Ещё» (докупка устройств / апгрейд тарифа) ─────────────────────
+    // The card header carries a kebab that opens a single flyout with four mutually-exclusive panels
+    // (menu → devices | upgrade → upgrade-confirm), toggled by these bools. Secondary actions: they stay
+    // out of the card body so «Продлить» remains the one primary CTA.
+
+    /// <summary>True when the overflow «Ещё» affordance is offered (device top-up and/or an upgrade is possible).</summary>
+    public bool ShowMore { get; set; }
+
+    [Reactive] public bool MenuMode { get; set; } = true;
+    [Reactive] public bool DeviceMode { get; set; }
+    [Reactive] public bool UpgradeMode { get; set; }
+    [Reactive] public bool UpgradeConfirmMode { get; set; }
+
+    // Device top-up. Estimate = pricePerExtraDevice × extras × (100−tierDiscount)/100 × remainingDays/30.
+    internal int MaxExtraDevices { get; init; }
+    internal double PricePerExtraDevice { get; init; }
+    internal int RemainingDays { get; init; }
+
+    /// <summary>True when the tariff exposes a positive per-extra-device price and a headroom (max &gt; 0).</summary>
+    public bool CanBuyDevices { get; init; }
+    [Reactive] public int ExtraDevices { get; set; } = 1;
+    [Reactive] public string DevicePriceText { get; set; } = string.Empty;
+    [Reactive] public bool IsDeviceBusy { get; set; }
+
+    // Upgrade.
+    internal string? RemnawaveUuidValue { get; init; }
+    public List<UpgradeTargetOption> UpgradeTargets { get; set; } = new();
+    public bool HasUpgradeTargets { get; set; }
+    [Reactive] public bool IsUpgradeBusy { get; set; }
+    [Reactive] public string UpgradeConfirmTitle { get; set; } = string.Empty;
+    [Reactive] public string UpgradeConfirmDetail { get; set; } = string.Empty;
+    internal string? SelectedUpgradeTariffId { get; set; }
+
     public ReactiveCommand<Unit, Unit> RenewBalanceCmd { get; }
     public ReactiveCommand<Unit, Unit> RenewCardCmd { get; }
     public ReactiveCommand<Unit, Unit> OpenBuyCmd { get; }
     public ReactiveCommand<Unit, Unit> DevicesCmd { get; }
+
+    // Overflow picker navigation + actions.
+    public ReactiveCommand<Unit, Unit> OpenDevicePickerCmd { get; }
+    public ReactiveCommand<Unit, Unit> OpenUpgradePickerCmd { get; }
+    public ReactiveCommand<Unit, Unit> BackToMenuCmd { get; }
+    public ReactiveCommand<Unit, Unit> IncDevicesCmd { get; }
+    public ReactiveCommand<Unit, Unit> DecDevicesCmd { get; }
+    public ReactiveCommand<Unit, Unit> BuyDevicesBalanceCmd { get; }
+    public ReactiveCommand<Unit, Unit> BuyDevicesCardCmd { get; }
+    public ReactiveCommand<Unit, Unit> UpgradeBalanceCmd { get; }
+    public ReactiveCommand<Unit, Unit> UpgradeCardCmd { get; }
 
     public AccountSubCard(AccountViewModel owner)
     {
@@ -2031,6 +2466,16 @@ public sealed class AccountSubCard : ReactiveObject
         RenewCardCmd = ReactiveCommand.CreateFromTask(() => owner.RenewWithCard(this));
         OpenBuyCmd = ReactiveCommand.Create(owner.RequestBuy);
         DevicesCmd = ReactiveCommand.Create(owner.RequestDevices);
+
+        OpenDevicePickerCmd = ReactiveCommand.Create(() => owner.OpenDevicePicker(this));
+        OpenUpgradePickerCmd = ReactiveCommand.Create(() => owner.OpenUpgradePicker(this));
+        BackToMenuCmd = ReactiveCommand.Create(() => SetPanel(PanelMode.Menu));
+        IncDevicesCmd = ReactiveCommand.Create(() => owner.StepDevices(this, +1));
+        DecDevicesCmd = ReactiveCommand.Create(() => owner.StepDevices(this, -1));
+        BuyDevicesBalanceCmd = ReactiveCommand.CreateFromTask(() => owner.BuyDevices(this, "balance"));
+        BuyDevicesCardCmd = ReactiveCommand.CreateFromTask(() => owner.BuyDevices(this, "platega"));
+        UpgradeBalanceCmd = ReactiveCommand.CreateFromTask(() => owner.ConfirmUpgrade(this, "balance"));
+        UpgradeCardCmd = ReactiveCommand.CreateFromTask(() => owner.ConfirmUpgrade(this, "platega"));
         this.WhenAnyValue(x => x.AutoRenewOn).Subscribe(v =>
         {
             if (_armed)
@@ -2038,6 +2483,42 @@ public sealed class AccountSubCard : ReactiveObject
                 _ = owner.SetAutoRenew(this, v);
             }
         });
+
+        // Safety net: a stray card-action exception surfaces as a snack instead of crashing the app.
+        Observable.Merge(
+                RenewBalanceCmd.ThrownExceptions,
+                RenewCardCmd.ThrownExceptions,
+                BuyDevicesBalanceCmd.ThrownExceptions,
+                BuyDevicesCardCmd.ThrownExceptions,
+                UpgradeBalanceCmd.ThrownExceptions,
+                UpgradeCardCmd.ThrownExceptions,
+                OpenDevicePickerCmd.ThrownExceptions,
+                OpenUpgradePickerCmd.ThrownExceptions)
+            .Subscribe(_ =>
+            {
+                IsDeviceBusy = false;
+                IsUpgradeBusy = false;
+                IsRenewing = false;
+                AppEvents.SendSnackMsgRequested.Publish(L.T("Common_SomethingWrong"));
+            });
+    }
+
+    /// <summary>The four mutually-exclusive overflow-flyout panels.</summary>
+    public enum PanelMode
+    {
+        Menu,
+        Devices,
+        Upgrade,
+        UpgradeConfirm,
+    }
+
+    /// <summary>Switches the overflow flyout to one panel (drives the four IsVisible bools).</summary>
+    public void SetPanel(PanelMode mode)
+    {
+        MenuMode = mode == PanelMode.Menu;
+        DeviceMode = mode == PanelMode.Devices;
+        UpgradeMode = mode == PanelMode.Upgrade;
+        UpgradeConfirmMode = mode == PanelMode.UpgradeConfirm;
     }
 
     /// <summary>Sets the toggle without triggering the network call (initial build + failure revert).</summary>
@@ -2051,4 +2532,25 @@ public sealed class AccountSubCard : ReactiveObject
 
     /// <summary>Arms the toggle so subsequent user flips persist to the backend.</summary>
     public void Arm() => _armed = true;
+}
+
+/// <summary>One eligible upgrade target in the card's «Улучшить тариф» list: a tariff above the current
+/// one. Selecting it asks the VM for a live quote, then swaps the flyout to the confirm panel.</summary>
+public sealed class UpgradeTargetOption : ReactiveObject
+{
+    public string TariffId { get; init; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
+    public string PriceText { get; init; } = string.Empty;
+    public ReactiveCommand<Unit, Unit> SelectCmd { get; }
+
+    public UpgradeTargetOption(AccountViewModel owner, AccountSubCard card, string tariffId, string name, string priceText)
+    {
+        TariffId = tariffId;
+        Name = name;
+        PriceText = priceText;
+        SelectCmd = ReactiveCommand.CreateFromTask(() => owner.SelectUpgradeTarget(card, tariffId, name));
+        // Safety net: this command isn't part of the VM/card ThrownExceptions merge, so route its stray
+        // exceptions to the same error surface instead of the Rx default handler (which could crash).
+        SelectCmd.ThrownExceptions.Subscribe(owner.ReportCommandException);
+    }
 }

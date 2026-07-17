@@ -116,6 +116,14 @@ public sealed class AccountRepository
     public Task<ApiResult<PaymentInitDto>> AddDevices(string scope, string id, int extraDevices, string method, string? paymentMethod = null) =>
         Guard(() => _api.AddDevices(scope, id, extraDevices, method, paymentMethod));
 
+    /// <summary>
+    /// Pure device top-up (POST /client/subscription/{scope}/{id}/add-devices) returning the dual-shape
+    /// <see cref="AddDevicesResultDto"/>: a "balance" top-up settles immediately ({ok,newDeviceLimit,
+    /// newBalance}); a "platega" top-up returns a card checkout ({paymentUrl,…}) — poll GET /client/payments.
+    /// </summary>
+    public Task<ApiResult<AddDevicesResultDto>> PurchaseDevices(string scope, string id, int extraDevices, string method, int? paymentMethod = null) =>
+        Guard(() => _api.PurchaseDevices(scope, id, extraDevices, method, paymentMethod));
+
     public Task<ApiResult<DevicesResult>> GetDevices(string remnawaveUuid) => Guard(() => _api.GetDevices(remnawaveUuid));
 
     public Task<ApiResult<bool>> DeleteDevice(string hwid, string remnawaveUuid) =>

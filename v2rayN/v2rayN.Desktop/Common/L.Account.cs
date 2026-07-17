@@ -78,6 +78,26 @@ public sealed partial class L
         Add("Account_RenewDone", "Подписка продлена", "Subscription renewed");
         Add("Account_PickPlan", "Выбрать тариф", "Pick a plan");
 
+        // ── Overflow «Ещё»: докупка устройств + улучшение тарифа ──
+        Add("Account_More", "Ещё", "More");
+        Add("Account_AddDevices", "Докупить устройства", "Add devices");
+        Add("Account_UpgradeTariff", "Улучшить тариф", "Upgrade plan");
+        Add("Account_ExtraDevicesN", "+{0} к устройствам", "+{0} devices");
+        // Client-side estimate («≈»): the final amount is computed by the backend at payment.
+        Add("Account_DeviceEstimate", "≈ {0}", "≈ {0}");
+        Add("Account_EstimateNote",
+            "Примерная сумма — точную посчитаем при оплате",
+            "Approximate — the exact amount is set at checkout");
+        Add("Account_PayFromBalance", "С баланса", "From balance");
+        Add("Account_PayWithCard", "Картой", "By card");
+        Add("Account_DevicesAdded", "Устройства добавлены", "Devices added");
+        Add("Account_UpgradeTo", "Улучшить до {0}", "Upgrade to {0}");
+        // {0} = amount, {1} = effective days.
+        Add("Account_UpgradeQuote", "{0} · +{1} дн.", "{0} · +{1} days");
+        Add("Account_UpgradeDone", "Тариф улучшен", "Plan upgraded");
+        Add("Account_NoUpgrades", "Вы на максимальном тарифе", "You're on the top plan");
+        Add("Account_BackAction", "Назад", "Back");
+
         // ── Linking block (Способы входа) ──
         Add("Account_LinkingTitle", "Способы входа", "Sign-in methods");
         Add("Account_LinkEmail", "Email и пароль", "Email & password");
@@ -128,10 +148,46 @@ public sealed partial class L
         Add("Login_StartOver", "Начать заново", "Start over");
         Add("Login_ChooseAnother", "Другой способ входа", "Use another method");
 
+        // ── Start-page auth: sign-in ⇄ register segment, providers, passwordless links ──
+        Add("Login_TabSignIn", "Вход", "Sign in");
+        Add("Login_TabRegister", "Регистрация", "Register");
+        Add("Login_TitleRegister", "Создайте аккаунт", "Create your account");
+        Add("Login_SubtitleRegister",
+            "Зарегистрируйтесь по email — или войдите через Telegram в один тап.",
+            "Register with your email — or sign in with Telegram in one tap.");
+        Add("Login_PasswordRegister", "Пароль (не менее 8 символов)", "Password (at least 8 characters)");
+        Add("Login_PasswordHint", "Минимум 8 символов", "At least 8 characters");
+        Add("Login_ConfirmPassword", "Повторите пароль", "Repeat password");
+        Add("Login_PasswordMismatch", "Пароли не совпадают", "The passwords don't match");
+        Add("Login_CreateAccount", "Создать аккаунт", "Create account");
+        Add("Login_MagicLink", "Войти по ссылке", "Sign in with a link");
+        Add("Login_ForgotPassword", "Забыли пароль?", "Forgot password?");
+        Add("Login_ContinueGoogle", "Продолжить с Google", "Continue with Google");
+        Add("Login_ComingSoon", "Скоро", "Soon");
+
+        // Email-pending states (verify email · magic link sent · reset sent). {0} = the address.
+        Add("Login_VerifyTitle", "Подтвердите почту", "Confirm your email");
+        Add("Login_VerifyHint",
+            "Мы отправили ссылку на {0}. Откройте её, чтобы подтвердить вход — остальное сделаем сами.",
+            "We've sent a link to {0}. Open it to confirm your sign-in — we'll take care of the rest.");
+        Add("Login_MagicSentTitle", "Ссылка отправлена", "Link sent");
+        Add("Login_MagicSentHint",
+            "Если аккаунт с {0} существует, мы отправили ссылку для входа. Откройте её в браузере.",
+            "If an account for {0} exists, we've sent a sign-in link. Open it in your browser.");
+        Add("Login_ResetSentTitle", "Письмо отправлено", "Email sent");
+        Add("Login_ResetSentHint",
+            "Если аккаунт с {0} существует, мы отправили ссылку для сброса пароля. Задайте новый пароль и вернитесь ко входу.",
+            "If an account for {0} exists, we've sent a password-reset link. Set a new password, then return to sign in.");
+        Add("Login_Resend", "Отправить снова", "Send again");
+        Add("Login_BackToSignIn", "Вернуться ко входу", "Back to sign in");
+
         // Login error family (login-flow diagnostics; shown in the error line).
         Add("Login_ErrBadCreds", "Неверный email или пароль", "Incorrect email or password");
         Add("Login_ErrLinkExpired", "Ссылка устарела, начните заново", "The link has expired, start over");
         Add("Login_ErrUnavailable", "Вход недоступен", "Sign-in is unavailable");
+        Add("Login_ErrEmailTaken",
+            "Аккаунт с этой почтой уже существует",
+            "An account with this email already exists");
         Add("Login_ErrRetry",
             "Что-то пошло не так, попробуйте снова",
             "Something went wrong, try again");

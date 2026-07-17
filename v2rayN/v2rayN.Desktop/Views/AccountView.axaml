@@ -32,6 +32,8 @@
     <UserControl.Resources>
         <!--  Векторные глифы (порт Android drawable/ic_acc_*; 24dp).  -->
         <StreamGeometry x:Key="Geo.Acc.Add">M19,13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z</StreamGeometry>
+        <StreamGeometry x:Key="Geo.Acc.Minus">M19,13H5v-2h14v2z</StreamGeometry>
+        <StreamGeometry x:Key="Geo.Acc.More">M12,8c1.1,0 2,-0.9 2,-2s-0.9,-2 -2,-2 -2,0.9 -2,2 0.9,2 2,2zm0,2c-1.1,0 -2,0.9 -2,2s0.9,2 2,2 2,-0.9 2,-2 -0.9,-2 -2,-2zm0,6c-1.1,0 -2,0.9 -2,2s0.9,2 2,2 2,-0.9 2,-2 -0.9,-2 -2,-2z</StreamGeometry>
         <StreamGeometry x:Key="Geo.Acc.Logout">M17,7l-1.41,1.41L18.17,11H8v2h10.17l-2.58,2.58L17,17l5,-5zM4,5h8V3H4c-1.1,0 -2,0.9 -2,2v14c0,1.1 0.9,2 2,2h8v-2H4V5z</StreamGeometry>
         <StreamGeometry x:Key="Geo.Acc.Copy">M16,1L4,1c-1.1,0 -2,0.9 -2,2v14h2L4,3h12L16,1zM19,5L8,5c-1.1,0 -2,0.9 -2,2v14c0,1.1 0.9,2 2,2h11c1.1,0 2,-0.9 2,-2L21,7c0,-1.1 -0.9,-2 -2,-2zM19,21L8,21L8,7h11v14z</StreamGeometry>
         <StreamGeometry x:Key="Geo.Acc.Upgrade">M16,6l2.29,2.29 -4.88,4.88 -4,-4L2,16.59 3.41,18l6,-6 4,4 6.3,-6.29L22,12V6z</StreamGeometry>
@@ -412,9 +414,10 @@
                                             <DataTemplate x:DataType="vms:AccountSubCard">
                                                 <Border Classes="Card" Width="{Binding CardWidth}" MinHeight="208">
                                                     <StackPanel>
-                                                        <!--  (a) Шапка: имя подписки («Ваша подписка» / «Подписка N») + health-чип.
+                                                        <!--  (a) Шапка: имя подписки («Ваша подписка» / «Подписка N») + health-чип
+                                                              + kebab «Ещё» (докупка устройств / улучшение тарифа — вторичные действия).
                                                               Тариф здесь НАМЕРЕННО отсутствует — он живёт один раз, на hero.  -->
-                                                        <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Top">
+                                                        <Grid ColumnDefinitions="*,Auto,Auto" VerticalAlignment="Top">
                                                             <TextBlock
                                                                 Grid.Column="0"
                                                                 VerticalAlignment="Center"
@@ -431,6 +434,248 @@
                                                                 Classes.pending="{Binding IsHealthExpiring}">
                                                                 <TextBlock Classes="Chip" Text="{Binding HealthLabel}" />
                                                             </Border>
+                                                            <Button
+                                                                Grid.Column="2"
+                                                                Width="40"
+                                                                Height="40"
+                                                                Margin="4,0,0,0"
+                                                                VerticalAlignment="Center"
+                                                                Classes="IconButton40"
+                                                                IsVisible="{Binding ShowMore}"
+                                                                ToolTip.Tip="{loc:T Account_More}">
+                                                                <PathIcon
+                                                                    Width="20"
+                                                                    Height="20"
+                                                                    Data="{StaticResource Geo.Acc.More}"
+                                                                    Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+                                                                <Button.Flyout>
+                                                                    <Flyout Placement="BottomEdgeAlignedRight">
+                                                                        <Panel Width="272" x:DataType="vms:AccountSubCard">
+
+                                                                            <!--  Панель 1 — меню: два вторичных действия.  -->
+                                                                            <StackPanel IsVisible="{Binding MenuMode}" Spacing="4">
+                                                                                <Button
+                                                                                    HorizontalAlignment="Stretch"
+                                                                                    HorizontalContentAlignment="Left"
+                                                                                    Classes="LinkAction"
+                                                                                    Command="{Binding OpenDevicePickerCmd}"
+                                                                                    IsVisible="{Binding CanBuyDevices}">
+                                                                                    <StackPanel Orientation="Horizontal" Spacing="12">
+                                                                                        <PathIcon
+                                                                                            Width="20"
+                                                                                            Height="20"
+                                                                                            Data="{StaticResource Geo.Acc.Devices}"
+                                                                                            Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+                                                                                        <TextBlock VerticalAlignment="Center" Text="{loc:T Account_AddDevices}" />
+                                                                                    </StackPanel>
+                                                                                </Button>
+                                                                                <Button
+                                                                                    HorizontalAlignment="Stretch"
+                                                                                    HorizontalContentAlignment="Left"
+                                                                                    Classes="LinkAction"
+                                                                                    Command="{Binding OpenUpgradePickerCmd}"
+                                                                                    IsVisible="{Binding HasUpgradeTargets}">
+                                                                                    <StackPanel Orientation="Horizontal" Spacing="12">
+                                                                                        <PathIcon
+                                                                                            Width="20"
+                                                                                            Height="20"
+                                                                                            Data="{StaticResource Geo.Acc.Upgrade}"
+                                                                                            Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+                                                                                        <TextBlock VerticalAlignment="Center" Text="{loc:T Account_UpgradeTariff}" />
+                                                                                    </StackPanel>
+                                                                                </Button>
+                                                                            </StackPanel>
+
+                                                                            <!--  Панель 2 — докупка устройств: степпер + клиентская оценка цены + оплата.  -->
+                                                                            <StackPanel IsVisible="{Binding DeviceMode}" Spacing="12">
+                                                                                <Grid ColumnDefinitions="Auto,*" VerticalAlignment="Center">
+                                                                                    <Button
+                                                                                        Grid.Column="0"
+                                                                                        Width="32"
+                                                                                        Height="32"
+                                                                                        Classes="IconButton40"
+                                                                                        Command="{Binding BackToMenuCmd}"
+                                                                                        ToolTip.Tip="{loc:T Account_BackAction}">
+                                                                                        <PathIcon
+                                                                                            Width="20"
+                                                                                            Height="20"
+                                                                                            Data="{StaticResource Geo.Acc.ChevLeft}"
+                                                                                            Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+                                                                                    </Button>
+                                                                                    <TextBlock
+                                                                                        Grid.Column="1"
+                                                                                        Margin="8,0,0,0"
+                                                                                        VerticalAlignment="Center"
+                                                                                        Classes="Title"
+                                                                                        Text="{loc:T Account_AddDevices}" />
+                                                                                </Grid>
+                                                                                <!--  Степпер количества доп. устройств.  -->
+                                                                                <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
+                                                                                    <Button
+                                                                                        Grid.Column="0"
+                                                                                        Width="40"
+                                                                                        Height="40"
+                                                                                        Classes="IconButton40"
+                                                                                        Command="{Binding DecDevicesCmd}">
+                                                                                        <PathIcon
+                                                                                            Width="20"
+                                                                                            Height="20"
+                                                                                            Data="{StaticResource Geo.Acc.Minus}"
+                                                                                            Foreground="{DynamicResource Brush.OnSurface}" />
+                                                                                    </Button>
+                                                                                    <TextBlock
+                                                                                        Grid.Column="1"
+                                                                                        HorizontalAlignment="Center"
+                                                                                        VerticalAlignment="Center"
+                                                                                        Classes="Headline Numeric"
+                                                                                        Text="{Binding ExtraDevices}" />
+                                                                                    <Button
+                                                                                        Grid.Column="2"
+                                                                                        Width="40"
+                                                                                        Height="40"
+                                                                                        Classes="IconButton40"
+                                                                                        Command="{Binding IncDevicesCmd}">
+                                                                                        <PathIcon
+                                                                                            Width="20"
+                                                                                            Height="20"
+                                                                                            Data="{StaticResource Geo.Acc.Add}"
+                                                                                            Foreground="{DynamicResource Brush.OnSurface}" />
+                                                                                    </Button>
+                                                                                </Grid>
+                                                                                <TextBlock
+                                                                                    HorizontalAlignment="Center"
+                                                                                    Classes="Title Numeric"
+                                                                                    Text="{Binding DevicePriceText}" />
+                                                                                <TextBlock
+                                                                                    HorizontalAlignment="Center"
+                                                                                    Classes="Caption"
+                                                                                    Foreground="{DynamicResource Brush.OnSurfaceVariant}"
+                                                                                    Text="{loc:T Account_EstimateNote}"
+                                                                                    TextAlignment="Center"
+                                                                                    TextWrapping="Wrap" />
+                                                                                <StackPanel Spacing="8">
+                                                                                    <Button
+                                                                                        HorizontalAlignment="Stretch"
+                                                                                        HorizontalContentAlignment="Center"
+                                                                                        Classes="Tonal"
+                                                                                        Command="{Binding BuyDevicesBalanceCmd}"
+                                                                                        Content="{loc:T Account_PayFromBalance}"
+                                                                                        IsEnabled="{Binding !IsDeviceBusy}" />
+                                                                                    <Button
+                                                                                        HorizontalAlignment="Stretch"
+                                                                                        HorizontalContentAlignment="Center"
+                                                                                        Classes="Primary"
+                                                                                        Command="{Binding BuyDevicesCardCmd}"
+                                                                                        Content="{loc:T Account_PayWithCard}"
+                                                                                        IsEnabled="{Binding !IsDeviceBusy}" />
+                                                                                </StackPanel>
+                                                                            </StackPanel>
+
+                                                                            <!--  Панель 3 — улучшение тарифа: список целей выше текущего.  -->
+                                                                            <StackPanel IsVisible="{Binding UpgradeMode}" Spacing="8">
+                                                                                <Grid ColumnDefinitions="Auto,*" VerticalAlignment="Center">
+                                                                                    <Button
+                                                                                        Grid.Column="0"
+                                                                                        Width="32"
+                                                                                        Height="32"
+                                                                                        Classes="IconButton40"
+                                                                                        Command="{Binding BackToMenuCmd}"
+                                                                                        ToolTip.Tip="{loc:T Account_BackAction}">
+                                                                                        <PathIcon
+                                                                                            Width="20"
+                                                                                            Height="20"
+                                                                                            Data="{StaticResource Geo.Acc.ChevLeft}"
+                                                                                            Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+                                                                                    </Button>
+                                                                                    <TextBlock
+                                                                                        Grid.Column="1"
+                                                                                        Margin="8,0,0,0"
+                                                                                        VerticalAlignment="Center"
+                                                                                        Classes="Title"
+                                                                                        Text="{loc:T Account_UpgradeTariff}" />
+                                                                                </Grid>
+                                                                                <ItemsControl ItemsSource="{Binding UpgradeTargets}">
+                                                                                    <ItemsControl.ItemsPanel>
+                                                                                        <ItemsPanelTemplate>
+                                                                                            <StackPanel Spacing="4" />
+                                                                                        </ItemsPanelTemplate>
+                                                                                    </ItemsControl.ItemsPanel>
+                                                                                    <ItemsControl.ItemTemplate>
+                                                                                        <DataTemplate x:DataType="vms:UpgradeTargetOption">
+                                                                                            <Button
+                                                                                                HorizontalAlignment="Stretch"
+                                                                                                HorizontalContentAlignment="Stretch"
+                                                                                                Classes="Tonal"
+                                                                                                Command="{Binding SelectCmd}">
+                                                                                                <Grid ColumnDefinitions="*,Auto">
+                                                                                                    <TextBlock
+                                                                                                        Grid.Column="0"
+                                                                                                        VerticalAlignment="Center"
+                                                                                                        Text="{Binding Name}"
+                                                                                                        TextTrimming="CharacterEllipsis" />
+                                                                                                    <TextBlock
+                                                                                                        Grid.Column="1"
+                                                                                                        Margin="8,0,0,0"
+                                                                                                        VerticalAlignment="Center"
+                                                                                                        Classes="Numeric"
+                                                                                                        Foreground="{DynamicResource Brush.OnSurfaceVariant}"
+                                                                                                        Text="{Binding PriceText}" />
+                                                                                                </Grid>
+                                                                                            </Button>
+                                                                                        </DataTemplate>
+                                                                                    </ItemsControl.ItemTemplate>
+                                                                                </ItemsControl>
+                                                                            </StackPanel>
+
+                                                                            <!--  Панель 4 — подтверждение апгрейда: сумма + эффективные дни + оплата.  -->
+                                                                            <StackPanel IsVisible="{Binding UpgradeConfirmMode}" Spacing="12">
+                                                                                <Grid ColumnDefinitions="Auto,*" VerticalAlignment="Center">
+                                                                                    <Button
+                                                                                        Grid.Column="0"
+                                                                                        Width="32"
+                                                                                        Height="32"
+                                                                                        Classes="IconButton40"
+                                                                                        Command="{Binding OpenUpgradePickerCmd}"
+                                                                                        ToolTip.Tip="{loc:T Account_BackAction}">
+                                                                                        <PathIcon
+                                                                                            Width="20"
+                                                                                            Height="20"
+                                                                                            Data="{StaticResource Geo.Acc.ChevLeft}"
+                                                                                            Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+                                                                                    </Button>
+                                                                                    <TextBlock
+                                                                                        Grid.Column="1"
+                                                                                        Margin="8,0,0,0"
+                                                                                        VerticalAlignment="Center"
+                                                                                        Classes="Title"
+                                                                                        Text="{Binding UpgradeConfirmTitle}"
+                                                                                        TextTrimming="CharacterEllipsis" />
+                                                                                </Grid>
+                                                                                <TextBlock
+                                                                                    HorizontalAlignment="Center"
+                                                                                    Classes="Title Numeric"
+                                                                                    Text="{Binding UpgradeConfirmDetail}" />
+                                                                                <StackPanel Spacing="8">
+                                                                                    <Button
+                                                                                        HorizontalAlignment="Stretch"
+                                                                                        HorizontalContentAlignment="Center"
+                                                                                        Classes="Tonal"
+                                                                                        Command="{Binding UpgradeBalanceCmd}"
+                                                                                        Content="{loc:T Account_PayFromBalance}"
+                                                                                        IsEnabled="{Binding !IsUpgradeBusy}" />
+                                                                                    <Button
+                                                                                        HorizontalAlignment="Stretch"
+                                                                                        HorizontalContentAlignment="Center"
+                                                                                        Classes="Primary"
+                                                                                        Command="{Binding UpgradeCardCmd}"
+                                                                                        Content="{loc:T Account_PayWithCard}"
+                                                                                        IsEnabled="{Binding !IsUpgradeBusy}" />
+                                                                                </StackPanel>
+                                                                            </StackPanel>
+                                                                        </Panel>
+                                                                    </Flyout>
+                                                                </Button.Flyout>
+                                                            </Button>
                                                         </Grid>
 
                                                         <!--  (b) Блок мер: срок · трафик · устройства — читаются одним взглядом (12dp).
