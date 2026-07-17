@@ -262,8 +262,15 @@ public sealed class UpgradeRequestDto
     }
 }
 
+/// <summary>
+/// Body for PATCH /client/auto-renew and PATCH /client/secondary-subscriptions/{id}/auto-renew. BOTH
+/// routes read the `enabled` key (updateAutoRenewSchema / Boolean(req.body.enabled)) — the wire key is
+/// forced to `enabled` so toggling actually takes effect (the former `autoRenew` key was silently
+/// ignored by the backend).
+/// </summary>
 public sealed class AutoRenewRequestDto
 {
+    [JsonPropertyName("enabled")]
     public bool AutoRenew { get; set; }
 
     public AutoRenewRequestDto()
@@ -273,4 +280,50 @@ public sealed class AutoRenewRequestDto
     public AutoRenewRequestDto(bool autoRenew) => AutoRenew = autoRenew;
 }
 
+/// <summary>
+/// Body for the pure device top-up POST /client/subscription/{scope}/{id}/add-devices. Unlike the
+/// legacy <see cref="AddDevicesRequestDto"/>, PaymentMethod is an int (2..13), matching addDevicesSchema.
+/// method is "balance" (settles from wallet) or "platega" (returns a card checkout URL).
+/// </summary>
+public sealed class AddDevicesPurchaseRequestDto
+{
+    public int ExtraDevices { get; set; }
+    public string Method { get; set; } = "";
+    public int? PaymentMethod { get; set; }
+
+    public AddDevicesPurchaseRequestDto()
+    {
+    }
+
+    public AddDevicesPurchaseRequestDto(int extraDevices, string method, int? paymentMethod = null)
+    {
+        ExtraDevices = extraDevices;
+        Method = method;
+        PaymentMethod = paymentMethod;
+    }
+}
+
 #endregion request bodies
+
+/// <summary>
+/// Response of POST /client/subscription/{scope}/{id}/add-devices. The backend has two shapes: a
+/// "balance" top-up settles immediately → {ok,newDeviceLimit,newBalance}; a "platega" top-up returns a
+/// card checkout → {paymentUrl,orderId,paymentId,finalAmount}. All fields are nullable so either shape
+/// deserializes.
+/// </summary>
+public sealed class AddDevicesResultDto
+{
+    // "balance" shape
+    public bool? Ok { get; set; }
+    public int? NewDeviceLimit { get; set; }
+    public double? NewBalance { get; set; }
+
+    // "platega" shape (card checkout)
+    public string? PaymentUrl { get; set; }
+    public string? OrderId { get; set; }
+    public string? PaymentId { get; set; }
+    public double? FinalAmount { get; set; }
+
+    /// <summary>True when a card checkout URL was issued (method "platega"); poll GET /client/payments.</summary>
+    public bool RequiresCheckout() => !PaymentUrl.IsNullOrEmpty();
+}

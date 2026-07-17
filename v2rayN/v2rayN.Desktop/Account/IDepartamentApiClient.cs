@@ -23,12 +23,35 @@ public interface IDepartamentApiClient
     Task<AuthResult> LoginGoogle(string idToken, string? referralCode = null);
     Task<UserProfileDto> GetMe();
 
+    // Auth — start-page register + passwordless flows
+    Task<RegisterResult> Register(string email, string password, string? referralCode = null);
+    Task<LoginResult> VerifyEmail(string token);
+    Task<MessageResponseDto> RequestMagicLink(string email);
+    Task<LoginResult> ConsumeMagicLink(string token, string? referralCode = null);
+    Task<MessageResponseDto> RequestPasswordReset(string email);
+    Task<MessageResponseDto> ConsumePasswordReset(string token, string newPassword);
+
+    // Auth — app↔site SSO handoff
+    Task<AppHandoffDto> CreateAppHandoff();
+    Task<AuthResult> ConsumeAppHandoff(string code);
+
+    // Account linking (authed): attach a missing sign-in method to the current account
+    Task<LinkTelegramRequestDto> RequestLinkTelegram();
+    Task<MessageResponseDto> RequestLinkEmail(string email);
+    Task<MessageResponseDto> SetPassword(string newPassword);
+    Task<UserProfileDto> LinkGoogle(string idToken);
+
     // Subscription
     Task<PrimarySubscriptionDto> GetPrimarySubscription();
     Task<SubscriptionAllDto> GetSubscriptionAll();
     Task RenameSubscription(string scope, string id, string name);
     Task<byte[]> GetSubscriptionQr(string remnawaveUuid);
     Task<PaymentInitDto> AddDevices(string scope, string id, int extraDevices, string method, string? paymentMethod = null);
+
+    /// <summary>Pure device top-up. Returns {ok,newDeviceLimit,newBalance} for "balance" or a card
+    /// checkout {paymentUrl,...} for "platega".</summary>
+    Task<AddDevicesResultDto> PurchaseDevices(string scope, string id, int extraDevices, string method, int? paymentMethod = null);
+
     Task<UpgradeQuoteDto> GetUpgradeQuote(string targetTariffId);
     Task<PaymentInitDto> Upgrade(string targetTariffId, string method, string subscriptionUuid, string? paymentMethod = null);
 
@@ -38,6 +61,10 @@ public interface IDepartamentApiClient
 
     // Payments
     Task<PaymentInitDto> PayPlatega(PaymentRequestDto req);
+
+    /// <summary>Scoped card renewal/purchase of a chosen (root/secondary) subscription → {paymentUrl,...}.</summary>
+    Task<PaymentInitDto> PayTariffPlatega(PaymentRequestDto req);
+
     Task<PaymentResultDto> PayBalance(PaymentRequestDto req);
     Task<PaymentsDto> GetPayments();
 

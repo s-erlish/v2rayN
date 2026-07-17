@@ -109,6 +109,58 @@ public sealed class DepartamentApiClient : IDepartamentApiClient
     public async Task<LoginResult> Login(string email, string password)
     {
         var raw = await PostJson<LoginResponseDto>(Endpoints.Login, Serialize(new LoginRequestDto(email, password)));
+        return MapLoginResponse(raw);
+    }
+
+    public Task<AuthResult> Login2Fa(string tempToken, string code) =>
+        PostJson<AuthResult>(Endpoints.TwoFaLogin, Serialize(new TwoFaLoginRequestDto(tempToken, code)));
+
+    public Task<AuthResult> LoginGoogle(string idToken, string? referralCode = null) =>
+        PostJson<AuthResult>(Endpoints.GoogleLogin, Serialize(new GoogleLoginRequestDto(idToken, referralCode)));
+
+    public Task<UserProfileDto> GetMe() => GetJson<UserProfileDto>(Endpoints.Me);
+
+    public async Task<RegisterResult> Register(string email, string password, string? referralCode = null)
+    {
+        var raw = await PostJson<RegisterResponseDto>(Endpoints.Register, Serialize(new RegisterRequestDto(email, password, referralCode)));
+        if (raw.Token.IsNotEmpty() && raw.Client != null)
+        {
+            return new RegisterResult.Success(raw.Token!, raw.Client);
+        }
+        // No token → the backend sent a verification email (requiresVerification).
+        return new RegisterResult.RequiresVerification(raw.Message);
+    }
+
+    public async Task<LoginResult> VerifyEmail(string token)
+    {
+        var raw = await PostJson<LoginResponseDto>(Endpoints.VerifyEmail, Serialize(new TokenRequestDto(token)));
+        return MapLoginResponse(raw);
+    }
+
+    public Task<MessageResponseDto> RequestMagicLink(string email) =>
+        PostJson<MessageResponseDto>(Endpoints.MagicLinkRequest, Serialize(new EmailRequestDto(email)));
+
+    public async Task<LoginResult> ConsumeMagicLink(string token, string? referralCode = null)
+    {
+        var raw = await PostJson<LoginResponseDto>(Endpoints.MagicLinkConsume, Serialize(new MagicLinkConsumeRequestDto(token, referralCode)));
+        return MapLoginResponse(raw);
+    }
+
+    public Task<MessageResponseDto> RequestPasswordReset(string email) =>
+        PostJson<MessageResponseDto>(Endpoints.PasswordResetRequest, Serialize(new EmailRequestDto(email)));
+
+    public Task<MessageResponseDto> ConsumePasswordReset(string token, string newPassword) =>
+        PostJson<MessageResponseDto>(Endpoints.PasswordResetConsume, Serialize(new PasswordResetConsumeRequestDto(token, newPassword)));
+
+    public Task<AppHandoffDto> CreateAppHandoff() =>
+        PostJson<AppHandoffDto>(Endpoints.AppHandoff, "{}");
+
+    public Task<AuthResult> ConsumeAppHandoff(string code) =>
+        PostJson<AuthResult>(Endpoints.AppHandoffConsume, Serialize(new CodeRequestDto(code)));
+
+    /// <summary>Maps a login/verify/magic-link auth body (either {token,client} or {requires2FA,tempToken}).</summary>
+    private static LoginResult MapLoginResponse(LoginResponseDto raw)
+    {
         var tempToken = raw.TempToken;
         var token = raw.Token;
         var client = raw.Client;
@@ -123,15 +175,23 @@ public sealed class DepartamentApiClient : IDepartamentApiClient
         throw new ApiError.Parse();
     }
 
-    public Task<AuthResult> Login2Fa(string tempToken, string code) =>
-        PostJson<AuthResult>(Endpoints.TwoFaLogin, Serialize(new TwoFaLoginRequestDto(tempToken, code)));
-
-    public Task<AuthResult> LoginGoogle(string idToken, string? referralCode = null) =>
-        PostJson<AuthResult>(Endpoints.GoogleLogin, Serialize(new GoogleLoginRequestDto(idToken, referralCode)));
-
-    public Task<UserProfileDto> GetMe() => GetJson<UserProfileDto>(Endpoints.Me);
-
     #endregion auth
+
+    #region account linking
+
+    public Task<LinkTelegramRequestDto> RequestLinkTelegram() =>
+        PostJson<LinkTelegramRequestDto>(Endpoints.LinkTelegramRequest, "{}");
+
+    public Task<MessageResponseDto> RequestLinkEmail(string email) =>
+        PostJson<MessageResponseDto>(Endpoints.LinkEmailRequest, Serialize(new EmailRequestDto(email)));
+
+    public Task<MessageResponseDto> SetPassword(string newPassword) =>
+        PostJson<MessageResponseDto>(Endpoints.SetPassword, Serialize(new SetPasswordRequestDto(newPassword)));
+
+    public Task<UserProfileDto> LinkGoogle(string idToken) =>
+        PostJson<UserProfileDto>(Endpoints.LinkGoogle, Serialize(new LinkGoogleRequestDto(idToken)));
+
+    #endregion account linking
 
     #region subscription
 
@@ -168,6 +228,9 @@ public sealed class DepartamentApiClient : IDepartamentApiClient
 
     public Task<PaymentInitDto> AddDevices(string scope, string id, int extraDevices, string method, string? paymentMethod = null) =>
         PostJson<PaymentInitDto>(Endpoints.AddDevices(scope, id), Serialize(new AddDevicesRequestDto(extraDevices, method, paymentMethod)));
+
+    public Task<AddDevicesResultDto> PurchaseDevices(string scope, string id, int extraDevices, string method, int? paymentMethod = null) =>
+        PostJson<AddDevicesResultDto>(Endpoints.AddDevices(scope, id), Serialize(new AddDevicesPurchaseRequestDto(extraDevices, method, paymentMethod)));
 
     public async Task<UpgradeQuoteDto> GetUpgradeQuote(string targetTariffId)
     {
@@ -216,6 +279,9 @@ public sealed class DepartamentApiClient : IDepartamentApiClient
 
     public Task<PaymentInitDto> PayPlatega(PaymentRequestDto req) =>
         PostJson<PaymentInitDto>(Endpoints.PayPlatega, Serialize(req));
+
+    public Task<PaymentInitDto> PayTariffPlatega(PaymentRequestDto req) =>
+        PostJson<PaymentInitDto>(Endpoints.PayTariffPlatega, Serialize(req));
 
     public Task<PaymentResultDto> PayBalance(PaymentRequestDto req) =>
         PostJson<PaymentResultDto>(Endpoints.PayBalance, Serialize(req));

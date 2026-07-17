@@ -16,10 +16,23 @@ public sealed class PaymentRequestDto
     public string? Currency { get; set; }
     public string? TariffId { get; set; }
     public string? TariffPriceOptionId { get; set; }
+
+    /// <summary>Extra devices for a BALANCE purchase/renewal (POST /client/payments/balance).</summary>
     public int? DeviceCount { get; set; }
+
+    /// <summary>Extra devices for a scoped CARD renewal (POST /client/payments/tariff/platega uses
+    /// `extraDevices`, not `deviceCount`).</summary>
+    public int? ExtraDevices { get; set; }
+
     public int? PaymentMethod { get; set; }
     public string? PromoCode { get; set; }
     public string? SubscriptionUuid { get; set; }
+
+    // Scoped renewal: address a specific (root or secondary) subscription. Both null → legacy root
+    // behavior (balance) / required together for /payments/tariff/platega. scope is "root"|"secondary";
+    // subscriptionId is the client id for root, else the secondary subscription id.
+    public string? Scope { get; set; }
+    public string? SubscriptionId { get; set; }
 }
 
 /// <summary>Returned when a payment provider checkout URL is issued (Platega, add-devices, upgrade).</summary>
@@ -30,11 +43,18 @@ public sealed class PaymentInitDto
     public string OrderId { get; set; } = "";
 }
 
-/// <summary>Returned by a balance (wallet) payment that settles immediately.</summary>
+/// <summary>Returned by a balance (wallet) payment that settles immediately. The Departament backend's
+/// tariff-purchase/renewal reply is {message, paymentId, newBalance}; Status/OrderId are kept for
+/// source compatibility with older callers and stay blank on this endpoint.</summary>
 public sealed class PaymentResultDto
 {
     public string Status { get; set; } = "";
     public string OrderId { get; set; } = "";
+
+    // Actual fields returned by POST /client/payments/balance for a tariff purchase/renewal.
+    public string? Message { get; set; }
+    public string? PaymentId { get; set; }
+    public double? NewBalance { get; set; }
 }
 
 /// <summary>GET /client/payments</summary>

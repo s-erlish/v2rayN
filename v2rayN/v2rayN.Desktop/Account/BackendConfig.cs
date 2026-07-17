@@ -38,6 +38,24 @@ public static class BackendConfig
         public const string GoogleLogin = "/client/auth/google";
         public const string Me = "/client/auth/me";
 
+        // Auth — start-page (email/password) register + passwordless flows
+        public const string Register = "/client/auth/register";
+        public const string VerifyEmail = "/client/auth/verify-email";
+        public const string MagicLinkRequest = "/client/auth/magic-link/request";
+        public const string MagicLinkConsume = "/client/auth/magic-link/consume";
+        public const string PasswordResetRequest = "/client/auth/password-reset/request";
+        public const string PasswordResetConsume = "/client/auth/password-reset/consume";
+
+        // Auth — app↔site SSO handoff (issue code while authed, consume it publicly)
+        public const string AppHandoff = "/client/auth/app-handoff";
+        public const string AppHandoffConsume = "/client/auth/app-handoff/consume";
+
+        // Account linking (all authed; attach a missing sign-in method to the current account)
+        public const string LinkTelegramRequest = "/client/link-telegram-request";
+        public const string LinkEmailRequest = "/client/link-email-request";
+        public const string SetPassword = "/client/set-password";
+        public const string LinkGoogle = "/client/link-google";
+
         // Subscription
         /// <summary>The authoritative ACTIVE (root) subscription summary — richer than the /all root item.</summary>
         public const string Subscription = "/client/subscription";
@@ -59,15 +77,23 @@ public static class BackendConfig
         public const string PayBalance = "/client/payments/balance";
         public const string Payments = "/client/payments";
 
+        /// <summary>Scoped card (Platega) purchase/renewal of a chosen (root or secondary) subscription.</summary>
+        public const string PayTariffPlatega = "/client/payments/tariff/platega";
+
         // Promo / trial / referral
         public const string PromoCheck = "/client/promo-code/check";
         public const string PromoActivate = "/client/promo-code/activate";
         public const string Trial = "/client/trial";
         public const string ReferralStats = "/client/referral-stats";
 
+        /// <summary>PATCH auto-renew of a secondary subscription — body {enabled}.</summary>
         public static string SecondaryAutoRenew(string id) => $"/client/secondary-subscriptions/{id}/auto-renew";
 
-        /// <summary>Auto-renew of the ACTIVE (root/primary) subscription — no id in the path.</summary>
-        public const string PrimaryAutoRenew = "/client/subscription/auto-renew";
+        /// <summary>
+        /// PATCH auto-renew of the ACTIVE (root/primary) subscription — no id in the path, body
+        /// {enabled}. NOTE: the real route is `/client/auto-renew` (bug #29 — the former
+        /// `/client/subscription/auto-renew` 404s).
+        /// </summary>
+        public const string PrimaryAutoRenew = "/client/auto-renew";
     }
 }

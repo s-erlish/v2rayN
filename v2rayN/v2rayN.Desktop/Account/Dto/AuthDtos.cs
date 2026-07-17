@@ -64,6 +64,119 @@ public sealed class GoogleLoginRequestDto
     }
 }
 
+/// <summary>POST /client/auth/register — email+password sign-up (referralCode optional).</summary>
+public sealed class RegisterRequestDto
+{
+    public string Email { get; set; } = "";
+    public string Password { get; set; } = "";
+    public string? ReferralCode { get; set; }
+
+    public RegisterRequestDto()
+    {
+    }
+
+    public RegisterRequestDto(string email, string password, string? referralCode = null)
+    {
+        Email = email;
+        Password = password;
+        ReferralCode = referralCode;
+    }
+}
+
+/// <summary>POST /client/auth/verify-email — confirm the emailed registration token.</summary>
+public sealed class TokenRequestDto
+{
+    public string Token { get; set; } = "";
+
+    public TokenRequestDto()
+    {
+    }
+
+    public TokenRequestDto(string token) => Token = token;
+}
+
+/// <summary>POST /client/auth/magic-link/request and /client/password-reset/request — {email}.</summary>
+public sealed class EmailRequestDto
+{
+    public string Email { get; set; } = "";
+
+    public EmailRequestDto()
+    {
+    }
+
+    public EmailRequestDto(string email) => Email = email;
+}
+
+/// <summary>POST /client/auth/magic-link/consume — exchange the emailed token for a session.</summary>
+public sealed class MagicLinkConsumeRequestDto
+{
+    public string Token { get; set; } = "";
+    public string? ReferralCode { get; set; }
+
+    public MagicLinkConsumeRequestDto()
+    {
+    }
+
+    public MagicLinkConsumeRequestDto(string token, string? referralCode = null)
+    {
+        Token = token;
+        ReferralCode = referralCode;
+    }
+}
+
+/// <summary>POST /client/auth/password-reset/consume — {token,newPassword}.</summary>
+public sealed class PasswordResetConsumeRequestDto
+{
+    public string Token { get; set; } = "";
+    public string NewPassword { get; set; } = "";
+
+    public PasswordResetConsumeRequestDto()
+    {
+    }
+
+    public PasswordResetConsumeRequestDto(string token, string newPassword)
+    {
+        Token = token;
+        NewPassword = newPassword;
+    }
+}
+
+/// <summary>POST /client/auth/app-handoff/consume — {code} (app receives a code minted on the site).</summary>
+public sealed class CodeRequestDto
+{
+    public string Code { get; set; } = "";
+
+    public CodeRequestDto()
+    {
+    }
+
+    public CodeRequestDto(string code) => Code = code;
+}
+
+/// <summary>POST /client/set-password — {newPassword} (set the first password on a passwordless account).</summary>
+public sealed class SetPasswordRequestDto
+{
+    public string NewPassword { get; set; } = "";
+
+    public SetPasswordRequestDto()
+    {
+    }
+
+    public SetPasswordRequestDto(string newPassword) => NewPassword = newPassword;
+}
+
+/// <summary>POST /client/link-google — {idToken} (attach Google to the current account).</summary>
+public sealed class LinkGoogleRequestDto
+{
+    public string IdToken { get; set; } = "";
+
+    public LinkGoogleRequestDto()
+    {
+    }
+
+    public LinkGoogleRequestDto(string idToken) => IdToken = idToken;
+}
+
 #endregion request bodies
 
 #region raw responses (parsed then mapped to the result types)
@@ -83,7 +196,9 @@ public sealed class TelegramCheckResponseDto
     public bool JustCreated { get; set; }
 }
 
-/// <summary>Raw body of POST /client/auth/login (either shape).</summary>
+/// <summary>Raw body of POST /client/auth/login (either shape). Also reused for the auth responses of
+/// POST /client/auth/verify-email and /client/auth/magic-link/consume (both go through the backend's
+/// buildAuthResponse, so they can return {token,client} OR {requires2FA,tempToken}).</summary>
 public sealed class LoginResponseDto
 {
     public string? Token { get; set; }
@@ -93,6 +208,45 @@ public sealed class LoginResponseDto
     public bool Requires2Fa { get; set; }
 
     public string? TempToken { get; set; }
+}
+
+/// <summary>
+/// Raw body of POST /client/auth/register. Two shapes: verification-off returns {token,client};
+/// verification-on returns {message,requiresVerification:true} with NO token.
+/// </summary>
+public sealed class RegisterResponseDto
+{
+    public string? Token { get; set; }
+    public UserProfileDto? Client { get; set; }
+    public bool RequiresVerification { get; set; }
+    public string? Message { get; set; }
+}
+
+/// <summary>
+/// A message-only response (magic-link/request, password-reset/request, password-reset/consume,
+/// link-email-request, set-password). Anti-enumeration endpoints return the same message either way.
+/// </summary>
+public sealed class MessageResponseDto
+{
+    public string? Message { get; set; }
+    public int? ExpiresInMinutes { get; set; }
+}
+
+/// <summary>POST /client/link-telegram-request → {code, expiresAt, botUsername}. The user sends
+/// `/link &lt;code&gt;` to the bot; poll /me until telegramLinked flips true.</summary>
+public sealed class LinkTelegramRequestDto
+{
+    public string Code { get; set; } = "";
+    public string? ExpiresAt { get; set; }
+    public string? BotUsername { get; set; }
+}
+
+/// <summary>POST /client/auth/app-handoff → {code, expiresAt}. Open the site with this code to land
+/// already signed-in.</summary>
+public sealed class AppHandoffDto
+{
+    public string Code { get; set; } = "";
+    public string? ExpiresAt { get; set; }
 }
 
 #endregion raw responses
@@ -120,6 +274,16 @@ public abstract record LoginResult
 
     /// <summary>Password accepted but a TOTP code is required; call 2fa-login with TempToken.</summary>
     public sealed record Requires2Fa(string TempToken) : LoginResult;
+}
+
+/// <summary>Outcome of POST /client/auth/register.</summary>
+public abstract record RegisterResult
+{
+    /// <summary>Verification disabled server-side — a session was issued immediately.</summary>
+    public sealed record Success(string Token, UserProfileDto Client) : RegisterResult;
+
+    /// <summary>Verification required — a confirmation email was sent; no token yet.</summary>
+    public sealed record RequiresVerification(string? Message) : RegisterResult;
 }
 
 /// <summary>A successful authentication carrying the JWT and profile.</summary>
@@ -156,6 +320,14 @@ public sealed class UserProfileDto
     }
 
     public bool TelegramLinked { get; set; }
+
+    // Account-linking state the backend's /client/auth/me already returns (see toClientShape):
+    // googleLinked = Boolean(googleId), appleLinked = Boolean(appleId), hasPassword = has passwordHash.
+    // Drive the "Привязки" (linking) rows on the Account tab.
+    public bool GoogleLinked { get; set; }
+    public bool AppleLinked { get; set; }
+    public bool HasPassword { get; set; }
+
     public long? TelegramId { get; set; }
     public string? TelegramUsername { get; set; }
 
