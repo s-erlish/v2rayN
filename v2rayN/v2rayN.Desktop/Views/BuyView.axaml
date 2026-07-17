@@ -158,6 +158,26 @@
             </Style.Animations>
         </Style>
 
+        <!--  Раскрытие опций выбранного тарифа: fade + мягкий подъём 6→0 (Reveal 300 OutQuint) вместо
+              жёсткого IsVisible-переключения. Под lite не аттачится (селектор не совпадает) → мгновенно.  -->
+        <Style Selector=":is(Window):not(.lite) StackPanel.optreveal[IsVisible=True]">
+            <Style.Animations>
+                <Animation
+                    Duration="0:0:0.30"
+                    Easing="{StaticResource Ease.OutQuint}"
+                    FillMode="Forward">
+                    <KeyFrame Cue="0%">
+                        <Setter Property="Opacity" Value="0" />
+                        <Setter Property="TranslateTransform.Y" Value="6" />
+                    </KeyFrame>
+                    <KeyFrame Cue="100%">
+                        <Setter Property="Opacity" Value="1" />
+                        <Setter Property="TranslateTransform.Y" Value="0" />
+                    </KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+
         <!--  Шит «Способ оплаты» — глобальные Border.SheetTop (Surface, радиус 24,24,0,0, 1px верх-rim)
               + Border.SheetHandle (36×4 SurfaceHighest, pill). Локальные копии сняты; отступ/клип шита
               заданы на элементе Sheet в разметке.  -->
@@ -325,8 +345,9 @@
                             Classes="Title"
                             Text="{loc:T Buy_ChoosePlan}" />
 
-                        <!--  Карты тарифов: тап по шапке выбирает; выбранная раскрывает опции срока.  -->
-                        <ItemsControl ItemsSource="{Binding Tariffs}">
+                        <!--  Карты тарифов: тап по шапке выбирает; выбранная раскрывает опции срока.
+                              Стаггер входа карт (по одной, +40мс) — в code-behind при показе контента.  -->
+                        <ItemsControl x:Name="TariffList" ItemsSource="{Binding Tariffs}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="vms:BuyTariffItem">
                                     <Border
@@ -364,10 +385,11 @@
                                                 </Border>
                                             </Button>
 
-                                            <!--  Опции срока/цены: только у выбранного тарифа.  -->
+                                            <!--  Опции срока/цены: только у выбранного тарифа. Обёрнуты в
+                                                  optreveal-панель — плавное раскрытие вместо жёсткого показа.  -->
+                                            <StackPanel Classes="optreveal" IsVisible="{Binding IsSelected}">
                                             <ItemsControl
                                                 Margin="16,0,16,16"
-                                                IsVisible="{Binding IsSelected}"
                                                 ItemsSource="{Binding Options}">
                                                 <ItemsControl.ItemTemplate>
                                                     <DataTemplate x:DataType="vms:BuyOptionItem">
@@ -400,6 +422,7 @@
                                                     </DataTemplate>
                                                 </ItemsControl.ItemTemplate>
                                             </ItemsControl>
+                                            </StackPanel>
                                         </StackPanel>
                                     </Border>
                                 </DataTemplate>
@@ -479,7 +502,9 @@
                                     Background="{DynamicResource Brush.OutlineVariant}"
                                     IsVisible="{Binding ShowExtraDevices}" />
 
-                                <!--  Итого: подпись muted + сумма Headline Accent (tnum).  -->
+                                <!--  Итого: подпись muted + сумма набрана как ДЕНЬГИ (та же грамматика, что
+                                      и hero-баланс): сумма Headline Accent (tnum) + приглушённый ₽ на шаг мельче.
+                                      Значения ставит code-behind из TotalText; сумма кроссфейдится при пересчёте.  -->
                                 <Grid Margin="0,12,0,0" ColumnDefinitions="*,Auto">
                                     <TextBlock
                                         Grid.Column="0"
@@ -487,14 +512,25 @@
                                         Classes="Body"
                                         Foreground="{DynamicResource Brush.OnSurfaceVariant}"
                                         Text="{loc:T Buy_Total}" />
-                                    <TextBlock
+                                    <StackPanel
                                         Grid.Column="1"
-                                        VerticalAlignment="Center"
-                                        Classes="Headline"
-                                        FontFamily="{DynamicResource Font.Numeric}"
-                                        FontFeatures="tnum,lnum,zero"
-                                        Foreground="{DynamicResource Brush.Accent}"
-                                        Text="{Binding TotalText}" />
+                                        Orientation="Horizontal"
+                                        VerticalAlignment="Center">
+                                        <TextBlock
+                                            x:Name="TotalAmount"
+                                            Classes="Headline"
+                                            FontFamily="{DynamicResource Font.Numeric}"
+                                            FontFeatures="tnum,lnum,zero"
+                                            Foreground="{DynamicResource Brush.Accent}"
+                                            RenderTransformOrigin="50%,50%"
+                                            VerticalAlignment="Bottom" />
+                                        <TextBlock
+                                            x:Name="TotalCurrency"
+                                            Margin="4,0,0,1"
+                                            Classes="Title"
+                                            Foreground="{DynamicResource Brush.OnSurfaceVariant}"
+                                            VerticalAlignment="Bottom" />
+                                    </StackPanel>
                                 </Grid>
 
                                 <!--  Инлайн-диагностика оплаты («Ошибка оплаты», HTTP-код + деталь бэкенда).  -->
@@ -526,12 +562,38 @@
                                         VerticalAlignment="Center"
                                         Orientation="Horizontal"
                                         Spacing="8">
-                                        <PathIcon
-                                            Width="18"
-                                            Height="18"
-                                            VerticalAlignment="Center"
-                                            Data="{StaticResource Geo.Buy.Wallet}"
-                                            Foreground="{DynamicResource Brush.OnAccent}" />
+                                        <!--  Пока идёт оплата — глиф кошелька В ТОМ ЖЕ слоте заменяется
+                                              компактным спиннером-дугой (ничего вокруг не сдвигается).
+                                              Под lite дуга не крутится (селектор .spinning гасит вращение).  -->
+                                        <Panel Width="18" Height="18" VerticalAlignment="Center">
+                                            <PathIcon
+                                                Width="18"
+                                                Height="18"
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                Data="{StaticResource Geo.Buy.Wallet}"
+                                                Foreground="{DynamicResource Brush.OnAccent}"
+                                                IsVisible="{Binding !IsPaying}" />
+                                            <Ellipse
+                                                Width="16"
+                                                Height="16"
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                Classes="Spinner"
+                                                Classes.spinning="{Binding IsPaying}"
+                                                IsVisible="{Binding IsPaying}"
+                                                Stroke="{DynamicResource Brush.OnAccent}"
+                                                StrokeDashArray="6.3,18.8"
+                                                StrokeLineCap="Round"
+                                                StrokeThickness="2">
+                                                <Ellipse.RenderTransform>
+                                                    <RotateTransform
+                                                        Angle="0"
+                                                        CenterX="8"
+                                                        CenterY="8" />
+                                                </Ellipse.RenderTransform>
+                                            </Ellipse>
+                                        </Panel>
                                         <TextBlock
                                             VerticalAlignment="Center"
                                             Foreground="{DynamicResource Brush.OnAccent}"

@@ -23,23 +23,40 @@ public sealed partial class L
         Add("Account_AmountRub", "Сумма, ₽", "Amount, ₽");
         Add("Account_Continue", "Продолжить", "Continue");
         Add("Account_CopyReferralCode", "Скопировать код", "Copy code");
-        Add("Account_FirstSub", "Оформите первую подписку", "Set up your first subscription");
+        Add("Account_FirstSub", "Оформи первую подписку", "Set up your first subscription");
         Add("Account_NoSubHint",
-            "Пока нет активной подписки. Оформите её, чтобы подключиться.",
-            "You don't have an active subscription yet. Set one up to connect.");
+            "Выбери тариф — оплата в рублях, подключение сразу.",
+            "Pick a plan — pay in rubles, connect right away.");
         Add("Account_Devices", "Устройства", "Devices");
-        Add("Account_SignOut", "Выйти из аккаунта", "Sign out");
-        Add("Account_SignInTitle", "Войдите в аккаунт", "Sign in to your account");
+        Add("Account_SignOut", "Выйти", "Sign out");
+        Add("Account_SignInTitle", "Войди в departament", "Sign in to departament");
         Add("Account_SignInHint",
-            "Войдите, чтобы увидеть подписку, устройства и историю платежей.",
-            "Sign in to see your subscription, devices, and payment history.");
+            "Через Telegram — быстро, без пароля. Или войди по почте на сайте.",
+            "With Telegram — fast, no password. Or sign in by email on the website.");
 
         // ── Account view-model (imperative / computed) ──
         Add("Account_AmountGtZero", "Введите сумму больше 0", "Enter an amount greater than 0");
         Add("Account_ReferralCode", "Реф-код {0}", "Referral code {0}");
+        Add("Account_ReferralBenefit", "Код друга", "Referral code");
         Add("Account_MySubs", "Мои подписки", "My subscriptions");
         Add("Account_ValidUntil", "Действует до {0}", "Valid until {0}");
         Add("Account_DevicesCount", "Устройства: {0} / {1}", "Devices: {0} / {1}");
+
+        // ── Subscription card (identity caption · health chip · expiry urgency · devices) ──
+        Add("Account_TariffCaption", "Тариф · {0}", "Plan · {0}");
+        Add("Account_TrialPeriod", "Пробный период", "Trial period");
+        Add("Account_HealthActive", "Активна", "Active");
+        Add("Account_HealthExpiring", "Истекает", "Expiring");
+        Add("Account_HealthExpired", "Истекла", "Expired");
+        Add("Account_ExpiresUntil", "До {0}", "Until {0}");
+        Add("Account_ExpiresInDays", "Осталось {0} дн.", "{0} days left");
+        Add("Account_ExpiredOn", "Истекла", "Expired");
+        Add("Account_Perpetual", "Бессрочно", "No expiry");
+        Add("Account_DevicesUsage", "{0} из {1} устройств", "{0} of {1} devices");
+        Add("Account_DevicesTotal", "{0} устройств", "{0} devices");
+        Add("Account_Renew", "Продлить", "Renew");
+        Add("Account_PrevSub", "Предыдущая", "Previous");
+        Add("Account_NextSub", "Следующая", "Next");
 
         // ── Login screen (LoginView) ──
         Add("Login_SignIn", "Вход", "Sign in");

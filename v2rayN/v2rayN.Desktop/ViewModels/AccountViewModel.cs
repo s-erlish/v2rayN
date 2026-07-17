@@ -110,6 +110,12 @@ public class AccountViewModel : MyReactiveObject
     [Reactive] public string Username { get; set; } = string.Empty;
     [Reactive] public string AvatarInitial { get; set; } = string.Empty;
     [Reactive] public string BalanceText { get; set; } = string.Empty;
+
+    /// <summary>Balance typeset as money: the amount alone (e.g. "1 490"), so the ₽ can be a stepped-down trailing run.</summary>
+    [Reactive] public string BalanceAmountText { get; set; } = string.Empty;
+
+    /// <summary>The currency symbol shown as a subordinate trailing glyph next to <see cref="BalanceAmountText"/> (e.g. "₽").</summary>
+    [Reactive] public string BalanceCurrencyText { get; set; } = string.Empty;
     [Reactive] public bool HasBalance { get; set; }
     [Reactive] public string ReferralText { get; set; } = string.Empty;
 
@@ -117,6 +123,22 @@ public class AccountViewModel : MyReactiveObject
     [Reactive] public string ReferralCode { get; set; } = string.Empty;
     [Reactive] public bool HasReferral { get; set; }
     [Reactive] public bool HasProfile { get; set; }
+
+    /// <summary>Sentence-case tariff signal shown on the identity line under the username ("Тариф · Base" / "Пробный период").</summary>
+    [Reactive] public string TariffCaptionText { get; set; } = string.Empty;
+    [Reactive] public bool HasTariffCaption { get; set; }
+
+    /// <summary>Every subscription as a health-rich carousel card (active first). Desktop used to render only the first.</summary>
+    [Reactive] public List<AccountSubCard> SubCards { get; set; } = new();
+
+    /// <summary>True when more than one subscription exists — gates the carousel dots / drag / arrow paging.</summary>
+    [Reactive] public bool HasMultipleSubs { get; set; }
+
+    /// <summary>The active carousel page (0-based). Driven by drag/dots/arrow keys in the view; only read for the pager.</summary>
+    [Reactive] public int CarouselIndex { get; set; }
+
+    /// <summary>Fixed pixel width every carousel card takes — computed by the view from the carousel viewport (peek-aware).</summary>
+    [Reactive] public double CardWidth { get; set; } = 320;
 
     [Reactive] public string SubName { get; set; } = string.Empty;
     [Reactive] public string TariffBadge { get; set; } = string.Empty;
@@ -335,6 +357,26 @@ public class AccountViewModel : MyReactiveObject
     }
 
     public static AccountViewModel CreateDesign() => new(true);
+
+    #region carousel card navigation intents
+
+    /// <summary>
+    /// Raised when a carousel card's «Продлить» CTA is tapped. The view forwards this to its own
+    /// <c>BuyRequested</c> event (the host opens Buy) — so card CTAs reuse the shipped navigation path
+    /// without a MainWindow change and without the cards needing a view reference.
+    /// </summary>
+    public event EventHandler? BuyIntentRequested;
+
+    /// <summary>Raised when a carousel card's «Устройства» link is tapped; the view forwards to <c>DevicesRequested</c>.</summary>
+    public event EventHandler? DevicesIntentRequested;
+
+    /// <summary>Card CTA hook: request the Buy screen (renew this subscription).</summary>
+    public void RequestBuy() => BuyIntentRequested?.Invoke(this, EventArgs.Empty);
+
+    /// <summary>Card CTA hook: request the Devices screen.</summary>
+    public void RequestDevices() => DevicesIntentRequested?.Invoke(this, EventArgs.Empty);
+
+    #endregion carousel card navigation intents
 
     #region loads
 
@@ -1036,6 +1078,8 @@ public class AccountViewModel : MyReactiveObject
             Username = string.Empty;
             AvatarInitial = string.Empty;
             BalanceText = string.Empty;
+            BalanceAmountText = string.Empty;
+            BalanceCurrencyText = string.Empty;
             HasBalance = false;
             ReferralText = string.Empty;
             ReferralCode = string.Empty;
@@ -1048,6 +1092,9 @@ public class AccountViewModel : MyReactiveObject
             Username = AccountSession.DisplayNameFor(profile);
             AvatarInitial = Monogram(Username);
             BalanceText = FormatMoney(profile.Balance, profile.Currency);
+            // Typeset as money: amount and the currency symbol split, so the view can step the ₽ down.
+            BalanceAmountText = FormatMoneyAmount(profile.Balance);
+            BalanceCurrencyText = CurrencySymbol(profile.Currency);
             HasBalance = true;
             HasReferral = profile.ReferralCode.IsNotEmpty();
             ReferralCode = HasReferral ? profile.ReferralCode : string.Empty;
@@ -1084,6 +1131,43 @@ public class AccountViewModel : MyReactiveObject
             SubDevicesText = L.F("Account_DevicesCount", used, totalStr);
             DevicesRowValue = $"{used} / {totalStr}";
             HasDevicesRowValue = true;
+        }
+
+        // Identity-line tariff signal: the tariff name when known, else the trial marker, else nothing.
+        if (HasTariffBadge)
+        {
+            TariffCaptionText = L.F("Account_TariffCaption", TariffBadge);
+            HasTariffCaption = true;
+        }
+        else if (sub?.IsTrial == true)
+        {
+            TariffCaptionText = L.T("Account_TrialPeriod");
+            HasTariffCaption = true;
+        }
+        else
+        {
+            TariffCaptionText = string.Empty;
+            HasTariffCaption = false;
+        }
+
+        // Carousel cards: EVERY subscription (active/root first), each with health + expiry urgency + a
+        // device-usage bar. The connected-device count is only known for the active sub (index 0), so
+        // only that card shows the honest used/total bar; secondaries show their total device slots.
+        var cards = new List<AccountSubCard>();
+        for (var i = 0; i < Subscriptions.Count; i++)
+        {
+            cards.Add(BuildCard(Subscriptions[i], i));
+        }
+        // Keep the same fixed width the view last measured so a rebuild doesn't reset cards to a stale size.
+        foreach (var c in cards)
+        {
+            c.CardWidth = CardWidth;
+        }
+        SubCards = cards;
+        HasMultipleSubs = cards.Count > 1;
+        if (CarouselIndex > cards.Count - 1)
+        {
+            CarouselIndex = cards.Count > 0 ? cards.Count - 1 : 0;
         }
 
         // History row trailing value (latest payment date)
@@ -1137,6 +1221,102 @@ public class AccountViewModel : MyReactiveObject
         ShowError = error;
     }
 
+    /// <summary>Health state of a subscription, derived purely from its expiry date. Colour-blind-safe: paired with copy.</summary>
+    private enum SubHealth { Active, Expiring, Expired }
+
+    /// <summary>Builds one carousel card view of a subscription (name · tariff caption · health · expiry · devices).</summary>
+    private AccountSubCard BuildCard(SubInfoDto sub, int index)
+    {
+        var name = FirstNonBlank(sub.DisplayName, sub.TariffDisplayName, sub.DefaultLabel, L.T("Account_MySubs"));
+
+        var badge = TariffNameFor(sub.TariffId) ?? TariffNameForPriceOptionId(sub.TariffPriceOptionId) ?? sub.TariffBadgeName();
+        var tariffCaption = badge.IsNotEmpty()
+            ? L.F("Account_TariffCaption", badge!)
+            : (sub.IsTrial ? L.T("Account_TrialPeriod") : string.Empty);
+
+        var (health, expiryText, urgent) = ResolveHealth(sub);
+        var healthLabel = health switch
+        {
+            SubHealth.Expired => L.T("Account_HealthExpired"),
+            SubHealth.Expiring => L.T("Account_HealthExpiring"),
+            _ => L.T("Account_HealthActive"),
+        };
+
+        // Devices: the connected count is only fetched for the active/root sub (index 0), so only that card
+        // shows the honest used/total bar (finite plans); secondaries advertise their total device slots.
+        var raw = sub.Subscription?.Raw();
+        var unlimited = raw?.IsUnlimitedDevices() == true;
+        var total = sub.TotalDevices;
+        var used = index == 0 ? (DeviceCount ?? 0) : 0;
+        var showUsage = index == 0 && !unlimited && total > 0;
+
+        string devicesText;
+        double usageWidth = 0;
+        if (index == 0)
+        {
+            // Active sub: keep the real used count even when devices are unlimited ("{used} из ∞").
+            var totalStr = unlimited ? "∞" : total.ToString();
+            devicesText = L.F("Account_DevicesUsage", used, totalStr);
+            if (showUsage)
+            {
+                var frac = Math.Clamp((double)used / total, 0.0, 1.0);
+                usageWidth = TrafficPillWidth * frac;
+            }
+        }
+        else
+        {
+            devicesText = L.F("Account_DevicesTotal", unlimited ? "∞" : total.ToString());
+        }
+
+        return new AccountSubCard(this)
+        {
+            Name = name,
+            TariffCaption = tariffCaption,
+            HasTariffCaption = tariffCaption.IsNotEmpty(),
+            HealthLabel = healthLabel,
+            IsHealthActive = health == SubHealth.Active,
+            IsHealthExpiring = health == SubHealth.Expiring,
+            IsHealthExpired = health == SubHealth.Expired,
+            ExpiryText = expiryText,
+            ExpiryUrgent = urgent && health == SubHealth.Expiring,
+            ExpiryExpired = health == SubHealth.Expired,
+            DevicesText = devicesText,
+            ShowUsageBar = showUsage,
+            UsageWidth = usageWidth,
+            RenewPrimary = health != SubHealth.Active,
+        };
+    }
+
+    /// <summary>The traffic-pill track width (px), mirrored from <c>Size.TrafficPill</c>, used to size the usage-bar fill.</summary>
+    private const double TrafficPillWidth = 160.0;
+
+    /// <summary>Resolves a subscription's health + urgency copy from its expiry date (no expiry ⇒ perpetual/active).</summary>
+    private static (SubHealth health, string expiryText, bool urgent) ResolveHealth(SubInfoDto sub)
+    {
+        var iso = sub.ExpireAtIso;
+        if (iso.IsNullOrEmpty())
+        {
+            return (SubHealth.Active, L.T("Account_Perpetual"), false);
+        }
+        if (DateTimeOffset.TryParse(iso, CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var expire))
+        {
+            var days = (expire - DateTimeOffset.UtcNow).TotalDays;
+            if (days < 0)
+            {
+                return (SubHealth.Expired, L.T("Account_ExpiredOn"), true);
+            }
+            if (days <= 7)
+            {
+                var n = Math.Max(1, (int)Math.Ceiling(days));
+                return (SubHealth.Expiring, L.F("Account_ExpiresInDays", n), true);
+            }
+            return (SubHealth.Active, L.F("Account_ExpiresUntil", FormatIsoDate(iso)), false);
+        }
+        // Unparseable date — show it verbatim and treat as active rather than inventing urgency.
+        return (SubHealth.Active, L.F("Account_ExpiresUntil", FormatIsoDate(iso)), false);
+    }
+
     private void OnSessionStateChanged(AccountState state)
     {
         RunOnUi(() =>
@@ -1160,11 +1340,13 @@ public class AccountViewModel : MyReactiveObject
 
     private static string FormatMoney(double amount, string currency)
     {
-        var n = amount % 1.0 == 0.0
-            ? ((long)amount).ToString(CultureInfo.InvariantCulture)
-            : amount.ToString("0.00", CultureInfo.InvariantCulture);
-        return $"{n} {CurrencySymbol(currency)}";
+        return $"{FormatMoneyAmount(amount)} {CurrencySymbol(currency)}";
     }
+
+    /// <summary>The bare money amount (whole amounts drop the decimals) — the currency symbol is typeset separately.</summary>
+    private static string FormatMoneyAmount(double amount) => amount % 1.0 == 0.0
+        ? ((long)amount).ToString(CultureInfo.InvariantCulture)
+        : amount.ToString("0.00", CultureInfo.InvariantCulture);
 
     // RUB-only product: RUB/blank/USD/unknown all render as the ruble sign; only genuinely distinct
     // currencies keep their own symbol.
@@ -1228,4 +1410,49 @@ public class AccountViewModel : MyReactiveObject
     }
 
     #endregion formatting helpers
+}
+
+/// <summary>
+/// One subscription rendered as a carousel card: identity (name + tariff caption), a health chip
+/// (active/expiring/expired — colour + copy), urgency-aware expiry, an honest device-usage bar and a
+/// health-weighted «Продлить» CTA. Built by <see cref="AccountViewModel.BuildCard"/>; its CTAs call the
+/// shared VM's intent hooks, so a card never needs a view reference and MainWindow stays untouched.
+/// </summary>
+public sealed class AccountSubCard : ReactiveObject
+{
+    public string Name { get; init; } = string.Empty;
+    public string TariffCaption { get; init; } = string.Empty;
+    public bool HasTariffCaption { get; init; }
+
+    public string HealthLabel { get; init; } = string.Empty;
+    public bool IsHealthActive { get; init; }
+    public bool IsHealthExpiring { get; init; }
+    public bool IsHealthExpired { get; init; }
+
+    public string ExpiryText { get; init; } = string.Empty;
+
+    /// <summary>Expiring (≤7d) — the expiry line reads in the warning tone.</summary>
+    public bool ExpiryUrgent { get; init; }
+
+    /// <summary>Expired — the expiry line reads in the destructive tone.</summary>
+    public bool ExpiryExpired { get; init; }
+
+    public string DevicesText { get; init; } = string.Empty;
+    public bool ShowUsageBar { get; init; }
+    public double UsageWidth { get; init; }
+
+    /// <summary>Expiring/expired ⇒ the «Продлить» CTA is promoted to Primary; active ⇒ it stays quiet (Tonal).</summary>
+    public bool RenewPrimary { get; init; }
+
+    /// <summary>Fixed card width (px) the carousel assigns from its viewport; reactive so a resize reflows every card.</summary>
+    [Reactive] public double CardWidth { get; set; } = 320;
+
+    public ReactiveCommand<Unit, Unit> RenewCmd { get; }
+    public ReactiveCommand<Unit, Unit> DevicesCmd { get; }
+
+    public AccountSubCard(AccountViewModel owner)
+    {
+        RenewCmd = ReactiveCommand.Create(owner.RequestBuy);
+        DevicesCmd = ReactiveCommand.Create(owner.RequestDevices);
+    }
 }
