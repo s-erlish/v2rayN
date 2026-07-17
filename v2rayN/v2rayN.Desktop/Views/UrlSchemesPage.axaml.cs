@@ -15,6 +15,11 @@ public partial class UrlSchemesPage : UserControl, ISubPage
 {
     private const string Scheme = "depv";
 
+    // Browser→app SSO return scheme. Distinct from the tunnel-action scheme «depv» because the site's
+    // safe-return allowlist only accepts a «departament…»-prefixed scheme (^departament[a-z0-9]*$), which
+    // «depv» does not match. Registered alongside «depv» so «Войти через сайт» can round-trip back.
+    private const string AuthScheme = "departamentvpn";
+
     public event EventHandler? BackRequested;
 
     public UrlSchemesPage()
@@ -30,6 +35,7 @@ public partial class UrlSchemesPage : UserControl, ISubPage
             new("depv://toggle", L.T("UrlSchemes_Toggle")),
             new("depv://import/{base64}", L.T("UrlSchemes_Import")),
             new("depv://add/{url}", L.T("UrlSchemes_AddByUrl")),
+            new("departamentvpn://auth", L.T("Common_SignInWebsite")),
         };
 
         btnBack.Click += (_, _) => BackRequested?.Invoke(this, EventArgs.Empty);
@@ -94,17 +100,9 @@ public partial class UrlSchemesPage : UserControl, ISubPage
                 txtStatus.Text = L.T("UrlSchemes_NoPath");
                 return;
             }
-            using var root = Registry.CurrentUser.CreateSubKey($@"Software\Classes\{Scheme}");
-            root.SetValue(null, "URL:departament protocol");
-            root.SetValue("URL Protocol", string.Empty);
-            using (var icon = root.CreateSubKey("DefaultIcon"))
-            {
-                icon.SetValue(null, $"\"{exe}\",0");
-            }
-            using (var cmd = root.CreateSubKey(@"shell\open\command"))
-            {
-                cmd.SetValue(null, $"\"{exe}\" \"%1\"");
-            }
+            // Register both the tunnel-action scheme and the browser→app sign-in return scheme.
+            RegisterScheme(Scheme, exe!);
+            RegisterScheme(AuthScheme, exe!);
             txtStatus.Text = L.T("UrlSchemes_Registered");
         }
         catch (Exception ex)
@@ -112,6 +110,21 @@ public partial class UrlSchemesPage : UserControl, ISubPage
             txtStatus.Text = L.T("UrlSchemes_RegisterFailed") + ex.Message;
         }
         RefreshStatusButtons();
+    }
+
+    private static void RegisterScheme(string scheme, string exe)
+    {
+        using var root = Registry.CurrentUser.CreateSubKey($@"Software\Classes\{scheme}");
+        root.SetValue(null, "URL:departament protocol");
+        root.SetValue("URL Protocol", string.Empty);
+        using (var icon = root.CreateSubKey("DefaultIcon"))
+        {
+            icon.SetValue(null, $"\"{exe}\",0");
+        }
+        using (var cmd = root.CreateSubKey(@"shell\open\command"))
+        {
+            cmd.SetValue(null, $"\"{exe}\" \"%1\"");
+        }
     }
 
     private void Unregister()
@@ -123,6 +136,7 @@ public partial class UrlSchemesPage : UserControl, ISubPage
         try
         {
             Registry.CurrentUser.DeleteSubKeyTree($@"Software\Classes\{Scheme}", throwOnMissingSubKey: false);
+            Registry.CurrentUser.DeleteSubKeyTree($@"Software\Classes\{AuthScheme}", throwOnMissingSubKey: false);
             txtStatus.Text = L.T("UrlSchemes_RemovedOk");
         }
         catch (Exception ex)

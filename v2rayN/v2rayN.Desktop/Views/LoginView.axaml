@@ -41,6 +41,8 @@
         <StreamGeometry x:Key="Geo.Login.Google">M12,11v2.4h5.6c-0.24,1.5 -1.7,4.4 -5.6,4.4 -3.37,0 -6.12,-2.79 -6.12,-6.2S8.63,5.4 12,5.4c1.92,0 3.2,0.82 3.94,1.52l2.68,-2.58C16.9,2.7 14.66,1.8 12,1.8 6.9,1.8 2.8,5.9 2.8,11S6.9,20.2 12,20.2c5.9,0 9.8,-4.15 9.8,-9.99 0,-0.67 -0.07,-1.18 -0.16,-1.69L12,11z</StreamGeometry>
         <!--  Конверт (mail) — глиф пред-состояний «письмо отправлено».  -->
         <StreamGeometry x:Key="Geo.Login.Mail">M20,4H4c-1.1,0 -1.99,0.9 -1.99,2L2,18c0,1.1 0.9,2 2,2h16c1.1,0 2,-0.9 2,-2V6c0,-1.1 -0.9,-2 -2,-2zM20,8l-8,5 -8,-5V6l8,5 8,-5v2z</StreamGeometry>
+        <!--  Глобус (public) — глиф «Войти через сайт» (браузер-хэндофф), тот же, что демотированная ссылка сайта в онбординге.  -->
+        <StreamGeometry x:Key="Geo.Login.Globe">M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2zM11,19.93c-3.95,-0.49 -7,-3.85 -7,-7.93 0,-0.62 0.08,-1.21 0.21,-1.79L9,15v1c0,1.1 0.9,2 2,2v1.93zM17.9,17.39c-0.26,-0.81 -1,-1.39 -1.9,-1.39h-1v-3c0,-0.55 -0.45,-1 -1,-1H8v-2h2c0.55,0 1,-0.45 1,-1V7h2c1.1,0 2,-0.9 2,-2v-0.41c2.93,1.19 5,4.06 5,7.41 0,2.08 -0.8,3.97 -2.1,5.39z</StreamGeometry>
 
         <!--  Тема поля Incy теперь ГЛОБАЛЬНАЯ (GlobalResources.axaml → TextBox.Incy). Локальный дубль
               удалён (P0): поля ссылаются на Theme="{StaticResource TextBox.Incy}" — рендерятся 1:1.  -->
@@ -78,7 +80,8 @@
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
             <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="CornerRadius" Value="10" />
+            <!--  Концентрично треку (Radius.Chip 12 − 4 паддинг = 8), а не off-scale 10.  -->
+            <Setter Property="CornerRadius" Value="8" />
             <Setter Property="HorizontalAlignment" Value="Stretch" />
             <Setter Property="HorizontalContentAlignment" Value="Center" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
@@ -107,7 +110,7 @@
         <Style Selector="Border.SoonPill">
             <Setter Property="Background" Value="{DynamicResource Brush.SurfaceVariant}" />
             <Setter Property="CornerRadius" Value="8" />
-            <Setter Property="Padding" Value="8,3" />
+            <Setter Property="Padding" Value="8,4" />
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
 
@@ -118,6 +121,13 @@
               никакого shake/bounce, только цвет.  -->
         <Style Selector="TextBox.fieldError /template/ Border#PART_BorderElement">
             <Setter Property="BorderBrush" Value="{DynamicResource Brush.Red}" />
+        </Style>
+
+        <!--  Маска пароля (§A3): лёгкий глиф • (U+2022) вместо тяжёлого ● (U+25CF) + межбуквенный
+              трекинг на самом презентере (не на всём TextBox, иначе разъехались бы email/watermark) —
+              точки «дышат», а не слипаются в жирную полосу. Каретка/выделение — акцент из TextBox.Incy.  -->
+        <Style Selector="TextBox.MaskField /template/ TextPresenter#PART_TextPresenter">
+            <Setter Property="LetterSpacing" Value="2" />
         </Style>
 
         <!--  Скрытое реальное поле 2FA под сегментными ячейками: прозрачная рамка/фон даже в
@@ -285,6 +295,14 @@
                                 Foreground="{DynamicResource Brush.Accent}" />
                         </Border>
 
+                        <!--  Вордмарк departament (паритет с онбордингом: общий щит + вордмарк — единая
+                              бренд-идентичность на переходе онбординг↔вход). Бренд-имя не переводится.  -->
+                        <TextBlock
+                            Margin="0,8,0,0"
+                            HorizontalAlignment="Center"
+                            Classes="Title"
+                            Text="departament" />
+
                         <!--  Заголовок + подзаголовок (по центру, sentence-case). Текст меняется по режиму
                               (вход/регистрация) в code-behind (ApplyMode). Ритм: title 16.  -->
                         <TextBlock
@@ -322,86 +340,9 @@
                             </Grid>
                         </Border>
 
-                        <!--  Первичный CTA — вход через Telegram (акцент, самолётик). Активен всегда,
-                              кроме времени опроса подтверждения (SetAwaiting).  -->
-                        <Button
-                            x:Name="TelegramButton"
-                            Margin="0,24,0,0"
-                            HorizontalAlignment="Stretch"
-                            HorizontalContentAlignment="Center"
-                            VerticalContentAlignment="Center"
-                            Classes="Primary Tall">
-                            <StackPanel
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Center"
-                                Orientation="Horizontal"
-                                Spacing="8">
-                                <PathIcon
-                                    Width="20"
-                                    Height="20"
-                                    Data="{StaticResource Geo.Login.Telegram}"
-                                    Foreground="{DynamicResource Brush.OnAccent}" />
-                                <TextBlock VerticalAlignment="Center" Text="{loc:T Common_SignInTelegram}" />
-                            </StackPanel>
-                        </Button>
-
-                        <!--  Google — ЧЕСТНО неактивная кнопка «Скоро». Десктоп-приложение не располагает
-                              собственным google_client_id, а Вариант A запрещает правки бэкенда, поэтому
-                              настоящего id_token-флоу нет — показываем отключённую affordance вместо
-                              сломанной кнопки. РАЗБЛОКИРУЕТ: публичный desktop google_client_id + нативный
-                              loopback-redirect (http://127.0.0.1) в том же Google-проекте (PKCE),
-                              ЛИБО добавление desktop-audience в verifyIdToken на бэкенде (1 строка).
-                              Тогда: системный браузер → Authorization Code + PKCE → обмен на id_token →
-                              существующий IDepartamentApiClient.LoginGoogle(idToken).  -->
-                        <Button
-                            x:Name="GoogleButton"
-                            Margin="0,12,0,0"
-                            HorizontalAlignment="Stretch"
-                            Classes="Tonal Tall"
-                            IsEnabled="False"
-                            ToolTip.Tip="{loc:T Login_ComingSoon}">
-                            <Grid ColumnDefinitions="Auto,*,Auto">
-                                <PathIcon
-                                    Grid.Column="0"
-                                    Width="20"
-                                    Height="20"
-                                    Data="{StaticResource Geo.Login.Google}"
-                                    Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
-                                <TextBlock
-                                    Grid.Column="1"
-                                    Margin="8,0,0,0"
-                                    HorizontalAlignment="Left"
-                                    VerticalAlignment="Center"
-                                    Text="{loc:T Login_ContinueGoogle}" />
-                                <Border Grid.Column="2" Classes="SoonPill">
-                                    <TextBlock
-                                        Classes="Caption"
-                                        Foreground="{DynamicResource Brush.OnSurfaceVariant}"
-                                        Text="{loc:T Login_ComingSoon}" />
-                                </Border>
-                            </Grid>
-                        </Button>
-
-                        <!--  Разделитель «или»: две тонкие линии + подпись по центру. Ритм: divider 24.  -->
-                        <Grid Margin="0,24,0,0" ColumnDefinitions="*,Auto,*">
-                            <Border
-                                Grid.Column="0"
-                                Height="1"
-                                VerticalAlignment="Center"
-                                Background="{DynamicResource Brush.OutlineVariant}" />
-                            <TextBlock
-                                Grid.Column="1"
-                                Margin="12,0"
-                                Classes="Caption"
-                                Text="{loc:T Login_Or}" />
-                            <Border
-                                Grid.Column="2"
-                                Height="1"
-                                VerticalAlignment="Center"
-                                Background="{DynamicResource Brush.OutlineVariant}" />
-                        </Grid>
-
-                        <!--  Email (auth_email_hint). Enter переводит фокус на пароль. Ритм: email 24.  -->
+                        <!--  Email (auth_email_hint). Enter переводит фокус на пароль. Форма email/пароля —
+                              первичный способ входа: CTA Telegram/сайт демотированы ПОД форму (§A2), чтобы
+                              путь email/сайт не «зажимался» самолётиком сверху. Ритм: email 24.  -->
                         <TextBox
                             x:Name="EmailBox"
                             Margin="0,24,0,0"
@@ -411,8 +352,8 @@
                         <!--  Живая подсказка невалидного email (auth_email_invalid). Текст = RedText.  -->
                         <TextBlock
                             x:Name="EmailError"
-                            Margin="4,6,4,0"
-                            FontSize="12"
+                            Margin="0,8,0,0"
+                            Classes="Caption"
                             Foreground="{DynamicResource Brush.RedText}"
                             IsVisible="False"
                             Text="{loc:T Login_EmailInvalid}"
@@ -422,7 +363,8 @@
                         <TextBox
                             x:Name="PasswordBox"
                             Margin="0,12,0,0"
-                            PasswordChar="●"
+                            Classes="MaskField"
+                            PasswordChar="•"
                             Text="{Binding LoginPassword, Mode=TwoWay}"
                             Theme="{StaticResource TextBox.Incy}"
                             Watermark="{loc:T Login_Password}">
@@ -456,7 +398,7 @@
                         <!--  Подсказка требований к паролю — ТОЛЬКО в режиме регистрации (муто, не ошибка).  -->
                         <TextBlock
                             x:Name="RegisterPasswordHint"
-                            Margin="4,6,4,0"
+                            Margin="0,8,0,0"
                             Classes="Caption"
                             Foreground="{DynamicResource Brush.OnSurfaceVariant}"
                             IsVisible="False"
@@ -467,36 +409,40 @@
                         <TextBox
                             x:Name="ConfirmPasswordBox"
                             Margin="0,12,0,0"
+                            Classes="MaskField"
                             IsVisible="False"
-                            PasswordChar="●"
+                            PasswordChar="•"
                             Text="{Binding RegisterConfirmPassword, Mode=TwoWay}"
                             Theme="{StaticResource TextBox.Incy}"
                             Watermark="{loc:T Login_ConfirmPassword}" />
                         <!--  Живая подсказка несовпадения паролей (RedText).  -->
                         <TextBlock
                             x:Name="ConfirmPasswordError"
-                            Margin="4,8,4,0"
+                            Margin="0,8,0,0"
                             Classes="Caption"
                             Foreground="{DynamicResource Brush.RedText}"
                             IsVisible="False"
                             Text="{loc:T Login_PasswordMismatch}"
                             TextWrapping="Wrap" />
 
-                        <!--  Вторичный CTA «Войти через сайт» (тональная) + спиннер поверх при SiteLoading.
-                              В режиме регистрации скрыт — его заменяет RegisterSubmitButton ниже.  -->
+                        <!--  Первичный CTA формы — вход по email+паролю «Войти» (ЕДИНСТВЕННЫЙ залитый акцент
+                              экрана) + спиннер поверх при SiteLoading. В режиме регистрации скрыт — его
+                              заменяет RegisterSubmitButton ниже. Раньше был мислейбл «Войти через сайт»
+                              (тональная): честный лейбл = это отправка email/пароля, а браузер-хэндофф
+                              «Войти через сайт» демотирован в блок альтернатив ниже (§A1/§A2).  -->
                         <Panel x:Name="SiteButtonHost" Margin="0,16,0,0">
                             <Button
                                 x:Name="SiteButton"
                                 HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Center"
                                 VerticalContentAlignment="Center"
-                                Classes="Tonal Tall"
+                                Classes="Primary Tall"
                                 Command="{Binding LoginSiteCmd}">
                                 <TextBlock
                                     x:Name="SiteButtonLabel"
                                     HorizontalAlignment="Center"
                                     TextAlignment="Center"
-                                    Text="{loc:T Common_SignInWebsite}" />
+                                    Text="{loc:T Login_SubmitSignIn}" />
                             </Button>
                             <Ellipse
                                 x:Name="SiteSpinner"
@@ -507,21 +453,21 @@
                                 Classes="Spinner"
                                 IsVisible="False"
                                 RenderTransformOrigin="50%,50%"
-                                Stroke="{DynamicResource Brush.Accent}"
+                                Stroke="{DynamicResource Brush.OnAccent}"
                                 StrokeDashArray="6.9,20.8"
                                 StrokeLineCap="Round"
                                 StrokeThickness="2.5" />
                         </Panel>
 
-                        <!--  CTA регистрации «Создать аккаунт» — ТОЛЬКО в режиме регистрации. Тональная
-                              (единственный акцент остаётся за Telegram) + инлайн-спиннер при RegisterLoading.  -->
+                        <!--  CTA регистрации «Создать аккаунт» — ТОЛЬКО в режиме регистрации. Залитый акцент
+                              (в регистрации это единственное первичное действие) + инлайн-спиннер при RegisterLoading.  -->
                         <Panel x:Name="RegisterButtonHost" Margin="0,16,0,0" IsVisible="False">
                             <Button
                                 x:Name="RegisterSubmitButton"
                                 HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Center"
                                 VerticalContentAlignment="Center"
-                                Classes="Tonal Tall"
+                                Classes="Primary Tall"
                                 Command="{Binding RegisterCmd}">
                                 <TextBlock
                                     x:Name="RegisterButtonLabel"
@@ -538,7 +484,7 @@
                                 Classes="Spinner"
                                 IsVisible="False"
                                 RenderTransformOrigin="50%,50%"
-                                Stroke="{DynamicResource Brush.Accent}"
+                                Stroke="{DynamicResource Brush.OnAccent}"
                                 StrokeDashArray="6.9,20.8"
                                 StrokeLineCap="Round"
                                 StrokeThickness="2.5" />
@@ -565,6 +511,136 @@
                                 Classes="LinkAction"
                                 Command="{Binding PasswordResetCmd}"
                                 Content="{loc:T Login_ForgotPassword}" />
+                        </StackPanel>
+
+                        <!--  ==================== Альтернативные способы входа (ДЕМОТИРОВАНЫ под форму) ====================
+                              §A2: раньше CTA Telegram стоял НАД формой email/сайта и «зажимал» её. Теперь форма
+                              email — первична (её «Войти» — единственный залитый акцент), а Telegram + браузер-
+                              хэндофф «Войти через сайт» + «войти по коду» демотированы сюда, под разделитель «или»,
+                              тональными/текст-действиями. Виден ТОЛЬКО в режиме входа (в регистрации скрыт).  -->
+                        <StackPanel x:Name="AltMethodsBlock" Margin="0,24,0,0">
+                            <!--  Разделитель «или»: две тонкие линии + подпись по центру.  -->
+                            <Grid ColumnDefinitions="*,Auto,*">
+                                <Border
+                                    Grid.Column="0"
+                                    Height="1"
+                                    VerticalAlignment="Center"
+                                    Background="{DynamicResource Brush.OutlineVariant}" />
+                                <TextBlock
+                                    Grid.Column="1"
+                                    Margin="12,0"
+                                    Classes="Caption"
+                                    Text="{loc:T Login_Or}" />
+                                <Border
+                                    Grid.Column="2"
+                                    Height="1"
+                                    VerticalAlignment="Center"
+                                    Background="{DynamicResource Brush.OutlineVariant}" />
+                            </Grid>
+
+                            <!--  ОДНА тональная альтернатива — Telegram (§A2): демотирован из первичного акцента,
+                                  но остаётся заметным способом входа. Остальные (сайт / код / Google) — тихие
+                                  текст-ссылки ниже, чтобы под формой НЕ было «стопки одинаковых кнопок» (AI-slop
+                                  tell) и один filled-акцент оставался за «Войти». Активен, кроме опроса.  -->
+                            <Button
+                                x:Name="TelegramButton"
+                                Margin="0,16,0,0"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Center"
+                                VerticalContentAlignment="Center"
+                                Classes="Tonal Tall">
+                                <StackPanel
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Orientation="Horizontal"
+                                    Spacing="8">
+                                    <PathIcon
+                                        Width="20"
+                                        Height="20"
+                                        Data="{StaticResource Geo.Login.Telegram}"
+                                        Foreground="{DynamicResource Brush.OnSurface}" />
+                                    <TextBlock VerticalAlignment="Center" Text="{loc:T Common_SignInTelegram}" />
+                                </StackPanel>
+                            </Button>
+
+                            <!--  «Войти через сайт» — браузер-хэндофф (§A1), теперь тихой ссылкой (не второй
+                                  тональной кнопкой): открывает /app-login сайта, где залогиненная веб-сессия
+                                  чеканит одноразовый код и возвращает его в приложение по departamentvpn://auth.  -->
+                            <Button
+                                x:Name="SiteBrowserButton"
+                                Margin="0,14,0,0"
+                                HorizontalAlignment="Center"
+                                Classes="LinkAction"
+                                Command="{Binding LoginBrowserCmd}">
+                                <StackPanel
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Orientation="Horizontal"
+                                    Spacing="8">
+                                    <PathIcon
+                                        Width="18"
+                                        Height="18"
+                                        Data="{StaticResource Geo.Login.Globe}"
+                                        Foreground="{DynamicResource Brush.Accent}" />
+                                    <TextBlock VerticalAlignment="Center" Text="{loc:T Common_SignInWebsite}" />
+                                </StackPanel>
+                            </Button>
+
+                            <!--  «У меня есть код» — ручной фолбэк браузер-хэндоффа (§A1 #5): для платформ/кейсов,
+                                  где callback-схема не срабатывает. Ссылка разворачивает поле для вставки кода
+                                  (иная формулировка, чтобы не все действия начинались с «Войти…»).  -->
+                            <Button
+                                x:Name="CodeEntryToggle"
+                                Margin="0,12,0,0"
+                                HorizontalAlignment="Center"
+                                Classes="LinkAction"
+                                Content="{loc:T Login_ByCode}" />
+                            <StackPanel x:Name="CodeEntryHost" Margin="0,8,0,0" IsVisible="False">
+                                <TextBox
+                                    x:Name="HandoffCodeBox"
+                                    Text="{Binding HandoffCodeInput, Mode=TwoWay}"
+                                    Theme="{StaticResource TextBox.Incy}"
+                                    Watermark="{loc:T Login_CodePaste}" />
+                                <Button
+                                    x:Name="CodeSubmitButton"
+                                    Margin="0,8,0,0"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Center"
+                                    VerticalContentAlignment="Center"
+                                    Classes="Tonal Tall"
+                                    Command="{Binding LoginByCodeCmd}"
+                                    Content="{loc:T Login_SubmitSignIn}" />
+                            </StackPanel>
+
+                            <!--  Google — ЧЕСТНО неактивная «Скоро», ДЕМОТИРОВАНА из hero-слота (§A4) в
+                                  самый низ альтернатив текст-действием, а не полновесной кнопкой.  -->
+                            <Button
+                                x:Name="GoogleButton"
+                                Margin="0,12,0,0"
+                                HorizontalAlignment="Center"
+                                Classes="LinkAction"
+                                Foreground="{DynamicResource Brush.OnSurfaceVariant}"
+                                IsEnabled="False"
+                                ToolTip.Tip="{loc:T Login_ComingSoon}">
+                                <StackPanel
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Orientation="Horizontal"
+                                    Spacing="8">
+                                    <PathIcon
+                                        Width="18"
+                                        Height="18"
+                                        Data="{StaticResource Geo.Login.Google}"
+                                        Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+                                    <TextBlock VerticalAlignment="Center" Text="{loc:T Login_ContinueGoogle}" />
+                                    <Border Classes="SoonPill">
+                                        <TextBlock
+                                            Classes="Caption"
+                                            Foreground="{DynamicResource Brush.OnSurfaceVariant}"
+                                            Text="{loc:T Login_ComingSoon}" />
+                                    </Border>
+                                </StackPanel>
+                            </Button>
                         </StackPanel>
 
                         <!--  Блок 2FA (TOTP): виден только когда бэкенд запросил код (layout_2fa).  -->
@@ -614,8 +690,8 @@
                             <!--  Живая подсказка (auth_code_invalid). Текст = RedText.  -->
                             <TextBlock
                                 x:Name="CodeError"
-                                Margin="4,6,4,0"
-                                FontSize="12"
+                                Margin="0,8,0,0"
+                                Classes="Caption"
                                 Foreground="{DynamicResource Brush.RedText}"
                                 IsVisible="False"
                                 Text="{loc:T Login_CodeIs6}"

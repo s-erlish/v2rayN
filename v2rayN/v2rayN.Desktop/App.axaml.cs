@@ -1,3 +1,4 @@
+using Microsoft.Win32;
 using ServiceLib.Handler.SysProxy;
 using v2rayN.Desktop.Common;
 using v2rayN.Desktop.Views;
@@ -59,6 +60,7 @@ public partial class App : Application
             {
                 SetupTrayMenu();
                 SetupConnectivityHooks(desktop);
+                SetupAppHandoff();
             }
 
             if (OperatingSystem.IsMacOS())
@@ -139,6 +141,103 @@ public partial class App : Application
     }
 
     #endregion MacOS Activation
+
+    #region Browser→app SSO handoff (departamentvpn://auth?code=…)
+
+    /// <summary>
+    /// Registers the <c>departamentvpn://</c> URL scheme (Windows, per-user, no admin) so the OS routes the
+    /// site's <c>/app-login</c> return back to the app, and wires the receiver that redeems the handoff
+    /// code. The scheme name matches the site's safe-return allowlist (<c>^departament[a-z0-9]*$</c>), so a
+    /// browser→app return needs zero site changes. On non-Windows the registry step is skipped (guarded);
+    /// the pipe receiver + «войти по коду» fallback still work.
+    /// </summary>
+    private void SetupAppHandoff()
+    {
+        RegisterAuthScheme();
+        // The pipe/cold-start URL is delivered on a background thread; marshal to the UI thread to route it.
+        AppHandoffChannel.SetHandler(url => Dispatcher.UIThread.Post(() => OnAuthCallbackUrl(url)));
+    }
+
+    private static void RegisterAuthScheme()
+    {
+        if (!Utils.IsWindows())
+        {
+            return;
+        }
+        try
+        {
+            var exe = Environment.ProcessPath;
+            if (exe.IsNullOrEmpty())
+            {
+                return;
+            }
+            using var root = Registry.CurrentUser.CreateSubKey(@"Software\Classes\departamentvpn");
+            root.SetValue(null, "URL:departament protocol");
+            root.SetValue("URL Protocol", string.Empty);
+            using (var icon = root.CreateSubKey("DefaultIcon"))
+            {
+                icon.SetValue(null, $"\"{exe}\",0");
+            }
+            using (var cmd = root.CreateSubKey(@"shell\open\command"))
+            {
+                cmd.SetValue(null, $"\"{exe}\" \"%1\"");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog("RegisterAuthScheme", ex);
+        }
+    }
+
+    private void OnAuthCallbackUrl(string url)
+    {
+        try
+        {
+            var code = ParseHandoffCode(url);
+            if (code.IsNullOrEmpty())
+            {
+                return;
+            }
+            if ((ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow is MainWindow mainWindow)
+            {
+                mainWindow.HandleAuthCallback(code!);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog("OnAuthCallbackUrl", ex);
+        }
+    }
+
+    /// <summary>Extracts the <c>code</c> query value from <c>departamentvpn://auth?code=…</c> (manual parse
+    /// — a custom scheme isn't guaranteed to expose <see cref="Uri.Query"/>, and this avoids a System.Web dep).</summary>
+    private static string? ParseHandoffCode(string url)
+    {
+        if (url.IsNullOrEmpty())
+        {
+            return null;
+        }
+        // Take the query/fragment portion, then match the pair whose key is EXACTLY "code" — a plain
+        // IndexOf("code=") would also match "barcode="/"mycode=" if the return URL ever gains such a param.
+        var qStart = url.IndexOfAny(new[] { '?', '#' });
+        var query = qStart >= 0 ? url.Substring(qStart + 1) : url;
+        foreach (var pair in query.Split('&', '#'))
+        {
+            var eq = pair.IndexOf('=');
+            if (eq <= 0)
+            {
+                continue;
+            }
+            if (pair.Substring(0, eq).Trim().Equals("code", StringComparison.OrdinalIgnoreCase))
+            {
+                var value = Uri.UnescapeDataString(pair.Substring(eq + 1).Trim());
+                return value.IsNullOrEmpty() ? null : value;
+            }
+        }
+        return null;
+    }
+
+    #endregion Browser→app SSO handoff
 
     #region Connectivity hooks (network change → core health check)
 

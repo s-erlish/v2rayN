@@ -225,6 +225,10 @@ public class AccountViewModel : MyReactiveObject
 
     [Reactive] public string TwoFaCode { get; set; } = string.Empty;
 
+    /// <summary>The one-time handoff code the user can paste in the «войти по коду» fallback field
+    /// (for platforms/edge cases where the <c>departamentvpn://auth</c> scheme callback doesn't fire).</summary>
+    [Reactive] public string HandoffCodeInput { get; set; } = string.Empty;
+
     /// <summary>The balance top-up amount (₽) the user typed in the «Пополнить» flyout.</summary>
     [Reactive] public string TopUpAmount { get; set; } = string.Empty;
 
@@ -262,6 +266,15 @@ public class AccountViewModel : MyReactiveObject
     public ReactiveCommand<Unit, Unit> LoadDevicesCmd { get; }
     public ReactiveCommand<Unit, Unit> LoginTelegramCmd { get; }
     public ReactiveCommand<Unit, Unit> LoginSiteCmd { get; }
+
+    /// <summary>«Войти через сайт» — opens the site's <c>/app-login</c> page in the system browser. A
+    /// logged-in web session mints a one-time code there and returns to the app via the
+    /// <c>departamentvpn://auth?code=…</c> scheme (redeemed by <see cref="CompleteAppHandoff"/>).</summary>
+    public ReactiveCommand<Unit, Unit> LoginBrowserCmd { get; }
+
+    /// <summary>«Войти по коду» — redeems a manually pasted handoff code (fallback when the scheme
+    /// callback doesn't fire) via the same <see cref="CompleteAppHandoff"/> path.</summary>
+    public ReactiveCommand<Unit, Unit> LoginByCodeCmd { get; }
 
     /// <summary>Start-page email+password registration (also the «отправить снова» action on the verify screen).</summary>
     public ReactiveCommand<Unit, Unit> RegisterCmd { get; }
@@ -326,6 +339,8 @@ public class AccountViewModel : MyReactiveObject
         LoadDevicesCmd = ReactiveCommand.CreateFromTask(LoadActiveDevices);
         LoginTelegramCmd = ReactiveCommand.CreateFromTask(StartTelegramLogin);
         LoginSiteCmd = ReactiveCommand.CreateFromTask(LoginSite);
+        LoginBrowserCmd = ReactiveCommand.Create(OpenSiteLoginBrowser);
+        LoginByCodeCmd = ReactiveCommand.CreateFromTask(() => CompleteAppHandoff(HandoffCodeInput));
         RegisterCmd = ReactiveCommand.CreateFromTask(Register);
         MagicLinkCmd = ReactiveCommand.CreateFromTask(RequestMagicLink);
         PasswordResetCmd = ReactiveCommand.CreateFromTask(RequestPasswordReset);
@@ -349,6 +364,8 @@ public class AccountViewModel : MyReactiveObject
                 LoadDevicesCmd.ThrownExceptions,
                 LoginTelegramCmd.ThrownExceptions,
                 LoginSiteCmd.ThrownExceptions,
+                LoginBrowserCmd.ThrownExceptions,
+                LoginByCodeCmd.ThrownExceptions,
                 RegisterCmd.ThrownExceptions,
                 MagicLinkCmd.ThrownExceptions,
                 PasswordResetCmd.ThrownExceptions,
@@ -858,6 +875,72 @@ public class AccountViewModel : MyReactiveObject
                     CurrentLoginState = new LoginState.Idle();
                 });
             }
+        }
+        catch (ApiError e)
+        {
+            RunOnUi(() => CurrentLoginState = new LoginState.Error(e));
+        }
+    }
+
+    /// <summary>Base URL of the site's app-login handoff page (see departament-site AppLoginPage).</summary>
+    private const string SiteLoginUrl = "https://departament.site/app-login";
+
+    /// <summary>Custom URL scheme the site returns to (matches its allowlist <c>^departament[a-z0-9]*$</c>).</summary>
+    public const string AppScheme = "departamentvpn";
+
+    /// <summary>
+    /// «Войти через сайт»: opens the site's <c>/app-login</c> page in the system browser, passing the
+    /// app's custom-scheme return URL. When the web session is already signed in the site mints a one-time
+    /// handoff code and redirects the browser to <c>departamentvpn://auth?code=…</c>, which the OS routes
+    /// back to the app (single-instance IPC → <see cref="CompleteAppHandoff"/>). No backend/site change is
+    /// needed: the site already honours a <c>departament…://</c> return in its safe-return allowlist.
+    /// </summary>
+    private void OpenSiteLoginBrowser()
+    {
+        RunOnUi(() =>
+        {
+            if (CurrentLoginState is LoginState.Error)
+            {
+                CurrentLoginState = new LoginState.Idle();
+            }
+        });
+        var url = $"{SiteLoginUrl}?return={AppScheme}://auth";
+        try
+        {
+            ProcUtils.ProcessStart(url);
+        }
+        catch
+        {
+            RunOnUi(() => AppEvents.SendSnackMsgRequested.Publish(L.T("Common_SomethingWrong")));
+        }
+    }
+
+    /// <summary>
+    /// Redeems a one-time app-handoff code (delivered by the <c>departamentvpn://auth</c> scheme callback
+    /// or pasted into the «войти по коду» fallback) for a session. Enters
+    /// <see cref="LoginState.SiteHandoffLoading"/> while the code is exchanged, then runs the SAME
+    /// <see cref="OnAuthenticated"/> success path as email/Telegram login. An expired/invalid code surfaces
+    /// as <see cref="LoginState.Error"/>. Safe to call from any thread.
+    /// </summary>
+    public async Task CompleteAppHandoff(string code)
+    {
+        var trimmed = code?.Trim() ?? string.Empty;
+        if (trimmed.IsNullOrEmpty())
+        {
+            return;
+        }
+        _telegramCts?.Cancel();
+        _registerCts?.Cancel();
+        RunOnUi(() =>
+        {
+            TwoFaTempToken = null;
+            CurrentLoginState = new LoginState.SiteHandoffLoading();
+        });
+        try
+        {
+            var profile = await _authManager.ConsumeAppHandoff(trimmed);
+            RunOnUi(() => HandoffCodeInput = string.Empty);
+            await OnAuthenticated(profile);
         }
         catch (ApiError e)
         {

@@ -60,6 +60,7 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     private bool _isEmpty = true;
     private bool _isSyncing;                     // E3: идёт пост-логин импорт → оверлей синхронизации
     private bool _isStartupLoading;              // Bug4: холодный старт с сохранённой сессией → оверлей загрузки (НЕ гейт входа)
+    private bool _isLoggedIn;                    // A1: залогинен ли пользователь → пустое состояние ведёт на Главную, а не на онбординг-вход
     private bool _layoutInitialized;             // C6: первый ApplyLayoutMode без кроссфейда морфинга
 
     // ОДИН экземпляр AccountViewModel на всё приложение: делится между вкладкой «Аккаунт»
@@ -836,7 +837,14 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         //     входа (иначе у уже-вошедшего пользователя ~2с мелькал бы экран «Войдите в аккаунт»).
         // Оба сигнала снимаются только ПОСЛЕ завершения загрузки, к тому моменту _isEmpty уже false
         // (сервера пришли) → кадр уходит прямо в заполненный bodyRoot без промежуточного онбординга.
-        Control target = (_isSyncing || _isStartupLoading) ? accountSyncView : _isEmpty ? onboardingView : bodyRoot;
+        //
+        // A1: онбординг-гейт (с CTA входа) осмыслен ТОЛЬКО для вышедшего из аккаунта пользователя. Если
+        // пользователь ВОШЁЛ, но подписок/серверов нет (пустой аккаунт), НЕ показываем ему снова экран
+        // входа — ведём в оболочку «Главной» (там пустое состояние героя + вкладка «Аккаунт» с «Купить
+        // подписку»), а не на онбординг-вход. Онбординг остаётся первым кадром только для logged-out.
+        Control target = (_isSyncing || _isStartupLoading)
+            ? accountSyncView
+            : (_isEmpty && !_isLoggedIn) ? onboardingView : bodyRoot;
         CrossfadeShellTo(target);
     }
 
@@ -1027,6 +1035,38 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
                 _isEmpty = empty;
                 ApplyShellVisibility();
             });
+
+        // A1: вошёл/вышел из аккаунта → пере-оцениваем гейт (logged-in + пусто ведёт на Главную, а не
+        // на онбординг-вход). Держится в паре с IsEmpty выше.
+        _accountVm.WhenAnyValue(x => x.IsLoggedIn)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .Subscribe(loggedIn =>
+            {
+                _isLoggedIn = loggedIn;
+                ApplyShellVisibility();
+            });
+    }
+
+    /// <summary>
+    /// Browser→app SSO callback (departamentvpn://auth?code=…): brings the window forward so the sign-in
+    /// completion is visible, ensures the login sub-page is up (so the «завершаем вход через сайт…» step +
+    /// success beat render), and redeems the one-time handoff code on the shared <see cref="AccountViewModel"/>
+    /// — the SAME terminal path as an email/Telegram login. A duplicate/stale callback after we're already
+    /// signed in is ignored.
+    /// </summary>
+    public void HandleAuthCallback(string code)
+    {
+        ShowHideWindow(true);
+        Activate();
+        if (_accountVm.IsLoggedIn)
+        {
+            return;
+        }
+        if (_subStack.LastOrDefault() is not LoginView)
+        {
+            OpenLogin();
+        }
+        _ = _accountVm.CompleteAppHandoff(code);
     }
 
     #region Sub-page host (Buy / Login / Devices / History)
@@ -1176,11 +1216,13 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         _accountVm.LoginTelegramCmd.Execute().Subscribe();
     }
 
-    // Онбординг «Войти через сайт»: открываем LoginView прямо на форме входа по email/паролю
-    // (site-авторизация требует ввод, поэтому «немедленно» = сразу форма сайта, без выбора способа).
+    // Онбординг «Войти через сайт»: открываем LoginView (чтобы возврату из браузера было куда сесть и
+    // чтобы показать шаг «завершаем вход через сайт…») И СРАЗУ запускаем браузер-хэндофф (§A1): сайт
+    // /app-login чеканит одноразовый код у залогиненной веб-сессии и возвращается по departamentvpn://auth.
     public void OpenLoginSite()
     {
         OpenLogin();
+        _accountVm.LoginBrowserCmd.Execute().Subscribe();
     }
 
     // Общий вход для суб-страниц НАСТРОЕК (DNS, Маршрутизация, Прокси по приложениям, Провайдеры,

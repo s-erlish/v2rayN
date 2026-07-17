@@ -73,6 +73,10 @@ public partial class LoginView : UserControl
         Verify,
         Magic,
         Reset,
+
+        // Browser→app SSO handoff: a one-time code is being redeemed (departamentvpn://auth callback or a
+        // pasted code). Transient, self-resolving — no resend/back actions; the ring spins while it redeems.
+        Handoff,
     }
 
     // Ключ ошибки ИМЕННО логин-потока (LoginState.Error → auth_err_*); имеет приоритет над общим
@@ -135,6 +139,11 @@ public partial class LoginView : UserControl
         // Пред-состояния «письмо отправлено»: повторная отправка (по виду) и возврат ко входу.
         ResendButton.Click += OnResendClick;
         BackToSignInButton.Click += OnBackToSignInClick;
+
+        // «Войти по коду» (§A1 #5): разворачивает поле ручного ввода handoff-кода (фолбэк, если callback-
+        // схема departamentvpn://auth не сработала). Enter в поле = отправить код тем же путём, что кнопка.
+        CodeEntryToggle.Click += OnToggleCodeEntry;
+        HandoffCodeBox.KeyDown += OnHandoffCodeKeyDown;
 
         // Отправка с клавиатуры (паритет imeOptions actionNext/actionDone).
         EmailBox.KeyDown += OnEmailKeyDown;
@@ -333,6 +342,17 @@ public partial class LoginView : UserControl
                 SetAwaiting(false);
                 SetSiteBusy(true);
                 SetLoginError(string.Empty);
+                break;
+
+            case LoginState.SiteHandoffLoading:
+                // Browser→app handoff code is being redeemed: focused «завершаем вход через сайт…» step
+                // (reuses the pending block with the handoff kind — spinner, no resend/back), then Success
+                // plays the badge beat over it exactly like an email/2FA login.
+                SetSiteBusy(false);
+                SetRegisterBusy(false);
+                SetLoginError(string.Empty);
+                ConfigureEmailPending(PendingKind.Handoff, string.Empty);
+                ShowBlock(ViewBlock.EmailPending);
                 break;
 
             case LoginState.RegisterLoading:
@@ -596,19 +616,34 @@ public partial class LoginView : UserControl
         SubtitleText.Text = L.T(_registerMode ? "Login_SubtitleRegister" : "Login_Subtitle");
         PasswordBox.Watermark = L.T(_registerMode ? "Login_PasswordRegister" : "Login_Password");
 
+        UpdateFormVisibility();
+        UpdateSiteGate();
+        UpdateRegisterGate();
+    }
+
+    /// <summary>
+    /// Gates the mutually-exclusive form regions: register fields + «Создать аккаунт» (register mode),
+    /// email submit «Войти» + passwordless links + the demoted alternates block (sign-in mode), and the
+    /// 2FA block (sign-in + tempToken). While 2FA is up the sign-in submit + alternates are hidden so the
+    /// focused code step is the ONLY filled accent (its «Подтвердить»). Called from both <see cref="ApplyMode"/>
+    /// and <see cref="Apply2Fa"/> so the two toggles never disagree.
+    /// </summary>
+    private void UpdateFormVisibility()
+    {
+        var signInForm = !_registerMode && !_twoFaVisible;
+
         // Только регистрация.
         RegisterPasswordHint.IsVisible = _registerMode;
         ConfirmPasswordBox.IsVisible = _registerMode;
-        RegisterButtonHost.IsVisible = _registerMode;
+        RegisterButtonHost.IsVisible = _registerMode && !_twoFaVisible;
 
-        // Только вход.
-        SiteButtonHost.IsVisible = !_registerMode;
-        PasswordlessLinks.IsVisible = !_registerMode;
+        // Только вход (и не во время 2FA).
+        SiteButtonHost.IsVisible = signInForm;
+        PasswordlessLinks.IsVisible = signInForm;
+        AltMethodsBlock.IsVisible = signInForm;
+
         // Блок 2FA осмыслен только во входе; в регистрации всегда скрыт (иначе — по tempToken).
         TwoFaBlock.IsVisible = !_registerMode && _twoFaVisible;
-
-        UpdateSiteGate();
-        UpdateRegisterGate();
     }
 
     /// <summary>Настраивает пред-экран «письмо отправлено» под вид состояния (verify / magic / reset).</summary>
@@ -619,14 +654,22 @@ public partial class LoginView : UserControl
         {
             PendingKind.Magic => ("Login_MagicSentTitle", "Login_MagicSentHint"),
             PendingKind.Reset => ("Login_ResetSentTitle", "Login_ResetSentHint"),
+            PendingKind.Handoff => ("Login_SiteHandoff", string.Empty),
             _ => ("Login_VerifyTitle", "Login_VerifyHint"),
         };
         PendingTitle.Text = L.T(titleKey);
-        PendingHint.Text = L.F(hintKey, email);
+        PendingHint.Text = hintKey.IsNotEmpty() ? L.F(hintKey, email) : string.Empty;
+        PendingHint.IsVisible = hintKey.IsNotEmpty();
 
-        // Только verify-email реально поллит логин → крутим кольцо; magic/reset — спокойный статичный
-        // «отправлено» (дуга скрыта, остаётся трек + конверт). Под lite дугу не показываем вовсе.
-        var spin = kind == PendingKind.Verify && !IsReducedMotion();
+        // The handoff step is transient + self-resolving — its resend/back actions would be meaningless
+        // (there's nothing to re-send and the redeem finishes on its own), so hide them for that kind only.
+        var transient = kind == PendingKind.Handoff;
+        ResendButton.IsVisible = !transient;
+        BackToSignInButton.IsVisible = !transient;
+
+        // verify-email polls login and the handoff redeems a code → spin the ring; magic/reset are a calm
+        // static «отправлено» (arc hidden, track + envelope remain). Under lite the arc is not shown at all.
+        var spin = (kind == PendingKind.Verify || kind == PendingKind.Handoff) && !IsReducedMotion();
         SetSpinning(PendingSpinner, spin);
         PendingSpinner.Opacity = spin ? 1 : 0;
     }
@@ -640,7 +683,7 @@ public partial class LoginView : UserControl
 
         if (appeared)
         {
-            TwoFaBlock.IsVisible = true;
+            UpdateFormVisibility();
             SetLoginError(string.Empty);
             RenderCodeCells();
             Reveal2Fa();
@@ -651,7 +694,7 @@ public partial class LoginView : UserControl
         }
         else if (!visible)
         {
-            TwoFaBlock.IsVisible = false;
+            UpdateFormVisibility();
         }
         Update2FaGate();
     }
@@ -1029,6 +1072,27 @@ public partial class LoginView : UserControl
         _vm?.CancelLogin();
     }
 
+    /// <summary>«Войти по коду»: разворачивает поле ручного ввода handoff-кода и фокусирует его.</summary>
+    private void OnToggleCodeEntry(object? sender, RoutedEventArgs e)
+    {
+        var show = !CodeEntryHost.IsVisible;
+        CodeEntryHost.IsVisible = show;
+        if (show && !Design.IsDesignMode)
+        {
+            HandoffCodeBox.Focus();
+        }
+    }
+
+    /// <summary>Enter в поле handoff-кода = отправить код тем же путём, что кнопка (LoginByCodeCmd).</summary>
+    private void OnHandoffCodeKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key is Key.Enter or Key.Return)
+        {
+            Execute(_vm?.LoginByCodeCmd);
+            e.Handled = true;
+        }
+    }
+
     private void OnTogglePasswordClick(object? sender, RoutedEventArgs e)
     {
         _revealPassword = !_revealPassword;
@@ -1147,16 +1211,17 @@ public partial class LoginView : UserControl
     }
 
     /// <summary>
-    /// Задержка entrance-бита по роли ребёнка MethodBlock (§3a). Порядок XAML: 0 щит; 1–2 идентичность
-    /// (заголовок + подзаголовок); 3–4 CTA Telegram + разделитель; 5+ форма входа (email/ошибка/пароль/
-    /// сайт/2FA/регистрация/строка ошибки) как ОДНА группа. Члены бита делят его задержку — 4 бита.
+    /// Задержка entrance-бита по роли ребёнка MethodBlock (§3a). Порядок XAML после §A2-реструктуризации:
+    /// 0 щит; 1–3 идентичность (вордмарк + заголовок + подзаголовок); 4 сегмент «Вход|Регистрация»;
+    /// 5+ форма входа + демотированные альтернативы (email/пароль/«Войти»/ссылки/сайт/Telegram/код/2FA/
+    /// строка ошибки) как ОДНА группа. Члены бита делят его задержку — 4 бита, а не равномерный drip.
     /// </summary>
     private static int BeatDelayMs(int childIndex) => childIndex switch
     {
-        0 => 0,          // бит 1 · щит-марка
-        1 or 2 => 60,    // бит 2 · идентичность
-        3 or 4 => 140,   // бит 3 · CTA Telegram + разделитель
-        _ => 200,        // бит 4 · форма входа как одна группа
+        0 => 0,              // бит 1 · щит-марка
+        1 or 2 or 3 => 60,   // бит 2 · идентичность (вордмарк + заголовок + подзаголовок)
+        4 => 120,            // бит 3 · сегмент «Вход|Регистрация»
+        _ => 180,            // бит 4 · форма входа + альтернативы как одна группа
     };
 
     /// <summary>Раскрывает элемент: opacity 0→1 + RenderTransform from→to, 300мс OutQuint, с задержкой

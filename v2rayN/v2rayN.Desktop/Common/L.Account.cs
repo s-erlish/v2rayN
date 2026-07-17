@@ -125,8 +125,8 @@ public sealed partial class L
         Add("Login_SignIn", "Вход", "Sign in");
         Add("Login_Title", "Вход в departament", "Sign in to departament");
         Add("Login_Subtitle",
-            "Войдите через Telegram в один тап или по email и паролю.",
-            "Sign in with Telegram in one tap, or with your email and password.");
+            "Войдите по email и паролю — или через Telegram в один тап.",
+            "Sign in with your email and password — or with Telegram in one tap.");
         Add("Login_Or", "или", "or");
         Add("Login_Email", "Электронная почта", "Email");
         Add("Login_EmailInvalid",
@@ -167,6 +167,15 @@ public sealed partial class L
         Add("Login_ForgotPassword", "Забыли пароль?", "Forgot password?");
         Add("Login_ContinueGoogle", "Продолжить с Google", "Continue with Google");
         Add("Login_ComingSoon", "Скоро", "Soon");
+
+        // Email/password form submit («Войти») — distinct from the browser handoff «Войти через сайт»
+        // (Common_SignInWebsite) and the manual-code fallback below.
+        Add("Login_SubmitSignIn", "Войти", "Sign in");
+        // Manual browser→app handoff fallback: paste the code the site shows if the scheme callback misses.
+        Add("Login_ByCode", "Войти по коду", "Sign in with a code");
+        Add("Login_CodePaste", "Вставьте код из браузера", "Paste the code from your browser");
+        // Transient step while the departamentvpn://auth handoff code is being redeemed.
+        Add("Login_SiteHandoff", "Завершаем вход через сайт…", "Finishing sign-in via the website…");
 
         // Email-pending states (verify email · magic link sent · reset sent). {0} = the address.
         Add("Login_VerifyTitle", "Подтвердите почту", "Confirm your email");

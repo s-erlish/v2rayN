@@ -16,6 +16,13 @@ public abstract record LoginState
     /// <summary>A site email/password or 2FA request is in flight.</summary>
     public sealed record SiteLoading : LoginState;
 
+    /// <summary>
+    /// A browser→app SSO handoff code was received (custom-scheme callback or a pasted code) and is being
+    /// exchanged for a session via <see cref="AuthManager.ConsumeAppHandoff"/>. The UI shows a focused
+    /// «завершаем вход через сайт…» step while the one-time code is redeemed.
+    /// </summary>
+    public sealed record SiteHandoffLoading : LoginState;
+
     /// <summary>An email+password registration request is in flight.</summary>
     public sealed record RegisterLoading : LoginState;
 
@@ -149,6 +156,23 @@ public sealed class AuthManager
             AccountSession.OnAuthenticated(success.Token, success.Client);
         }
         return result;
+    }
+
+    /// <summary>
+    /// Redeems a one-time app-handoff code minted by the site's <c>/app-login</c> page (a logged-in web
+    /// user who returned to the app via the <c>departamentvpn://auth?code=…</c> scheme, or a manually
+    /// pasted code) for a session. Persists the session and returns the profile — the SAME terminal path
+    /// as an email or Telegram login. Throws <see cref="ApiError"/> on failure (e.g. an expired code).
+    /// </summary>
+    public async Task<UserProfileDto> ConsumeAppHandoff(string code)
+    {
+        if (!BackendConfig.IsConfigured())
+        {
+            throw new ApiError.NotConfiguredError();
+        }
+        var auth = await _api.ConsumeAppHandoff(code);
+        AccountSession.OnAuthenticated(auth.Token, auth.Client);
+        return auth.Client;
     }
 
     /// <summary>Completes a 2FA login; persists the session and returns the profile. Throws ApiError.</summary>
