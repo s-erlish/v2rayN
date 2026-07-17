@@ -62,18 +62,16 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     // верхнюю; когда стек пуст — хост скрыт и снова видна вкладка/онбординг под ним.
     private readonly List<Control> _subStack = new();
 
-    // Моушен-токены оболочки (§A, общие для смены вкладок и кроссфейдов): reveal/press = OutQuint,
-    // двусторонние состояния/кроссфейды = Standard. Индикатор подключения в рейле теперь красится
-    // ТЕМА-токенами через класс .on (см. Ellipse.ConnDot в разметке), а не хардкод-hex.
-    private static readonly Easing _easeOutQuint = new SplineEasing(0.22, 1, 0.36, 1);
-    private static readonly Easing _easeStandard = new SplineEasing(0.2, 0, 0, 1);
+    // Моушен-токены оболочки теперь берутся из ЕДИНОГО C#-каталога Common/Motion.cs (Motion.Ease.* /
+    // Motion.Dur.*), который зеркалит XAML Ease.*/таблицу длительностей — так XAML и C# не расходятся.
+    // Раньше здесь дублировались локальные easings и константы длительностей входа/выхода; их значения
+    // были идентичны Motion.Ease.OutQuint/Standard и Motion.Dur.Reveal/Exit — дедуп без смены поведения.
+    // Индикатор подключения в рейле красится ТЕМА-токенами через класс .on (Ellipse.ConnDot в разметке).
 
-    // Токены смены вкладки (§A.4): вход = подъём translateY 8→0 + fade-in (OutQuint 300мс) поверх
-    // выхода = быстрый fade-out (Standard 150мс, короче входа). Только translate+opacity — центр
-    // вращения не при чём, страница не «улетает» из угла.
+    // Смена вкладки (§A.4): вход = подъём translateY 8→0 + fade-in (Motion.Dur.Reveal 300мс,
+    // Motion.Ease.OutQuint) поверх выхода = быстрый fade-out (Motion.Dur.Exit 150мс, Motion.Ease.Standard,
+    // короче входа). ContentRiseFrom — ДИСТАНЦИЯ подъёма (px), не длительность/кривая → живёт локально.
     private const double ContentRiseFrom = 8.0;
-    private static readonly TimeSpan ContentEnterDuration = TimeSpan.FromMilliseconds(300);
-    private static readonly TimeSpan ContentExitDuration = TimeSpan.FromMilliseconds(150);
 
     // Токены отмены незавершённой анимации на каждый анимируемый узел (перезапуск отменяет предыдущую).
     private CancellationTokenSource? _subPageAnim;
@@ -378,8 +376,8 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     {
         target.Opacity = 0d;
         // Вход (подъём 8→0 + fade-in, OutQuint) поверх выхода (быстрый fade-out, Standard) — параллельно.
-        var enter = RunTranslateFade(target, TranslateTransform.YProperty, ContentRiseFrom, 0d, 0d, 1d, ContentEnterDuration, _easeOutQuint, ct);
-        var exit = RunFade(previous, previous.Opacity, 0d, ContentExitDuration, _easeStandard, ct);
+        var enter = RunTranslateFade(target, TranslateTransform.YProperty, ContentRiseFrom, 0d, 0d, 1d, Motion.Dur.Reveal, Motion.Ease.OutQuint, ct);
+        var exit = RunFade(previous, previous.Opacity, 0d, Motion.Dur.Exit, Motion.Ease.Standard, ct);
         try { await Task.WhenAll(enter, exit); }
         catch { }
         if (ct.IsCancellationRequested)
@@ -551,7 +549,7 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         _layoutAnim = cts;
 
         contentArea.Opacity = 0d;
-        try { await RunFade(contentArea, 0d, 1d, TimeSpan.FromMilliseconds(130), _easeStandard, cts.Token); }
+        try { await RunFade(contentArea, 0d, 1d, TimeSpan.FromMilliseconds(130), Motion.Ease.Standard, cts.Token); }
         catch { }
         if (cts.IsCancellationRequested)
         {
@@ -663,7 +661,7 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
 
     private async void FadeShellIn(Control c, CancellationToken ct)
     {
-        try { await RunFade(c, 0d, 1d, TimeSpan.FromMilliseconds(200), _easeStandard, ct); }
+        try { await RunFade(c, 0d, 1d, TimeSpan.FromMilliseconds(200), Motion.Ease.Standard, ct); }
         catch { }
         if (!ct.IsCancellationRequested)
         {
@@ -673,7 +671,7 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
 
     private async void FadeShellOutThenHide(Control c, CancellationToken ct)
     {
-        try { await RunFade(c, c.Opacity, 0d, TimeSpan.FromMilliseconds(200), _easeStandard, ct); }
+        try { await RunFade(c, c.Opacity, 0d, TimeSpan.FromMilliseconds(200), Motion.Ease.Standard, ct); }
         catch { }
         if (ct.IsCancellationRequested)
         {
@@ -849,7 +847,7 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         _subPageAnim = cts;
 
         subPageHost.Opacity = 0;
-        try { await RunTranslateFade(subPageHost, TranslateTransform.XProperty, 16d, 0d, 0d, 1d, TimeSpan.FromMilliseconds(300), _easeOutQuint, cts.Token); }
+        try { await RunTranslateFade(subPageHost, TranslateTransform.XProperty, 16d, 0d, 0d, 1d, TimeSpan.FromMilliseconds(300), Motion.Ease.OutQuint, cts.Token); }
         catch { }
         if (cts.IsCancellationRequested)
         {
@@ -870,7 +868,7 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         var cts = new CancellationTokenSource();
         _subPageAnim = cts;
 
-        try { await RunTranslateFade(subPageHost, TranslateTransform.XProperty, 0d, 16d, 1d, 0d, TimeSpan.FromMilliseconds(200), _easeStandard, cts.Token); }
+        try { await RunTranslateFade(subPageHost, TranslateTransform.XProperty, 0d, 16d, 1d, 0d, TimeSpan.FromMilliseconds(200), Motion.Ease.Standard, cts.Token); }
         catch { }
         if (cts.IsCancellationRequested)
         {
@@ -1075,7 +1073,7 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
             while (true)
             {
                 var t = Math.Min(1d, (Environment.TickCount64 - startTicks) / durationMs);
-                var eased = _easeOutQuint.Ease(t);
+                var eased = Motion.Ease.OutQuint.Ease(t);
                 var w = startWidth + ((targetWidth - startWidth) * eased);
                 var h = startHeight + ((targetHeight - startHeight) * eased);
                 ApplySizeCentered(w, h, centerX, centerY, screen, scaling);
@@ -1279,7 +1277,7 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
             while (true)
             {
                 var t = Math.Min(1d, (Environment.TickCount64 - startTicks) / durationMs);
-                var radius = _easeOutQuint.Ease(t) * maxRadius;
+                var radius = Motion.Ease.OutQuint.Ease(t) * maxRadius;
                 // Клип = прямоугольник окна МИНУС растущий круг: снимок виден только СНАРУЖИ круга, внутри
                 // проступает уже перекрашенная новая тема. Круг растёт из точки нажатия → «заливка» новой темы.
                 var hole = new EllipseGeometry { Center = origin, RadiusX = radius, RadiusY = radius };

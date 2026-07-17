@@ -494,6 +494,10 @@ public partial class App : Application
         var highest = light ? "#E7E7E9" : "#232326"; // surfaceContainerHighest
         // Красный сохраняем для деструктива (Android mono держит iconTintRed/failed красным).
         var red = light ? "#C42B32" : "#E5484D";
+        // Красный ТЕКСТ на mono-поверхностях (ошибки): ярче заливки ради контраста ≥4.5:1 —
+        // light #C42B32 (5.6:1 на #FFFFFF) / dark #FF6069 (7.1:1 на #000000). Совпадает с базовым
+        // RedText (dark/light) — красный единый на всё приложение, единственный неубираемый в mono тон.
+        var redText = light ? "#C42B32" : "#FF6069";
 
         // Полупрозрачные производные — единый серый под tile/selected/статус-чип.
         // На тёмной базе — белый лифт, на светлой — чёрный (как ховер).
@@ -525,6 +529,7 @@ public partial class App : Application
             // ── Семантика: зелёный/оранжевый/жёлтый → серый; КРАСНЫЙ остаётся (деструктив) ──
             ["Brush.Green"] = Solid(connected), // «подключено»/успех = mono connected (серо-белый)
             ["Brush.Red"] = Solid(red),
+            ["Brush.RedText"] = Solid(redText),
 
             // ── Плитки иконок: цветные → серые; красная плитка остаётся красной ──
             ["Brush.Tile.Neutral"] = Solid(highest),

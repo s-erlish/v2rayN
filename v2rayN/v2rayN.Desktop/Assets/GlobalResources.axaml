@@ -78,6 +78,10 @@
             <SolidColorBrush x:Key="Brush.OnAccentContainer" Color="#CFE0FF" />
             <SolidColorBrush x:Key="Brush.Green" Color="#22C55E" />
             <SolidColorBrush x:Key="Brush.Red" Color="#F04452" />
+            <!--  Красный ТЕКСТ на тёмных поверхностях (ошибки входа/синхронизации). Ярче заливки
+                  Brush.Red ради контраста ≥4.5:1: #FF6069 = 6.7:1 на Bg #0A0B0D, ~5.9:1 на Surface
+                  #141619. Brush.Red остаётся для заливок/рамок/глифов, RedText — только для текста.  -->
+            <SolidColorBrush x:Key="Brush.RedText" Color="#FF6069" />
             <SolidColorBrush x:Key="Brush.Tile.Neutral" Color="#20242B" />
             <SolidColorBrush x:Key="Brush.Hover" Color="#000000" Opacity="0.32" />
             <SolidColorBrush x:Key="Brush.Toast.Bg" Color="#20242B" />
@@ -110,6 +114,10 @@
             <SolidColorBrush x:Key="Brush.OnAccentContainer" Color="#14468F" />
             <SolidColorBrush x:Key="Brush.Green" Color="#0B7D4A" />
             <SolidColorBrush x:Key="Brush.Red" Color="#C42B32" />
+            <!--  Красный ТЕКСТ на светлых поверхностях. #C42B32 = 5.2:1 на Bg #F4F7FC, 5.6:1 на
+                  Surface #FFFFFF (оба ≥4.5:1) — совпадает с Brush.Red (на светлой он уже тёмный,
+                  отдельный текстовый оттенок не нужен). Ключ существует во ВСЕХ темах ради единого API.  -->
+            <SolidColorBrush x:Key="Brush.RedText" Color="#C42B32" />
             <SolidColorBrush x:Key="Brush.Tile.Neutral" Color="#E3EAF4" />
             <SolidColorBrush x:Key="Brush.Hover" Color="#000000" Opacity="0.06" />
             <SolidColorBrush x:Key="Brush.Toast.Bg" Color="#E3EAF4" />
@@ -185,16 +193,25 @@
     <SplineEasing x:Key="Ease.OutQuint" X1="0.22" Y1="1" X2="0.36" Y2="1" />
     <!--  ease_standard (0.2,0,0,1): argb-tint/crossfade, двусторонние смены состояния, реверс.  -->
     <SplineEasing x:Key="Ease.Standard" X1="0.2" Y1="0" X2="0" Y2="1" />
+    <!--  ease_out_expo (0.16,1,0.3,1): САМЫЙ решительный ease-out — ЗАРЕЗЕРВИРОВАН под ОДИН момент
+          hand-off auth→home (Dur.Slow 0:0:0.45), чтобы он читался тяжелее рядового таб-свопа.  -->
+    <SplineEasing x:Key="Ease.OutExpo" X1="0.16" Y1="1" X2="0.3" Y2="1" />
 
     <!--  Длительности (motion.xml) задаются ЛИТЕРАЛАМИ в Duration="…": XAML-       -->
     <!--  компилятор Avalonia НЕ поддерживает интринсик x:TimeSpan. Каталог токенов:-->
+    <!--    Dur.Instant  0:0:0      — lite/reduced-motion фолбэк: мгновенный снап            -->
     <!--    Dur.PressIn  0:0:0.09  — палец-вниз (press_in 90мс)                      -->
     <!--    Dur.PressOut 0:0:0.16  — отпускание/возврат (press_out 160мс)           -->
     <!--    Dur.State    0:0:0.22  — смена состояния / tint-crossfade (state 220мс)  -->
     <!--    Dur.Reveal   0:0:0.30  — раскрытие / glow (reveal 300мс)                 -->
+    <!--    Dur.Exit     0:0:0.15  — выход экрана/суб-страницы, короче входа (150мс)  -->
+    <!--    Dur.Shell    0:0:0.20  — кроссфейд 3-путёвого оверлея оболочки (200мс)    -->
+    <!--    Dur.Slow     0:0:0.45  — ОДИН hand-off auth→home, Ease.OutExpo (450мс)    -->
     <!--    Dur.Stagger  0:0:0.04  — стаггер списка (40мс)                           -->
     <!--    Dur.Emphasis 0:0:0.60  — ОДИН hero-момент: connect-сонар (emphasis 600мс)-->
     <!--  Реверс отключения = 75% темпа: revState 0:0:0.165 · revReveal 0:0:0.225.  -->
+    <!--  C#-ЗЕРКАЛО этой шкалы (кривые + длительности как TimeSpan) — Common/Motion.cs      -->
+    <!--  (Motion.Dur.* / Motion.Ease.*). Держать синхронно с этой таблицей и Ease.* выше.   -->
 
     <!-- ==================================================================== -->
     <!--  НЕДОСТАЮЩИЕ токены мастер-плана §2.4 (добавлено фазой 0 / агент A)     -->
@@ -301,6 +318,9 @@
           Промоушен дублей из Buy/Login/PaymentHistory. Для back-кнопок и строк значений.  -->
     <StreamGeometry x:Key="Geo.ArrowBack">M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z</StreamGeometry>
     <StreamGeometry x:Key="Geo.ChevronRight">M8.6,4.6L7.2,6l6,6l-6,6l1.4,1.4L16,12z</StreamGeometry>
+    <!--  Галочка (Material 24dp «check»): success-момент входа (дуга ожидания достраивается в
+          галочку перед передачей в синхронизацию) + общий индикатор «готово».  -->
+    <StreamGeometry x:Key="Geo.Check">M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z</StreamGeometry>
 
     <!-- ====================================================================== -->
     <!--  iOS-стиль ToggleSwitch (мастер-план §2.4/5.2): трек-пилюля 52×32,        -->

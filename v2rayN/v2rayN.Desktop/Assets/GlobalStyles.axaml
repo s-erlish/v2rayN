@@ -933,6 +933,76 @@
     </Style>
 
     <!-- ==================================================================== -->
+    <!--  FOCUS-VISIBLE КОЛЬЦО (§3.4, a11y; мастер-план Фаза 0). ЕДИНЫЙ индикатор    -->
+    <!--  фокуса-с-клавиатуры для кнопок / полей / account-chip на всех экранах.     -->
+    <!--                                                                            -->
+    <!--  Механизм — Control.FocusAdorner: кольцо рисуется в СЛОЕ АДОРНЕРОВ поверх    -->
+    <!--  контрола, поэтому (1) НЕ влияет на раскладку — 0 reflow, покой рисуется     -->
+    <!--  идентично; (2) НЕ обрезается родителем (карта/скролл); (3) Avalonia         -->
+    <!--  показывает адорнер ТОЛЬКО при keyboard focus-visible (не по клику мышью).   -->
+    <!--                                                                            -->
+    <!--  Цвет — Brush.Accent через DynamicResource (тема-зависимо: синий в dark/     -->
+    <!--  light, серый в mono — нейтрализация акцента работает). Мгновенно, БЕЗ        -->
+    <!--  перехода → переживает lite: a11y важнее движения, поэтому кольцо НЕ гасится  -->
+    <!--  под .lite (lite обнуляет Transitions, а FocusAdorner к ним не относится).   -->
+    <!--  Радиус адорнера = радиус контрола + 2 (кольцо концентрично, Margin -2).     -->
+    <!--  Primary/Tall (акцентная ЗАЛИВКА): внешнее синее на синем не видно →          -->
+    <!--  ВНУТРЕННЕЕ кольцо Brush.OnAccent @40% (радиус контрола, без отрицательного   -->
+    <!--  отступа). Применяется к CTA-классам, TextBox и Border.AccountChip (chip      -->
+    <!--  станет Focusable в Фазе 3 — кольцо-фундамент уже готово и сработает тогда).  -->
+    <!-- ==================================================================== -->
+
+    <!--  Не-залитые CTA (Radius.Button 16 → кольцо 18): внешнее 2px Accent.  -->
+    <Style Selector="Button.Tonal, Button.OutlinedAccent, Button.Destructive">
+        <Setter Property="FocusAdorner">
+            <FocusAdornerTemplate>
+                <Border Margin="-2" BorderThickness="2" CornerRadius="18"
+                        BorderBrush="{DynamicResource Brush.Accent}" />
+            </FocusAdornerTemplate>
+        </Setter>
+    </Style>
+
+    <!--  LinkAction (Radius.Chip 12 → кольцо 14).  -->
+    <Style Selector="Button.LinkAction">
+        <Setter Property="FocusAdorner">
+            <FocusAdornerTemplate>
+                <Border Margin="-2" BorderThickness="2" CornerRadius="14"
+                        BorderBrush="{DynamicResource Brush.Accent}" />
+            </FocusAdornerTemplate>
+        </Setter>
+    </Style>
+
+    <!--  Поля ввода Incy (TextBox.Incy / IncyField, Radius.Search 14 → кольцо 16).  -->
+    <Style Selector="TextBox">
+        <Setter Property="FocusAdorner">
+            <FocusAdornerTemplate>
+                <Border Margin="-2" BorderThickness="2" CornerRadius="16"
+                        BorderBrush="{DynamicResource Brush.Accent}" />
+            </FocusAdornerTemplate>
+        </Setter>
+    </Style>
+
+    <!--  Account-chip (Radius.Card 20 → кольцо 22).  -->
+    <Style Selector="Border.AccountChip">
+        <Setter Property="FocusAdorner">
+            <FocusAdornerTemplate>
+                <Border Margin="-2" BorderThickness="2" CornerRadius="22"
+                        BorderBrush="{DynamicResource Brush.Accent}" />
+            </FocusAdornerTemplate>
+        </Setter>
+    </Style>
+
+    <!--  Primary/Tall — ВНУТРЕННЕЕ кольцо OnAccent @40% (радиус 16, без -2 отступа).  -->
+    <Style Selector="Button.Primary">
+        <Setter Property="FocusAdorner">
+            <FocusAdornerTemplate>
+                <Border BorderThickness="2" CornerRadius="16" Opacity="0.4"
+                        BorderBrush="{DynamicResource Brush.OnAccent}" />
+            </FocusAdornerTemplate>
+        </Setter>
+    </Style>
+
+    <!-- ==================================================================== -->
     <!--  Статус-чип истории платежей (promoted из PaymentHistoryView, P1 18).    -->
     <!--  Радиус 12, паддинг 8,2 (оптический вертикальный 2 — санкционированное    -->
     <!--  исключение чипа, §0.3). База = неизвестный статус (нейтрально). Вариант  -->
