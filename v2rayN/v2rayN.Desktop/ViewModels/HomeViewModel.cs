@@ -182,14 +182,19 @@ public class HomeViewModel : MyReactiveObject, IDisposable
             return;
         }
         BeginConnecting();
-        // Reload builds the config and starts the core with the current default server.
-        await _main.Reload();
+        // Reload builds the config and starts the core with the current default server. Its return
+        // value tells us whether it actually RAN the attempt or merely deferred to a reload already in
+        // flight (semaphore contended — e.g. a rapid second tap, or a background reload).
+        var executed = await _main.Reload();
 
-        // Truthful failure: Reload has fully awaited the core start, so if the core is not actually
-        // running the attempt failed (wrong exe / bad config / blocked). Do NOT leave the shield
-        // spinning up to 12s and never read as connected — clear the connecting state now and
-        // surface the failure. Verbatim Android string (values-ru/strings.xml toast_status_failed).
-        if (!IsCoreRunning())
+        // Truthful failure, but ONLY when Reload actually executed: it has then fully awaited the core
+        // start, so a not-running core means the attempt failed (wrong exe / bad config / blocked) —
+        // surface it now instead of spinning to the 12s deadline. If Reload merely DEFERRED (executed
+        // == false), the in-flight owner's follow-up job will still bring the core up, so we must NOT
+        // paint a failure here; we keep the Connecting spin and let the CoreRunningStateChanged event
+        // resolve it (or the 12s deadline surface an honest timeout if it never comes). This closes the
+        // "first tap does nothing, second tap connects" race. Verbatim Android string (toast_status_failed).
+        if (executed && !IsCoreRunning())
         {
             IsConnecting = false;
             _connectingUntil = null;

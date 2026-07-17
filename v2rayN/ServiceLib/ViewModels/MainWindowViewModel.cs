@@ -801,19 +801,26 @@ public class MainWindowViewModel : MyReactiveObject
     private bool _hasNextReloadJob = false;
     private readonly SemaphoreSlim _reloadSemaphore = new(1, 1);
 
-    public async Task Reload()
+    /// <summary>
+    /// Returns true when THIS call actually ran the core-load attempt to completion (whatever its
+    /// outcome), false ONLY when it deferred to an already-in-flight reload (semaphore contended). The
+    /// connect UI uses this so a deferred call is NOT mistaken for a connect failure: the in-flight
+    /// owner's follow-up job (_hasNextReloadJob) will still bring the core up, so judging "not connected"
+    /// the instant this deferred call returns would paint a false error though a connect is still coming.
+    /// </summary>
+    public async Task<bool> Reload()
     {
         //If there are unfinished reload job, marked with next job.
         if (!await _reloadSemaphore.WaitAsync(0))
         {
             _hasNextReloadJob = true;
-            return;
+            return false;
         }
 
         if (DesignMode)
         {
             _reloadSemaphore.Release();
-            return;
+            return true;
         }
 
         try
@@ -824,12 +831,12 @@ public class MainWindowViewModel : MyReactiveObject
             if (profileItem == null)
             {
                 NoticeManager.Instance.Enqueue(ResUI.CheckServerSettings);
-                return;
+                return true;
             }
             var allResult = await CoreConfigContextBuilder.BuildAll(_config, profileItem);
             if (NoticeManager.Instance.NotifyValidatorResult(allResult.CombinedValidatorResult) && !allResult.Success)
             {
-                return;
+                return true;
             }
 
             await Task.Run(async () =>
@@ -869,6 +876,8 @@ public class MainWindowViewModel : MyReactiveObject
                 await Reload();
             }
         }
+
+        return true;
     }
 
     /// <summary>

@@ -193,21 +193,24 @@ public class CoreManager
         await CoreStopInternal();
         await Task.Delay(100);
 
-        await CoreStart(mainContext);
-        await WaitForProxyPort(preContext);
-        await CoreStartPreService(preContext);
+        // First start attempt. On a weak PC the very first connect after launch (or right after a
+        // disconnect) sometimes fails transiently: the freed socks port / wintun adapter is not yet
+        // released, or a CPU-starved core exits during its first spin-up. That is exactly the reported
+        // «первый раз не подключается — жмёшь ещё раз и работает». So instead of returning an error and
+        // making the user tap Connect a second time, we do ONE clean internal re-arm here. This is a
+        // single retry, NOT a loop — a genuinely broken config still fails after the second attempt and
+        // surfaces an honest error below.
+        var started = await TryStartCoresOnce(mainContext, preContext);
+        if (!started)
+        {
+            // Tear down whatever half-started (frees the port / removes the stale adapter), let the OS
+            // settle a touch longer than the first attempt, then try exactly once more.
+            await CoreStopInternal();
+            await Task.Delay(300);
+            started = await TryStartCoresOnce(mainContext, preContext);
+        }
 
-        // A pre-context means a pre-service is REQUIRED for traffic to flow:
-        //  - FULL TUN + custom/legacy node: the sing-box pre-service owns the OS tun adapter and
-        //    forwards captured traffic into the main core's socks inbound;
-        //  - pre-socks chaining: the pre-core is the actual ingress.
-        // In all cases the main (Xray) core alone is useless without it — its socks inbound binds
-        // fine so the process is "alive", but nothing routes OS traffic to it. Treating that as
-        // "connected" is exactly the reported false «Подключено» with no traffic anywhere. So when a
-        // pre-service was required but did not start, the connection has NOT succeeded.
-        var preServiceRequiredButFailed = preContext != null && _processPreService is null;
-
-        if (_processService != null && !preServiceRequiredButFailed)
+        if (started)
         {
             // Both the main core and (if required) the pre-service actually started — mark the app as
             // running so IsRunningCore()/the connect shield/tray honestly read "connected".
@@ -944,11 +947,15 @@ public class CoreManager
             var preDead = _lastPreContext != null && _processPreService is null or { HasExited: true };
             var dead = mainDead || preDead;
 
-            // M1: a generous 2s handshake timeout so CPU starvation / resume jitter can't manufacture a
-            // false "wedged" verdict here (liveness above stays authoritative and immediate).
+            // Liveness above stays authoritative and immediate. For the readiness probe we demand a
+            // SUSTAINED failure (several generous-timeout handshakes in a row all failing) before we
+            // conclude the tunnel is wedged: on a weak PC a resume/network-change burst often coincides
+            // with a CPU spike, and a single slow handshake must NEVER restart a still-alive core (that
+            // is the self-inflicted disconnect we are eliminating). If ANY attempt answers, the core is
+            // alive and left running.
             if (!dead && _lastPreContext is { } pre && pre.AppConfig.TunModeItem.EnableTun)
             {
-                dead = !await ProbeSocksReadyAsync(pre.Node.Port, 2000);
+                dead = !await ProbeSocksReadySustainedAsync(pre.Node.Port);
             }
 
             if (dead && !ShouldAbortRecovery(startGen, token) && _lastMainContext != null)
@@ -992,21 +999,31 @@ public class CoreManager
     }
 
     /// <summary>
-    /// Single background supervision loop, live only while a core is up. Every ~7s it does a cheap
-    /// liveness check (dead main core or dead required pre-service ⇒ crash) and, for a TUN pre-socks
-    /// ingress, an optional SOCKS5 readiness probe (process alive but tunnel wedged ⇒ crash after two
-    /// consecutive misses). Both funnel into <see cref="HandleUnexpectedExitAsync"/>.
+    /// Single background supervision loop, live only while a core is up. Its ONLY job is to catch a
+    /// genuinely DEAD core process — a dead main core or a dead REQUIRED pre-service — as a belt-and-
+    /// suspenders backup to the immediate <see cref="ProcessService.Exited"/> callback, and funnel that
+    /// into <see cref="HandleUnexpectedExitAsync"/>. It runs on a generous interval and does only a
+    /// cheap <c>HasExited</c> boolean check, so it costs nothing on a weak PC.
+    ///
+    /// Deliberately it does NOT probe SOCKS5 readiness and NEVER restarts a core that is still ALIVE.
+    /// A weak/CPU-starved PC under load makes the local handshake slow, so a periodic readiness probe
+    /// would time out against a perfectly-healthy core and KILL+RESTART it — the exact self-inflicted
+    /// «отключается сам и переподключается под нагрузкой» the owner reported. A living process is left
+    /// running, full stop. Only a real process death here (or an OS resume / network-change health check,
+    /// or the crash callback) triggers recovery; a slow-but-alive tunnel does not.
     /// </summary>
     private async Task WatchdogLoopAsync(CancellationToken token)
     {
-        var readinessMisses = 0;
         try
         {
             while (!token.IsCancellationRequested)
             {
                 try
                 {
-                    await Task.Delay(TimeSpan.FromSeconds(7), token);
+                    // Generous interval: the Exited callback is the primary, instant crash detector; this
+                    // loop is only the backup for the rare case it does not fire, so a slow cadence is
+                    // plenty and keeps the weak-PC cost negligible.
+                    await Task.Delay(TimeSpan.FromSeconds(15), token);
                 }
                 catch (OperationCanceledException)
                 {
@@ -1019,45 +1036,18 @@ public class CoreManager
                     || _switchSemaphore.CurrentCount == 0
                     || AppManager.Instance.RunningCoreType == ECoreType.v2rayN)
                 {
-                    readinessMisses = 0;
                     continue;
                 }
 
-                // (1) cheap liveness — a dead main core or dead REQUIRED pre-service is a crash. This is
-                //     authoritative and immediate (no timeout, no false positive under load).
+                // Cheap liveness ONLY — a dead main core or dead REQUIRED pre-service is a real crash.
+                // Authoritative and immediate (no timeout, no false positive under load). A slow-but-alive
+                // core is NEVER touched here (no readiness-probe restart).
                 var mainDead = _processService is null or { HasExited: true };
                 var preDead = _lastPreContext != null && _processPreService is null or { HasExited: true };
                 if (mainDead || preDead)
                 {
-                    readinessMisses = 0;
                     await HandleUnexpectedExitAsync();
                     continue;
-                }
-
-                // (2) readiness — process alive but tunnel wedged. Only meaningful when a TUN pre-socks
-                //     ingress exists to probe. M1: a generous 2s handshake timeout AND 3 consecutive
-                //     misses (~27s) before acting, so CPU starvation / resume jitter can't drop a healthy
-                //     tunnel or burn the restart budget; liveness above catches a real death instantly.
-                if (_lastPreContext is { } pre && pre.AppConfig.TunModeItem.EnableTun)
-                {
-                    var ready = await ProbeSocksReadyAsync(pre.Node.Port, 2000);
-                    if (!ready)
-                    {
-                        if (++readinessMisses >= 3)
-                        {
-                            readinessMisses = 0;
-                            await HandleUnexpectedExitAsync();
-                            continue;
-                        }
-                    }
-                    else
-                    {
-                        readinessMisses = 0;
-                    }
-                }
-                else
-                {
-                    readinessMisses = 0;
                 }
 
                 // Reset the auto-restart attempt budget after a stretch of stable connected uptime.
@@ -1075,6 +1065,40 @@ public class CoreManager
         {
             Logging.SaveLog(_tag, ex);
         }
+    }
+
+    /// <summary>
+    /// "Alive" verdict for the resume / network-change health check: probe the local SOCKS5 port up to
+    /// <paramref name="attempts"/> times with a generous per-attempt timeout, returning true as soon as
+    /// ANY attempt succeeds. Only when EVERY attempt fails do we treat the tunnel as wedged. This makes a
+    /// transient CPU spike (typical right after a sleep/resume storm) unable to manufacture a false
+    /// "dead" verdict that would needlessly restart a healthy core. A non-positive port answers true
+    /// (nothing to probe ⇒ do not manufacture a failure).
+    /// </summary>
+    private static async Task<bool> ProbeSocksReadySustainedAsync(int port, int attempts = 3, int timeoutMs = 3000, int gapMs = 500)
+    {
+        if (port <= 0)
+        {
+            return true;
+        }
+        for (var i = 0; i < attempts; i++)
+        {
+            if (await ProbeSocksReadyAsync(port, timeoutMs))
+            {
+                return true;
+            }
+            if (i < attempts - 1)
+            {
+                try
+                {
+                    await Task.Delay(gapMs);
+                }
+                catch
+                {
+                }
+            }
+        }
+        return false;
     }
 
     /// <summary>
@@ -1259,6 +1283,33 @@ public class CoreManager
     }
 
     #region Private
+
+    /// <summary>
+    /// One full start attempt: start the main core, wait for its socks port, then start the required
+    /// pre-service. Returns true only when the main core is genuinely alive AND (if a pre-service was
+    /// required) it actually started. MUST be called with <see cref="_coreOpGate"/> held (always is —
+    /// only <see cref="LoadCoreInternal"/> calls it). Factored out so <see cref="LoadCoreInternal"/> can
+    /// re-arm it exactly once on a transient slow-PC start failure without duplicating the logic.
+    ///
+    /// A pre-context means a pre-service is REQUIRED for traffic to flow:
+    ///  - FULL TUN + custom/legacy node: the sing-box pre-service owns the OS tun adapter and forwards
+    ///    captured traffic into the main core's socks inbound;
+    ///  - pre-socks chaining: the pre-core is the actual ingress.
+    /// In all cases the main (Xray) core alone is useless without it — its socks inbound binds fine so
+    /// the process is "alive", but nothing routes OS traffic to it. Treating that as "connected" is
+    /// exactly the reported false «Подключено» with no traffic anywhere, so a required-but-missing
+    /// pre-service is NOT a success. The main-core check uses HasExited (not just non-null) so a core
+    /// that started and then died during the socks wait is correctly seen as a failed attempt.
+    /// </summary>
+    private async Task<bool> TryStartCoresOnce(CoreConfigContext mainContext, CoreConfigContext? preContext)
+    {
+        await CoreStart(mainContext);
+        await WaitForProxyPort(preContext);
+        await CoreStartPreService(preContext);
+
+        var preServiceRequiredButFailed = preContext != null && _processPreService is null;
+        return _processService is { HasExited: false } && !preServiceRequiredButFailed;
+    }
 
     private async Task CoreStart(CoreConfigContext context)
     {
