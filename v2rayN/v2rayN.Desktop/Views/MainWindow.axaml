@@ -222,6 +222,29 @@
             <Setter Property="IsHitTestVisible" Value="False" />
         </Style>
 
+        <!--  ==================== Путешествующий индикатор рейла (P0-1) ====================
+              ОДНА акцентная полоса 3×28 у левого края, физически СКОЛЬЗИТ между слотами по Y
+              (M3 nav-rail idiom, НЕ статичный side-stripe). Позицию/скольжение ведёт code-behind
+              (MoveRailIndicator: Motion.Dur.State 220 OutQuint, отмена _indicatorAnim). Здесь —
+              только гашение вместе со свёрткой рейла: при .railCollapsed уезжает в Opacity 0
+              синхронно с navItems (та же длительность 0.16, как у RailItems.Opacity).  -->
+        <Style Selector="Border.RailIndicator">
+            <Setter Property="Opacity" Value="1" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Opacity" Duration="0:0:0.16" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Grid.railCollapsed Border.RailIndicator">
+            <Setter Property="Opacity" Value="0" />
+        </Style>
+        <Style Selector=":is(Window).lite Border.RailIndicator">
+            <Setter Property="Transitions">
+                <Transitions />
+            </Setter>
+        </Style>
+
         <!--  Reduced-motion: переходы свёртки/шеврона мгновенны (состояние без анимации).  -->
         <Style Selector=":is(Window).lite StackPanel.RailItems">
             <Setter Property="Transitions">
@@ -422,15 +445,19 @@
                                 <!--  3 вкладки (Главная · Настройки · Аккаунт). Список серверов живёт
                                       в левой колонке «Главной», отдельной вкладки «Сервера» нет.
                                       (Бренд-марка «d» убрана — владелец её не хочет в рейле.)  -->
-                                <StackPanel
-                                    x:Name="navItems"
+                                <!--  Слот-полоса вкладок + ОДИН путешествующий индикатор поверх (P0-1).
+                                      Panel держит и StackPanel пунктов (сворачивается по ширине), и
+                                      railIndicator (акцентная полоса, СКОЛЬЗИТ по Y между слотами —
+                                      см. MoveRailIndicator в code-behind). Прежние три per-item
+                                      Border.NavPill убраны: индикатор теперь ЕДИН.  -->
+                                <Panel
                                     Margin="0,12,0,0"
-                                    Classes="RailItems"
-                                    ClipToBounds="True"
                                     DockPanel.Dock="Top">
-                                    <Button x:Name="navHome" Classes="NavRailItem">
-                                        <Grid>
-                                            <Border Classes="NavPill" />
+                                    <StackPanel
+                                        x:Name="navItems"
+                                        Classes="RailItems"
+                                        ClipToBounds="True">
+                                        <Button x:Name="navHome" Classes="NavRailItem">
                                             <StackPanel
                                                 HorizontalAlignment="Center"
                                                 VerticalAlignment="Center"
@@ -441,11 +468,8 @@
                                                     Classes="Chip"
                                                     Text="{loc:T Nav_Home}" />
                                             </StackPanel>
-                                        </Grid>
-                                    </Button>
-                                    <Button x:Name="navSettings" Classes="NavRailItem">
-                                        <Grid>
-                                            <Border Classes="NavPill" />
+                                        </Button>
+                                        <Button x:Name="navSettings" Classes="NavRailItem">
                                             <StackPanel
                                                 HorizontalAlignment="Center"
                                                 VerticalAlignment="Center"
@@ -456,11 +480,8 @@
                                                     Classes="Chip"
                                                     Text="{loc:T Nav_Settings}" />
                                             </StackPanel>
-                                        </Grid>
-                                    </Button>
-                                    <Button x:Name="navAccount" Classes="NavRailItem">
-                                        <Grid>
-                                            <Border Classes="NavPill" />
+                                        </Button>
+                                        <Button x:Name="navAccount" Classes="NavRailItem">
                                             <StackPanel
                                                 HorizontalAlignment="Center"
                                                 VerticalAlignment="Center"
@@ -471,9 +492,22 @@
                                                     Classes="Chip"
                                                     Text="{loc:T Nav_Account}" />
                                             </StackPanel>
-                                        </Grid>
-                                    </Button>
-                                </StackPanel>
+                                        </Button>
+                                    </StackPanel>
+                                    <!--  ОДИН акцентный бар: базовая позиция (top,left); реальный слот
+                                          ставит TranslateTransform.Y из code-behind (первый показ —
+                                          мгновенно на активном слоте, дальше — скольжение 220 OutQuint).  -->
+                                    <Border
+                                        x:Name="railIndicator"
+                                        Width="3"
+                                        Height="28"
+                                        HorizontalAlignment="Left"
+                                        VerticalAlignment="Top"
+                                        Background="{DynamicResource Brush.Accent}"
+                                        Classes="RailIndicator"
+                                        CornerRadius="2"
+                                        IsHitTestVisible="False" />
+                                </Panel>
 
                                 <!--  Низ рейла (ВСЕГДА виден): индикатор подключения + кнопка свёртки.
                                       Шеврон ‹ сворачивает рейл, › разворачивает — навигация не «застревает».  -->

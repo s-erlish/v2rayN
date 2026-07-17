@@ -41,9 +41,11 @@
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
             <Setter Property="Cursor" Value="Hand" />
+            <!--  Press = Motion.Dur.PressOut 160мс OutQuint — ЕДИНОЕ значение press для ОБЕИХ
+                  навигаций (рейл + нижний бар), убирает прежний разнобой 100/120 (P1-3).  -->
             <Setter Property="Transitions">
                 <Transitions>
-                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.1" Easing="{StaticResource Ease.OutQuint}" />
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.16" Easing="{StaticResource Ease.OutQuint}" />
                 </Transitions>
             </Setter>
         </Style>
@@ -85,38 +87,18 @@
                 </Transitions>
             </Setter>
         </Style>
-        <!--  Активная пилюля (bg_nav_dot): 34×3, скрыта в покое; у выбранного «вырастает» по
-              горизонтали (scaleX 0.55→1) + fade. origin 50%,50% (относит.) → растёт из центра,
-              метод TransformOperations scale() как у press-классов (не из угла).  -->
-        <Style Selector="Button.BottomNavItem Border.NavPillBottom">
-            <Setter Property="Width" Value="34" />
-            <Setter Property="Height" Value="3" />
-            <Setter Property="Margin" Value="0,3,0,0" />
-            <Setter Property="CornerRadius" Value="2" />
-            <Setter Property="HorizontalAlignment" Value="Center" />
-            <Setter Property="Background" Value="{DynamicResource Brush.Accent}" />
-            <Setter Property="RenderTransformOrigin" Value="50%,50%" />
-            <Setter Property="Opacity" Value="0" />
-            <Setter Property="RenderTransform" Value="scale(0.55,1)" />
-            <Setter Property="Transitions">
-                <Transitions>
-                    <DoubleTransition Property="Opacity" Duration="0:0:0.2" Easing="{StaticResource Ease.Standard}" />
-                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.2" Easing="{StaticResource Ease.Standard}" />
-                </Transitions>
-            </Setter>
-        </Style>
+        <!--  Активная пилюля БОЛЬШЕ НЕ per-item: три независимых пилюли заменены ОДНИМ общим
+              «путешествующим» индикатором (Border x:Name="BottomIndicator" в разметке), который
+              физически СКОЛЬЗИТ по X к центру активной трети. Позицию/скольжение ведёт code-behind
+              (PositionIndicator: центры из ЖИВЫХ ширин колонок, Motion.Dur.State 220 OutQuint).  -->
 
-        <!--  Выбранный пункт (класс .sel): глиф+подпись accent, подпись 500→700, пилюля вырастает + fade.  -->
+        <!--  Выбранный пункт (класс .sel): глиф+подпись accent, подпись 500→700 (тинт 200мс Standard).  -->
         <Style Selector="Button.BottomNavItem.sel PathIcon">
             <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
         </Style>
         <Style Selector="Button.BottomNavItem.sel TextBlock.NavLabel">
             <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
             <Setter Property="FontWeight" Value="Bold" />
-        </Style>
-        <Style Selector="Button.BottomNavItem.sel Border.NavPillBottom">
-            <Setter Property="Opacity" Value="1" />
-            <Setter Property="RenderTransform" Value="scale(1,1)" />
         </Style>
 
         <!--  Hover (не выбранный): затемняем ТОЛЬКО глиф/подпись (без фона), как у рейла.  -->
@@ -143,11 +125,6 @@
                 <Transitions />
             </Setter>
         </Style>
-        <Style Selector=":is(Window).lite Button.BottomNavItem Border.NavPillBottom">
-            <Setter Property="Transitions">
-                <Transitions />
-            </Setter>
-        </Style>
     </UserControl.Styles>
 
     <Panel Background="{StaticResource Nav.Scrim}">
@@ -159,7 +136,6 @@
                 <StackPanel HorizontalAlignment="Center">
                     <PathIcon HorizontalAlignment="Center" Data="{StaticResource Geo.Nav.Home}" />
                     <TextBlock Classes="NavLabel" Text="{loc:T Nav_Home}" />
-                    <Border Classes="NavPillBottom" />
                 </StackPanel>
             </Button>
             <Button
@@ -169,7 +145,6 @@
                 <StackPanel HorizontalAlignment="Center">
                     <PathIcon HorizontalAlignment="Center" Data="{StaticResource Geo.Nav.Settings}" />
                     <TextBlock Classes="NavLabel" Text="{loc:T Nav_Settings}" />
-                    <Border Classes="NavPillBottom" />
                 </StackPanel>
             </Button>
             <Button
@@ -180,9 +155,26 @@
                 <StackPanel HorizontalAlignment="Center">
                     <PathIcon HorizontalAlignment="Center" Data="{StaticResource Geo.Nav.Account}" />
                     <TextBlock Classes="NavLabel" Text="{loc:T Nav_Account}" />
-                    <Border Classes="NavPillBottom" />
                 </StackPanel>
             </Button>
+
+            <!--  ОДИН путешествующий индикатор (P0-1): акцентная полоса 34×3, СКОЛЬЗИТ по X к
+                  центру активной трети. Спан по всем колонкам, база (left,bottom); реальный X ставит
+                  TranslateTransform.X из code-behind (PositionIndicator) — центры берутся из ЖИВЫХ
+                  ширин колонок, поэтому индикатор корректен и в 3-, и в 2-пунктовом (без «Аккаунта»)
+                  состоянии. Первый показ — мгновенно на активной трети, дальше — скольжение 220 OutQuint.  -->
+            <Border
+                x:Name="BottomIndicator"
+                Grid.Column="0"
+                Grid.ColumnSpan="3"
+                Width="34"
+                Height="3"
+                Margin="0,0,0,6"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Bottom"
+                Background="{DynamicResource Brush.Accent}"
+                CornerRadius="2"
+                IsHitTestVisible="False" />
         </Grid>
     </Panel>
 </UserControl>

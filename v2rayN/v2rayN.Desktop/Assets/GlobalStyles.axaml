@@ -681,10 +681,12 @@
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         <Setter Property="VerticalContentAlignment" Value="Stretch" />
         <Setter Property="Cursor" Value="Hand" />
-        <!--  Press-возврат = Ease.OutQuint (уверенное оседание из центра, origin 50%,50% выше).  -->
+        <!--  Press-возврат = Ease.OutQuint (уверенное оседание из центра, origin 50%,50% выше).
+              Длительность = Motion.Dur.PressOut 160мс — ЕДИНОЕ значение press для ОБЕИХ навигаций
+              (рейл + нижний бар), убирает прежний разнобой 120/100 (P1-3).  -->
         <Setter Property="Transitions">
             <Transitions>
-                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" Easing="{StaticResource Ease.OutQuint}" />
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.16" Easing="{StaticResource Ease.OutQuint}" />
             </Transitions>
         </Setter>
     </Style>
@@ -735,37 +737,18 @@
             </Transitions>
         </Setter>
     </Style>
-    <!--  Левая акцентная пилюля (bg_nav_dot, перенесённая слева): скрыта в покое, у выбранного
-          мягко «вырастает» по вертикали (scaleY 0.55→1) + fade — origin 50%,50% (относительный,
-          растёт из центра, НЕ из угла), метод = TransformOperations scale() как у press-классов.  -->
-    <Style Selector="Button.NavRailItem Border.NavPill">
-        <Setter Property="Width" Value="3" />
-        <Setter Property="Height" Value="28" />
-        <Setter Property="CornerRadius" Value="2" />
-        <Setter Property="Background" Value="{DynamicResource Brush.Accent}" />
-        <Setter Property="HorizontalAlignment" Value="Left" />
-        <Setter Property="VerticalAlignment" Value="Center" />
-        <Setter Property="RenderTransformOrigin" Value="50%,50%" />
-        <Setter Property="Opacity" Value="0" />
-        <Setter Property="RenderTransform" Value="scale(1,0.55)" />
-        <Setter Property="Transitions">
-            <Transitions>
-                <DoubleTransition Property="Opacity" Duration="0:0:0.2" Easing="{StaticResource Ease.Standard}" />
-                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.2" Easing="{StaticResource Ease.Standard}" />
-            </Transitions>
-        </Setter>
-    </Style>
-    <!--  Активный пункт: глиф+подпись Accent, вес 500→700, пилюля вырастает до полной высоты + fade-in.  -->
+    <!--  Активная левая пилюля БОЛЬШЕ НЕ per-item: три независимых пилюли заменены ОДНИМ общим
+          «путешествующим» индикатором (Border x:Name="railIndicator" в MainWindow.axaml), который
+          физически СКОЛЬЗИТ между слотами по Y (M3 nav-rail idiom). Его позицию/скольжение ведёт
+          code-behind (MoveRailIndicator, Motion.Dur.State 220 OutQuint). Здесь остаётся только
+          тинт активного пункта (глиф+подпись Accent) — он идёт параллельно скольжению индикатора.  -->
+    <!--  Активный пункт: глиф+подпись Accent, вес 500→700 (тинт-кроссфейд 200мс Standard задан выше).  -->
     <Style Selector="Button.NavRailItem.active PathIcon">
         <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
     </Style>
     <Style Selector="Button.NavRailItem.active TextBlock">
         <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
         <Setter Property="FontWeight" Value="Bold" />
-    </Style>
-    <Style Selector="Button.NavRailItem.active Border.NavPill">
-        <Setter Property="Opacity" Value="1" />
-        <Setter Property="RenderTransform" Value="scale(1,1)" />
     </Style>
 
     <!-- ==================================================================== -->
@@ -1332,11 +1315,6 @@
     </Style>
     <!--  Диск connect-щита: press-scale 0.94 мгновенно (без пружины 160мс).  -->
     <Style Selector=":is(Window).lite Border.ConnectDisc">
-        <Setter Property="Transitions">
-            <Transitions />
-        </Setter>
-    </Style>
-    <Style Selector=":is(Window).lite Border.NavPill">
         <Setter Property="Transitions">
             <Transitions />
         </Setter>

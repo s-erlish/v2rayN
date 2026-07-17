@@ -78,20 +78,28 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     // были идентичны Motion.Ease.OutQuint/Standard и Motion.Dur.Reveal/Exit — дедуп без смены поведения.
     // Индикатор подключения в рейле красится ТЕМА-токенами через класс .on (Ellipse.ConnDot в разметке).
 
-    // Смена вкладки (§A.4): вход = подъём translateY 8→0 + fade-in (Motion.Dur.Reveal 300мс,
-    // Motion.Ease.OutQuint) поверх выхода = быстрый fade-out (Motion.Dur.Exit 150мс, Motion.Ease.Standard,
-    // короче входа). ContentRiseFrom — ДИСТАНЦИЯ подъёма (px), не длительность/кривая → живёт локально.
-    private const double ContentRiseFrom = 8.0;
+    // Смена вкладки (P0-2): вход = НАПРАВЛЕННЫЙ горизонтальный слайд translateX ±16→0 + fade-in
+    // (Motion.Dur.State 220мс, Motion.Ease.OutQuint) поверх выхода = быстрый fade-out (Motion.Dur.Exit
+    // 150мс, Motion.Ease.Standard, короче входа). Направление задаёт дельта nav-индекса (глубже по строке
+    // навигации Home▸Settings▸Account → въезд СПРАВА; назад → СЛЕВА) — эхо геометрии навигации вместо
+    // «единого рефлекса» одинакового вертикального подъёма на всех вкладках. Дистанция 16px = ЕДИНЫЙ
+    // slide-словарь с суб-страницами (AnimateSubPageIn тоже 16px X). ContentSlideFrom — дистанция (px).
+    private const double ContentSlideFrom = 16.0;
 
     // Токены отмены незавершённой анимации на каждый анимируемый узел (перезапуск отменяет предыдущую).
     private CancellationTokenSource? _subPageAnim;
     private CancellationTokenSource? _shellAnim;
     private CancellationTokenSource? _layoutAnim;
     private CancellationTokenSource? _resizeAnim;   // Bug6: плавная анимация размера окна при тумблере раскладки
-    private CancellationTokenSource? _contentAnim;  // смена вкладки в едином contentHost (rise+fade)
+    private CancellationTokenSource? _contentAnim;  // смена вкладки в едином contentHost (directional slide+fade)
+    private CancellationTokenSource? _indicatorAnim; // скольжение путешествующего индикатора рейла (P1-4)
     private Control? _currentShellView;          // текущий видимый оверлей оболочки (для кроссфейда)
     private Control? _currentContentView;        // текущая видимая вкладка в contentHost (keep-alive своп)
     private int _contentZ;                       // ZIndex-счётчик: входящая вкладка всегда поверх уходящей
+    private TranslateTransform? _railIndicatorTransform;   // Y-слот путешествующего индикатора рейла (P0-1)
+    private bool _railIndicatorSeeded;                     // первый показ индикатора — мгновенно на активном слоте
+    private int _navIndex;                                 // индекс текущей вкладки (Home0/Settings1/Account2) → направление слайда (P0-2)
+    private readonly HashSet<AppTab> _entrancePlayed = new();  // region-stagger: первая активация вкладки за сессию (P1-1)
 
     // Bug8: интеракции буфера/скана регистрируются на ВРЕМЯ ЖИЗНИ окна (а не под WhenActivated, что снимало
     // их при деактивации). Держим их здесь и освобождаем один раз в OnClosed — так угловой «+» (MenuFlyout,
@@ -344,20 +352,39 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     // detach/reattach. Отдельной вкладки «Сервера» нет: серверы — часть «Главной».
     private void ShowTab(AppTab tab, bool animate = true)
     {
+        // Направление слайда контента = дельта индекса в строке навигации (Home0▸Settings1▸Account2):
+        // +1 глубже (въезд справа), −1 назад (слева). На мгновенном свопе (layout swap / первый показ)
+        // направление не нужно (0). _navIndex обновляем ВСЕГДА, чтобы следующий переход считался от
+        // фактической вкладки (layout-свопы зовут ShowTab с той же вкладкой → дельта 0, ничего не ломают).
+        var toIndex = NavIndex(tab);
+        var direction = animate ? toIndex.CompareTo(_navIndex) : 0;
+        _navIndex = toIndex;
         _currentTab = tab;
 
-        SetRailActive(tab);
+        SetRailActive(tab, animate);
         bottomNav.SetSelected(tab);
 
-        SwapContent(ViewFor(tab), animate);
+        SwapContent(ViewFor(tab), animate, direction);
     }
+
+    private static int NavIndex(AppTab tab) => tab switch
+    {
+        AppTab.Settings => 1,
+        AppTab.Account => 2,
+        _ => 0,
+    };
+
+    // Off-screen-guard (P0-3): анимируем оболочку только когда окно реально видно. В трее (Hide → !IsVisible)
+    // или свёрнутом (Minimized) состоянии программный ShowTab/индикатор/стаггер снапятся в финал, а не тикают
+    // за экраном — закрывает класс «off-screen animation loop».
+    private bool IsWindowLive() => IsVisible && WindowState != WindowState.Minimized;
 
     // ==================== Keep-alive своп вкладок (rise+fade §A.4) ====================
     // Все вкладки постоянно реализованы детьми contentHost; здесь только меняем ВИДИМУЮ поверхность
     // дешёвой композитной анимацией (Opacity + TranslateY) на уже разложенной вью — без detach/reattach
     // и first-layout под кадром перехода. animate:false — мгновенно (первый показ, своп раскладки);
     // под .lite — тоже мгновенно (reduced-motion). Rise+fade идентичен прежнему page-transition.
-    private void SwapContent(Control target, bool animate)
+    private void SwapContent(Control target, bool animate, int direction = 0)
     {
         var previous = _currentContentView;
         if (previous == target)
@@ -382,8 +409,9 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         }
         target.IsHitTestVisible = true;   // покрывает и PREVIEW_VIEW (target вне keep-alive-набора)
 
-        // Мгновенный своп: первый показ (previous == null), reduced-motion (.lite) или своп раскладки.
-        if (!animate || previous is null || MotionState.IsLite)
+        // Мгновенный своп: первый показ (previous == null), reduced-motion (.lite), своп раскладки или
+        // окно вне экрана (P0-3: не крутим переход, которого никто не видит).
+        if (!animate || previous is null || MotionState.IsLite || !IsWindowLive())
         {
             _contentAnim?.Cancel();
             target.Opacity = 1d;
@@ -399,15 +427,21 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         _contentAnim?.Cancel();
         var cts = new CancellationTokenSource();
         _contentAnim = cts;
-        AnimateContentSwap(target, previous, cts.Token);
+        AnimateContentSwap(target, previous, direction, cts.Token);
     }
 
-    private async void AnimateContentSwap(Control target, Control previous, CancellationToken ct)
+    private async void AnimateContentSwap(Control target, Control previous, int direction, CancellationToken ct)
     {
         target.Opacity = 0d;
-        // Вход (подъём 8→0 + fade-in, OutQuint) поверх выхода (быстрый fade-out, Standard) — параллельно.
-        var enter = RunTranslateFade(target, TranslateTransform.YProperty, ContentRiseFrom, 0d, 0d, 1d, Motion.Dur.Reveal, Motion.Ease.OutQuint, ct);
+        // Направленный вход (translateX ±16→0 + fade-in, State 220 OutQuint) поверх выхода (быстрый
+        // fade-out, Exit 150 Standard) — параллельно. Знак X = направление по строке навигации: глубже
+        // (direction ≥ 0) → въезд справа (+16); назад (direction < 0) → слева (−16). Уходящая только
+        // гаснет (без встречного слайда) — keep-alive стек не клипается, не превращается в тяжёлую карусель.
+        var fromX = direction < 0 ? -ContentSlideFrom : ContentSlideFrom;
+        var enter = RunTranslateFade(target, TranslateTransform.XProperty, fromX, 0d, 0d, 1d, Motion.Dur.State, Motion.Ease.OutQuint, ct);
         var exit = RunFade(previous, previous.Opacity, 0d, Motion.Dur.Exit, Motion.Ease.Standard, ct);
+        // Внутренний region-stagger (Home/Settings) — поверх слайда корня; Account сам себя проигрывает.
+        PlayTabEntrance(target);
         try { await Task.WhenAll(enter, exit); }
         catch { }
         if (ct.IsCancellationRequested)
@@ -466,7 +500,7 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         }
     }
 
-    private void SetRailActive(AppTab tab)
+    private void SetRailActive(AppTab tab, bool animate)
     {
         foreach (var b in _navButtons)
         {
@@ -479,6 +513,163 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
             _ => navHome,
         };
         active.Classes.Add("active");
+
+        MoveRailIndicator(tab, animate);
+    }
+
+    // ==================== Путешествующий индикатор рейла (P0-1) ====================
+    // ОДНА акцентная полоса (railIndicator) физически СКОЛЬЗИТ по Y между слотами (M3 nav-rail idiom),
+    // вместо трёх независимых пилюль, «мигавших» на месте. Рейл всегда показывает 3 пункта (Home/Settings/
+    // Account), поэтому шаг фиксированный (высота пункта 64), слот индикатора (высота 28) центрируется:
+    // Y = index·64 + (64−28)/2. Первый показ (не seeded) / lite / off-screen / layout-своп (animate:false) —
+    // мгновенно на активном слоте (без скольжения с Y=0); дальше — Motion.Dur.State 220 OutQuint. Токен
+    // _indicatorAnim отменяет незавершённое скольжение при новом тапе; на layout-свопе рейл↔бар пере-садим
+    // мгновенно (animate:false из ShowTab), т.к. геометрии разные.
+    private static double RailSlotY(AppTab tab) => (NavIndex(tab) * 64d) + 18d;
+
+    private void MoveRailIndicator(AppTab tab, bool animate)
+    {
+        if (railIndicator is null)
+        {
+            return;
+        }
+        _railIndicatorTransform ??= new TranslateTransform();
+        if (!ReferenceEquals(railIndicator.RenderTransform, _railIndicatorTransform))
+        {
+            railIndicator.RenderTransform = _railIndicatorTransform;
+        }
+
+        var targetY = RailSlotY(tab);
+        //  В компактном режиме рейл СКРЫТ — тап нижнего бара не должен гонять 220мс скольжение на
+        //  невидимой полосе (лишняя работа компоновщика); на свопе в широкий рейл сядет мгновенно.
+        var instant = !animate || !_railIndicatorSeeded || MotionState.IsLite || !IsWindowLive() || _compactMode;
+        //  Текущее Y (в т.ч. на СЕРЕДИНЕ идущего скольжения) ловим ДО Cancel: отмена ревертит свойство к
+        //  базе, поэтому чтение внутри аниматора давало «откат-кадр» при быстрых тапах трёх вкладок.
+        var fromY = _railIndicatorTransform.Y;
+        _indicatorAnim?.Cancel();
+        if (instant)
+        {
+            _railIndicatorTransform.Y = targetY;
+            _railIndicatorSeeded = true;
+            return;
+        }
+
+        var cts = new CancellationTokenSource();
+        _indicatorAnim = cts;
+        AnimateRailIndicator(fromY, targetY, cts.Token);
+    }
+
+    private async void AnimateRailIndicator(double from, double targetY, CancellationToken ct)
+    {
+        if (_railIndicatorTransform is null)
+        {
+            return;
+        }
+        var anim = new Animation
+        {
+            Duration = Motion.Dur.State,
+            Easing = Motion.Ease.OutQuint,
+            FillMode = FillMode.Forward,
+            Children =
+            {
+                new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(TranslateTransform.YProperty, from) } },
+                new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(TranslateTransform.YProperty, targetY) } },
+            },
+        };
+        try { await anim.RunAsync(_railIndicatorTransform, ct); }
+        catch { }
+        if (!ct.IsCancellationRequested)
+        {
+            _railIndicatorTransform.Y = targetY;
+        }
+    }
+
+    // ==================== Per-tab region stagger (P1-1) ====================
+    // На активации вкладки её КРУПНЫЕ регионы (≤3) приезжают со сдвигом 40мс (opacity 0→1 + translateY
+    // 6→0, State 220 OutQuint) — «одна кривая, разные голоса» вместо единого рефлекса. Императивно, только
+    // при анимируемом свопе (значит уже не lite и на экране — AnimateContentSwap туда не заходит иначе),
+    // и ОДИН раз за сессию на вкладку (без повторного ре-fade при каждом возврате). Account ПРОПУСКАЕМ —
+    // он сам проигрывает свой group-2 стаггер (IsHitTestVisible false→true); connect-щит (ConnectHeroView)
+    // тоже НЕ трогаем — он владеет собственной cold-start сборкой и connect-хореографией (никогда не
+    // анимируем дважды). Поэтому Home = чип + список серверов (щит несёт свой вход сам); Settings = первые
+    // группы-карточки в порядке чтения.
+    private void PlayTabEntrance(Control target)
+    {
+        if (MotionState.IsLite || !IsWindowLive())
+        {
+            return;
+        }
+        if (ReferenceEquals(target, _accountView))
+        {
+            return;   // Account сам проигрывает вход
+        }
+
+        var regions = new List<Control>();
+        AppTab tab;
+        if (ReferenceEquals(target, _settingsView))
+        {
+            tab = AppTab.Settings;
+            // Первые ≤3 верхнеуровневых ребёнка контент-стека (заголовок/карточка… в порядке чтения).
+            var sv = target.GetVisualDescendants().OfType<ScrollViewer>().FirstOrDefault();
+            if (sv?.Content is Panel panel)
+            {
+                foreach (var child in panel.Children.OfType<Control>())
+                {
+                    regions.Add(child);
+                    if (regions.Count >= 3)
+                    {
+                        break;
+                    }
+                }
+            }
+        }
+        else
+        {
+            tab = AppTab.Home;   // широкая или компактная «Главная»
+            // ТОЛЬКО список серверов. Щит (ConnectHero) НЕ включаем — у него свой вход; чип аккаунта
+            // ТОЖЕ не включаем — HomeAccountChip.MaybeRunEntrance сам проигрывает своё появление при
+            // резолве аккаунта, и второй стаггер здесь давал бы двойной вход (а при одновременном
+            // логине — два аниматора на одном Opacity/RenderTransform). Стаггерим только список.
+            if (FindNamed(target, "ServerList") is { } list)
+            {
+                regions.Add(list);
+            }
+        }
+
+        if (regions.Count == 0 || !_entrancePlayed.Add(tab))
+        {
+            return;   // нечего стаггерить, либо уже играли за эту сессию
+        }
+
+        for (var i = 0; i < regions.Count; i++)
+        {
+            RunRegionReveal(regions[i], i);
+        }
+    }
+
+    private static Control? FindNamed(Visual root, string name)
+        => root.GetVisualDescendants().OfType<Control>().FirstOrDefault(c => c.Name == name);
+
+    private static async void RunRegionReveal(Control region, int index)
+    {
+        region.Opacity = 0d;
+        var anim = new Animation
+        {
+            Duration = Motion.Dur.State,
+            Delay = TimeSpan.FromTicks(Motion.Dur.Stagger.Ticks * index),
+            Easing = Motion.Ease.OutQuint,
+            FillMode = FillMode.Both,   // держим стартовый кадр (opacity 0) на время задержки региона
+            Children =
+            {
+                new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(Visual.OpacityProperty, 0d), new Setter(TranslateTransform.YProperty, 6d) } },
+                new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(Visual.OpacityProperty, 1d), new Setter(TranslateTransform.YProperty, 0d) } },
+            },
+        };
+        try { await anim.RunAsync(region); }
+        catch { }
+        // Контент виден, даже если стаггер no-op/прерван — гейтить видимость нельзя.
+        region.Opacity = 1d;
+        region.RenderTransform = null;
     }
 
     // ==================== Адаптивный своп (ширина окна ↔ раскладка) ====================
@@ -579,7 +770,11 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         _layoutAnim = cts;
 
         contentArea.Opacity = 0d;
-        try { await RunFade(contentArea, 0d, 1d, TimeSpan.FromMilliseconds(130), Motion.Ease.Standard, cts.Token); }
+        // P1-2: длительность = Motion.Dur.Shell 200мс (было off-scale 130). Совпадает с анимацией
+        // размера окна (AnimateWindowSize 200 OutQuint) → при тумблере/drag-to-edge контент
+        // до-материализуется РОВНО на том кадре, где окно перестаёт расти = один плавный морфинг,
+        // а не два рассинхронных события. Семантически Shell = «оболочка перекладывается» — это оно.
+        try { await RunFade(contentArea, 0d, 1d, Motion.Dur.Shell, Motion.Ease.Standard, cts.Token); }
         catch { }
         if (cts.IsCancellationRequested)
         {
@@ -1629,6 +1824,9 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         // RenderTargetBitmap snapshot (else it's left to GC and the async-void loop keeps poking a
         // closing window). No-op when no transition is in flight.
         CancelThemeTransition();
+        // P1-4: снимаем незавершённое скольжение путешествующего индикатора рейла (та же CTS-дисциплина,
+        // что у остальных узлов) — async-void аниматор не дёргает закрывающееся окно.
+        _indicatorAnim?.Cancel();
         base.OnClosed(e);
     }
 
