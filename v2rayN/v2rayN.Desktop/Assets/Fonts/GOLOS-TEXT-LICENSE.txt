@@ -1,0 +1,19 @@
+Golos Text
+Copyright (c) 2020 ParaType Ltd (https://www.paratype.com)
+
+Licensed under the SIL Open Font License, Version 1.1 (OFL-1.1).
+Full licence text: https://openfontlicense.org/open-font-license-official-text/
+
+Vendored weights: golos_text_regular.ttf (400), golos_text_medium.ttf (500),
+golos_text_bold.ttf (700). Static instances, so they render on every supported API level
+(minSdk 24) without fontVariationSettings, which needs API 26.
+
+Why this font is here: the Russian UI face. Space Grotesk, the brand face, maps 735
+codepoints and none of them are Cyrillic (U+0400-04FF is empty in the shipped binary), so
+every Russian string set in it silently fell back to the system face. Golos Text is a
+Russian-designed geometric grotesque and carries the full Russian alphabet including Ё/ё,
+plus ₽ U+20BD, … U+2026 and «» U+00AB/BB, which the copy law in
+docs/design2026/00-rules.md section 9.2 requires.
+
+Space Grotesk is kept, scoped to digits, currency, units, Latin technical tokens and the
+wordmark. See decisions D-1 and D-2 in docs/design2026/00-rules.md section 18.
