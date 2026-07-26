@@ -1,7 +1,7 @@
 namespace v2rayN.Desktop.Common;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// OWNER: WP3 — Settings + sub-pages.
+// OWNER: WP3, settings + sub-pages.
 // Keys: Settings_*, Dns_*, Routing_*, PerApp_*, Ping_*, Geo_*, About_*, Backup_*,
 //       UrlSchemes_*, Provider_* (+ Common_* references).
 // Views: SettingsView(.axaml/.cs), SettingsViewModel, DnsSubView, RoutingSubView,
@@ -21,7 +21,7 @@ public sealed partial class L
 {
     partial void RegisterSettings()
     {
-        // ── SettingsView — section headers + rows ──
+        // ── SettingsView: section headers + rows ──
         Add("Settings_SecConnection", "Подключение", "Connection");
         Add("Settings_Mode", "Режим", "Mode");
         Add("Settings_ModeProxy", "Прокси", "Proxy");
@@ -31,17 +31,18 @@ public sealed partial class L
         Add("Settings_Ipv6Hint", "Включить IPv6-адресацию в туннеле", "Enable IPv6 addressing in the tunnel");
         Add("Settings_Ping", "Пинг", "Ping");
         Add("Settings_LocalProxy", "Локальный прокси", "Local proxy");
-        Add("Settings_LocalProxyHint", "Порт, логин и пароль SOCKS5-подключения", "Port, username and password for the SOCKS5 connection");
+        // «Имя пользователя», matching Android lp_socks_login, not a second word for the same field.
+        Add("Settings_LocalProxyHint", "Порт, имя пользователя и пароль SOCKS5", "Port, username and password for SOCKS5");
         Add("Settings_Port", "Порт", "Port");
         Add("Settings_Socks5Auth", "SOCKS5-авторизация", "SOCKS5 authentication");
-        Add("Settings_Username", "Логин", "Username");
+        Add("Settings_Username", "Имя пользователя", "Username");
         Add("Settings_NotSet", "Не задан", "Not set");
-        Add("Settings_Socks5Hint", "Адрес: 127.0.0.1. Пустые логин и пароль отключают SOCKS5-авторизацию.", "Address: 127.0.0.1. Empty username and password disable SOCKS5 authentication.");
+        Add("Settings_Socks5Hint", "Адрес: 127.0.0.1. Пустые имя пользователя и пароль отключают SOCKS5-авторизацию.", "Address: 127.0.0.1. Empty username and password disable SOCKS5 authentication.");
 
         Add("Settings_SecBypass", "Обход блокировок", "Bypass censorship");
         Add("Settings_Mux", "Мультиплексирование (Mux)", "Multiplexing (Mux)");
-        Add("Settings_MuxHint", "Объединяет запросы в один канал соединения", "Combines requests into a single connection channel");
-        Add("Settings_MuxCount", "Число соединений Mux", "Mux connection count");
+        Add("Settings_MuxHint", "Объединяет запросы в один канал", "Combines requests into a single channel");
+        Add("Settings_MuxCount", "Число подключений Mux", "Mux connection count");
         Add("Settings_Fragment", "Фрагментация пакетов", "Packet fragmentation");
         Add("Settings_FragmentHint", "Разбивает TLS-рукопожатие против DPI", "Splits the TLS handshake to defeat DPI");
 
@@ -51,14 +52,17 @@ public sealed partial class L
 
         Add("Settings_SecInterface", "Интерфейс", "Interface");
         Add("Settings_Appearance", "Оформление", "Appearance");
-        Add("Settings_Monochrome", "Монохром", "Monochrome");
-        Add("Settings_MonochromeHint", "Монохромный режим поверх тёмной или светлой темы", "Monochrome mode over the dark or light theme");
+        // «Чёрно-белый режим» matches Android settings_theme_mono; «Монохром» was a second word
+        // for the same setting.
+        Add("Settings_Monochrome", "Чёрно-белый режим", "Black and white");
+        Add("Settings_MonochromeHint", "Поверх тёмной или светлой темы", "Over the dark or light theme");
         Add("Settings_Language", "Язык", "Language");
         Add("Settings_Autostart", "Запуск при загрузке", "Launch at startup");
         Add("Settings_AutostartHint", "Открывать departament при входе в систему", "Open departament when you sign in");
 
         Add("Settings_SecSubscription", "Подписка", "Subscription");
-        Add("Settings_SubAutoUpdate", "Автообновление подписки", "Auto-update subscription");
+        // Terminology lock 9.3: the URL sources are «провайдеры»; «подписка» is the paid service.
+        Add("Settings_SubAutoUpdate", "Автообновление провайдеров", "Auto-update providers");
         Add("Settings_Routing", "Маршрутизация", "Routing");
         Add("Settings_GeoFiles", "Файлы ресурсов", "Resource files");
 
@@ -67,7 +71,7 @@ public sealed partial class L
         Add("Settings_UrlSchemes", "Схемы URL-адресов", "URL schemes");
         Add("Settings_UrlSchemesHint", "Быстрые команды depv://", "Quick depv:// commands");
 
-        // ── SettingsViewModel — display-value resolvers (language-aware) ──
+        // ── SettingsViewModel: display-value resolvers (language-aware) ──
         Add("Settings_PerAppExcept", "кроме", "except");
         Add("Settings_PerAppOnly", "только", "only");
         Add("Settings_ThemeLight", "Светлая", "Light");
@@ -80,10 +84,10 @@ public sealed partial class L
         Add("Dns_CustomAddress", "Свой DNS-адрес", "Custom DNS address");
         Add("Dns_CustomHint", "DoH-адрес (https://…/dns-query), DoT или обычный IP: 1.1.1.1", "DoH address (https://…/dns-query), DoT, or a plain IP: 1.1.1.1");
         Add("Dns_Advanced", "Дополнительно", "Advanced");
-        Add("Dns_AdvancedHint", "Ускоряет соединение, отвечая на DNS-запросы локально (sing-box)", "Speeds up connections by answering DNS queries locally (sing-box)");
+        Add("Dns_AdvancedHint", "Ускоряет подключение, отвечая на DNS-запросы локально (sing-box)", "Speeds up connections by answering DNS queries locally (sing-box)");
 
         // ── RoutingSubView ──
-        Add("Routing_Intro", "Наборы правил определяют, какой трафик идёт через VPN, а какой — напрямую. Выберите активный набор.", "Rule sets decide which traffic goes through the VPN and which goes direct. Pick the active set.");
+        Add("Routing_Intro", "Наборы правил определяют, какой трафик идёт через VPN, а какой напрямую. Выберите активный набор.", "Rule sets decide which traffic goes through the VPN and which goes direct. Pick the active set.");
         Add("Routing_RuleSets", "Наборы правил", "Rule sets");
         Add("Routing_RulesCount", "{0} правил", "{0} rules");
         Add("Routing_Active", "Активен", "Active");
@@ -101,15 +105,15 @@ public sealed partial class L
         // ── PerAppProxyPage ──
         Add("PerApp_SplitTunnel", "Раздельное туннелирование", "Split tunneling");
         Add("PerApp_SplitTunnelHint", "Выберите, какие программы идут через VPN", "Choose which apps go through the VPN");
-        Add("PerApp_BypassHint", "Кроме выбранных — идут напрямую, минуя VPN", "Except selected — they go direct, bypassing the VPN");
-        Add("PerApp_OnlyHint", "Только выбранные — через VPN идут лишь они", "Only selected — just these go through the VPN");
+        Add("PerApp_BypassHint", "Выбранные идут напрямую, минуя VPN", "Selected apps go direct, bypassing the VPN");
+        Add("PerApp_OnlyHint", "Через VPN идут только выбранные", "Only selected apps go through the VPN");
         Add("PerApp_Apps", "Приложения", "Apps");
         Add("PerApp_AddExe", "Добавить .exe", "Add .exe");
         Add("PerApp_TunHint", "Работает в режиме TUN (sing-box). Правила применяются при следующем подключении.", "Works in TUN mode (sing-box). Rules apply on the next connection.");
         Add("PerApp_ProgramFileType", "Программа", "Program");
 
         // ── PingSettingsPage (only Real / TCP rows) ──
-        Add("Ping_Intro", "Как измерять задержку серверов. Ниже — адрес и тайм-аут проверки.", "How to measure server latency. The test address and timeout are below.");
+        Add("Ping_Intro", "Как измерять задержку серверов. Ниже задаются адрес и тайм-аут проверки.", "How to measure server latency. The test address and timeout are set below.");
         Add("Ping_RealTitle", "Реальная задержка", "Real latency");
         Add("Ping_RealHint", "Через ядро, как при подключении", "Through the core, as when connected");
         Add("Ping_TcpHint", "TCP-подключение к серверу", "TCP connection to the server");
@@ -125,11 +129,14 @@ public sealed partial class L
         Add("Geo_SizeUpdated", "{0} МБ · обновлён {1}", "{0} MB · updated {1}");
         Add("Geo_Updating", "Обновление…", "Updating…");
         Add("Geo_Downloading", "Загрузка баз…", "Downloading databases…");
-        Add("Geo_Done", "Готово — базы обновлены.", "Done — databases updated.");
-        Add("Geo_Failed", "Не удалось обновить: ", "Update failed: ");
+        Add("Geo_Done", "Базы обновлены.", "Databases updated.");
+        // Trailing space: GeoFilesPage.axaml.cs:89 still appends ex.Message. The copy is a complete
+        // 9.4 message so the view can drop that concatenation without a new string.
+        Add("Geo_Failed", "Не удалось обновить базы. Проверьте сеть и повторите. ", "Couldn't update the databases. Check your network and try again. ");
 
         // ── AboutPage ──
-        Add("About_Version", "Версия —", "Version —");
+        // Placeholder before AboutPage.axaml.cs:19 overwrites it with About_VersionValue.
+        Add("About_Version", "Версия", "Version");
         Add("About_VersionValue", "Версия {0}", "Version {0}");
         Add("About_TitleVersion", "departament · Версия {0}", "departament · Version {0}");
         Add("About_OpenSite", "Открыть сайт", "Open website");
@@ -139,19 +146,20 @@ public sealed partial class L
         Add("About_SystemInfo", "ОС: {0}\nАрхитектура: {1}\n.NET: {2}", "OS: {0}\nArchitecture: {1}\n.NET: {2}");
 
         // ── BackupPage ──
-        Add("Backup_Intro", "Сохраните все настройки, подписки и серверы в один .zip-файл или восстановите их из ранее сохранённой копии.", "Save all settings, subscriptions, and servers to a single .zip file, or restore them from a previous backup.");
+        Add("Backup_Intro", "Сохраните все настройки, провайдеров и серверы в один .zip-файл или восстановите их из ранее сохранённой копии.", "Save all settings, providers, and servers to a single .zip file, or restore them from a previous backup.");
         Add("Backup_Export", "Экспорт", "Export");
         Add("Backup_ExportHint", "Сохранить копию в файл", "Save a backup to a file");
         Add("Backup_Save", "Сохранить…", "Save…");
         Add("Backup_Import", "Импорт", "Import");
-        Add("Backup_ImportHint", "Восстановить из файла — приложение перезапустится", "Restore from a file — the app will restart");
+        Add("Backup_ImportHint", "Восстановить из файла, приложение перезапустится", "Restore from a file, the app will restart");
         Add("Backup_Restore", "Восстановить…", "Restore…");
         Add("Backup_Saving", "Сохранение…", "Saving…");
         Add("Backup_Saved", "Копия сохранена: {0}", "Backup saved: {0}");
-        Add("Backup_SaveFailed", "Не удалось сохранить копию.", "Couldn't save the backup.");
-        Add("Backup_ExportError", "Ошибка экспорта: ", "Export error: ");
+        Add("Backup_SaveFailed", "Не удалось сохранить копию. Выберите другую папку и повторите.", "Couldn't save the backup. Pick another folder and try again.");
+        // Trailing space: BackupPage.axaml.cs:51 / :84 still append ex.Message (see Geo_Failed).
+        Add("Backup_ExportError", "Не удалось сохранить копию. Выберите другую папку и повторите. ", "Couldn't save the backup. Pick another folder and try again. ");
         Add("Backup_Restoring", "Восстановление… Приложение перезапустится.", "Restoring… The app will restart.");
-        Add("Backup_ImportError", "Ошибка импорта: ", "Import error: ");
+        Add("Backup_ImportError", "Не удалось восстановить из файла. Выберите другой файл и повторите. ", "Couldn't restore from that file. Pick another file and try again. ");
 
         // ── UrlSchemesPage ──
         Add("UrlSchemes_Registration", "Регистрация схемы depv://", "depv:// scheme registration");
@@ -160,26 +168,31 @@ public sealed partial class L
         Add("UrlSchemes_Hint", "Нажмите на схему, чтобы скопировать. Используйте их в ярлыках, скриптах или других приложениях.", "Tap a scheme to copy it. Use them in shortcuts, scripts, or other apps.");
         Add("UrlSchemes_StartTunnel", "Запустить туннель", "Start the tunnel");
         Add("UrlSchemes_OpenApp", "Открыть приложение", "Open the app");
-        Add("UrlSchemes_Stop", "Остановить соединение", "Stop the connection");
-        Add("UrlSchemes_Toggle", "Переключить соединение", "Toggle the connection");
-        Add("UrlSchemes_Import", "Импорт (автоопределение типа)", "Import (auto-detect type)");
+        // Terminology lock 9.3: the tunnel state is «подключение», never «соединение».
+        Add("UrlSchemes_Stop", "Отключиться", "Disconnect");
+        // depv://close closes the app; UrlSchemesPage.axaml.cs:34 currently labels it UrlSchemes_Stop.
+        // This key is here so that view can label the two rows apart.
+        Add("UrlSchemes_Close", "Закрыть приложение", "Close the app");
+        Add("UrlSchemes_Toggle", "Переключить подключение", "Toggle the connection");
+        Add("UrlSchemes_Import", "Импорт (автоопределение)", "Import (auto-detect)");
         Add("UrlSchemes_AddByUrl", "Добавить по URL", "Add by URL");
         Add("UrlSchemes_WindowsOnly", "Регистрация схемы доступна только на Windows.", "Scheme registration is available on Windows only.");
-        Add("UrlSchemes_Registered", "Схема зарегистрирована — ссылки depv:// открывают departament.", "Scheme registered — depv:// links open departament.");
+        Add("UrlSchemes_Registered", "Схема зарегистрирована. Ссылки depv:// открывают departament.", "Scheme registered. depv:// links open departament.");
         Add("UrlSchemes_NotRegistered", "Схема не зарегистрирована.", "Scheme not registered.");
-        Add("UrlSchemes_NoPath", "Не удалось определить путь к программе.", "Couldn't determine the app's path.");
-        Add("UrlSchemes_RegisterFailed", "Не удалось зарегистрировать: ", "Registration failed: ");
+        Add("UrlSchemes_NoPath", "Не удалось определить путь к программе. Переустановите departament и повторите.", "Couldn't determine the app's path. Reinstall departament and try again.");
+        // Trailing space: UrlSchemesPage.axaml.cs:110 / :144 still append ex.Message (see Geo_Failed).
+        Add("UrlSchemes_RegisterFailed", "Не удалось зарегистрировать схему. Запустите departament от имени администратора и повторите. ", "Couldn't register the scheme. Run departament as administrator and try again. ");
         Add("UrlSchemes_RemovedOk", "Схема удалена.", "Scheme removed.");
-        Add("UrlSchemes_RemoveFailed", "Не удалось удалить: ", "Removal failed: ");
+        Add("UrlSchemes_RemoveFailed", "Не удалось убрать схему. Запустите departament от имени администратора и повторите. ", "Couldn't remove the scheme. Run departament as administrator and try again. ");
 
         // ── ProviderSettingsPage ──
         Add("Provider_Title", "Настройки провайдеров", "Provider settings");
         Add("Provider_SecUpdates", "Обновление", "Updates");
         Add("Provider_AutoUpdate", "Автообновление", "Auto-update");
-        Add("Provider_AutoUpdateHint", "Автоматически обновлять подписки", "Update subscriptions automatically");
+        Add("Provider_AutoUpdateHint", "Автоматически обновлять серверы провайдеров", "Refresh provider servers automatically");
         Add("Provider_Interval", "Интервал обновления", "Update interval");
         Add("Provider_SecNetwork", "Сеть", "Network");
         Add("Provider_Hwid", "Идентификатор устройства (HWID)", "Device ID (HWID)");
-        Add("Provider_UserAgentHint", "Отправляется ядром на исходящих соединениях.", "Sent by the core on outbound connections.");
+        Add("Provider_UserAgentHint", "Отправляется ядром на исходящих подключениях", "Sent by the core on outbound connections");
     }
 }

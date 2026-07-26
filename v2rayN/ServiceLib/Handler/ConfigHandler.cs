@@ -1,4 +1,4 @@
-using System.Data;
+﻿using System.Data;
 
 namespace ServiceLib.Handler;
 
@@ -1505,7 +1505,7 @@ public static class ConfigHandler
         var enableLegacyProtect = config.TunModeItem.EnableLegacyProtect;
         if (node.ConfigType != EConfigType.Custom
             && coreType != ECoreType.sing_box
-            && config.TunModeItem.EnableTun
+            && config.TunModeItem.EnableTunEffective
             && enableLegacyProtect)
         {
             itemSocks = new ProfileItem()
@@ -1519,7 +1519,7 @@ public static class ConfigHandler
         else if (node.ConfigType == EConfigType.Custom
             && node.PreSocksPort is > 0 and <= 65535)
         {
-            var preCoreType = config.TunModeItem.EnableTun ? ECoreType.sing_box : ECoreType.Xray;
+            var preCoreType = config.TunModeItem.EnableTunEffective ? ECoreType.sing_box : ECoreType.Xray;
             itemSocks = new ProfileItem()
             {
                 CoreType = preCoreType,

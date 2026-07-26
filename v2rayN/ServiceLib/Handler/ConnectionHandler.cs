@@ -85,15 +85,33 @@ public static class ConnectionHandler
             for (var i = 0; i < 2; i++)
             {
                 var timer = Stopwatch.StartNew();
-                await client.GetAsync(url, cts.Token).ConfigureAwait(false);
+                // The response STATUS is part of the measurement, not a detail to discard. GetAsync does
+                // not throw on 4xx/5xx, so without this check a Cloudflare/ISP block page, a captive
+                // portal login page or a mistyped probe URL is timed and reported as a healthy latency
+                // for a proxy that carries no traffic. The default probe is generate_204, whose only
+                // correct answer is 204. Matches the Android rule in SpeedtestManager.kt (204 or 200).
+                // ResponseHeadersRead also makes this time-to-first-byte instead of
+                // time-to-full-body, so an error page's payload no longer inflates the number.
+                using var resp = await client
+                    .GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cts.Token)
+                    .ConfigureAwait(false);
                 timer.Stop();
+                if (!resp.IsSuccessStatusCode)
+                {
+                    return -1;
+                }
                 oneTime.Add((int)timer.Elapsed.TotalMilliseconds);
                 await Task.Delay(100, cts.Token);
             }
-            responseTime = oneTime.Where(x => x > 0).OrderBy(x => x).FirstOrDefault();
+            // Clamp to >= 1: a sub-millisecond answer truncates to 0, which every caller reads as
+            // "failed" while SpeedtestService still writes the string "0" into the row.
+            responseTime = Math.Max(1, oneTime.Where(x => x > 0).OrderBy(x => x).FirstOrDefault());
         }
-        catch
+        catch (Exception ex)
         {
+            // -1 is the single failure sentinel; log the reason instead of dropping it silently.
+            Logging.SaveLog(_tag, ex);
+            return -1;
         }
         return responseTime;
     }

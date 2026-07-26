@@ -1,4 +1,4 @@
-namespace ServiceLib.Handler.Builder;
+﻿namespace ServiceLib.Handler.Builder;
 
 public record CoreConfigContextBuilderResult(CoreConfigContext Context, NodeValidatorResult ValidatorResult)
 {
@@ -42,7 +42,7 @@ public class CoreConfigContextBuilder
             AllProxiesMap = [],
             AppConfig = config,
             FullConfigTemplate = await AppManager.Instance.GetFullConfigTemplateItem(coreType),
-            IsTunEnabled = config.TunModeItem.EnableTun,
+            IsTunEnabled = config.TunModeItem.EnableTunEffective,
             SimpleDnsItem = config.SimpleDNSItem,
             ProtectDomainList = [],
             RawDnsItem = await AppManager.Instance.GetDNSItem(coreType),
@@ -201,7 +201,7 @@ public class CoreConfigContextBuilder
         if (preSocksItem == null
             && node.ConfigType == EConfigType.Custom
             && coreType == ECoreType.Xray
-            && config.TunModeItem.EnableTun)
+            && config.TunModeItem.EnableTunEffective)
         {
             preSocksItem = new ProfileItem
             {

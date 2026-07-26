@@ -6,7 +6,7 @@ namespace v2rayN.Desktop.Common;
 /// departament localization core (Option a from LOCALIZATION_PLAN.md).
 ///
 /// A single live string table for the custom "departament" UI, selectable between
-/// Russian (<c>ru</c>) and English (<c>en</c>) with LIVE switching — no restart.
+/// Russian (<c>ru</c>) and English (<c>en</c>) with LIVE switching, no restart.
 ///
 /// Usage:
 ///   • AXAML:  add <c>xmlns:loc="clr-namespace:v2rayN.Desktop.Common"</c> to the view root,
@@ -16,7 +16,7 @@ namespace v2rayN.Desktop.Common;
 ///   • Code:   <c>L.T("Key")</c> for a plain string, <c>L.F("Key", args)</c> for a
 ///             positional-placeholder template, <c>L.Plural("Key", n)</c> for a locale-aware
 ///             "{n} word" count line.
-///   • Switch: <c>L.Instance.SetLanguage("en")</c> — updates the language, syncs
+///   • Switch: <c>L.Instance.SetLanguage("en")</c>: updates the language, syncs
 ///             <see cref="Thread.CurrentUICulture"/> (so the ResUI/engine layer follows),
 ///             refreshes all <c>{loc:T}</c> bindings, and raises <see cref="LanguageChanged"/>.
 ///
@@ -40,7 +40,7 @@ public sealed partial class L : INotifyPropertyChanged
     // Guards the "log a missing key only once" behaviour.
     private readonly HashSet<string> _missingLogged = new(StringComparer.Ordinal);
 
-    // Live observers created by {loc:T} bindings — one per open binding. Held by WEAK reference so the
+    // Live observers created by {loc:T} bindings, one per open binding. Held by WEAK reference so the
     // long-lived singleton never pins a control (see the Observe(...) region for the full rationale).
     private readonly List<(string Key, WeakReference<IObserver<string>> Ref)> _observers = new();
     private readonly object _observersLock = new();
@@ -56,7 +56,7 @@ public sealed partial class L : INotifyPropertyChanged
     private L()
     {
         // Read the persisted language before anything binds. Guarded because the XAML previewer
-        // (design mode) and very-early init may not have a live config yet — fall back to ru.
+        // (design mode) and very-early init may not have a live config yet; fall back to ru.
         try
         {
             var lang = AppManager.Instance.Config?.UiItem?.CurrentLanguage;
@@ -71,7 +71,7 @@ public sealed partial class L : INotifyPropertyChanged
         }
 
         // Each area contributes its own keys from its own partial file (implemented → called,
-        // unimplemented → elided). WP0 owns Common; WP1–WP6 own the rest.
+        // unimplemented → elided). WP0 owns Common; WP1-WP6 own the rest.
         RegisterCommon();
         RegisterHome();
         RegisterServers();
@@ -164,7 +164,7 @@ public sealed partial class L : INotifyPropertyChanged
         return Math.Abs(n) == 1 ? forms[0] : forms[^1];
     }
 
-    /// <summary>Russian plural selector: one (1), few (2–4), many (0, 5–20, teens). Forms = {one, few, many}.</summary>
+    /// <summary>Russian plural selector: one (1), few (2-4), many (0, 5-20, teens). Forms = {one, few, many}.</summary>
     private static string SelectRu(string[] forms, int n)
     {
         if (forms.Length == 0)
@@ -205,18 +205,18 @@ public sealed partial class L : INotifyPropertyChanged
         }
         catch (CultureNotFoundException)
         {
-            // Unknown culture name — leave the current UI culture unchanged.
+            // Unknown culture name; leave the current UI culture unchanged.
         }
 
         // Push the new translation to every open {loc:T} binding. This is the mechanism that makes the
-        // static XAML labels re-render live — see the Observe(...) region for why an observable is used
+        // static XAML labels re-render live; see the Observe(...) region for why an observable is used
         // instead of the (Avalonia-inert) "Item[]" indexer-invalidation convention.
         PushToObservers();
 
         // Kept for backward compatibility with any INotifyPropertyChanged consumer. Note: Avalonia 12's
         // binding system does NOT act on the WPF-era "Item[]" indexer-refresh convention (its INPC
         // accessor only matches the exact property name, or an empty/null name), so this alone never
-        // refreshed the {loc:T} bindings — that is what PushToObservers() above now fixes.
+        // refreshed the {loc:T} bindings; that is what PushToObservers() above now fixes.
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs("Item[]"));
         LanguageChanged?.Invoke(this, EventArgs.Empty);
     }
@@ -231,7 +231,7 @@ public sealed partial class L : INotifyPropertyChanged
     // The old {loc:T Key} bound to L.Instance[Key] (a reflection indexer binding) and SetLanguage raised
     // PropertyChanged("Item[]"). That is the WPF convention for "all indexers changed", but Avalonia 12's
     // INPC accessor (InpcPropertyAccessorPlugin) only re-reads when the raised property name is empty/null
-    // or exactly matches the accessor's name ("Item") — it does NOT special-case "Item[]". So the open
+    // or exactly matches the accessor's name ("Item"); it does NOT special-case "Item[]". So the open
     // indexer bindings never re-pulled, and every static {loc:T} label stayed frozen in the startup
     // language. (Strings re-applied imperatively via LanguageChanged updated fine, matching the report.)
     //
@@ -288,7 +288,7 @@ public sealed partial class L : INotifyPropertyChanged
         }
     }
 
-    /// <summary>Per-key observable. Kept tiny and allocation-light — one instance per <c>{loc:T}</c> binding.</summary>
+    /// <summary>Per-key observable. Kept tiny and allocation-light, one instance per <c>{loc:T}</c> binding.</summary>
     private sealed class KeyObservable : IObservable<string>
     {
         private readonly L _owner;

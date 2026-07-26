@@ -181,7 +181,27 @@ public class CoreTypeItem
 [Serializable]
 public class TunModeItem
 {
+    /// <summary>
+    /// The user's PERSISTED routing intent. It must NEVER be downgraded to reflect what the current
+    /// process happens to be capable of: an unelevated Windows run, or any Linux/macOS launch before
+    /// the sudo prompt has run, would otherwise have its downgrade made permanent by the 20-minute
+    /// autosave (<c>TaskManager</c>) and the exit save (<c>AppManager.AppExitAsync</c>) — erasing a
+    /// choice the user never changed. Decide what to actually BUILD and RUN from
+    /// <see cref="EnableTunEffective"/>.
+    /// </summary>
     public bool EnableTun { get; set; } = true;
+
+    /// <summary>
+    /// Session-scoped capability, owned by <c>StatusBarViewModel</c>: true when THIS process cannot
+    /// create a tunnel. Deliberately not serialized — it describes the run, not the user.
+    /// </summary>
+    [JsonIgnore]
+    public bool TunUnavailable { get; set; }
+
+    /// <summary>Intent AND capability. Every core-config / routing decision reads this.</summary>
+    [JsonIgnore]
+    public bool EnableTunEffective => EnableTun && !TunUnavailable;
+
     public bool AutoRoute { get; set; } = true;
     public bool StrictRoute { get; set; } = true;
     public string Stack { get; set; }

@@ -145,16 +145,15 @@ public class StatusBarViewModel : MyReactiveObject
         // A6: capture whether TUN was requested BEFORE the in-memory downgrade below, so we can
         // surface "requested but unavailable" instead of silently switching to system-proxy.
         _tunRequested = _config.TunModeItem.EnableTun;
-        if (_config.TunModeItem.EnableTun && AllowEnableTun())
-        {
-            EnableTun = true;
-        }
-        else
-        {
-            // Downgrade the EFFECTIVE config to false (so the generated core config doesn't request a
-            // tunnel it can't create) — but _tunRequested still records the user's real intent.
-            _config.TunModeItem.EnableTun = EnableTun = false;
-        }
+        // Downgrade the EFFECTIVE routing to false when this process cannot create a tunnel (so the
+        // generated core config never requests one it cannot build) WITHOUT touching the persisted
+        // intent. TunUnavailable is [JsonIgnore], so neither the 20-minute autosave nor the exit save
+        // can write the downgrade to disk any more — previously one unelevated Windows run, or ANY
+        // Linux/macOS launch (LinuxSudoPwd is in-memory only and is necessarily empty this early),
+        // erased the user's TUN choice permanently and, from the second launch on, also erased the
+        // "TUN requested but unavailable" banner that was supposed to report it.
+        _config.TunModeItem.TunUnavailable = !AllowEnableTun();
+        EnableTun = _config.TunModeItem.EnableTunEffective;
         UpdateRoutingModeStatus();
 
         #region WhenAnyValue && ReactiveCommand

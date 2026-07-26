@@ -490,6 +490,18 @@
         <Setter Property="Opacity" Value="0.38" />
         <Setter Property="Cursor" Value="Arrow" />
     </Style>
+    <!--  Строка, ждущая сеть: НЕ вид «отключено». Непрозрачность остаётся 1.0
+          (выцветшая строка читается как «сломано», а не «работает»), строка просто
+          перестаёт принимать нажатия, а на месте трейлинга потребитель ставит
+          инлайн-дугу 20. Промежуточного состояния у тумблера не существует —
+          именно поэтому он на время ожидания заменяется, а не «полу-включается».  -->
+    <Style Selector="Border.Row.loading">
+        <Setter Property="IsHitTestVisible" Value="False" />
+        <Setter Property="Cursor" Value="Arrow" />
+    </Style>
+    <Style Selector="Border.Row.loading:pointerover">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
     <!--  Row.Value — показывает значение и открывает выбор. Геометрия базовая;
           класс существует, чтобы разметка называла роль, а не рисовала её.  -->
     <Style Selector="Border.Row.Value">
@@ -2487,6 +2499,24 @@
     <Style Selector="Border.Selectable.disabled">
         <Setter Property="Opacity" Value="0.38" />
         <Setter Property="Cursor" Value="Arrow" />
+    </Style>
+    <!--  Загрузка списка выбора: элемент не принимает нажатий, но НЕ выцветает.  -->
+    <Style Selector="Border.Selectable.loading">
+        <Setter Property="IsHitTestVisible" Value="False" />
+        <Setter Property="Cursor" Value="Arrow" />
+    </Style>
+    <!--  Сообщение вспомогательным технологиям о выборе задаёт потребитель через
+          AutomationProperties.IsSelected — цвет и вес читает только зрячий.  -->
+
+    <!-- ==================================================================== -->
+    <!--  12. ФЛАЙАУТ / ЛИСТ. Порядок предпочтения — закон (7.6): инлайн →       -->
+    <!--  раскрывающаяся строка → флайаут → диалог. Диалог последний.            -->
+    <!--  Поверхность флайаута задаёт IncyFlyoutTheme (вверху файла): SurfaceHigh -->
+    <!--  на ступень выше карты, 1px рамка, радиус 20, паддинг 16.                -->
+    <!--  Здесь — заголовок листа и его отступ до содержимого.                    -->
+    <!-- ==================================================================== -->
+    <Style Selector="Border.SheetTop TextBlock.Title">
+        <Setter Property="Margin" Value="0,0,0,16" />
     </Style>
 
     <!-- ==================================================================== -->

@@ -1237,7 +1237,10 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     public void OpenLoginTelegram()
     {
         OpenLogin();
-        _accountVm.LoginTelegramCmd.Execute().Subscribe();
+        // onError is MANDATORY: ReactiveCommand.Execute() faults the returned sequence as well as
+        // ThrownExceptions, and a parameterless Subscribe() installs a rethrowing stub that kills the
+        // process. Route it to the account error surface so the user reads a real message.
+        _accountVm.LoginTelegramCmd.Execute().Subscribe(_ => { }, _accountVm.ReportCommandException);
     }
 
     // Онбординг «Войти через сайт»: открываем LoginView (чтобы возврату из браузера было куда сесть и
@@ -1246,7 +1249,7 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     public void OpenLoginSite()
     {
         OpenLogin();
-        _accountVm.LoginBrowserCmd.Execute().Subscribe();
+        _accountVm.LoginBrowserCmd.Execute().Subscribe(_ => { }, _accountVm.ReportCommandException);
     }
 
     // Общий вход для суб-страниц НАСТРОЕК (DNS, Маршрутизация, Прокси по приложениям, Провайдеры,

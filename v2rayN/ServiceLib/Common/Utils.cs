@@ -983,7 +983,18 @@ public class Utils
         return await GetCliWrapOutput(filePath, arg != null ? new List<string>() { arg } : null);
     }
 
-    public static async Task<string?> GetCliWrapOutput(string filePath, IEnumerable<string>? args)
+    /// <summary>
+    /// Bounded variant: kills the child process and returns null once <paramref name="timeout"/>
+    /// elapses. Use this from ANY path that runs while a lock is held — an external binary that never
+    /// exits would otherwise wedge the holder forever.
+    /// </summary>
+    public static async Task<string?> GetCliWrapOutput(string filePath, string? arg, TimeSpan timeout)
+    {
+        using var cts = new CancellationTokenSource(timeout);
+        return await GetCliWrapOutput(filePath, arg != null ? new List<string>() { arg } : null, cts.Token);
+    }
+
+    public static async Task<string?> GetCliWrapOutput(string filePath, IEnumerable<string>? args, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -1000,7 +1011,9 @@ public class Utils
                 }
             }
 
-            var result = await cmd.ExecuteBufferedAsync();
+            // Forceful cancellation: CliWrap kills the child on cancel, so the await genuinely returns
+            // instead of leaving an orphan process attached to a dead task.
+            var result = await cmd.ExecuteBufferedAsync(cancellationToken);
             if (result.IsSuccess)
             {
                 return result.StandardOutput ?? "";

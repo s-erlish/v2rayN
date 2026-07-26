@@ -11,12 +11,20 @@ namespace v2rayN.Desktop.Account;
 ///    off it — the branding UA gets the wrong content);
 ///  - <see cref="ConfigHandler.DeleteSubItem(Config, string)"/> drops a managed sub gone remotely.
 ///
-/// KEY FACT (why the previous import fetched nothing): the connect URL (<c>subscriptionUrl</c>) lives
-/// ONLY on GET /client/subscription — the authoritative ACTIVE/primary subscription. The
-/// /client/subscription/all items arrive WITHOUT a <c>subscription</c>/<c>remnawaveUuid</c> block, so
-/// importing from /all alone yields no URL and therefore no servers. This manager fetches the PRIMARY
-/// summary for the real URL (and merges any /all item that happens to expose its own URL), sets it as
-/// the created <see cref="SubItem.Url"/>, and lets the normal subscription update download the servers.
+/// KEY FACT (why the previous import fetched nothing): the connect URL (<c>subscriptionUrl</c>) is
+/// only GUARANTEED on GET /client/subscription — the authoritative ACTIVE/primary subscription. The
+/// deployed backend also copies the same Remnawave payload onto each /client/subscription/all item
+/// (client.routes.ts builds `subscription: rootResult.data ?? null` per item), but it is `null`
+/// whenever the upstream panel is unreachable, so /all alone is not a dependable source of URLs. This
+/// manager fetches the PRIMARY summary for the real URL, merges any /all item that exposes its own,
+/// sets it as the created <see cref="SubItem.Url"/>, and lets the normal subscription update download
+/// the servers.
+///
+/// PRUNING IS NOT DRIVEN BY "WE GOT NOTHING BACK". Both endpoints can answer HTTP 200 with a null
+/// subscription during an upstream outage, and both can fail outright when the machine is offline;
+/// neither means the account lost its subscriptions. <see cref="ImportAll"/> therefore only authorises
+/// the prune when both calls succeeded AND the remote answer was self-consistent — see the
+/// <c>canPrune</c> parameter of <see cref="Import"/>.
 ///
 /// The uuid-&gt;guid mapping is owned by <see cref="AuthTokenStore"/>.
 /// </summary>
@@ -40,40 +48,60 @@ public sealed class SubscriptionSyncManager
 
     /// <summary>
     /// GETs the account's subscriptions (primary summary + /all), imports/updates each into the local
-    /// plumbing, removes any managed subscription no longer present remotely, and returns the local
-    /// guids of the current managed set (so the caller can reload its server list).
+    /// plumbing, removes any managed subscription that the account AUTHORITATIVELY no longer has, and
+    /// returns the local guids of the current managed set (so the caller can reload its server list).
+    /// A fetch that failed is rethrown AFTER the import so the caller's
+    /// <c>ApiResult.OnFailure(Report)</c> shows the user an honest error instead of a silent no-op —
+    /// but the local data is left intact either way.
     /// </summary>
     public async Task<List<string>> ImportAll()
     {
         // The PRIMARY summary is the authoritative source of the real connect URL. A "no active
-        // subscription" account returns a 200 with an empty subscription (not an error), so the
-        // best-effort try/catch only swallows genuine transient failures — the subsequent
-        // AccountViewModel.FetchAndApplySubscriptions surfaces those to the UI.
+        // subscription" account returns a 200 with an empty subscription (not an error), so a failure
+        // here is always a genuine transient one. It is REMEMBERED (not swallowed): a fetch that did
+        // not answer must not be read as "this subscription is gone".
+        ApiError? fetchError = null;
         PrimarySubscriptionDto? primary = null;
+        var primaryOk = false;
         try
         {
             primary = await _api.GetPrimarySubscription();
+            primaryOk = true;
         }
-        catch (ApiError)
+        catch (ApiError e)
         {
-            // fall through — still import anything /all exposes
+            fetchError ??= e;   // still import anything /all exposes, but forbid the prune
         }
 
         List<SubInfoDto> all;
+        var allOk = false;
         try
         {
             all = (await _api.GetSubscriptionAll()).Items;
+            allOk = true;
         }
-        catch (ApiError)
+        catch (ApiError e)
         {
+            fetchError ??= e;
             all = new List<SubInfoDto>();
         }
 
         var profile = AuthTokenStore.GetUser();
-        return await Import(primary, all, profile);
+        // Offline / DNS / TLS / timeout / 429 / 502 / 503 / parse all land here with canPrune=false, so
+        // the launch-time sync of an offline user can no longer delete the servers he is offline with.
+        var guids = await Import(primary, all, profile, canPrune: primaryOk && allOk);
+        if (fetchError is not null)
+        {
+            throw fetchError;
+        }
+        return guids;
     }
 
-    private async Task<List<string>> Import(PrimarySubscriptionDto? primary, List<SubInfoDto> all, UserProfileDto? profile)
+    /// <param name="canPrune">
+    /// True only when the remote subscription set was actually determined. False means "could not
+    /// determine" — the managed set is then preserved verbatim and nothing is deleted.
+    /// </param>
+    private async Task<List<string>> Import(PrimarySubscriptionDto? primary, List<SubInfoDto> all, UserProfileDto? profile, bool canPrune)
     {
         var config = AppManager.Instance.Config;
         var managed = AuthTokenStore.GetManagedGuids();
@@ -81,7 +109,20 @@ public sealed class SubscriptionSyncManager
         var newMap = new Dictionary<string, string>();
         var resultGuids = new List<string>();
 
-        foreach (var candidate in BuildCandidates(primary, all, profile))
+        var candidates = BuildCandidates(primary, all, profile).ToList();
+
+        // Second guard, for the failure that throws NOTHING: when the upstream Remnawave panel is down
+        // the backend still answers 200 on both endpoints with `subscription: null`, so every item
+        // loses its URL and BuildCandidates returns empty even though the account still owns the
+        // subscriptions. Distinguish that from a genuinely emptied account: only an account that
+        // reports no /all items AND no active primary is allowed to prune down to nothing.
+        var remoteReportsNothing = all.Count == 0 && primary?.HasActiveSubscription() != true;
+        if (candidates.Count == 0 && !remoteReportsNothing)
+        {
+            canPrune = false;
+        }
+
+        foreach (var candidate in candidates)
         {
             // Reuse the guid we already manage for this uuid, else an existing SubItem with the same
             // URL, else create a new row (AddSubItem assigns the guid).
@@ -121,6 +162,21 @@ public sealed class SubscriptionSyncManager
             }
         }
 
+        if (!canPrune)
+        {
+            // Not authoritative. Keep every mapping we could not re-confirm and delete NOTHING, so the
+            // user still has his subscriptions (and their servers) the next time the network works.
+            foreach (var kv in managed)
+            {
+                if (kv.Value.IsNotEmpty() && !newMap.ContainsKey(kv.Key))
+                {
+                    newMap[kv.Key] = kv.Value;
+                }
+            }
+            AuthTokenStore.SetManagedGuids(newMap);
+            return resultGuids;
+        }
+
         // Drop any previously managed subscription whose guid is not in the freshly imported set.
         foreach (var kv in managed)
         {
@@ -135,9 +191,10 @@ public sealed class SubscriptionSyncManager
     }
 
     /// <summary>
-    /// Builds the ordered import set: the ACTIVE/primary subscription first (the only reliable source
-    /// of a real connect URL), then any /all item that happens to expose its OWN url (future-proof —
-    /// today /all never does). De-duplicated by url.
+    /// Builds the ordered import set: the ACTIVE/primary subscription first (the most reliable source
+    /// of a real connect URL), then any /all item that exposes its OWN url — the deployed backend does
+    /// put one on both root and secondary items, but leaves it null when the upstream panel is down,
+    /// which is why an empty result here is treated as "unknown", not "empty". De-duplicated by url.
     /// </summary>
     private static IEnumerable<Candidate> BuildCandidates(PrimarySubscriptionDto? primary, List<SubInfoDto> all, UserProfileDto? profile)
     {
@@ -181,7 +238,17 @@ public sealed class SubscriptionSyncManager
         {
             if (kv.Value.IsNotEmpty())
             {
-                await ConfigHandler.DeleteSubItem(config, kv.Value);
+                // Per-item guard: DeleteSubItem does raw SQLite work with no try/catch of its own, and a
+                // single failing row must not abort the logout half-way — the session still has to be
+                // cleared, and the caller (LogoutCmd) must not fault.
+                try
+                {
+                    await ConfigHandler.DeleteSubItem(config, kv.Value);
+                }
+                catch (Exception ex)
+                {
+                    Logging.SaveLog("RemoveAllManaged", ex);
+                }
             }
         }
         AuthTokenStore.SetManagedGuids(new Dictionary<string, string>());

@@ -28,7 +28,10 @@ public sealed class SubInfoDto
     /// <summary>The subscription id — also the id the auto-renew endpoint expects. (in /all)</summary>
     public string Id { get; set; } = "";
 
-    // NOT present on /all items — only on the GET /client/subscription summary / connect payload.
+    // Best-effort on /all: the deployed backend copies the Remnawave payload onto every /all item, but
+    // sends `subscription: null` whenever the upstream panel is unreachable. Guaranteed only on the
+    // GET /client/subscription summary / connect payload. Never treat an absent block as "no
+    // subscription" — see SubscriptionSyncManager's prune guard.
     public string RemnawaveUuid { get; set; } = "";
     public SubResponseWrapper? Subscription { get; set; }
     public string? TariffDisplayName { get; set; }

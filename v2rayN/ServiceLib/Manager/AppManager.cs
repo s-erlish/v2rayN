@@ -1,4 +1,4 @@
-namespace ServiceLib.Manager;
+﻿namespace ServiceLib.Manager;
 
 public sealed class AppManager
 {
@@ -27,7 +27,7 @@ public sealed class AppManager
         get
         {
             _statePort2 ??= Utils.GetFreePort(GetLocalPort(EInboundProtocol.api2));
-            return _statePort2.Value + (_config.TunModeItem.EnableTun ? 1 : 0);
+            return _statePort2.Value + (_config.TunModeItem.EnableTunEffective ? 1 : 0);
         }
     }
 

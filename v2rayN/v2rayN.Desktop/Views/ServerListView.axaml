@@ -133,6 +133,19 @@
                                                   (первые ≤8 строк всплывают 12→0 + fade, задержка i×40мс,
                                                   ~300мс OutQuint). Строки видимы ПО УМОЛЧАНИЮ — анимация лишь
                                                   усиливает уже видимый покой (см. code-behind, §A.4).  -->
+                                            <!--  ДОСТУПНОСТЬ (00-rules 12.2 «ничто не может быть доступно только мышью»,
+                                                  7.1, 14.8): строка — таб-стоп. Раньше это был «голый» Border с одними
+                                                  указательными обработчиками, поэтому ВСЕ семь действий строки (по
+                                                  умолчанию / пинг / изменить / дублировать / QR / ссылка / удалить) жили
+                                                  ТОЛЬКО в правом клике, а с клавиатуры не открывались вовсе. Focusable
+                                                  + IsTabStop дают: (1) фокус-с-клавиатуры и уже готовое кольцо
+                                                  FocusAdorner (GlobalStyles «Border.ServerRow» — фундамент лежал в
+                                                  ожидании этого флага, как было с Border.AccountChip); (2) ContextMenu
+                                                  по клавише «Меню» / Shift+F10 — Avalonia поднимает ContextRequested с
+                                                  клавиатуры только на СФОКУСИРОВАННОМ контроле, а OnRowContextRequested
+                                                  берёт цель из DataContext отправителя, поэтому клавиатурный путь ведёт
+                                                  ровно к той же строке. Выбор сервера по Enter/Space остаётся за
+                                                  code-behind (пара к WireRow в SettingsView.axaml.cs) — здесь разметка.  -->
                                             <Border
                                                 MinHeight="52"
                                                 Margin="16,2"
@@ -141,6 +154,8 @@
                                                 Classes.selected="{Binding IsActive}"
                                                 ContextRequested="OnRowContextRequested"
                                                 CornerRadius="{StaticResource Radius.Search}"
+                                                Focusable="True"
+                                                IsTabStop="True"
                                                 Loaded="OnServerRowLoaded"
                                                 PointerCaptureLost="OnRowPointerCaptureLost"
                                                 PointerExited="OnRowPointerExited"

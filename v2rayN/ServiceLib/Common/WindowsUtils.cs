@@ -52,6 +52,15 @@ internal static class WindowsUtils
         }
     }
 
+    /// <summary>
+    /// Per-<c>pnputil</c> invocation budget. This runs inside <c>CoreManager.CoreStopInternal</c>, i.e.
+    /// while the global core-op gate is held and with NO cancellation token on the three user-facing
+    /// waits (connect, disconnect, app exit). pnputil talking to a wedged PnP stack therefore used to
+    /// wedge the whole app until Task Manager; the bound turns that into a logged warning and a
+    /// possibly-stale adapter. Generous enough that a healthy removal never trips it.
+    /// </summary>
+    private static readonly TimeSpan _tunRemoveTimeout = TimeSpan.FromSeconds(20);
+
     public static async Task RemoveTunDevice()
     {
         var tunNameList = new List<string> { "wintunsingbox_tun", "xray_tun" };
@@ -64,8 +73,8 @@ internal static class WindowsUtils
                 var pnpUtilPath = @"C:\Windows\System32\pnputil.exe";
                 var arg = $$""" /remove-device  "SWD\Wintun\{{{guid}}}" """;
 
-                // Try to remove the device
-                _ = await Utils.GetCliWrapOutput(pnpUtilPath, arg);
+                // Try to remove the device — bounded, never unbounded (see _tunRemoveTimeout).
+                _ = await Utils.GetCliWrapOutput(pnpUtilPath, arg, _tunRemoveTimeout);
             }
             catch (Exception ex)
             {

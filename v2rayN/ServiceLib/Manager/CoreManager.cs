@@ -1,4 +1,4 @@
-namespace ServiceLib.Manager;
+﻿namespace ServiceLib.Manager;
 
 /// <summary>
 /// Core process processing class
@@ -953,7 +953,7 @@ public class CoreManager
             // with a CPU spike, and a single slow handshake must NEVER restart a still-alive core (that
             // is the self-inflicted disconnect we are eliminating). If ANY attempt answers, the core is
             // alive and left running.
-            if (!dead && _lastPreContext is { } pre && pre.AppConfig.TunModeItem.EnableTun)
+            if (!dead && _lastPreContext is { } pre && pre.AppConfig.TunModeItem.EnableTunEffective)
             {
                 dead = !await ProbeSocksReadySustainedAsync(pre.Node.Port);
             }
@@ -1254,7 +1254,7 @@ public class CoreManager
         // a device that still exists). Doing it here means both an explicit user disconnect and the
         // stop-before-start inside LoadCore leave a clean slate. RemoveTunDevice swallows its own
         // errors, so a missing adapter is a no-op.
-        if (Utils.IsWindows() && _config?.TunModeItem?.EnableTun == true)
+        if (Utils.IsWindows() && _config?.TunModeItem?.EnableTunEffective == true)
         {
             await WindowsUtils.RemoveTunDevice();
         }
@@ -1363,7 +1363,7 @@ public class CoreManager
         {
             return;
         }
-        if (!preContext.AppConfig.TunModeItem.EnableTun)
+        if (!preContext.AppConfig.TunModeItem.EnableTunEffective)
         {
             return;
         }
@@ -1442,7 +1442,7 @@ public class CoreManager
         try
         {
             if (mayNeedSudo
-                && _config.TunModeItem.EnableTun
+                && _config.TunModeItem.EnableTunEffective
                 && (coreInfo.CoreType is ECoreType.sing_box or ECoreType.mihomo or ECoreType.Xray)
                 && Utils.IsNonWindows())
             {

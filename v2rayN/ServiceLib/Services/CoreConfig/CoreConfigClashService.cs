@@ -1,4 +1,4 @@
-namespace ServiceLib.Services.CoreConfig;
+﻿namespace ServiceLib.Services.CoreConfig;
 
 /// <summary>
 /// Core configuration file processing class
@@ -102,7 +102,7 @@ public class CoreConfigClashService(Config config)
             }
 
             //enable tun mode
-            if (config.TunModeItem.EnableTun)
+            if (config.TunModeItem.EnableTunEffective)
             {
                 var tun = EmbedUtils.GetEmbedText(Global.ClashTunYaml);
                 if (tun.IsNotEmpty())
@@ -171,7 +171,7 @@ public class CoreConfigClashService(Config config)
         }
         foreach (var item in mixinContent)
         {
-            if (!config.TunModeItem.EnableTun && item.Key == "tun")
+            if (!config.TunModeItem.EnableTunEffective && item.Key == "tun")
             {
                 continue;
             }

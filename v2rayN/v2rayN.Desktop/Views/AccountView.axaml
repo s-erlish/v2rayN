@@ -1369,6 +1369,12 @@
 
                     <!--  «Выйти» — вынесен ИЗ карты навигации в отдельную тихую строку (24dp-разрыв):
                           красный ТЕКСТ, без заливки/красной плитки. Виден только вошедшему.  -->
+                    <!--  ДОСТУПНОСТЬ (00-rules 12.2 «ничто не может быть доступно только мышью», 7.1, 14.8):
+                          «Выйти» был Border с одним Tapped из code-behind — выход из аккаунта не выполнялся
+                          с клавиатуры вообще. Focusable + IsTabStop дают таб-стоп и уже готовое кольцо
+                          FocusAdorner (GlobalStyles «Border.Row»), а KeyBindings Enter/Space вызывают ТОТ ЖЕ
+                          LogoutCmd, что и указательный путь (AccountView.axaml.cs:66) — путь замкнут целиком
+                          в разметке, без дублирующего обработчика. Порядок Tab = порядок разметки.  -->
                     <Border
                         x:Name="LogoutRow"
                         Margin="0,24,0,0"
@@ -1376,7 +1382,13 @@
                         Padding="16,0"
                         Classes="Row"
                         Cursor="Hand"
+                        Focusable="True"
+                        IsTabStop="True"
                         IsVisible="{Binding IsLoggedIn}">
+                        <Border.KeyBindings>
+                            <KeyBinding Command="{Binding LogoutCmd}" Gesture="Enter" />
+                            <KeyBinding Command="{Binding LogoutCmd}" Gesture="Space" />
+                        </Border.KeyBindings>
                         <Grid ColumnDefinitions="Auto,*" VerticalAlignment="Center">
                             <Border Grid.Column="0" VerticalAlignment="Center" Classes="Tile">
                                 <PathIcon

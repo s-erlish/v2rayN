@@ -63,7 +63,17 @@ public partial class AccountView : UserControl
         CopyReferralButton.Click += OnCopyReferral;
         // Пустое состояние «Выбрать тариф» ведёт в «Купить» (тот же путь навигации, что и строка «Купить»).
         EmptyBuyButton.Click += (_, _) => BuyRequested?.Invoke(this, EventArgs.Empty);
-        LogoutRow.Tapped += (_, _) => (DataContext as AccountViewModel)?.LogoutCmd.Execute().Subscribe();
+        // onError is MANDATORY here: Logout() awaits an unguarded DB teardown (AccountSession.Wipe →
+        // RemoveAllManaged → ConfigHandler.DeleteSubItem), and a parameterless Subscribe() would rethrow
+        // that fault into the dispatcher and kill the process mid-logout — after the VPN was stopped but
+        // before the session was cleared.
+        LogoutRow.Tapped += (_, _) =>
+        {
+            if (DataContext is AccountViewModel vm)
+            {
+                vm.LogoutCmd.Execute().Subscribe(_ => { }, vm.ReportCommandException);
+            }
+        };
 
         // Press-scale 0.99 (§0.1) на всех строках навигации: тап ощущается до выезда суб-страницы.
         WirePress(BuyRow);

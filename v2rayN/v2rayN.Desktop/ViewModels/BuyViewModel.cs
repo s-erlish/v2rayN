@@ -639,7 +639,12 @@ public class BuyViewModel : MyReactiveObject
                     .Select(c => c.DataContext)
                     .OfType<AccountViewModel>()
                     .FirstOrDefault();
-                accountVm?.RetryCmd.Execute().Subscribe();
+                // onError is MANDATORY: this RunOnUi try/catch only covers a SYNCHRONOUS rethrow, and a
+                // post-await fault from a parameterless Subscribe() would reach the Rx rethrow stub.
+                if (accountVm is not null)
+                {
+                    accountVm.RetryCmd.Execute().Subscribe(_ => { }, accountVm.ReportCommandException);
+                }
             }
             catch (Exception ex)
             {
