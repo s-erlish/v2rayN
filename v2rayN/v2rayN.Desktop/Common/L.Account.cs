@@ -25,11 +25,13 @@ public sealed partial class L
         Add("Account_TopUpMethod", "Способ оплаты", "Payment method");
         Add("Account_TopUpVia", "Оплата · {0}", "Payment · {0}");
         Add("Account_CopyReferralCode", "Скопировать код", "Copy code");
-        // Вы-form throughout, and «Купить» per terminology lock 9.3 (never «Оформить»).
-        Add("Account_FirstSub", "Купите первую подписку", "Buy your first subscription");
+        // Copy-law 9.5 «No subscription» empty state: title + one line + one action
+        // (Account_PickPlan). Verbatim, and identical to Android account_empty_title /
+        // account_no_subscription.
+        Add("Account_FirstSub", "Подписки пока нет", "No subscription yet");
         Add("Account_NoSubHint",
-            "Выберите тариф. Оплата в рублях, подключение сразу.",
-            "Pick a plan. Pay in rubles, connect right away.");
+            "Купите тариф, чтобы подключаться к серверам Departament.",
+            "Buy a plan to connect to Departament servers.");
         Add("Account_Devices", "Устройства", "Devices");
         Add("Account_SignOut", "Выйти", "Sign out");
         Add("Account_SignInTitle", "Войдите в departament", "Sign in to departament");
@@ -77,10 +79,12 @@ public sealed partial class L
         Add("Account_AutoRenewNudge",
             "Включите автопродление, чтобы не прерывать",
             "Turn on auto-renew so it doesn't lapse");
-        Add("Account_RenewFromBalance", "С баланса · {0}", "From balance · {0}");
+        // Same shape as Android pay_method_from_balance_fmt and desktop Buy_FromBalance.
+        Add("Account_RenewFromBalance", "С баланса: {0}", "From balance: {0}");
         Add("Account_RenewWithCard", "Оплатить картой", "Pay by card");
         Add("Account_RenewDone", "Подписка продлена", "Subscription renewed");
-        Add("Account_PickPlan", "Выбрать тариф", "Pick a plan");
+        // The 9.5 action for the empty-subscription state (AccountView.axaml:1017).
+        Add("Account_PickPlan", "Купить", "Buy");
 
         // ── Overflow «Ещё»: докупка устройств + улучшение тарифа ──
         Add("Account_More", "Ещё", "More");
@@ -132,7 +136,7 @@ public sealed partial class L
         Add("Login_Or", "или", "or");
         Add("Login_Email", "Электронная почта", "Email");
         Add("Login_EmailInvalid",
-            "Введите адрес почты, например name@example.com",
+            "Введите корректный адрес почты, например name@example.com",
             "Enter a valid email, for example name@example.com");
         Add("Login_Password", "Пароль", "Password");
         Add("Login_ShowPassword", "Показать пароль", "Show password");
@@ -222,8 +226,8 @@ public sealed partial class L
         // Sync error surface (a failed import shows retry, not an eternal spinner).
         Add("Account_SyncErrorTitle", "Не удалось синхронизировать", "Sync didn't finish");
         Add("Account_SyncErrorHint",
-            "Проверьте сеть и повторите.",
-            "Check your network and try again.");
+            "Проверьте подключение и повторите.",
+            "Check your connection and try again.");
         Add("Account_SyncRetry", "Повторить", "Try again");
         Add("Account_SyncReLogin", "Войти заново", "Sign in again");
     }

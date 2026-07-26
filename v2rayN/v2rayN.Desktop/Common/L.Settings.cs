@@ -106,7 +106,7 @@ public sealed partial class L
         Add("PerApp_SplitTunnel", "Раздельное туннелирование", "Split tunneling");
         Add("PerApp_SplitTunnelHint", "Выберите, какие программы идут через VPN", "Choose which apps go through the VPN");
         Add("PerApp_BypassHint", "Выбранные идут напрямую, минуя VPN", "Selected apps go direct, bypassing the VPN");
-        Add("PerApp_OnlyHint", "Через VPN идут только выбранные", "Only selected apps go through the VPN");
+        Add("PerApp_OnlyHint", "Только выбранные идут через VPN", "Only selected apps go through the VPN");
         Add("PerApp_Apps", "Приложения", "Apps");
         Add("PerApp_AddExe", "Добавить .exe", "Add .exe");
         Add("PerApp_TunHint", "Работает в режиме TUN (sing-box). Правила применяются при следующем подключении.", "Works in TUN mode (sing-box). Rules apply on the next connection.");

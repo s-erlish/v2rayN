@@ -26,11 +26,13 @@ public sealed partial class L
         Add("Buy_Pay", "Купить", "Buy");
         Add("Buy_PaymentMethod", "Способ оплаты", "Payment method");
         Add("Buy_Processing", "Платёж обрабатывается…", "Processing payment…");
-        Add("Buy_ErrLoadPlans", "Не удалось загрузить тарифы. Проверьте сеть и повторите.", "Couldn't load plans. Check your network and try again.");
+        // Verbatim match with Android buy_error.
+        Add("Buy_ErrLoadPlans", "Не удалось загрузить тарифы. Проверьте подключение и повторите.", "Couldn't load plans. Check your connection and try again.");
         Add("Buy_NoPlans", "Тарифы недоступны", "No plans available");
         Add("Buy_ChoosePeriod", "Выберите срок подписки", "Choose a subscription period");
         Add("Buy_NoPaymentMethods", "Способы оплаты недоступны", "No payment methods available");
-        Add("Buy_FromBalance", "С баланса · {0}", "From balance · {0}");
+        // Matches Android pay_method_from_balance_fmt and desktop Account_RenewFromBalance.
+        Add("Buy_FromBalance", "С баланса: {0}", "From balance: {0}");
         Add("Buy_PaymentError", "Ошибка оплаты", "Payment error");
         Add("Buy_DevicesTraffic", "Устройства: {0} · Трафик: {1}", "Devices: {0} · Traffic: {1}");
 
@@ -41,15 +43,17 @@ public sealed partial class L
         // Copy-law 9.5 «No devices» empty state, verbatim.
         Add("Devices_Empty", "Устройств пока нет", "No devices yet");
         Add("Devices_EmptyHint", "Устройства появятся после первого подключения.", "Devices appear after your first connection.");
-        Add("Devices_NoSub", "Активная подписка не найдена", "No active subscription found");
-        Add("Devices_NoSubHint", "Купите подписку в разделе «Аккаунт», чтобы подключать устройства.", "Buy a subscription in the Account section to connect devices.");
+        // Title + line together read as Android devices_error_no_subscription, word for word.
+        Add("Devices_NoSub", "Активной подписки нет", "No active subscription");
+        Add("Devices_NoSubHint", "Купите тариф, чтобы управлять устройствами.", "Buy a plan to manage your devices.");
         Add("Devices_GoToAccount", "Перейти в аккаунт", "Go to account");
         Add("Devices_UnlinkConfirm", "Отвязать устройство?", "Unlink device?");
         Add("Devices_UnlinkShort", "Отвязать", "Unlink");
         Add("Devices_UnlinkBody", "Устройство «{0}» будет отключено от подписки.", "Device \"{0}\" will be disconnected from your subscription.");
-        Add("Devices_UnlinkFailed", "Не удалось отвязать устройство. Попробуйте позже.", "Couldn't unlink the device. Try again later.");
+        Add("Devices_UnlinkFailed", "Не удалось отвязать устройство. Повторите попытку позже.", "Couldn't unlink the device. Try again later.");
         Add("Devices_Unlinked", "Устройство отвязано", "Device unlinked");
-        Add("Devices_ErrLoad", "Не удалось загрузить устройства. Попробуйте позже.", "Couldn't load devices. Try again later.");
+        // Verbatim match with Android devices_error_generic.
+        Add("Devices_ErrLoad", "Не удалось загрузить устройства. Проверьте подключение и повторите.", "Couldn't load devices. Check your connection and try again.");
         Add("Devices_PlatformActive", "{0} · Активно: {1}", "{0} · Active: {1}");
         Add("Devices_Active", "Активно: {0}", "Active: {0}");
         Add("Devices_Id", "ID: {0}", "ID: {0}");
