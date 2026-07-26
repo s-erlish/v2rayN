@@ -32,6 +32,15 @@ public class ProfilesViewModel : MyReactiveObject
 
     public IObservableCollection<ProfileItemModel> ProfileItems { get; } = new ObservableCollectionExtended<ProfileItemModel>();
 
+    /// <summary>
+    /// True once <see cref="RefreshServers"/> has completed at least one load of the profile list out of
+    /// the local DB. Until then an EMPTY <see cref="ProfileItems"/> only means "not loaded yet" — it does
+    /// NOT mean the user has no servers. Anything that renders an empty / onboarding state must consult
+    /// this before believing the count, otherwise it decides from a default that is indistinguishable
+    /// from the fact (the launch-time onboarding flash).
+    /// </summary>
+    public bool HasLoadedServers { get; private set; }
+
     public IObservableCollection<SubItem> SubItems { get; } = new ObservableCollectionExtended<SubItem>();
 
     [Reactive]
@@ -397,6 +406,12 @@ public class ProfilesViewModel : MyReactiveObject
             selected ??= lstModel.FirstOrDefault(t => t.IndexId == _config.IndexId);
             SelectedProfile = selected ?? lstModel.First();
         }
+
+        // The collection now mirrors the DB — including when the DB genuinely came back empty. From here
+        // on a zero count is a FACT and consumers may render their empty state from it. Raised AFTER the
+        // AddRange so the (deferred) consumers that react to the collection change already read the
+        // settled list when they observe this flag.
+        HasLoadedServers = true;
 
         try
         {

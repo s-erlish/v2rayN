@@ -66,6 +66,13 @@ public class HomeViewModel : MyReactiveObject, IDisposable
     private bool _awaitingCoreCycle;
     private ServerSpeedItem? _lastSpeed;
 
+    // Launch-time snapshot of "does the local store hold any server?", read synchronously by the shell
+    // BEFORE the first frame and handed down here so both answer the question identically. It is the
+    // stand-in for the truth only until the engine's first load lands (Profiles.HasLoadedServers); after
+    // that the live list is the truth. null = the store could not be read → UNKNOWN, which must never be
+    // rendered as "empty". See ReconcileGroups.
+    private readonly bool? _storedServersAtLaunch;
+
     #region Reactive state
 
     [Reactive] public bool IsConnected { get; set; }
@@ -83,7 +90,13 @@ public class HomeViewModel : MyReactiveObject, IDisposable
 
     [Reactive] public bool HasServers { get; set; }
 
-    [Reactive] public bool IsEmpty { get; set; } = true;
+    /// <summary>
+    /// "We KNOW this user has nothing stored" — never merely "we have not loaded yet". Both this and
+    /// <see cref="HasServers"/> stay false while the answer is unknown, so the onboarding gate and the
+    /// list's empty state simply do not appear until one of them is a fact. Defaulting this to true is
+    /// what used to show the welcome screen to returning users for the first ~second of every launch.
+    /// </summary>
+    [Reactive] public bool IsEmpty { get; set; }
 
     [Reactive] public string Subtitle { get; set; } = string.Empty;
 
@@ -104,10 +117,15 @@ public class HomeViewModel : MyReactiveObject, IDisposable
     #endregion Commands
 
     /// <summary>Runtime constructor: wires the real engine instances (no duplication).</summary>
-    public HomeViewModel(MainWindowViewModel main)
+    /// <param name="storedServersAtLaunch">
+    /// The shell's synchronous launch-time answer to "does the local store hold any server?" (null =
+    /// unknown). It carries the empty/onboarding decision until the engine's first load lands.
+    /// </param>
+    public HomeViewModel(MainWindowViewModel main, bool? storedServersAtLaunch = null)
     {
         _config = AppManager.Instance.Config;
         _main = main;
+        _storedServersAtLaunch = storedServersAtLaunch;
         Profiles = main.ProfilesViewModel;
         StatusBar = main.StatusBarViewModel;
 
@@ -521,13 +539,23 @@ public class HomeViewModel : MyReactiveObject, IDisposable
     {
         var items = Profiles?.ProfileItems;
         var count = items?.Count ?? 0;
-        HasServers = count > 0;
-        IsEmpty = !HasServers;
+
+        // «Есть ли серверы» — это ФАКТ, а не значение по умолчанию. Пока движок не завершил первую
+        // загрузку списка из БД (HasLoadedServers), пустая коллекция значит «ещё не загрузили», и
+        // отвечать за пользователя нельзя: берём снимок хранилища, снятый синхронно при запуске. Иначе
+        // у вернувшегося пользователя (подписка из буфера обмена, вход не выполнен) первый кадр — это
+        // приветственный онбординг «добавьте подписку», хотя его серверы лежат в БД и приезжают через
+        // мгновение. Неизвестность (снимок null) оставляет ОБА флага false — ни списка, ни пустого
+        // состояния, — чтобы ничего не утверждать, пока не узнаем правду.
+        var loaded = Profiles?.HasLoadedServers == true;
+        HasServers = loaded ? count > 0 : _storedServersAtLaunch == true;
+        IsEmpty = loaded ? count == 0 : _storedServersAtLaunch == false;
 
         var plan = BuildGroupPlan(items, out var providers);
         ReconcileServerGroups(plan);
 
-        Subtitle = FormatServersProvidersMeta(count, providers);
+        // Счётчики считаем только по РЕАЛЬНО загруженному списку: «0 серверов» до загрузки было бы ложью.
+        Subtitle = loaded ? FormatServersProvidersMeta(count, providers) : string.Empty;
 
         // Point the per-item ping/speedtest live-sync at the current (possibly rebuilt) source items.
         ResyncItemSubscriptions();

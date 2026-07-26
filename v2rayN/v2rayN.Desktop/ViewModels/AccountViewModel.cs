@@ -427,15 +427,65 @@ public class AccountViewModel : MyReactiveObject
         }
     }
 
+    /// <summary>
+    /// Hard ceiling on how long the COLD-START gate may hold the shell. Every individual request is
+    /// already capped by the HTTP client (25s), but the restore is a SEQUENCE (account → subscriptions →
+    /// server download), so nothing bounded the whole of it — a single stuck phase could keep the launch
+    /// spinner up forever. Deliberately longer than one request timeout, so an ordinary slow call still
+    /// resolves through its own error path and this only catches a genuinely stuck sequence.
+    /// </summary>
+    private static readonly TimeSpan StartupGateTimeout = TimeSpan.FromSeconds(30);
+
     /// <summary>Returning-user startup: auto-import subscriptions (→ refresh Home) then load the tab.</summary>
     private async Task StartupLoad()
     {
         // Same phase sequence as a fresh login MINUS the extra subscription fetch (parity with the original
         // returning-user path: import + load only). On success clear the cold-start gate so the loading
-        // surface hands directly to the populated Home/Account instead of the empty login gate. On FAILURE
-        // RunSyncPhases raises SyncFailed and leaves IsStartupLoading TRUE, so the sync overlay shows the
-        // retry surface rather than flashing the logged-out login gate.
-        if (await RunSyncPhases(includeSubFetch: false))
+        // surface hands directly to the populated Home/Account instead of the empty login gate.
+        var restore = RunSyncPhases(includeSubFetch: false);
+
+        // Bounded gate (see StartupGateTimeout): if the restore has not resolved by the deadline we stop
+        // holding the window. With servers already on disk the gate simply comes down — the restore keeps
+        // running and refreshes Home when it lands. With nothing to fall back on we swap the spinner for
+        // the actionable retry surface instead of spinning indefinitely; a late success clears it below.
+        if (await Task.WhenAny(restore, Task.Delay(StartupGateTimeout)) != restore)
+        {
+            var hasLocalServers = await AppManager.Instance.HasStoredProfilesAsync() == true;
+            RunOnUi(() =>
+            {
+                if (!IsStartupLoading)
+                {
+                    return;
+                }
+                if (hasLocalServers)
+                {
+                    IsStartupLoading = false;
+                }
+                else
+                {
+                    SyncFailed = true;
+                }
+                Recompute();
+            });
+        }
+
+        if (await restore)
+        {
+            RunOnUi(() =>
+            {
+                IsStartupLoading = false;
+                SyncFailed = false;   // a late success retracts anything the watchdog above put up
+                Recompute();
+            });
+            return;
+        }
+
+        // The restore FAILED (offline, expired token, backend down). Failing to reach the ACCOUNT is not
+        // a reason to hide the servers this user already has on disk: when the local store holds servers
+        // the gate comes down and the app opens on them, with the failure surfaced non-blockingly on the
+        // Account tab (RunSyncPhases reported it). Only when there is nothing local do we keep the
+        // blocking retry surface up — there, retry/re-login really is the only meaningful next action.
+        if (await AppManager.Instance.HasStoredProfilesAsync() == true)
         {
             RunOnUi(() =>
             {
@@ -1111,6 +1161,10 @@ public class AccountViewModel : MyReactiveObject
             {
                 IsLoading = false;
                 SyncFailed = true;
+                // Also record it as a normal API error: when the caller decides the gate must come down
+                // anyway (cold start with servers already on disk), the Account tab is where the failure
+                // has to remain visible — with its own «Повторить» — instead of vanishing silently.
+                Report(ex as ApiError ?? new ApiError.NetworkError(ex));
                 Recompute();
             });
             return false;
@@ -2126,8 +2180,14 @@ public class AccountViewModel : MyReactiveObject
         {
             skeleton = true;
         }
-        else if (Profile == null && Error != null)
+        else if (Error != null && !_hasSubData)
         {
+            // «Подписок нет» — вывод, который можно делать ТОЛЬКО из успешно загруженного списка
+            // (_hasSubData). Если список так и не приехал, а ошибка есть — это состояние ошибки с
+            // кнопкой «Повторить», а не пустой аккаунт. Кэшированный профиль (он подставляется из
+            // хранилища при холодном старте, ещё до сети) больше не маскирует эту разницу: раньше
+            // условие требовало Profile == null, и вернувшийся пользователь без сети видел
+            // «у вас нет подписки» вместо честного «не удалось загрузить».
             error = true;
         }
         else

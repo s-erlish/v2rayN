@@ -213,6 +213,44 @@ public sealed class AppManager
         return await SQLiteHelper.Instance.TableAsync<SubItem>().FirstOrDefaultAsync(t => t.Id == subid);
     }
 
+    /// <summary>
+    /// Does the local store hold ANY server at all? Answered SYNCHRONOUSLY, because the shell has to
+    /// choose between the welcome/onboarding surface and the app itself for its very FIRST frame — long
+    /// before the asynchronous profile load lands. Returns <c>null</c> when the store could not be read:
+    /// callers must treat that as UNKNOWN and never as "this user has nothing" — an unknown answered as
+    /// "empty" is exactly what used to flash the welcome screen at returning users on every launch.
+    /// </summary>
+    public bool? HasStoredProfiles()
+    {
+        try
+        {
+            return SQLiteHelper.Instance.ExecuteScalar<int>("select count(*) from ProfileItem") > 0;
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog("HasStoredProfiles", ex);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Async twin of <see cref="HasStoredProfiles"/>, for callers that are already off the launch path
+    /// (and off the UI thread) — they must not touch the synchronous connection. Same contract:
+    /// <c>null</c> means UNKNOWN, not empty.
+    /// </summary>
+    public async Task<bool?> HasStoredProfilesAsync()
+    {
+        try
+        {
+            return await SQLiteHelper.Instance.TableAsync<ProfileItem>().CountAsync() > 0;
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog("HasStoredProfilesAsync", ex);
+            return null;
+        }
+    }
+
     public async Task<List<ProfileItem>?> ProfileItems(string subid)
     {
         if (subid.IsNullOrEmpty())

@@ -57,7 +57,12 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     private bool _titleDragging;
     private bool _edgeExpandRequested;
     private AppTab _currentTab = AppTab.Home;   // ОДНО состояние вкладки на обе раскладки
-    private bool _isEmpty = true;
+    // Онбординг-гейт: «у пользователя ПУСТО» — это ФАКТ, а не значение по умолчанию. Поле стартует с
+    // false («ещё не знаем») и взводится в ctor по синхронному снимку локального хранилища; живую правду
+    // потом ведёт HomeViewModel.IsEmpty (тоже «известно, что пусто»). Раньше здесь стояло true, и первый
+    // кадр у вернувшегося пользователя без входа был приветственным экраном «добавьте подписку».
+    private bool _isEmpty;
+    private readonly bool? _storedServersAtLaunch;   // снимок «есть ли серверы в БД», снятый ДО первого кадра (null = неизвестно)
     private bool _isSyncing;                     // E3: идёт пост-логин импорт → оверлей синхронизации
     private bool _isStartupLoading;              // Bug4: холодный старт с сохранённой сессией → оверлей загрузки (НЕ гейт входа)
     private bool _isLoggedIn;                    // A1: залогинен ли пользователь → пустое состояние ведёт на Главную, а не на онбординг-вход
@@ -198,6 +203,17 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
 
         // Drag-to-edge: тащим компактное окно к краю рабочей области → разворот в широкую.
         PositionChanged += OnPositionChanged;
+
+        // СЕМЕНИМ «пусто ли у пользователя» ДО первого ApplyShellVisibility — синхронным вопросом к
+        // локальному хранилищу. Движок грузит серверы АСИНХРОННО (MainWindowViewModel.Init →
+        // RefreshServersDispatcherAsync), поэтому на момент первой отрисовки список ещё пуст; решать по
+        // нему = решать по значению по умолчанию, неотличимому от факта «у него ничего нет». Именно
+        // отсюда брался баг: пользователь без входа, но с подпиской из буфера обмена, видел при каждом
+        // запуске приветственный экран, пока его серверы не приезжали из БД. Снимок отдаётся и
+        // HomeViewModel (SetupHome) — один вопрос, один ответ на обе стороны. Неизвестность (null) НЕ
+        // считается пустотой: тогда показываем оболочку, а не гейт (см. ApplyShellVisibility).
+        _storedServersAtLaunch = Design.IsDesignMode ? null : AppManager.Instance.HasStoredProfiles();
+        _isEmpty = _storedServersAtLaunch == false;
 
         // Bug4: СЕМЕНИМ cold-start-сигнал ДО первого ApplyShellVisibility. _accountVm (field-init выше)
         // уже сконструирован, и его ctor синхронно взвёл IsStartupLoading, если есть сохранённая сессия.
@@ -842,6 +858,12 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         // пользователь ВОШЁЛ, но подписок/серверов нет (пустой аккаунт), НЕ показываем ему снова экран
         // входа — ведём в оболочку «Главной» (там пустое состояние героя + вкладка «Аккаунт» с «Купить
         // подписку»), а не на онбординг-вход. Онбординг остаётся первым кадром только для logged-out.
+        //
+        // ИНВАРИАНТ гейта: _isEmpty означает «ЗНАЕМ, что пусто», и никогда «ещё не загрузили». Он
+        // взводится синхронным снимком хранилища в ctor и дальше ведётся HomeViewModel.IsEmpty с тем же
+        // смыслом. Пока правда неизвестна оба источника дают false → показываем оболочку, а не гейт:
+        // ошибиться в сторону «показали приложение владельцу подписки» несравнимо дешевле, чем
+        // встретить его приветствием «добавьте подписку».
         Control target = (_isSyncing || _isStartupLoading)
             ? accountSyncView
             : (_isEmpty && !_isLoggedIn) ? onboardingView : bodyRoot;
@@ -973,7 +995,9 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     // MainWindowViewModel) и отдаёт его «Главной». Индикатор рейла следует за IsConnected.
     private void SetupHome(MainWindowViewModel vm)
     {
-        _homeViewModel = new HomeViewModel(vm);
+        // Снимок хранилища из ctor едет в HomeViewModel: до первой загрузки движка он отвечает за
+        // «есть ли серверы», после — живой список. Так оболочка и «Главная» не могут разойтись во мнении.
+        _homeViewModel = new HomeViewModel(vm, _storedServersAtLaunch);
         // ОДИН HomeViewModel питает ОБЕ раскладки (широкую и компактную «Главную»), поэтому
         // connect-состояние, выбранный сервер, скорости и таймер одинаковы при любой ширине.
         // НО живой VM держит ТОЛЬКО активная по текущей раскладке «Главная» (BindActiveHome):
