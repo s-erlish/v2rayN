@@ -1,4 +1,4 @@
-using ServiceLib.UdpTest;
+﻿using ServiceLib.UdpTest;
 
 namespace ServiceLib.Services;
 
@@ -15,9 +15,23 @@ public class SpeedtestService(Config config, Func<SpeedTestResult, Task> updateF
     {
         Task.Run(async () =>
         {
-            await RunAsync(actionType, selecteds);
-            await ProfileExManager.Instance.SaveTo();
-            await UpdateFunc("", ResUI.SpeedtestingCompleted);
+            // Guarded, with the flush and the completion message in the finally. The task is discarded,
+            // so an early throw (GetClearItem does DB + file I/O; RunAsync dereferences SpeedTestItem)
+            // used to skip BOTH — leaving every row that GetClearItem already marked «Тестирование…»
+            // stuck in that state for the rest of the session, with the results never persisted.
+            try
+            {
+                await RunAsync(actionType, selecteds);
+            }
+            catch (Exception ex)
+            {
+                Logging.SaveLog(_tag, ex);
+            }
+            finally
+            {
+                await ProfileExManager.Instance.SaveTo();
+                await UpdateFunc("", ResUI.SpeedtestingCompleted);
+            }
         });
     }
 
@@ -232,7 +246,11 @@ public class SpeedtestService(Config config, Func<SpeedTestResult, Task> updateF
             }
             else
             {
-                await RunMixedTestAsync(lstSelected, _config.SpeedTestItem.MixedConcurrencyCount, false, exitLoopKey);
+                // lstFailed, not lstSelected: this branch is "retest the failed part". Passing the whole
+                // selection re-tested nodes that had already measured fine, and DoRealPing overwrites
+                // ProfileExManager's stored delay unconditionally — so a good result could be replaced
+                // by a worse one, or by -1.
+                await RunMixedTestAsync(lstFailed, _config.SpeedTestItem.MixedConcurrencyCount, false, exitLoopKey);
             }
         }
     }
@@ -286,7 +304,10 @@ public class SpeedtestService(Config config, Func<SpeedTestResult, Task> updateF
         {
             if (processService != null)
             {
-                await processService?.StopAsync();
+                // Dispose, not just Stop: StopAsync only kills, it does not release the Process handle
+                // or the redirected streams. A mixed test over 60 servers leaked 60 handles per run.
+                await processService.StopAsync();
+                processService.Dispose();
             }
         }
         return true;
@@ -405,7 +426,10 @@ public class SpeedtestService(Config config, Func<SpeedTestResult, Task> updateF
         {
             if (processService != null)
             {
-                await processService?.StopAsync();
+                // Dispose, not just Stop: StopAsync only kills, it does not release the Process handle
+                // or the redirected streams. A mixed test over 60 servers leaked 60 handles per run.
+                await processService.StopAsync();
+                processService.Dispose();
             }
         }
         return true;
@@ -466,7 +490,8 @@ public class SpeedtestService(Config config, Func<SpeedTestResult, Task> updateF
                 {
                     if (processService != null)
                     {
-                        await processService?.StopAsync();
+                        await processService.StopAsync();
+                        processService.Dispose();
                     }
                     concurrencySemaphore.Release();
                 }

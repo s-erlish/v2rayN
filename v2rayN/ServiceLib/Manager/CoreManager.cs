@@ -289,20 +289,34 @@ public class CoreManager
             _userStopRequested = false;
             ResetRestartLoopCts();
 
+            // The seamless path's ONLY completion signal is CoreSwitchSettled: the UI holds its
+            // mid-switch "Connecting" until it arrives, or until its own 12 s deadline. Every exit that
+            // actually performed the switch must publish it — not just the last fallback. Without this
+            // a switch that legitimately took the full-restart route (fresh start, core-type change,
+            // pre-service shape change, config-generation failure) left the shield spinning for the
+            // full 12 s over a tunnel that was already up on the new server.
+            async Task<bool> FallBackToFullReload()
+            {
+                await LoadCoreInternal(mainContext, preContext);
+                if (AppManager.Instance.RunningCoreType != ECoreType.v2rayN)
+                {
+                    AppEvents.CoreSwitchSettled.Publish(true);
+                }
+                return false;
+            }
+
             // No target, or not currently connected → this is a normal (fresh) start, not a switch.
             if (mainContext == null
                 || _processService is null or { HasExited: true }
                 || AppManager.Instance.RunningCoreType == ECoreType.v2rayN)
             {
-                await LoadCoreInternal(mainContext, preContext);
-                return false;
+                return await FallBackToFullReload();
             }
 
             // A main-core TYPE change (e.g. Xray → sing-box) rebuilds the whole plumbing → full reload.
             if (AppManager.Instance.RunningCoreType != mainContext.RunCoreType)
             {
-                await LoadCoreInternal(mainContext, preContext);
-                return false;
+                return await FallBackToFullReload();
             }
 
             // The pre-service SHAPE must be unchanged: a pre-service required now must already be
@@ -312,8 +326,7 @@ public class CoreManager
             var preAlive = _processPreService is { HasExited: false };
             if (preRequiredNow != preAlive)
             {
-                await LoadCoreInternal(mainContext, preContext);
-                return false;
+                return await FallBackToFullReload();
             }
 
             // Regenerate the run-config for the new server on disk up-front. This both (a) feeds the
@@ -323,8 +336,7 @@ public class CoreManager
             var gen = await CoreConfigHandler.GenerateClientConfig(mainContext, fileName);
             if (gen.Success != true)
             {
-                await LoadCoreInternal(mainContext, preContext);
-                return false;
+                return await FallBackToFullReload();
             }
 
             // From here on the switch is committed to the new server, so a crash-restart must reload IT,
@@ -358,15 +370,10 @@ public class CoreManager
                 return true;
             }
 
-            // Final fallback: full restart. Never leaves the user disconnected.
-            await LoadCoreInternal(mainContext, preContext);
-            // On a successful full restart the switch has still settled — signal it so any mid-switch UI
-            // hold resolves at once (harmless alongside LoadCore's own CoreRunningStateChanged(true)).
-            if (AppManager.Instance.RunningCoreType != ECoreType.v2rayN)
-            {
-                AppEvents.CoreSwitchSettled.Publish(true);
-            }
-            return false;
+            // Final fallback: full restart. Never leaves the user disconnected. The settled signal
+            // resolves any mid-switch UI hold at once (harmless alongside LoadCore's own
+            // CoreRunningStateChanged(true)).
+            return await FallBackToFullReload();
         }
         catch (Exception ex)
         {

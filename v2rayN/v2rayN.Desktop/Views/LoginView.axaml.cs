@@ -513,6 +513,21 @@ public partial class LoginView : UserControl
         incoming.IsVisible = true;
         outgoing.IsVisible = true;
 
+        // Гасим КАЖДЫЙ блок, не участвующий в ЭТОМ переходе. Комментарий ниже («новее переход владеет
+        // финальным состоянием») верен только когда у нового перехода ТА ЖЕ outgoing. Три разных блока
+        // за < 220 мс (Метод → Ожидание → Письмо отправлено) оставляли первый видимым: его переход
+        // отменён, его же ветка скрытия пропущена, а новый про него ничего не знает. Тот же приём, что
+        // в MainWindow.CrossfadeShellTo.
+        foreach (var block in new Control[] { MethodBlock, AwaitingBlock, EmailPendingBlock })
+        {
+            if (!ReferenceEquals(block, incoming) && !ReferenceEquals(block, outgoing))
+            {
+                block.IsVisible = false;
+                block.Opacity = 1;
+                block.RenderTransform = null;
+            }
+        }
+
         try
         {
             await Task.WhenAll(

@@ -1,4 +1,4 @@
-using System.Reactive.Disposables;
+﻿using System.Reactive.Disposables;
 using Avalonia.Animation;
 using Avalonia.Animation.Easings;
 using Avalonia.VisualTree;
@@ -99,6 +99,7 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     private CancellationTokenSource? _resizeAnim;   // Bug6: плавная анимация размера окна при тумблере раскладки
     private CancellationTokenSource? _contentAnim;  // смена вкладки в едином contentHost (directional slide+fade)
     private CancellationTokenSource? _indicatorAnim; // скольжение путешествующего индикатора рейла (P1-4)
+    private RegisteredWaitHandle? _programStartedWait;
     private Control? _currentShellView;          // текущий видимый оверлей оболочки (для кроссфейда)
     private Control? _currentContentView;        // текущая видимая вкладка в contentHost (keep-alive своп)
     private int _contentZ;                       // ZIndex-счётчик: входящая вкладка всегда поверх уходящей
@@ -347,7 +348,8 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
 
         if (Utils.IsWindows() && !Design.IsDesignMode)
         {
-            ThreadPool.RegisterWaitForSingleObject(Program.ProgramStarted, OnProgramStarted, null, -1, false);
+            // Держим RegisteredWaitHandle: без него регистрацию нечем снять в OnClosed.
+            _programStartedWait = ThreadPool.RegisterWaitForSingleObject(Program.ProgramStarted, OnProgramStarted, null, -1, false);
             HotkeyManager.Instance.Init(_config, OnHotkeyHandler);
         }
 
@@ -1109,6 +1111,15 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     // Кладёт суб-страницу поверх контента/онбординга и показывает хост с направленным slide+fade (C2).
     private void PushSubPage(Control view)
     {
+        // Идемпотентность по ТИПУ страницы. Ни один OpenBuy/OpenDevices/OpenHistory/OpenSubPage не
+        // проверял стек, а строки настроек висят на голом Tapped — двойной клик по «DNS» клал ДВА
+        // DnsSubView (два «назад» на выход), а по «Устройства»/«История»/«Купить» ещё и запускал второй
+        // сетевой запрос из конструктора. Гард той же формы уже стоит в HandleAuthCallback.
+        if (_subStack.LastOrDefault() is { } top && top.GetType() == view.GetType())
+        {
+            return;
+        }
+
         _subStack.Add(view);
         subPageHost.Content = view;
         subPageHost.IsVisible = true;
@@ -1199,6 +1210,13 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     // «Купить подписку»: BuyView со своим BuyViewModel (грузит каталог в ctor).
     public void OpenBuy()
     {
+        // Гард ДО конструктора: BuyView/DevicesView/PaymentHistoryView грузят данные из ctor, поэтому
+        // одного дедупа в PushSubPage мало — второй клик иначе выстрелит вторым сетевым запросом.
+        if (_subStack.LastOrDefault() is BuyView)
+        {
+            return;
+        }
+
         var view = new BuyView();
         view.BackRequested += (_, _) => PopSubPage();
         PushSubPage(view);
@@ -1208,6 +1226,11 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     // из вошедшего профиля; список грузится в ctor).
     public void OpenDevices()
     {
+        if (_subStack.LastOrDefault() is DevicesView)
+        {
+            return;
+        }
+
         var view = new DevicesView();
         view.BackRequested += (_, _) => PopSubPage();
         PushSubPage(view);
@@ -1216,6 +1239,11 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     // «История платежей»: PaymentHistoryView; пустой CTA «Купить подписку» ведёт на Buy поверх.
     public void OpenHistory()
     {
+        if (_subStack.LastOrDefault() is PaymentHistoryView)
+        {
+            return;
+        }
+
         var view = new PaymentHistoryView();
         view.BackRequested += (_, _) => PopSubPage();
         view.BuyRequested += (_, _) => OpenBuy();
@@ -1910,13 +1938,31 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     protected override void OnClosed(EventArgs e)
     {
         _windowInteractions.Dispose();
+        // Снимаем СТАТИЧЕСКИЕ подписки: MotionState/UiScaleState/App — статика, поэтому закрытое окно
+        // оставалось достижимым на весь процесс, а App.ApplyTheme мог заново войти в RunThemeTransition
+        // на мёртвом окне (оно трогает chromeRoot.Bounds ДО спасительной проверки !IsVisible).
+        UiScaleState.Changed -= OnUiScaleChanged;
+        MotionState.Changed -= OnMotionStateChanged;
+        if (App.ThemeTransitionHook?.Target == this)
+        {
+            App.ThemeTransitionHook = null;
+        }
+        _programStartedWait?.Unregister(null);
+        _programStartedWait = null;
         // If the window closes mid theme-transition, cancel the reveal loop's token and dispose the
         // RenderTargetBitmap snapshot (else it's left to GC and the async-void loop keeps poking a
         // closing window). No-op when no transition is in flight.
         CancelThemeTransition();
         // P1-4: снимаем незавершённое скольжение путешествующего индикатора рейла (та же CTS-дисциплина,
         // что у остальных узлов) — async-void аниматор не дёргает закрывающееся окно.
+        // Та же CTS-дисциплина для ВСЕХ узлов, а не для двух из семи. Особенно важен _resizeAnim: это
+        // рукописный 60-Гц цикл, который пишет Position/Width/Height ЗАКРЫВАЮЩЕГОСЯ окна.
         _indicatorAnim?.Cancel();
+        _subPageAnim?.Cancel();
+        _shellAnim?.Cancel();
+        _layoutAnim?.Cancel();
+        _resizeAnim?.Cancel();
+        _contentAnim?.Cancel();
         base.OnClosed(e);
     }
 
@@ -1974,28 +2020,49 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         }
     }
 
+    // Оба помощника ниже вызываются из async void KeyDown, поэтому ловят сами: непойманный бросок из
+    // импорта движка стал бы необработанным исключением на UI-потоке, а не строкой в панели сообщений.
     public async Task AddServerViaClipboardAsync()
     {
-        var clipboardData = await AvaUtils.GetClipboardData(this);
-        if (clipboardData.IsNotEmpty() && ViewModel != null)
+        try
         {
-            await ViewModel.AddServerViaClipboardAsync(clipboardData);
+            var clipboardData = await AvaUtils.GetClipboardData(this);
+            if (clipboardData.IsNotEmpty() && ViewModel != null)
+            {
+                await ViewModel.AddServerViaClipboardAsync(clipboardData);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog("AddServerViaClipboard", ex);
+            NoticeManager.Instance.SendMessage(ex.Message);
         }
     }
 
     public async Task ScanScreenTaskAsync()
     {
         ShowHideWindow(false);
-
-        await Task.Delay(200);
-
-        var bytes = QRCodeAvaloniaUtils.CaptureScreen();
-        if (bytes != null && ViewModel != null)
+        try
         {
-            await ViewModel.ScanScreenResult(bytes);
-        }
+            await Task.Delay(200);
 
-        ShowHideWindow(true);
+            var bytes = QRCodeAvaloniaUtils.CaptureScreen();
+            if (bytes != null && ViewModel != null)
+            {
+                await ViewModel.ScanScreenResult(bytes);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog("ScanScreen", ex);
+            NoticeManager.Instance.SendMessage(ex.Message);
+        }
+        finally
+        {
+            // В finally: без этого бросок оставлял ОКНО СКРЫТЫМ, и вернуть его можно было только через
+            // иконку в трее.
+            ShowHideWindow(true);
+        }
     }
 
     private void Shutdown(bool obj)

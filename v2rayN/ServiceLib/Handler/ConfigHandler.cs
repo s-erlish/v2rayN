@@ -144,8 +144,12 @@ public static class ConfigHandler
         }
         if (config.SpeedTestItem.PingMethod.IsNullOrEmpty())
         {
-            // departament: default latency probe = real delay through the core (Android parity).
-            config.SpeedTestItem.PingMethod = nameof(ESpeedActionType.Realping);
+            // Falls back to the MODEL's own default (SpeedTestItem.PingMethod's initializer), which is
+            // the single source of truth. This used to hardcode a second, contradicting opinion
+            // (Realping) that could never run on a fresh install — the initializer had already filled
+            // the field, so IsNullOrEmpty was false — leaving two documented intentions in the tree with
+            // no way to tell which was live. Only an explicitly-null stored value reaches here now.
+            config.SpeedTestItem.PingMethod = new SpeedTestItem().PingMethod;
         }
 
         config.Mux4RayItem ??= new()

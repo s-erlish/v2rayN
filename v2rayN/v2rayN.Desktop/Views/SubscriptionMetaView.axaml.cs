@@ -49,6 +49,12 @@ public partial class SubscriptionMetaView : UserControl
     private string _currentSubId = string.Empty;
     private bool _refreshing;
 
+    // Same shape as _refreshing: the pin and delete actions are async void handlers on a plain Click,
+    // so nothing else serialises them.
+    private bool _pinning;
+
+    private bool _deleting;
+
     //  Last subscription projected onto the meta-bar. Kept so a live language switch can re-render the
     //  imperative fields (expiry / subtitle / traffic units) without re-fetching from the engine.
     private SubItem? _boundSub;
@@ -674,20 +680,31 @@ public partial class SubscriptionMetaView : UserControl
     // which rebuilds the grouped ServerGroups — so this whole section disappears.
     private async void OnDeleteSubClick(object? sender, RoutedEventArgs e)
     {
+        // Same latch as pin/refresh: two confirms would run two deletes of the same row.
+        if (_deleting)
+        {
+            return;
+        }
+
         var subId = _currentSubId;
         if (subId.IsNullOrEmpty())
         {
             return;
         }
 
-        // Confirm in the interface's voice («Удалить подписку?»), same yes/no affordance as row-delete.
-        if (await UI.ShowYesNo(L.T("Sub_DeleteConfirm")) != ButtonResult.Yes)
-        {
-            return;
-        }
-
+        _deleting = true;
         try
         {
+            // Confirm in the interface's voice («Удалить подписку?»), same yes/no affordance as
+            // row-delete. INSIDE the try: UI.ShowYesNo resolves an owner via
+            // WindowDialog.TryGetOwnerWindow, which THROWS InvalidOperationException when no window is
+            // visible (app hidden to tray) — and this is an async void handler, so that throw had no
+            // catch anywhere above it.
+            if (await UI.ShowYesNo(L.T("Sub_DeleteConfirm")) != ButtonResult.Yes)
+            {
+                return;
+            }
+
             await ConfigHandler.DeleteSubItem(AppManager.Instance.Config, subId);
             // Rebuild the real ProfileItems → HomeViewModel.ServerGroups reprojects → this section is gone.
             var profiles = Profiles;
@@ -699,6 +716,10 @@ public partial class SubscriptionMetaView : UserControl
         catch (Exception ex)
         {
             Logging.SaveLog("SubscriptionMetaView.DeleteSub", ex);
+        }
+        finally
+        {
+            _deleting = false;
         }
     }
 
