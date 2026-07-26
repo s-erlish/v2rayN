@@ -16,6 +16,35 @@
         <CornerRadius x:Key="Radius.Button">16</CornerRadius>
 
         <!-- ==================================================================== -->
+        <!--  ДВЕ ГАРНИТУРЫ, РАЗДЕЛЁННЫЕ ПО ПИСЬМЕННОСТИ (00-rules.md 5.1, D-1/D-2). -->
+        <!--                                                                        -->
+        <!--  Font.Ui = Golos Text — РУССКИЙ интерфейсный шрифт. Им набрано КАЖДОЕ    -->
+        <!--  русское слово: Headline · Title · Title medium · Body · Subtitle ·      -->
+        <!--  Caption · Section header и ВСЕ подписи кнопок.                          -->
+        <!--  Font.Brand = Space Grotesk — брендовая/цифровая гарнитура: цифры,        -->
+        <!--  единицы, валюта, латинские технические токены (VLESS · Reality · WS ·    -->
+        <!--  TCP · хосты · порты), подписи чипов и вордмарк. И БОЛЬШЕ НИЧЕГО.         -->
+        <!--                                                                          -->
+        <!--  ПОЧЕМУ разделение (измеренная причина, не вкусовая): бинарь Space        -->
+        <!--  Grotesk покрывает 735 кодпоинтов и НОЛЬ в диапазоне U+0400-U+04FF.       -->
+        <!--  Русская строка, которой назначен Space Grotesk, ВСЕГДА рисовалась        -->
+        <!--  необъявленным фолбэком ОС — один экран тремя гарнитурами на трёх         -->
+        <!--  системах. Это дефект P1, а не полировка.                                -->
+        <!--                                                                          -->
+        <!--  ФОРМА URI: ПАПКА, а не отдельный .ttf. Golos Text приезжает тремя         -->
+        <!--  статическими начертаниями (Regular 400 / Medium 500 / Bold 700).          -->
+        <!--  Ссылка на один файл дала бы коллекцию из ОДНОГО начертания, и             -->
+        <!--  FontWeight="Bold" получил бы СИНТЕТИЧЕСКИЙ жир (fake-bold Skia),          -->
+        <!--  который 5.4 запрещает. Папочная форма собирает семейство целиком,          -->
+        <!--  и вес выбирает НАСТОЯЩЕЕ начертание.                                      -->
+        <!--  Golos Text Medium несёт собственное имя семейства в name-таблице,          -->
+        <!--  поэтому у веса 500 отдельный ключ Font.Ui.Medium.                          -->
+        <!-- ==================================================================== -->
+        <FontFamily x:Key="Font.Ui">avares://departament/Assets/Fonts#Golos Text</FontFamily>
+        <FontFamily x:Key="Font.Ui.Medium">avares://departament/Assets/Fonts#Golos Text Medium, Golos Text</FontFamily>
+        <FontFamily x:Key="Font.Brand">avares://departament/Assets/Fonts/SpaceGrotesk.ttf#Space Grotesk</FontFamily>
+
+        <!-- ==================================================================== -->
         <!--  Flyout Incy (замена светло-серого дефолта Semi FlyoutPresenter).       -->
         <!--  ТОЛЬКО для наших флайаутов вкладки «Аккаунт» (пополнение, kebab «Ещё»,  -->
         <!--  привязка почты) — применяется ТОЧЕЧНО через FlyoutPresenterTheme, а НЕ  -->
@@ -245,85 +274,168 @@
     </Style>
 
     <!-- ==================================================================== -->
-    <!--  ОДИН шрифт на ВСЁ приложение — Space Grotesk (Android-паритет).        -->
-    <!--  MainWindow ставит FontFamily только на своём корне; каждый отдельный   -->
-    <!--  визуальный корень (легаси суб-окна AddServer/Option/Routing/DNS/...,   -->
-    <!--  диалоги) и всплывашки в своём TopLevel (ContextMenu/MenuFlyout,        -->
-    <!--  ToolTip, выпадашка ComboBox) НЕ наследуют его шрифт и падали на         -->
-    <!--  дефолт темы Semi. Ставим семейство на самых широких корнях, чтобы      -->
-    <!--  КАЖДОЕ окно и попап унаследовали Grotesk. Задаём ТОЛЬКО семейство —     -->
-    <!--  веса/размеры остаются за типографскими классами ниже.                  -->
+    <!--  БЛАНКЕТНОЕ СЕМЕЙСТВО = Font.Ui (Golos Text), НЕ брендовая гарнитура.    -->
+    <!--                                                                        -->
+    <!--  Раньше здесь стоял Font.Grotesk, то есть Space Grotesk назначался       -->
+    <!--  КАЖДОЙ строке приложения — включая все русские. Space Grotesk не имеет  -->
+    <!--  ни одного кириллического глифа, поэтому весь русский текст рисовался    -->
+    <!--  необъявленным фолбэком операционной системы: разные гарнитуры на        -->
+    <!--  Windows, Linux и macOS в одном и том же экране. 00-rules.md 1 называет  -->
+    <!--  «брендовая гарнитура не может быть бланкетным сеттером» прямым запретом -->
+    <!--  и указывает на ЭТИ строки; 5.1 требует нести здесь интерфейсную         -->
+    <!--  гарнитуру. Брендовую теперь получают ТОЛЬКО роли Display / Chip /       -->
+    <!--  Numeric / Wordmark — точечно, своим классом.                            -->
+    <!--                                                                          -->
+    <!--  Сеттеры остаются на трёх широчайших корнях: MainWindow задаёт шрифт      -->
+    <!--  только своему корню, а каждый отдельный визуальный корень (легаси        -->
+    <!--  суб-окна AddServer/Option/Routing/DNS, диалоги) и всплывашки в своём     -->
+    <!--  TopLevel (ContextMenu/MenuFlyout, ToolTip, выпадашка ComboBox) его НЕ    -->
+    <!--  наследуют и падали на дефолт темы Semi. Задаём ТОЛЬКО семейство —        -->
+    <!--  веса/размеры/межбуквенное остаются за типографскими классами ниже.       -->
     <!-- ==================================================================== -->
     <Style Selector="TopLevel">
-        <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
     </Style>
     <Style Selector="TextBlock">
-        <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
     </Style>
     <Style Selector="TemplatedControl">
-        <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
     </Style>
 
     <!-- ==================================================================== -->
     <!--  departament VPN — Incy: типографика + компоненты (тёмная тема)        -->
     <!-- ==================================================================== -->
 
-    <!--  Типографика Space Grotesk (шкала 1:1 с Android TextAppearance.App.*)  -->
+    <!-- ==================================================================== -->
+    <!--  ТИПОГРАФИЧЕСКАЯ ЛЕСТНИЦА (00-rules.md 3.4 / 5, шкала 1:1 с Android       -->
+    <!--  TextAppearance.App.*). Три вещи, которых здесь не было:                  -->
+    <!--                                                                          -->
+    <!--  1. СЕМЕЙСТВО ПО РОЛИ, а не по привычке (D-1/D-2). Русский текст —         -->
+    <!--     Font.Ui (Golos Text). Брендовую Font.Brand (Space Grotesk) получают    -->
+    <!--     ровно четыре роли: Display (крупные цифры), Chip, Numeric, Wordmark.   -->
+    <!--     Body/Subtitle/Caption объявляют семейство ЯВНО, а не наследуют         -->
+    <!--     бланкетный сеттер — роль обязана быть самодостаточной.                 -->
+    <!--                                                                          -->
+    <!--  2. LineHeight ОБЪЯВЛЕН ЧИСЛОМ (D-12): 40/28/20/20/20/18/16/14/20/24.      -->
+    <!--     Раньше ведущую задавал платформенный дефолт, поэтому Android и        -->
+    <!--     десктоп рисовали РАЗНУЮ интерлиньяж при одинаковом кегле.              -->
+    <!--                                                                          -->
+    <!--  3. Межбуквенное — только из шкалы (5.6): Display -0.02em, Headline        -->
+    <!--     -0.01em, Title 0, Body/Subtitle +0.01em, Caption +0.02em, Chip         -->
+    <!--     +0.04em. В Avalonia LetterSpacing — это DIP, поэтому em переведён в    -->
+    <!--     пиксели по кеглю роли (Body 14·0.01 = 0.14 и т.д.).                    -->
+    <!-- ==================================================================== -->
+
+    <!--  Display 34/700 — крупная цифра (баланс, счётчик). Брендовая гарнитура.  -->
     <Style Selector="TextBlock.Display">
-        <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Brand}" />
         <Setter Property="FontWeight" Value="Bold" />
         <Setter Property="FontSize" Value="34" />
+        <Setter Property="LineHeight" Value="40" />
         <Setter Property="LetterSpacing" Value="-0.7" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
     </Style>
+    <!--  Headline 24/700 — заголовок экрана и пустого состояния. Русский → Ui.  -->
     <Style Selector="TextBlock.Headline">
-        <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
         <Setter Property="FontWeight" Value="Bold" />
         <Setter Property="FontSize" Value="24" />
+        <Setter Property="LineHeight" Value="28" />
         <Setter Property="LetterSpacing" Value="-0.24" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
     </Style>
+    <!--  Title 16/700 — заголовок строки, карточки, тулбара, подпись кнопки.  -->
     <Style Selector="TextBlock.Title">
-        <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
         <Setter Property="FontWeight" Value="Bold" />
         <Setter Property="FontSize" Value="16" />
+        <Setter Property="LineHeight" Value="20" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
     </Style>
+    <!--  Title medium 16/500 — тот же кегль тише: вторичная/третичная кнопка,
+          невыбранный сегмент. Отдельный ключ семейства: у Golos Text Medium
+          собственное имя семейства, иначе вес 500 схлопнулся бы в 400.  -->
     <Style Selector="TextBlock.TitleMedium">
-        <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui.Medium}" />
         <Setter Property="FontWeight" Value="Medium" />
         <Setter Property="FontSize" Value="16" />
+        <Setter Property="LineHeight" Value="20" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
     </Style>
     <Style Selector="TextBlock.Body">
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
         <Setter Property="FontSize" Value="14" />
+        <Setter Property="LineHeight" Value="20" />
+        <Setter Property="LetterSpacing" Value="0.14" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
     </Style>
     <Style Selector="TextBlock.Subtitle">
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
         <Setter Property="FontSize" Value="13" />
+        <Setter Property="LineHeight" Value="18" />
+        <Setter Property="LetterSpacing" Value="0.13" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
     </Style>
     <Style Selector="TextBlock.Caption">
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
         <Setter Property="FontSize" Value="12" />
+        <Setter Property="LineHeight" Value="16" />
+        <Setter Property="LetterSpacing" Value="0.24" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
     </Style>
+    <!--  Chip 11/500 — подпись чипа. Это латиница и короткие технические токены
+          (VLESS, WS, TCP), поэтому роль по D-2 отдана брендовой гарнитуре.  -->
     <Style Selector="TextBlock.Chip">
-        <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Brand}" />
         <Setter Property="FontWeight" Value="Medium" />
         <Setter Property="FontSize" Value="11" />
+        <Setter Property="LineHeight" Value="14" />
+        <Setter Property="LetterSpacing" Value="0.44" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
     </Style>
+    <!--  Numeric — живая цифра (трафик · скорость · пинг · цена · остаток).
+          Кегль/цвет наследует хозяина, гарнитуру и огранку задаёт роль:
+          tnum (табличные — значение не «прыгает» при обновлении), lnum
+          (прописные), zero (перечёркнутый ноль) для ТЕХНИЧЕСКИХ величин.  -->
     <Style Selector="TextBlock.Numeric">
-        <Setter Property="FontFamily" Value="{DynamicResource Font.Numeric}" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Brand}" />
+        <Setter Property="FontWeight" Value="Medium" />
         <Setter Property="FontFeatures" Value="tnum,lnum,zero" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
     </Style>
+    <!--  Numeric.Money — та же роль БЕЗ zero (D-3): перечёркнутый ноль в цене
+          читается как символ валюты, а не как цифра. «1 290 ₽», не «1 29Ø ₽».  -->
+    <Style Selector="TextBlock.Numeric.Money">
+        <Setter Property="FontFeatures" Value="tnum,lnum" />
+    </Style>
     <!--  Заголовок секции — жирный sentence-case, НЕ мелкий ALL-CAPS eyebrow  -->
     <Style Selector="TextBlock.SectionHeader">
-        <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
         <Setter Property="FontWeight" Value="Bold" />
         <Setter Property="FontSize" Value="16" />
+        <Setter Property="LineHeight" Value="20" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
+    </Style>
+    <!--  Wordmark 20/700 — ЕДИНСТВЕННОЕ место, где брендовая гарнитура несёт
+          «слово»: логотип-надпись на первой вкладке. Не заголовок суб-страницы
+          (12.1B): суб-страницы носят Title, иначе бренд обесценивается.  -->
+    <Style Selector="TextBlock.Wordmark">
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Brand}" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="FontSize" Value="20" />
+        <Setter Property="LineHeight" Value="24" />
+        <Setter Property="LetterSpacing" Value="-0.2" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
+    </Style>
+    <!--  Ошибка поля — Caption в красном ТЕКСТОВОМ токене (#FF6069, 6.15:1),
+          не в заливочном #F04452 (4.88:1). 00-rules.md 3.5.  -->
+    <Style Selector="TextBlock.FieldError">
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="LineHeight" Value="16" />
+        <Setter Property="LetterSpacing" Value="0.24" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.RedText}" />
     </Style>
 
     <!--  Карточка (замена MaterialCardView): поверхность, радиус 20, тонкая рамка, без тени  -->
@@ -335,15 +447,78 @@
         <Setter Property="Padding" Value="16" />
     </Style>
 
-    <!--  Строка списка (≥56dp, hover-подсветка)  -->
+    <!-- ==================================================================== -->
+    <!--  СТРОКА — самый повторяемый элемент продукта. Пять архетипов, одна       -->
+    <!--  геометрия (22-components 8.1): 16 гуттер · 40 плитка · 12 · текстовая    -->
+    <!--  колонка · 12 · ОДИН трейлинг · 16 гуттер. Минимум 56, растёт под         -->
+    <!--  двухстрочный подзаголовок и никогда не обрезает.                         -->
+    <!--                                                                          -->
+    <!--  ПАДДИНГ 12,0 → 16,12: строка обязана дышать по вертикали, а её           -->
+    <!--  горизонтальный отступ — тот же экранный гуттер 16, что у всего           -->
+    <!--  остального. Радиус 12 → 16: фурнитурный радиус на объекте размером со    -->
+    <!--  строку читался мельче своей высоты.                                      -->
+    <!--                                                                          -->
+    <!--  СТРОКА НЕ МАСШТАБИРУЕТСЯ ПРИ НАЖАТИИ (R5). Строка — это срез              -->
+    <!--  поверхности; масштабируя срез, рвём волосяные линии сверху и снизу, и     -->
+    <!--  это читается как баг отрисовки, а не как отклик. Отклик даёт ШАГ ФОНА     -->
+    <!--  на ступень вверх (Brush.SurfaceHigh). Масштабируются ОБЪЕКТЫ — карта,     -->
+    <!--  строка сервера, чип аккаунта, кнопка (см. Border.ServerRow ниже).         -->
+    <!-- ==================================================================== -->
     <Style Selector="Border.Row">
         <Setter Property="MinHeight" Value="{DynamicResource Size.Row}" />
-        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Tile}" />
-        <Setter Property="Padding" Value="12,0" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Button}" />
+        <Setter Property="Padding" Value="16,12" />
         <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Cursor" Value="Hand" />
     </Style>
     <Style Selector="Border.Row:pointerover">
         <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
+    </Style>
+    <!--  Нажатие: ступень поверхности, не масштаб. Класс вешает потребитель по
+          PointerPressed/Released (как .pressed у ServerRow).  -->
+    <Style Selector="Border.Row.pressed">
+        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
+    </Style>
+    <Style Selector="Border.Row.disabled">
+        <Setter Property="Opacity" Value="0.38" />
+        <Setter Property="Cursor" Value="Arrow" />
+    </Style>
+    <!--  Row.Value — показывает значение и открывает выбор. Геометрия базовая;
+          класс существует, чтобы разметка называла роль, а не рисовала её.  -->
+    <Style Selector="Border.Row.Value">
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <!--  Row.Action — действие выполняет ТРЕЙЛИНГ-контрол, а не строка.
+          Поэтому у тела строки нет ни курсора-руки, ни ховера, ни нажатия:
+          две мишени, делающие разное, — это ровно та ошибка, из-за которой
+          мета-бар подписки срабатывал «через раз».  -->
+    <Style Selector="Border.Row.Action">
+        <Setter Property="Cursor" Value="Arrow" />
+    </Style>
+    <Style Selector="Border.Row.Action:pointerover">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <!--  Row.Toggle — трейлинг тумблер, НЕинтерактивный (IsHitTestVisible=False
+          у потребителя): строка владеет переключателем целиком.  -->
+    <Style Selector="Border.Row.Toggle">
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <!--  Row.Destructive — заголовок красным ТЕКСТОВЫМ токеном (#FF6069, 6.15:1).
+          Плитка остаётся НЕЙТРАЛЬНОЙ: красная плитка плюс красный текст — это
+          один и тот же сигнал дважды, строка превращается в сирену.  -->
+    <Style Selector="Border.Row.Destructive TextBlock.Title">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.RedText}" />
+    </Style>
+    <!--  Разделитель строк: 1px, инсет 68 = точка начала текста (16+40+12).
+          Только МЕЖДУ строками — никогда над первой и под последней.  -->
+    <Style Selector="Border.Divider">
+        <Setter Property="Height" Value="1" />
+        <Setter Property="Background" Value="{DynamicResource Brush.OutlineVariant}" />
+        <Setter Property="Margin" Value="68,0,0,0" />
+    </Style>
+    <!--  Разделитель без ведущей плитки (строка без иконки) — от гуттера.  -->
+    <Style Selector="Border.Divider.Flush">
+        <Setter Property="Margin" Value="0" />
     </Style>
 
     <!--  Плитка иконки 40 с глифом 22  -->
@@ -382,32 +557,54 @@
     <!--  они центрируются сами, там origin намеренно абсолютный no-op, см. ниже.)   -->
     <!-- ==================================================================== -->
 
-    <!--  Первичная (акцент). 48h, Grotesk 15 Bold. press scale 0.97 @90мс.  -->
+    <!-- ==================================================================== -->
+    <!--  ПЕРВИЧНАЯ. Одна на экран: то единственное, чего экран от тебя хочет.    -->
+    <!--  Заливка акцентом, подпись Title 16/700 в Font.Ui (русская подпись —      -->
+    <!--  русской гарнитурой; раньше стоял Grotesk 15, у которого нет кириллицы).  -->
+    <!--                                                                          -->
+    <!--  ВЫСОТА — MinHeight, НИКОГДА Height. Фиксированная высота обрезает        -->
+    <!--  двухстрочную подпись при масштабе 200% — это дефект доступности P1       -->
+    <!--  (00-rules.md 14.5), а не косметика. Height="48" здесь и был этой миной.   -->
+    <!--                                                                          -->
+    <!--  ПРЕСС АСИММЕТРИЧЕН (D-11): вход 90мс OutQuart живёт на СЕЛЕКТОРЕ         -->
+    <!--  :pressed, возврат 160мс OutQuint — на базовом. Работает потому, что       -->
+    <!--  анимацией свойства управляет тот стиль, который применён В МОМЕНТ         -->
+    <!--  изменения: входя в :pressed берём его Transitions, выходя — базовые.      -->
+    <!--  Прежние симметричные 120/120 «кусали» и «отпускали» одинаково вяло.       -->
+    <!-- ==================================================================== -->
     <Style Selector="Button.Primary">
         <Setter Property="RenderTransformOrigin" Value="50%,50%" />
         <Setter Property="Background" Value="{DynamicResource Brush.Accent}" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnAccent}" />
         <Setter Property="CornerRadius" Value="{DynamicResource Radius.Button}" />
-        <Setter Property="Height" Value="48" />
+        <Setter Property="MinHeight" Value="{DynamicResource Size.Btn}" />
+        <Setter Property="MinWidth" Value="{DynamicResource Size.BtnMinWidth}" />
         <Setter Property="Padding" Value="24,0" />
-        <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
         <Setter Property="FontWeight" Value="Bold" />
-        <Setter Property="FontSize" Value="15" />
+        <Setter Property="FontSize" Value="16" />
         <Setter Property="HorizontalContentAlignment" Value="Center" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
-        <!--  Press-feedback: scale(0.97) с Ease.OutQuart @120мс (был линейный ramp 90мс). OutQuart
-              даёт уверенный decelerate в обе стороны — «кусает» решительно, оседает мягко, без bounce.  -->
+        <Setter Property="Cursor" Value="Hand" />
+        <!--  Возврат: 160мс OutQuint — уверенное оседание, без bounce.  -->
         <Setter Property="Transitions">
             <Transitions>
-                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" Easing="{StaticResource Ease.OutQuart}" />
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.16" Easing="{StaticResource Ease.OutQuint}" />
             </Transitions>
         </Setter>
     </Style>
     <Style Selector="Button.Primary:pressed">
         <Setter Property="RenderTransform" Value="scale(0.97)" />
+        <!--  Вход: 90мс OutQuart — отклик заметен раньше 100мс (7.3).  -->
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" Easing="{StaticResource Ease.OutQuart}" />
+            </Transitions>
+        </Setter>
     </Style>
     <Style Selector="Button.Primary:disabled">
         <Setter Property="Opacity" Value="0.38" />
+        <Setter Property="Cursor" Value="Arrow" />
     </Style>
     <!--  ГЛОБАЛЬНЫЙ фикс ховера. Без переопределения дефолтная тема Semi ({x:Type
           Button}) на :pointerover ПОДМЕНЯЕТ фон PART_ContentPresenter своим токеном
@@ -430,50 +627,117 @@
             </Transitions>
         </Setter>
     </Style>
+    <!--  Сырой хекс #3D7EF0/#3877E0 заменён токенами Brush.AccentHover /
+          Brush.AccentPressed: инлайн-хекс вне словаря токенов запрещён (00-rules.md 1),
+          и он же замораживал тёмное значение при переключении темы.  -->
     <Style Selector="Button.Primary:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-        <Setter Property="Background" Value="#3D7EF0" />
+        <Setter Property="Background" Value="{DynamicResource Brush.AccentHover}" />
     </Style>
     <Style Selector="Button.Primary:pressed /template/ ContentPresenter#PART_ContentPresenter">
-        <Setter Property="Background" Value="#3877E0" />
+        <Setter Property="Background" Value="{DynamicResource Brush.AccentPressed}" />
     </Style>
 
-    <!--  Первичная высокая (CTA форм: Оплатить / Войти / Подтвердить). 52h.
-          Android btn_pay/btn_telegram = layout height 52dp. Всё остальное =
-          Primary (наследует фон/типографику/press-scale/disabled по классу).  -->
+    <!--  Первичная высокая (CTA форм: Оплатить · Войти · Подтвердить). 52 —
+          тоже МИНИМУМ, а не фиксация: при 200% двухстрочная подпись растит
+          кнопку, а не обрезается. Android btn_pay/btn_telegram = 52dp.  -->
     <Style Selector="Button.Primary.Tall">
-        <Setter Property="Height" Value="52" />
+        <Setter Property="MinHeight" Value="{DynamicResource Size.BtnTall}" />
+    </Style>
+    <!--  Компактная первичная: те же цвета и типографика, высота 48 (5.2).
+          Нужна там, где первичное действие стоит В СТРОКЕ рядом с другим
+          контролом и 52 разорвали бы ритм.  -->
+    <Style Selector="Button.PrimaryCompact">
+        <Setter Property="RenderTransformOrigin" Value="50%,50%" />
+        <Setter Property="Background" Value="{DynamicResource Brush.Accent}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.OnAccent}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Button}" />
+        <Setter Property="MinHeight" Value="{DynamicResource Size.Btn}" />
+        <Setter Property="MinWidth" Value="{DynamicResource Size.BtnMinWidth}" />
+        <Setter Property="Padding" Value="24,0" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="FontSize" Value="16" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.16" Easing="{StaticResource Ease.OutQuint}" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button.PrimaryCompact /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource Brush.Accent}" />
+    </Style>
+    <Style Selector="Button.PrimaryCompact:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource Brush.AccentHover}" />
+    </Style>
+    <Style Selector="Button.PrimaryCompact:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource Brush.AccentPressed}" />
+    </Style>
+    <Style Selector="Button.PrimaryCompact:pressed">
+        <Setter Property="RenderTransform" Value="scale(0.97)" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" Easing="{StaticResource Ease.OutQuart}" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button.PrimaryCompact:disabled">
+        <Setter Property="Opacity" Value="0.38" />
+        <Setter Property="Cursor" Value="Arrow" />
+    </Style>
+    <Style Selector="Button.PrimaryCompact">
+        <Setter Property="FocusAdorner">
+            <FocusAdornerTemplate>
+                <Border BorderThickness="2" CornerRadius="16" Opacity="0.4"
+                        BorderBrush="{DynamicResource Brush.OnAccent}" />
+            </FocusAdornerTemplate>
+        </Setter>
     </Style>
 
-    <!--  Тональная. 48h, SurfaceHighest/OnSurface, Grotesk 15 Medium.
-          ДОБАВЛЕНЫ press scale 0.97 + переход (раньше их не было) — как Primary.  -->
-    <Style Selector="Button.Tonal">
+    <!-- ==================================================================== -->
+    <!--  ВТОРИЧНАЯ. Реалистичная альтернатива первичной либо действие без         -->
+    <!--  конкурента. Нейтральная тональная заливка, подпись Title medium 16/500.   -->
+    <!--  Канонический класс — Button.Secondary (см. ниже); Button.Tonal оставлен    -->
+    <!--  живым синонимом, потому что на нём висит 17 разметок, а удаление стиля     -->
+    <!--  — мгновенный отказ сборки. Оба селектора несут ОДНО поведение.             -->
+    <!-- ==================================================================== -->
+    <Style Selector="Button.Tonal, Button.Secondary">
         <Setter Property="RenderTransformOrigin" Value="50%,50%" />
         <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHighest}" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
         <Setter Property="CornerRadius" Value="{DynamicResource Radius.Button}" />
-        <Setter Property="Height" Value="48" />
+        <Setter Property="MinHeight" Value="{DynamicResource Size.Btn}" />
+        <Setter Property="MinWidth" Value="{DynamicResource Size.BtnMinWidth}" />
         <Setter Property="Padding" Value="24,0" />
-        <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui.Medium}" />
         <Setter Property="FontWeight" Value="Medium" />
-        <Setter Property="FontSize" Value="15" />
+        <Setter Property="FontSize" Value="16" />
         <Setter Property="HorizontalContentAlignment" Value="Center" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
-        <!--  Press-feedback: тот же Ease.OutQuart @120мс, что у Primary (был линейный 90мс).  -->
+        <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Transitions">
             <Transitions>
-                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" Easing="{StaticResource Ease.OutQuart}" />
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.16" Easing="{StaticResource Ease.OutQuint}" />
             </Transitions>
         </Setter>
     </Style>
-    <Style Selector="Button.Tonal:pressed">
+    <Style Selector="Button.Tonal:pressed, Button.Secondary:pressed">
         <Setter Property="RenderTransform" Value="scale(0.97)" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" Easing="{StaticResource Ease.OutQuart}" />
+            </Transitions>
+        </Setter>
     </Style>
-    <Style Selector="Button.Tonal:disabled">
+    <Style Selector="Button.Tonal:disabled, Button.Secondary:disabled">
         <Setter Property="Opacity" Value="0.38" />
+        <Setter Property="Cursor" Value="Arrow" />
     </Style>
     <!--  Ховер-тинт тонали: тот же 150мс Ease.Standard кроссфейд Brush.Hover (был жёсткий флип).
           Аттачится только не под .lite (см. Primary выше); press-тинт тот же Brush.Hover поверх.  -->
-    <Style Selector=":is(Window):not(.lite) Button.Tonal /template/ ContentPresenter#PART_ContentPresenter">
+    <Style Selector=":is(Window):not(.lite) Button.Tonal /template/ ContentPresenter#PART_ContentPresenter, :is(Window):not(.lite) Button.Secondary /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Transitions">
             <Transitions>
                 <BrushTransition Property="Background" Duration="0:0:0.15" Easing="{StaticResource Ease.Standard}" />
@@ -485,10 +749,10 @@
           Brush.Hover, что несут все прочие ховеры Incy (Row/IconButton/BackNav) —
           полупрозрачное затемнение, единое в dark/light/mono, НИКОГДА не светление и
           не акцент-флип. Текст (OnSurface) и press-scale 0.97 не трогаем.  -->
-    <Style Selector="Button.Tonal:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Style Selector="Button.Tonal:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.Secondary:pointerover /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
     </Style>
-    <Style Selector="Button.Tonal:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Style Selector="Button.Tonal:pressed /template/ ContentPresenter#PART_ContentPresenter, Button.Secondary:pressed /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
     </Style>
 
@@ -499,27 +763,35 @@
         <Setter Property="RenderTransformOrigin" Value="50%,50%" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineControl}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="CornerRadius" Value="{DynamicResource Radius.Button}" />
-        <Setter Property="Height" Value="48" />
+        <Setter Property="MinHeight" Value="{DynamicResource Size.Btn}" />
+        <Setter Property="MinWidth" Value="{DynamicResource Size.BtnMinWidth}" />
         <Setter Property="Padding" Value="24,0" />
-        <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui.Medium}" />
         <Setter Property="FontWeight" Value="Medium" />
-        <Setter Property="FontSize" Value="15" />
+        <Setter Property="FontSize" Value="16" />
         <Setter Property="HorizontalContentAlignment" Value="Center" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Transitions">
             <Transitions>
-                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" Easing="{StaticResource Ease.OutQuart}" />
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.16" Easing="{StaticResource Ease.OutQuint}" />
             </Transitions>
         </Setter>
     </Style>
     <Style Selector="Button.OutlinedAccent:pressed">
         <Setter Property="RenderTransform" Value="scale(0.97)" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" Easing="{StaticResource Ease.OutQuart}" />
+            </Transitions>
+        </Setter>
     </Style>
     <Style Selector="Button.OutlinedAccent:disabled">
         <Setter Property="Opacity" Value="0.38" />
+        <Setter Property="Cursor" Value="Arrow" />
     </Style>
     <!--  Тот же фикс: тема Semi на :pointerover заливала бы контурную кнопку своим
           светлым токеном (и меняла бы рамку). Держим прозрачный контур и СУБТИЛЬНО
@@ -527,13 +799,17 @@
           её в свой ховер-цвет. Текст (Accent) и press-scale 0.97 не трогаем — итог:
           мягкий затемняющий тинт внутри контура, без светления/акцент-флипа, dark/
           light/mono едино.  -->
+    <!--  Граница контура — Brush.OutlineControl (D-9), а не Brush.Accent: обводка
+          акцентом делала кнопку ВТОРОЙ акцентной поверхностью рядом с первичной,
+          что 4.3 запрещает. OutlineControl держит 3.43:1 — это WCAG 1.4.11 для
+          границы контрола, чего colorOutline (1.45:1) никогда не давал.  -->
     <Style Selector="Button.OutlinedAccent:pointerover /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineControl}" />
     </Style>
     <Style Selector="Button.OutlinedAccent:pressed /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineControl}" />
     </Style>
 
     <!--  Степпер (±): круг 40 (CornerRadius 20 = круг), фон Tile.Blue, глиф 20
@@ -566,11 +842,31 @@
         <Setter Property="Height" Value="20" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
     </Style>
+    <!--  Пресс 0.94 → 0.97: D-11 требует ОДИН масштаб нажатия на весь продукт.
+          Асимметрия та же — вход 90 OutQuart, возврат 160 OutQuint (базовый).  -->
     <Style Selector="Button.Stepper:pressed">
-        <Setter Property="RenderTransform" Value="scale(0.94)" />
+        <Setter Property="RenderTransform" Value="scale(0.97)" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" Easing="{StaticResource Ease.OutQuart}" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button.Stepper:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
     </Style>
     <Style Selector="Button.Stepper:disabled">
         <Setter Property="Opacity" Value="0.38" />
+        <Setter Property="Cursor" Value="Arrow" />
+    </Style>
+    <!--  Фокус степпера: круг → кольцо по контуру круга (радиус 20 + 2).  -->
+    <Style Selector="Button.Stepper">
+        <Setter Property="FocusAdorner">
+            <FocusAdornerTemplate>
+                <Border Margin="-2" BorderThickness="2" CornerRadius="22"
+                        BorderBrush="{DynamicResource Brush.Accent}" />
+            </FocusAdornerTemplate>
+        </Setter>
     </Style>
 
     <!-- ==================================================================== -->
@@ -628,8 +924,13 @@
     <Style Selector="Border.ServerRow:pointerover">
         <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
     </Style>
+    <!--  Строка сервера — СВОБОДНО СТОЯЩИЙ ОБЪЕКТ, а не срез поверхности,
+          поэтому она масштабируется (R5): 0.96 → 0.97, единый жест продукта.  -->
     <Style Selector="Border.ServerRow.pressed">
-        <Setter Property="RenderTransform" Value="scale(0.96)" />
+        <Setter Property="RenderTransform" Value="scale(0.97)" />
+    </Style>
+    <Style Selector="Border.ServerRow.disabled">
+        <Setter Property="Opacity" Value="0.38" />
     </Style>
     <Style Selector="Border.ServerRow.selected">
         <Setter Property="Background" Value="{DynamicResource Brush.SelectedFill}" />
@@ -870,11 +1171,23 @@
     <Style Selector="Button.IconButton40:pressed /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
     </Style>
+    <!--  Пресс 0.92 → 0.97 (D-11: один масштаб на продукт), асимметрия 90/160.  -->
     <Style Selector="Button.IconButton40:pressed">
-        <Setter Property="RenderTransform" Value="scale(0.92)" />
+        <Setter Property="RenderTransform" Value="scale(0.97)" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" Easing="{StaticResource Ease.OutQuart}" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <!--  Ховер: глиф выходит из приглушённого в полный OnSurface — иконка без
+          подписи обязана сама отвечать на курсор, фона ей для этого мало.  -->
+    <Style Selector="Button.IconButton40:pointerover PathIcon">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
     </Style>
     <Style Selector="Button.IconButton40:disabled">
         <Setter Property="Opacity" Value="0.38" />
+        <Setter Property="Cursor" Value="Arrow" />
     </Style>
     <!--  Глиф 22 по умолчанию (перекрывает базовый PathIcon 16).  -->
     <Style Selector="Button.IconButton40 PathIcon">
@@ -895,10 +1208,27 @@
     <!--  Бесшовный тулбар суб-страницы (§5.4 SubScreenToolbar): контейнер 56,
           фон Bg (сливается с окном), без рамки/тени. Хостит BackNav + Headline.  -->
     <Style Selector="Border.SubToolbar">
-        <Setter Property="Height" Value="{DynamicResource Size.SubToolbar}" />
+        <!--  56 — минимум, а не фиксация: при 200% заголовок Title растит тулбар,
+              а не обрезается на нижней отсечке.  -->
+        <Setter Property="MinHeight" Value="{DynamicResource Size.SubToolbar}" />
         <Setter Property="Background" Value="{DynamicResource Brush.Bg}" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Padding" Value="16,0" />
+    </Style>
+    <!--  Единственный разрешённый вариант тулбара: волосяная линия, которая
+          ПРОЯВЛЯЕТСЯ при прокрутке, если граница действительно нужна.
+          Класс вешает вью по ScrollViewer.Offset; больше тулбар не меняется
+          ничем — ни тенью, ни цветом, ни высотой (12.1A).  -->
+    <Style Selector="Border.SubToolbar.scrolled">
+        <Setter Property="BorderThickness" Value="0,0,0,1" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineVariant}" />
+    </Style>
+    <Style Selector=":is(Window):not(.lite) Border.SubToolbar">
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="BorderBrush" Duration="0:0:0.22" Easing="{StaticResource Ease.Standard}" />
+            </Transitions>
+        </Setter>
     </Style>
 
     <!--  Back-кнопка тулбара (§5.4): семантика IconButton40 (40 круг, hover
@@ -935,7 +1265,16 @@
         <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
     </Style>
     <Style Selector="Button.BackNav:pressed">
-        <Setter Property="RenderTransform" Value="scale(0.92)" />
+        <Setter Property="RenderTransform" Value="scale(0.97)" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" Easing="{StaticResource Ease.OutQuart}" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button.BackNav:disabled">
+        <Setter Property="Opacity" Value="0.38" />
+        <Setter Property="Cursor" Value="Arrow" />
     </Style>
     <Style Selector="Button.BackNav PathIcon">
         <Setter Property="Width" Value="{DynamicResource Size.Glyph}" />
@@ -945,32 +1284,110 @@
 
     <!--  Линк-действие (текст-кнопка акцента, §5.4): без рамки/фона, 40h тач-
           таргет, press scale 0.97. Пример: «Открыть Telegram», «Забыли пароль».  -->
-    <Style Selector="Button.LinkAction">
+    <!-- ==================================================================== -->
+    <!--  ТРЕТИЧНАЯ. Тихое действие, которое не должно спорить с первичным:       -->
+    <!--  «Отмена», «Повторить», действия внутри строки, кнопки диалога.          -->
+    <!--  Прозрачный фон, подпись акцентом. Радиус 16 как у всех кнопок (D-6):    -->
+    <!--  раньше стоял Radius.Chip 12 — фурнитурный радиус на КНОПКЕ.             -->
+    <!--  Button.LinkAction оставлен живым синонимом (17 разметок).               -->
+    <!-- ==================================================================== -->
+    <Style Selector="Button.LinkAction, Button.Tertiary, Button.TextAction">
         <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
         <Setter Property="RenderTransformOrigin" Value="50%,50%" />
-        <Setter Property="Height" Value="40" />
+        <Setter Property="MinHeight" Value="{DynamicResource Size.Btn}" />
         <Setter Property="Padding" Value="12,0" />
-        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Chip}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Button}" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
-        <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui.Medium}" />
         <Setter Property="FontWeight" Value="Medium" />
-        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontSize" Value="16" />
         <Setter Property="HorizontalContentAlignment" Value="Center" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="Cursor" Value="Hand" />
-        <!--  Press-feedback: тот же Ease.OutQuart @120мс, что у Primary/Tonal (был линейный 90мс).  -->
         <Setter Property="Transitions">
             <Transitions>
-                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" Easing="{StaticResource Ease.OutQuart}" />
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.16" Easing="{StaticResource Ease.OutQuint}" />
             </Transitions>
         </Setter>
     </Style>
-    <Style Selector="Button.LinkAction /template/ ContentPresenter#PART_ContentPresenter">
+    <Style Selector="Button.LinkAction /template/ ContentPresenter#PART_ContentPresenter, Button.Tertiary /template/ ContentPresenter#PART_ContentPresenter, Button.TextAction /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="Transparent" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Button}" />
     </Style>
-    <Style Selector="Button.LinkAction:pressed">
+    <!--  Ховер третичной: заливки в покое нет, поэтому ховер несёт САМ фон
+          (6% оверлей), а не подчёркивание и не смена цвета подписи.  -->
+    <Style Selector="Button.LinkAction:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.Tertiary:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.TextAction:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
+    </Style>
+    <Style Selector="Button.LinkAction:pressed /template/ ContentPresenter#PART_ContentPresenter, Button.Tertiary:pressed /template/ ContentPresenter#PART_ContentPresenter, Button.TextAction:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
+    </Style>
+    <Style Selector="Button.LinkAction:pressed, Button.Tertiary:pressed, Button.TextAction:pressed">
         <Setter Property="RenderTransform" Value="scale(0.97)" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" Easing="{StaticResource Ease.OutQuart}" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button.LinkAction:disabled, Button.Tertiary:disabled, Button.TextAction:disabled">
+        <Setter Property="Opacity" Value="0.38" />
+        <Setter Property="Cursor" Value="Arrow" />
+    </Style>
+    <!--  Текстовая деструктивная (5.2 Button.DestructiveText): то же тело, но
+          подпись красным ТЕКСТОВЫМ токеном. Заливочный #F04452 на тексте — 4.88:1,
+          то есть ниже пола 4.5:1 только формально; на деле рядом с ним всегда
+          стоит фон карты, поэтому берём #FF6069 (6.15:1).  -->
+    <Style Selector="Button.DestructiveText">
+        <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
+        <Setter Property="RenderTransformOrigin" Value="50%,50%" />
+        <Setter Property="MinHeight" Value="{DynamicResource Size.Btn}" />
+        <Setter Property="Padding" Value="12,0" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Button}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.RedText}" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui.Medium}" />
+        <Setter Property="FontWeight" Value="Medium" />
+        <Setter Property="FontSize" Value="16" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.16" Easing="{StaticResource Ease.OutQuint}" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button.DestructiveText /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Button}" />
+    </Style>
+    <Style Selector="Button.DestructiveText:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
+    </Style>
+    <Style Selector="Button.DestructiveText:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
+    </Style>
+    <Style Selector="Button.DestructiveText:pressed">
+        <Setter Property="RenderTransform" Value="scale(0.97)" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" Easing="{StaticResource Ease.OutQuart}" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button.DestructiveText:disabled">
+        <Setter Property="Opacity" Value="0.38" />
+        <Setter Property="Cursor" Value="Arrow" />
+    </Style>
+    <Style Selector="Button.DestructiveText">
+        <Setter Property="FocusAdorner">
+            <FocusAdornerTemplate>
+                <Border Margin="-2" BorderThickness="2" CornerRadius="18"
+                        BorderBrush="{DynamicResource Brush.Accent}" />
+            </FocusAdornerTemplate>
+        </Setter>
     </Style>
 
     <!-- ==================================================================== -->
@@ -984,16 +1401,18 @@
         <Setter Property="Background" Value="{DynamicResource Brush.Red}" />
         <Setter Property="Foreground" Value="White" />
         <Setter Property="CornerRadius" Value="{DynamicResource Radius.Button}" />
-        <Setter Property="Height" Value="48" />
+        <Setter Property="MinHeight" Value="{DynamicResource Size.Btn}" />
+        <Setter Property="MinWidth" Value="{DynamicResource Size.BtnMinWidth}" />
         <Setter Property="Padding" Value="24,0" />
-        <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
         <Setter Property="FontWeight" Value="Bold" />
-        <Setter Property="FontSize" Value="15" />
+        <Setter Property="FontSize" Value="16" />
         <Setter Property="HorizontalContentAlignment" Value="Center" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Transitions">
             <Transitions>
-                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" Easing="{StaticResource Ease.OutQuart}" />
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.16" Easing="{StaticResource Ease.OutQuint}" />
             </Transitions>
         </Setter>
     </Style>
@@ -1011,9 +1430,15 @@
     </Style>
     <Style Selector="Button.Destructive:pressed">
         <Setter Property="RenderTransform" Value="scale(0.97)" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" Easing="{StaticResource Ease.OutQuart}" />
+            </Transitions>
+        </Setter>
     </Style>
     <Style Selector="Button.Destructive:disabled">
         <Setter Property="Opacity" Value="0.38" />
+        <Setter Property="Cursor" Value="Arrow" />
     </Style>
 
     <!-- ==================================================================== -->
@@ -1036,8 +1461,11 @@
     <!--  станет Focusable в Фазе 3 — кольцо-фундамент уже готово и сработает тогда).  -->
     <!-- ==================================================================== -->
 
-    <!--  Не-залитые CTA (Radius.Button 16 → кольцо 18): внешнее 2px Accent.  -->
-    <Style Selector="Button.Tonal, Button.OutlinedAccent, Button.Destructive">
+    <!--  Не-залитые CTA (Radius.Button 16 → кольцо 18): внешнее 2px Accent.
+          Button.Destructive из этой группы ВЫВЕДЕНА: она ЗАЛИТАЯ, и синее кольцо
+          снаружи красной заливки — третий цвет в одном контроле. Ей полагается
+          ВНУТРЕННЕЕ белое кольцо @40% (см. ниже, R7).  -->
+    <Style Selector="Button.Tonal, Button.Secondary, Button.OutlinedAccent">
         <Setter Property="FocusAdorner">
             <FocusAdornerTemplate>
                 <Border Margin="-2" BorderThickness="2" CornerRadius="18"
@@ -1046,12 +1474,23 @@
         </Setter>
     </Style>
 
-    <!--  LinkAction (Radius.Chip 12 → кольцо 14).  -->
-    <Style Selector="Button.LinkAction">
+    <!--  Третичная / текстовое действие (Radius.Button 16 → кольцо 18).  -->
+    <Style Selector="Button.LinkAction, Button.Tertiary, Button.TextAction">
         <Setter Property="FocusAdorner">
             <FocusAdornerTemplate>
-                <Border Margin="-2" BorderThickness="2" CornerRadius="14"
+                <Border Margin="-2" BorderThickness="2" CornerRadius="18"
                         BorderBrush="{DynamicResource Brush.Accent}" />
+            </FocusAdornerTemplate>
+        </Setter>
+    </Style>
+
+    <!--  Деструктивная (ЗАЛИТАЯ красным) — ВНУТРЕННЕЕ кольцо белым @40%,
+          радиус контрола 16, без отрицательного отступа.  -->
+    <Style Selector="Button.Destructive">
+        <Setter Property="FocusAdorner">
+            <FocusAdornerTemplate>
+                <Border BorderThickness="2" CornerRadius="16" Opacity="0.4"
+                        BorderBrush="White" />
             </FocusAdornerTemplate>
         </Setter>
     </Style>
@@ -1093,6 +1532,68 @@
             <FocusAdornerTemplate>
                 <Border BorderThickness="2" CornerRadius="16" Opacity="0.4"
                         BorderBrush="{DynamicResource Brush.OnAccent}" />
+            </FocusAdornerTemplate>
+        </Setter>
+    </Style>
+
+    <!-- ==================================================================== -->
+    <!--  ЗАКРЫТИЕ ГЛАВНОЙ ДЫРЫ ДОСТУПНОСТИ (R7 / 12.2). Кольца фокуса не было   -->
+    <!--  НИ У ОДНОЙ иконочной кнопки и НИ У ОДНОЙ из двух навигаций — то есть    -->
+    <!--  тулбары, back, степперы, оверфлоу и весь рейл были достижимы ТОЛЬКО     -->
+    <!--  мышью. 12.2 говорит прямо: ничто не может быть доступно только мышью.   -->
+    <!--  Кольцо круглых контролов — окружность (радиус pill), у прямоугольных —  -->
+    <!--  радиус контрола + 2. Адорнер НЕ гасится под .lite: доступность выше     -->
+    <!--  снижения движения.                                                      -->
+    <!-- ==================================================================== -->
+    <Style Selector="Button.IconButton40, Button.BackNav, Button.Icon">
+        <Setter Property="FocusAdorner">
+            <FocusAdornerTemplate>
+                <Border Margin="-2" BorderThickness="2" CornerRadius="100"
+                        BorderBrush="{DynamicResource Brush.Accent}" />
+            </FocusAdornerTemplate>
+        </Setter>
+    </Style>
+    <!--  Легаси 32×32 иконочная кнопка гик-окон (радиус 8 → кольцо 10).  -->
+    <Style Selector="Button.IconButton">
+        <Setter Property="FocusAdorner">
+            <FocusAdornerTemplate>
+                <Border Margin="-2" BorderThickness="2" CornerRadius="10"
+                        BorderBrush="{DynamicResource Brush.Accent}" />
+            </FocusAdornerTemplate>
+        </Setter>
+    </Style>
+    <!--  Пункт навигации: кольцо по всему пункту, радиус 14 (11.1).  -->
+    <Style Selector="Button.NavRailItem, Button.NavItem">
+        <Setter Property="FocusAdorner">
+            <FocusAdornerTemplate>
+                <Border Margin="-2" BorderThickness="2" CornerRadius="14"
+                        BorderBrush="{DynamicResource Brush.Accent}" />
+            </FocusAdornerTemplate>
+        </Setter>
+    </Style>
+    <!--  Тумблер: кольцо вокруг ТРЕКА (7.2). Трек — стадион 52×32, поэтому 18.  -->
+    <Style Selector="ToggleSwitch">
+        <Setter Property="FocusAdorner">
+            <FocusAdornerTemplate>
+                <Border Margin="-2" BorderThickness="2" CornerRadius="18"
+                        BorderBrush="{DynamicResource Brush.Accent}" />
+            </FocusAdornerTemplate>
+        </Setter>
+    </Style>
+    <!--  Строки и выбираемые объекты: кольцо ВНЕШНЕЕ, радиус контрола + 2.  -->
+    <Style Selector="Border.Row, Border.Selectable, Border.PriceOption">
+        <Setter Property="FocusAdorner">
+            <FocusAdornerTemplate>
+                <Border Margin="-2" BorderThickness="2" CornerRadius="18"
+                        BorderBrush="{DynamicResource Brush.Accent}" />
+            </FocusAdornerTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="Border.ServerRow, Border.Card.Pressable">
+        <Setter Property="FocusAdorner">
+            <FocusAdornerTemplate>
+                <Border Margin="-2" BorderThickness="2" CornerRadius="22"
+                        BorderBrush="{DynamicResource Brush.Accent}" />
             </FocusAdornerTemplate>
         </Setter>
     </Style>
@@ -1142,13 +1643,17 @@
     <!--  ПОСТОЯННО 1.5px (§0.6 выбор не сдвигает раскладку); selected =           -->
     <!--  SelectedFill + 1.5px Accent. hover только у невыбранной.                 -->
     <!-- ==================================================================== -->
+    <!--  Радиус 14 → 16 (D-7: поле, поиск, опция цены и сегментный трек носят
+          радиус кнопки). Толщина рамки 1.5 держится в ОБОИХ состояниях — выбор
+          меняет только ЦВЕТ, поэтому раскладка не дёргается (18.1).  -->
     <Style Selector="Border.PriceOption">
         <Setter Property="MinHeight" Value="48" />
-        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Search}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Button}" />
         <Setter Property="Padding" Value="12" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineVariant}" />
         <Setter Property="BorderThickness" Value="1.5" />
+        <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Transitions">
             <Transitions>
                 <BrushTransition Property="Background" Duration="0:0:0.15" />
@@ -1162,6 +1667,15 @@
     <Style Selector="Border.PriceOption.selected">
         <Setter Property="Background" Value="{DynamicResource Brush.SelectedFill}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+    </Style>
+    <!--  Выбранная опция — заголовок весом 700: выбор читается по ТРЁМ осям
+          (заливка · цвет рамки · вес), поэтому переживает моно-тему и дальтонизм.  -->
+    <Style Selector="Border.PriceOption.selected TextBlock.Title">
+        <Setter Property="FontWeight" Value="Bold" />
+    </Style>
+    <Style Selector="Border.PriceOption.disabled">
+        <Setter Property="Opacity" Value="0.38" />
+        <Setter Property="Cursor" Value="Arrow" />
     </Style>
 
     <!-- ==================================================================== -->
@@ -1191,17 +1705,20 @@
     <!--  SurfaceHighest, радиус pill, паддинг 22,12, мягкая тень, текст           -->
     <!--  OnSurface 14/Bold. Позицию/авто-скрытие/cross-fade задаёт оверлей.       -->
     <!-- ==================================================================== -->
+    <!--  Радиус Pill → Radius.Card 20: широкая капсула с подписью внутри — ровно
+          та форма, которую владелец отклонил (D-6); pill остаётся за кругами и
+          треками. Паддинг 22,12 → 16,12: 22 нет ни в одной шкале.  -->
     <Style Selector="Border.Toast">
         <Setter Property="Background" Value="{DynamicResource Brush.Toast.Bg}" />
-        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill}" />
-        <Setter Property="Padding" Value="22,12" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Card}" />
+        <Setter Property="Padding" Value="16,12" />
         <Setter Property="BoxShadow" Value="0 8 24 0 #40000000" />
         <Setter Property="HorizontalAlignment" Value="Center" />
     </Style>
     <Style Selector="Border.Toast TextBlock">
-        <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
-        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
         <Setter Property="FontSize" Value="14" />
+        <Setter Property="LineHeight" Value="20" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
     </Style>
 
@@ -1214,26 +1731,40 @@
     <Style Selector="ToggleButton.Segment">
         <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
         <Setter Property="RenderTransformOrigin" Value="50%,50%" />
-        <Setter Property="Height" Value="{DynamicResource Size.SegmentChip}" />
-        <Setter Property="MinWidth" Value="44" />
-        <Setter Property="Padding" Value="16,0" />
+        <!--  Высота 44 → МИНИМУМ 40 внутри трека 48 (6.1): сегмент и кнопка на
+              одной строке выравниваются, а подпись 16/500 при 200% растит сегмент,
+              а не обрезается. Height здесь была той же миной, что у CTA.  -->
+        <Setter Property="MinHeight" Value="40" />
+        <Setter Property="MinWidth" Value="64" />
+        <Setter Property="Padding" Value="12,0" />
         <Setter Property="CornerRadius" Value="{DynamicResource Radius.Chip}" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineVariant}" />
         <Setter Property="BorderThickness" Value="1.5" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
-        <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui.Medium}" />
         <Setter Property="FontWeight" Value="Medium" />
-        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontSize" Value="16" />
         <Setter Property="HorizontalContentAlignment" Value="Center" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Transitions">
             <Transitions>
-                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" />
-                <BrushTransition Property="BorderBrush" Duration="0:0:0.15" />
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.16" Easing="{StaticResource Ease.OutQuint}" />
+                <BrushTransition Property="BorderBrush" Duration="0:0:0.22" Easing="{StaticResource Ease.Standard}" />
             </Transitions>
         </Setter>
+    </Style>
+    <!--  Трек сегментного переключателя (6.1): SurfaceHighest, радиус кнопки 16,
+          внутренний паддинг 4. Сегменты кладёт потребитель в StackPanel Spacing=4.  -->
+    <Style Selector="Border.SegmentTrack">
+        <Setter Property="MinHeight" Value="{DynamicResource Size.Btn}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Button}" />
+        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHighest}" />
+        <Setter Property="Padding" Value="4" />
+    </Style>
+    <Style Selector="Border.SegmentTrack:disabled">
+        <Setter Property="Opacity" Value="0.38" />
     </Style>
     <Style Selector="ToggleButton.Segment /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="Transparent" />
@@ -1243,14 +1774,35 @@
         <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
     </Style>
     <Style Selector="ToggleButton.Segment:pressed">
-        <Setter Property="RenderTransform" Value="scale(0.96)" />
+        <Setter Property="RenderTransform" Value="scale(0.97)" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" Easing="{StaticResource Ease.OutQuart}" />
+            </Transitions>
+        </Setter>
     </Style>
     <Style Selector="ToggleButton.Segment:checked /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource Brush.SelectedFill}" />
     </Style>
+    <!--  Выбранный сегмент читается по ТРЁМ осям: заливка, цвет, вес 500 → 700.
+          Вес щёлкает мгновенно (твина веса нет и он не нужен), заливка и рамка
+          перетекают за Dur.State 220 Ease.Standard.  -->
     <Style Selector="ToggleButton.Segment:checked">
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
+    </Style>
+    <!--  Выбранный сегмент НЕ реагирует на ховер: он уже в конечном состоянии.  -->
+    <Style Selector="ToggleButton.Segment:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource Brush.SelectedFill}" />
+    </Style>
+    <Style Selector="ToggleButton.Segment:not(:checked):pointerover">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
+    </Style>
+    <Style Selector="ToggleButton.Segment:disabled">
+        <Setter Property="Opacity" Value="0.38" />
+        <Setter Property="Cursor" Value="Arrow" />
     </Style>
 
     <!-- ==================================================================== -->
@@ -1282,11 +1834,16 @@
     <!--  Облегчённый режим: под lite-окном пульс НЕ навешивается (селектор не совпадает →
           анимация не аттачится → статичная непрозрачность). Конкурирующий стиль в Avalonia
           не может отменить уже запущенную анимацию, поэтому гасим на уровне СЕЛЕКТОРА.  -->
+    <!--  Длительность 900 → 1000 (motion_pulse). 900мс не существует ни в одной
+          шкале темпа; 1000 — объявленный токен и он же стоит на Android, так что
+          обе платформы пульсируют ПРОВЕРЯЕМО одинаково. Кривая SineEaseInOut →
+          Ease.Standard: ease-in-out на нашей шкале нет (8.3 — только ease-out и
+          двусторонний Ease.Standard).  -->
     <Style Selector=":is(Window):not(.lite) :is(Control).SkeletonPulse">
         <Style.Animations>
             <Animation
-                Duration="0:0:0.9"
-                Easing="SineEaseInOut"
+                Duration="0:0:1"
+                Easing="{StaticResource Ease.Standard}"
                 IterationCount="Infinite"
                 PlaybackDirection="Alternate">
                 <KeyFrame Cue="0%">
@@ -1297,6 +1854,11 @@
                 </KeyFrame>
             </Animation>
         </Style.Animations>
+    </Style>
+    <!--  Облегчённый режим: скелет СТАТИЧЕН на 0.7 — середина размаха пульса,
+          то есть он остаётся читаемым «загрузкой», а не выглядит потухшим.  -->
+    <Style Selector=":is(Window).lite :is(Control).SkeletonPulse">
+        <Setter Property="Opacity" Value="0.7" />
     </Style>
     <Style Selector="Border.SkelBar">
         <Setter Property="Height" Value="16" />
@@ -1355,6 +1917,554 @@
     <Style Selector="Border.NavRail">
         <Setter Property="Background" Value="{DynamicResource Brush.Bg}" />
         <Setter Property="BorderThickness" Value="0" />
+    </Style>
+
+    <!-- ==================================================================== -->
+    <!--  ============  КАНОНИЧЕСКИЙ СЛОВАРЬ КОМПОНЕНТОВ  ==================== -->
+    <!--                                                                        -->
+    <!--  Пятнадцать компонентов из 22-components R15 — и это ВЕСЬ словарь.      -->
+    <!--  Всё остальное на экране обязано быть РАСКЛАДКОЙ из них, а не новым      -->
+    <!--  контролом. Вью, которая рисует карточку руками, — дефект: расширяй      -->
+    <!--  класс здесь.                                                            -->
+    <!--                                                                          -->
+    <!--  Каждый класс ниже несёт ПОЛНЫЙ набор состояний: покой · :pointerover     -->
+    <!--  (6% оверлей) · :pressed (0.97, вход 90 OutQuart, возврат 160 OutQuint)   -->
+    <!--  · :focus-visible (кольцо 2px, отступ 2 — ОБЯЗАТЕЛЬНО, 12.2: ничто не      -->
+    <!--  достижимо только мышью) · :disabled (0.38 на ВЕСЬ контрол, а не на        -->
+    <!--  подпись) · .active/.selected где применим выбор · и подача загрузки.      -->
+    <!--  Класс без своих состояний — не компонент, а половина компонента.          -->
+    <!--                                                                          -->
+    <!--  Имена — из реестра 22-components 19: одно понятие, одно имя, обе          -->
+    <!--  платформы. Старые имена (Tonal · LinkAction · IconButton40 · BackNav ·    -->
+    <!--  NavRailItem · SettingRow · StatusChip · ChipBadge · ProtocolChip ·        -->
+    <!--  TrafficPill · SearchPill) ОСТАВЛЕНЫ ЖИВЫМИ: на них висят разметки, а      -->
+    <!--  удаление стиля — мгновенный отказ сборки. Это долг вывода, не долг         -->
+    <!--  работы.                                                                   -->
+    <!-- ==================================================================== -->
+
+    <!-- ==================================================================== -->
+    <!--  1. ИКОНОЧНАЯ КНОПКА (Button.Icon). Один глиф 22 в квадрате 40, без      -->
+    <!--  подписи и без бейджа. Нужна подпись — это третичная кнопка.             -->
+    <!--  Квадрат остаётся ФИКСИРОВАННЫМ (Width == Height): радиус pill живёт      -->
+    <!--  только там, где ширина равна высоте, а «минимум» на круге превратил бы   -->
+    <!--  его в стадион при первом же длинном содержимом.                          -->
+    <!--  Каждому экземпляру ОБЯЗАТЕЛЬНЫ AutomationProperties.Name и ToolTip.Tip   -->
+    <!--  одной и той же русской строкой — это задаёт потребитель.                 -->
+    <!-- ==================================================================== -->
+    <Style Selector="Button.Icon">
+        <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
+        <Setter Property="RenderTransformOrigin" Value="50%,50%" />
+        <Setter Property="Width" Value="{DynamicResource Size.IconButton}" />
+        <Setter Property="Height" Value="{DynamicResource Size.IconButton}" />
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.16" Easing="{StaticResource Ease.OutQuint}" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button.Icon /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill}" />
+    </Style>
+    <Style Selector="Button.Icon:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
+    </Style>
+    <Style Selector="Button.Icon:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
+    </Style>
+    <Style Selector="Button.Icon:pressed">
+        <Setter Property="RenderTransform" Value="scale(0.97)" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" Easing="{StaticResource Ease.OutQuart}" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button.Icon:disabled">
+        <Setter Property="Opacity" Value="0.38" />
+        <Setter Property="Cursor" Value="Arrow" />
+    </Style>
+    <!--  Глиф 22 (плиточный размер): у иконочной кнопки нет подписи, поэтому
+          глиф крупнее строчных 20 и мельче навигационных 24.  -->
+    <Style Selector="Button.Icon PathIcon">
+        <Setter Property="Width" Value="{DynamicResource Size.Glyph}" />
+        <Setter Property="Height" Value="{DynamicResource Size.Glyph}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Foreground" Duration="0:0:0.15" Easing="{StaticResource Ease.Standard}" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button.Icon:pointerover PathIcon">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
+    </Style>
+    <!--  В строке глиф 20 («иконки действий в строках 20»).  -->
+    <Style Selector="Button.Icon.Row PathIcon">
+        <Setter Property="Width" Value="20" />
+        <Setter Property="Height" Value="20" />
+    </Style>
+    <!--  .Filled — единственный модификатор иконочной: нейтральная заливка для
+          степперов и того действия тулбара, которое обязано находиться сразу.  -->
+    <Style Selector="Button.Icon.Filled /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHighest}" />
+    </Style>
+    <Style Selector="Button.Icon.Accent PathIcon">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+    </Style>
+    <Style Selector="Button.Icon.Accent:pointerover PathIcon">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+    </Style>
+    <Style Selector="Button.Icon.Danger PathIcon">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Red}" />
+    </Style>
+    <Style Selector="Button.Icon.Danger:pointerover PathIcon">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Red}" />
+    </Style>
+
+    <!-- ==================================================================== -->
+    <!--  2. КАРТА. Разрешена, только если верны ВСЕ три условия: это отдельный   -->
+    <!--  объект, с которым работают как с целым; ему нужна граница, которую не    -->
+    <!--  дают отступы; и он НЕ внутри другой карты. Экран настроек — это строки,  -->
+    <!--  а не карты. История платежей — разделённый список, а не сетка одинаковых -->
+    <!--  прямоугольников, которые ничего не делают.                               -->
+    <!--  Тени нет вообще: глубину несёт лестница поверхностей.                    -->
+    <!-- ==================================================================== -->
+    <!--  Нажимаемая карта — ОБЪЕКТ, значит масштабируется (R5), в отличие от строки.  -->
+    <Style Selector="Border.Card.Pressable">
+        <Setter Property="RenderTransformOrigin" Value="50%,50%" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.16" Easing="{StaticResource Ease.OutQuint}" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Border.Card.Pressable:pointerover">
+        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
+    </Style>
+    <Style Selector="Border.Card.Pressable.pressed">
+        <Setter Property="RenderTransform" Value="scale(0.97)" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" Easing="{StaticResource Ease.OutQuart}" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Border.Card.Pressable.disabled">
+        <Setter Property="Opacity" Value="0.38" />
+        <Setter Property="Cursor" Value="Arrow" />
+    </Style>
+    <!--  Карта-группа строк: паддинг 0 и клип углов, чтобы ховер строки не
+          вылезал за скругление. Вложенных карт не бывает (4.4).  -->
+    <Style Selector="Border.Card.Group">
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="ClipToBounds" Value="True" />
+    </Style>
+    <!--  Модальная карта (13.2): ширина, паддинг и радиус диалога. Ставится по
+          центру поверх Border.Scrim. Диалог — последнее средство после
+          «инлайн → раскрывающаяся строка → флайаут».  -->
+    <Style Selector="Border.Card.Modal">
+        <Setter Property="MaxWidth" Value="360" />
+        <Setter Property="Padding" Value="24" />
+        <Setter Property="Background" Value="{DynamicResource Brush.Surface}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Card}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineVariant}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- ==================================================================== -->
+    <!--  3. ЧИП. Чип — ЯРЛЫК, а не контрол: он никогда не кликается. Кликаемая   -->
+    <!--  пилюля — это третичная кнопка или сегмент.                              -->
+    <!--  Цвет НИКОГДА не единственный сигнал (6.3): в каждом статус-чипе стоит    -->
+    <!--  слово. Голая цветная точка рядом с подписью, которая уже называет        -->
+    <!--  состояние, — это украшение, и оно удаляется.                             -->
+    <!--  Статусов ТРИ, а не четыре (R12): «Отменён» нейтрален — отменённый        -->
+    <!--  платёж не является предупреждением.                                      -->
+    <!-- ==================================================================== -->
+    <Style Selector="Border.Chip">
+        <Setter Property="MinHeight" Value="24" />
+        <Setter Property="MaxWidth" Value="160" />
+        <Setter Property="Padding" Value="8,4" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Chip}" />
+        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHighest}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.Chip TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
+    </Style>
+    <!--  Chip.Accent — тарифный бейдж, и БОЛЬШЕ НИЧЕГО (R14.7): один на карточку
+          подписки. Любой другой акцентный чип отбирает бюджет акцента у
+          первичного действия экрана.  -->
+    <Style Selector="Border.Chip.Accent">
+        <Setter Property="Background" Value="{DynamicResource Brush.AccentContainer}" />
+    </Style>
+    <Style Selector="Border.Chip.Accent TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.OnAccentContainer}" />
+    </Style>
+    <Style Selector="Border.Chip.Status.Ok">
+        <Setter Property="Background" Value="{DynamicResource Brush.StatusChip.Green}" />
+    </Style>
+    <Style Selector="Border.Chip.Status.Ok TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Ping.Good}" />
+    </Style>
+    <Style Selector="Border.Chip.Status.Warn">
+        <Setter Property="Background" Value="{DynamicResource Brush.StatusChip.Orange}" />
+    </Style>
+    <Style Selector="Border.Chip.Status.Warn TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.AmberText}" />
+    </Style>
+    <Style Selector="Border.Chip.Status.Error">
+        <Setter Property="Background" Value="{DynamicResource Brush.StatusChip.Red}" />
+    </Style>
+    <Style Selector="Border.Chip.Status.Error TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.RedText}" />
+    </Style>
+    <Style Selector="Border.Chip:disabled">
+        <Setter Property="Opacity" Value="0.38" />
+    </Style>
+
+    <!-- ==================================================================== -->
+    <!--  4. ПОЛЕ ВВОДА. Подпись СВЕРХУ и всегда видима; плейсхолдер — это ПРИМЕР -->
+    <!--  значения, а не подпись. Строка помощи/ошибки присутствует в разметке     -->
+    <!--  ДАЖЕ пустой, иначе раскладка прыгает при первой же ошибке.               -->
+    <!--  Валидация — по потере фокуса, не по каждому нажатию клавиши.             -->
+    <!--  Граница — Brush.OutlineControl (D-9, 3.43:1): colorOutline даёт 1.45:1    -->
+    <!--  и не имеет права рисовать границу контрола.                              -->
+    <!-- ==================================================================== -->
+    <Style Selector="Border.Field">
+        <Setter Property="MinHeight" Value="{DynamicResource Size.Field}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Button}" />
+        <Setter Property="Padding" Value="16,0" />
+        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHighest}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineControl}" />
+        <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="Border.Field:pointerover">
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.OnSurfaceVariant}" />
+    </Style>
+    <!--  Фокус поля — рамка 2px акцентом ВНУТРИ габарита (толщина растёт внутрь,
+          раскладка не сдвигается) плюс общее кольцо адорнера снаружи.  -->
+    <Style Selector="Border.Field.focused">
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+        <Setter Property="BorderThickness" Value="2" />
+    </Style>
+    <Style Selector="Border.Field.error">
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Red}" />
+        <Setter Property="BorderThickness" Value="2" />
+    </Style>
+    <Style Selector="Border.Field:disabled">
+        <Setter Property="Opacity" Value="0.38" />
+    </Style>
+    <!--  Только для чтения: ни рамки, ни заливки — это уже не поле, а значение.  -->
+    <Style Selector="Border.Field.readonly">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <!--  Подпись над полем — Subtitle, sentence-case, без двоеточия.  -->
+    <Style Selector="TextBlock.FieldLabel">
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="LineHeight" Value="18" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
+        <Setter Property="Margin" Value="0,0,0,8" />
+    </Style>
+    <Style Selector="TextBlock.FieldLabel.error">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.RedText}" />
+    </Style>
+    <!--  Сам TextBox внутри Border.Field: без своей рамки и фона (их несёт
+          обёртка), чтобы не было ДВУХ границ одна в другой.  -->
+    <Style Selector="TextBox.Field">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
+        <Setter Property="FontSize" Value="16" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
+    </Style>
+    <!--  Плейсхолдер держит 4.5:1 (14.1): приглушённый серый по умолчанию Semi
+          этот пол не проходит и потому здесь переопределён.  -->
+    <Style Selector="TextBox.Field /template/ TextBlock#PART_Watermark">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
+    </Style>
+    <Style Selector="TextBox.Field:disabled">
+        <Setter Property="Opacity" Value="0.38" />
+    </Style>
+    <!--  Числовое поле (сумма · порт · HWID) — роль Numeric: табличные цифры,
+          значение не «прыгает» при вводе.  -->
+    <Style Selector="TextBox.Field.Numeric">
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Brand}" />
+        <Setter Property="FontFeatures" Value="tnum,lnum,zero" />
+    </Style>
+
+    <!-- ==================================================================== -->
+    <!--  5. ТУМБЛЕР. Геометрия трека/кнопки живёт в ControlTheme (GlobalResources), -->
+    <!--  здесь — состояния уровня контрола, которых у него не было: 0.38 на ВЕСЬ    -->
+    <!--  тумблер при выключении и запрет курсора-руки в этом состоянии.             -->
+    <!--  Промежуточного состояния у тумблера НЕ СУЩЕСТВУЕТ: тумблер, ждущий сеть,   -->
+    <!--  заменяется в строке инлайн-спиннером 20 и не принимает нажатий.            -->
+    <!-- ==================================================================== -->
+    <Style Selector="ToggleSwitch">
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="ToggleSwitch:disabled">
+        <Setter Property="Opacity" Value="0.38" />
+        <Setter Property="Cursor" Value="Arrow" />
+    </Style>
+
+    <!-- ==================================================================== -->
+    <!--  6. ПУНКТ НАВИГАЦИИ (Button.NavItem + .rail / .bar / .active).           -->
+    <!--  Четыре назначения, один активный класс на обеих платформах.             -->
+    <!--  Активное состояние читается по ТРЁМ осям (цвет · вес 700 · индикатор),  -->
+    <!--  поэтому переживает моно-тему.                                           -->
+    <!--  НАЖАТИЕ НЕ ДАЁТ НИЧЕГО: ни ripple, ни свечения, ни масштаба — прямое     -->
+    <!--  требование владельца. Отклик несёт сам переход на экран.                 -->
+    <!-- ==================================================================== -->
+    <Style Selector="Button.NavItem">
+        <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Stretch" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.NavItem.rail">
+        <Setter Property="Width" Value="76" />
+        <Setter Property="Height" Value="64" />
+    </Style>
+    <Style Selector="Button.NavItem.bar">
+        <Setter Property="MinHeight" Value="{DynamicResource Size.Row}" />
+    </Style>
+    <Style Selector="Button.NavItem /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.NavItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.NavItem:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.NavItem PathIcon">
+        <Setter Property="Width" Value="24" />
+        <Setter Property="Height" Value="24" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Foreground" Duration="0:0:0.22" Easing="{StaticResource Ease.Standard}" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button.NavItem TextBlock">
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui.Medium}" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="LineHeight" Value="14" />
+        <Setter Property="FontWeight" Value="Medium" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Foreground" Duration="0:0:0.22" Easing="{StaticResource Ease.Standard}" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <!--  Ховер трогает только НЕактивный пункт: активный уже акцентный.  -->
+    <Style Selector="Button.NavItem:pointerover:not(.active) PathIcon">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariantHover}" />
+    </Style>
+    <Style Selector="Button.NavItem:pointerover:not(.active) TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariantHover}" />
+    </Style>
+    <Style Selector="Button.NavItem.active PathIcon">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+    </Style>
+    <Style Selector="Button.NavItem.active TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
+        <Setter Property="FontWeight" Value="Bold" />
+    </Style>
+    <!--  Активный индикатор — стадион 64×34 (нативная форма M3-навигации,
+          сохранена карве-аутом «треки» в D-6). Позицию ведёт оболочка.  -->
+    <Style Selector="Border.NavIndicator">
+        <Setter Property="Width" Value="64" />
+        <Setter Property="Height" Value="34" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill}" />
+        <Setter Property="Background" Value="{DynamicResource Brush.AccentContainer}" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
+    <!--  Активная подпись рейла: вес 500 → 700 (раньше в части мест был только цвет).  -->
+    <Style Selector="Button.NavRailItem.active TextBlock">
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
+        <Setter Property="FontWeight" Value="Bold" />
+    </Style>
+
+    <!-- ==================================================================== -->
+    <!--  7. ПУСТОЕ СОСТОЯНИЕ. Одна грамматика на весь продукт: нейтральная       -->
+    <!--  плитка 64 · Headline · одна строка Subtitle · одно действие.            -->
+    <!--  Плитка НЕЙТРАЛЬНАЯ, а не акцентная: пустой экран не является главной    -->
+    <!--  поверхностью действия и не тратит бюджет акцента на украшение.          -->
+    <!-- ==================================================================== -->
+    <Style Selector="StackPanel.EmptyState">
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="MaxWidth" Value="360" />
+        <Setter Property="Spacing" Value="8" />
+    </Style>
+    <Style Selector="StackPanel.EmptyState TextBlock.Headline">
+        <Setter Property="TextAlignment" Value="Center" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style Selector="StackPanel.EmptyState TextBlock.Subtitle">
+        <Setter Property="TextAlignment" Value="Center" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <!--  Нейтральный вариант плитки пустого состояния (базовый Border.EmptyIcon
+          синий — он остаётся для тех экранов, где пусто И это первичный шаг).  -->
+    <Style Selector="Border.EmptyIcon.Neutral">
+        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHighest}" />
+    </Style>
+    <Style Selector="Border.EmptyIcon.Neutral PathIcon">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
+    </Style>
+    <!--  Оффлайн — это НЕ ошибка (15): экран оставляет данные, помечает их
+          устаревшими и показывает одну тихую полосу над содержимым.  -->
+    <Style Selector="Border.OfflineBar">
+        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Chip}" />
+        <Setter Property="Padding" Value="12" />
+    </Style>
+
+    <!-- ==================================================================== -->
+    <!--  8. СКЕЛЕТ. Работает ровно потому, что он — СИЛУЭТ настоящего            -->
+    <!--  содержимого: столько же блоков, тех же высот, в тех же позициях.        -->
+    <!--  Три плоских прямоугольника вместо карточки тарифа всё равно «хлопнут»   -->
+    <!--  при подмене. Появляется через 300мс, уходит кроссфейдом 220.            -->
+    <!-- ==================================================================== -->
+    <Style Selector="Border.Skeleton">
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Chip}" />
+        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHighest}" />
+    </Style>
+
+    <!-- ==================================================================== -->
+    <!--  9. ПРОГРЕСС. Две формы: детерминированная полоса и инлайн-спиннер.      -->
+    <!--  Полоса 6 высотой, трек SurfaceHighest, заливка СПЛОШНАЯ акцентом —      -->
+    <!--  без градиента: градиент не кодирует ничего, чего не кодирует сплошная    -->
+    <!--  заливка той же ширины. Подпись стоит РЯДОМ с полосой, никогда поверх:    -->
+    <!--  11px по движущейся заливке измеряется 2.9:1.                             -->
+    <!-- ==================================================================== -->
+    <Style Selector="Border.Meter">
+        <Setter Property="Height" Value="{DynamicResource Size.Meter}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill}" />
+        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHighest}" />
+        <Setter Property="ClipToBounds" Value="True" />
+    </Style>
+    <Style Selector="Border.Meter.Fill">
+        <Setter Property="Background" Value="{DynamicResource Brush.Accent}" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+    </Style>
+    <!--  Сверх лимита: заливка краснеет, а подпись рядом называет причину словом.  -->
+    <Style Selector="Border.Meter.Fill.over">
+        <Setter Property="Background" Value="{DynamicResource Brush.Red}" />
+    </Style>
+    <Style Selector="Border.Meter:disabled">
+        <Setter Property="Opacity" Value="0.38" />
+    </Style>
+
+    <!-- ==================================================================== -->
+    <!--  10. ЗАГРУЗКА КОНТРОЛА. Контракт (2.7): ширина УДЕРЖИВАЕТСЯ, подпись     -->
+    <!--  ПРЯЧЕТСЯ (а не удаляется), дуга 20 крутится 1100мс линейно в СОБСТВЕННОМ -->
+    <!--  цвете подписи, и это НЕ вид «отключено»: непрозрачность остаётся 1.0,     -->
+    <!--  потому что выцветший спиннер читается как «сломано», а не «работает».     -->
+    <!--  Поэтому загрузка вешается на IsHitTestVisible, а НЕ на IsEnabled.         -->
+    <!--  Фокус сохраняется, чтобы клавиатурного пользователя не выбросило вверх.   -->
+    <!-- ==================================================================== -->
+    <Style Selector="Button.loading">
+        <Setter Property="IsHitTestVisible" Value="False" />
+        <Setter Property="Cursor" Value="Arrow" />
+    </Style>
+    <!--  Подпись прячется ПРОЗРАЧНОСТЬЮ: ширина кнопки остаётся прежней, и
+          трёхбуквенная подпись со спиннером не дают двух разных ширин.  -->
+    <Style Selector="Button.loading TextBlock">
+        <Setter Property="Opacity" Value="0" />
+    </Style>
+    <!--  Инлайн-дуга: 20 внутри кнопки, 2px, круглые торцы. Цвет ставит
+          потребитель по хозяину (OnAccent в первичной, OnSurface во вторичной,
+          Accent в третичной, белый в деструктивной).  -->
+    <Style Selector="Ellipse.Spinner.Inline">
+        <Setter Property="Width" Value="20" />
+        <Setter Property="Height" Value="20" />
+        <Setter Property="StrokeThickness" Value="2" />
+        <Setter Property="StrokeLineCap" Value="Round" />
+    </Style>
+
+    <!-- ==================================================================== -->
+    <!--  11. ИНДИКАТОР ВЫБОРА (Border.Selectable + .selected). Самая трогаемая   -->
+    <!--  поверхность продукта и та, к которой 7.1 строже всего: минимум ДВЕ оси,  -->
+    <!--  никогда один тинт, и НИКАКОГО сдвига геометрии.                          -->
+    <!--  Толщина рамки одинакова в обоих состояниях, радиус не меняется, слот     -->
+    <!--  галочки зарезервирован ВСЕГДА — поэтому при выборе ничто не              -->
+    <!--  переразмечается. Именно этим текущая опция цены и грешила: радиус        -->
+    <!--  14 → 20 и штрих 1 → 1.5 на выборе, из-за чего строка видимо прыгала.     -->
+    <!-- ==================================================================== -->
+    <Style Selector="Border.Selectable">
+        <Setter Property="MinHeight" Value="{DynamicResource Size.Row}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Button}" />
+        <Setter Property="Padding" Value="16,12" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineVariant}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.22" Easing="{StaticResource Ease.Standard}" />
+                <BrushTransition Property="BorderBrush" Duration="0:0:0.22" Easing="{StaticResource Ease.Standard}" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Border.Selectable:not(.selected):pointerover">
+        <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
+    </Style>
+    <Style Selector="Border.Selectable.pressed">
+        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
+    </Style>
+    <Style Selector="Border.Selectable.selected">
+        <Setter Property="Background" Value="{DynamicResource Brush.SelectedFill}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+    </Style>
+    <!--  Уже выбранная строка не складывает заливку выбора с ховером: в списке
+          одновременно подсвечена ровно одна строка.  -->
+    <Style Selector="Border.Selectable.selected:pointerover">
+        <Setter Property="Background" Value="{DynamicResource Brush.SelectedFill}" />
+    </Style>
+    <Style Selector="Border.Selectable.selected TextBlock.Title">
+        <Setter Property="FontWeight" Value="Bold" />
+    </Style>
+    <!--  Слот галочки зарезервирован всегда: невыбранный — alpha 0, выбранный — 1.
+          Ничто не переразмечается, потому что место занято в обоих случаях.  -->
+    <Style Selector="Border.Selectable PathIcon.Check">
+        <Setter Property="Width" Value="20" />
+        <Setter Property="Height" Value="20" />
+        <Setter Property="Opacity" Value="0" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+    </Style>
+    <Style Selector="Border.Selectable.selected PathIcon.Check">
+        <Setter Property="Opacity" Value="1" />
+    </Style>
+    <Style Selector="Border.Selectable.disabled">
+        <Setter Property="Opacity" Value="0.38" />
+        <Setter Property="Cursor" Value="Arrow" />
     </Style>
 
     <!-- ==================================================================== -->
@@ -1440,6 +2550,41 @@
         </Setter>
     </Style>
     <Style Selector=":is(Window).lite ToggleSwitch /template/ Ellipse#knobFill">
+        <Setter Property="Transitions">
+            <Transitions />
+        </Setter>
+    </Style>
+
+    <!--  Новые классы канонического словаря — те же два рычага. Переходы гасим
+          на уровне контрола; циклические keyframe-анимации у них не заводятся
+          (SkeletonPulse и Spinner уже отсечены селектором :not(.lite) выше).
+          FocusAdorner НЕ гасится нигде: доступность выше снижения движения.  -->
+    <Style Selector=":is(Window).lite Border.Selectable">
+        <Setter Property="Transitions">
+            <Transitions />
+        </Setter>
+    </Style>
+    <Style Selector=":is(Window).lite Border.Card">
+        <Setter Property="Transitions">
+            <Transitions />
+        </Setter>
+    </Style>
+    <Style Selector=":is(Window).lite Border.SubToolbar">
+        <Setter Property="Transitions">
+            <Transitions />
+        </Setter>
+    </Style>
+    <Style Selector=":is(Window).lite Button.NavItem PathIcon">
+        <Setter Property="Transitions">
+            <Transitions />
+        </Setter>
+    </Style>
+    <Style Selector=":is(Window).lite Button.NavItem TextBlock">
+        <Setter Property="Transitions">
+            <Transitions />
+        </Setter>
+    </Style>
+    <Style Selector=":is(Window).lite Button.Icon PathIcon">
         <Setter Property="Transitions">
             <Transitions />
         </Setter>
