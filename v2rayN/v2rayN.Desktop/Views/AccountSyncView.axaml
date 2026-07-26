@@ -1,0 +1,176 @@
+<UserControl
+    x:Class="v2rayN.Desktop.Views.AccountSyncView"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:loc="clr-namespace:v2rayN.Desktop.Common"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:vms="clr-namespace:v2rayN.Desktop.ViewModels"
+    d:DesignHeight="630"
+    d:DesignWidth="372"
+    x:DataType="vms:AccountViewModel"
+    mc:Ignorable="d">
+
+    <!--
+        Экран синхронизации аккаунта (E3 + Фаза 3): показывается СРАЗУ после успешного входа и держится,
+        пока идёт импорт подписок + первичное обновление серверов (AccountViewModel.IsImportingAccount /
+        IsStartupLoading). Так между закрытием «Входа» и появлением заполненной «Главной» НЕ мелькает
+        пустой онбординг.
+
+        Полноэкранный, на фирменном радиальном фоне «Главной» (Brush.HomeGradient), центрированная
+        колонка (gutter 16 + MaxWidth 400) — та же дисциплина, что у Онбординга/Входа. По центру —
+        ФИРМЕННЫЙ ЩИТ (Geo.Shield, Accent) в кольце: статичный трек OutlineVariant + дуга Accent (тот же
+        приём, что LoginView AwaitingBlock), крутится классом .spinning (глобальный Ellipse.Spinner.
+        spinning, авто-гашение под .lite). Вращение навешивает code-behind ТОЛЬКО пока оверлей виден и
+        нет ошибки — не тикаем анимацию за кадром. Под щитом: заголовок + ЖИВАЯ строка стадии (реальная
+        фаза VM, ellipsis, без переноса).
+
+        Ошибка (SyncFailed): колонка меняется НА МЕСТЕ (кроссфейд) на алерт-щит (Brush.Red) + «Не удалось
+        синхронизировать» + подсказку + «Повторить» / «Войти заново». Оверлей остаётся поднятым (гейт
+        shell не трогаем), так что упавший импорт даёт действие, а не вечный спиннер.
+
+        Успех (IsImportingAccount → false): дуга останавливается, щит делает одноразовый settle-поп
+        (scale 1.0→1.04→1.0), затем shell кроссфейдит на «Главную» (существующий механизм). Всё —
+        только opacity/transform; под .lite мгновенно.
+
+        DataContext ставит code-behind = AccountViewModel.Shared (оверлей статичен в shell и не наследует
+        путь к этому VM) — без правок MainWindow. Разметка колонок статична; текст стадии и success/error
+        ведёт code-behind.
+    -->
+
+    <UserControl.Resources>
+        <!--  Нейтральный алерт-глиф (Material warning, контурный): треугольник + «!». Живёт локально —
+              в GlobalResources глобального алерт-глифа нет; форма контурная, чтобы не «заливать красным».  -->
+        <StreamGeometry x:Key="Geo.SyncAlert">M12,5.99L19.53,19H4.47L12,5.99M12,2L1,21h22L12,2zM13,16h-2v2h2v-2zM13,10h-2v4h2v-4z</StreamGeometry>
+    </UserControl.Resources>
+
+    <Border Background="{DynamicResource Brush.HomeGradient}">
+        <Panel Margin="16,0">
+            <!--  z-стек: колонка загрузки и колонка ошибки ПЕРЕКРЫВАЮТСЯ в одной ячейке, чтобы переход
+                  ошибка↔загрузка шёл кроссфейдом без пустого кадра и без смены раскладки.  -->
+            <Panel
+                MaxWidth="400"
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Center">
+
+                <!--  ==================== Колонка загрузки (по умолчанию) ====================  -->
+                <StackPanel
+                    x:Name="LoadingColumn"
+                    HorizontalAlignment="Stretch"
+                    RenderTransformOrigin="50%,50%">
+
+                    <!--  Фирменный щит в кольце: статичный трек OutlineVariant + дуга Accent (.spinning)
+                          + центрированный Geo.Shield (Accent) — общий элемент с Входом и «Главной».  -->
+                    <Panel
+                        Width="64"
+                        Height="64"
+                        HorizontalAlignment="Center">
+                        <Ellipse
+                            Width="64"
+                            Height="64"
+                            Stroke="{DynamicResource Brush.OutlineVariant}"
+                            StrokeThickness="3" />
+                        <Ellipse
+                            x:Name="SyncSpinner"
+                            Width="64"
+                            Height="64"
+                            Classes="Spinner"
+                            RenderTransformOrigin="50%,50%"
+                            Stroke="{DynamicResource Brush.Accent}"
+                            StrokeDashArray="16.75,50.25"
+                            StrokeLineCap="Round"
+                            StrokeThickness="3" />
+                        <PathIcon
+                            x:Name="SyncShield"
+                            Width="30"
+                            Height="30"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Data="{StaticResource Geo.Shield}"
+                            Foreground="{DynamicResource Brush.Accent}"
+                            RenderTransformOrigin="50%,50%" />
+                    </Panel>
+
+                    <TextBlock
+                        Margin="0,24,0,0"
+                        HorizontalAlignment="Stretch"
+                        Classes="Headline"
+                        Text="{loc:T Account_SyncTitle}"
+                        TextAlignment="Center"
+                        TextWrapping="Wrap" />
+
+                    <!--  Живая строка стадии: одну строку, ellipsis (никогда не reflow-ит колонку).
+                          Текст ведёт code-behind (кроссфейд при смене фазы); значение — VM.SyncStageText.  -->
+                    <TextBlock
+                        x:Name="StageLine"
+                        Margin="0,8,0,0"
+                        HorizontalAlignment="Stretch"
+                        Classes="Subtitle"
+                        TextAlignment="Center"
+                        TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+
+                <!--  ==================== Колонка ошибки (SyncFailed; НА МЕСТЕ, кроссфейд) ====================  -->
+                <StackPanel
+                    x:Name="ErrorColumn"
+                    HorizontalAlignment="Stretch"
+                    IsVisible="False"
+                    Opacity="0">
+
+                    <!--  То же кольцо (трек OutlineVariant, БЕЗ дуги) + алерт-глиф Brush.Red по центру:
+                          силуэт совпадает с колонкой загрузки, «кольцо становится спокойным».  -->
+                    <Panel
+                        Width="64"
+                        Height="64"
+                        HorizontalAlignment="Center">
+                        <Ellipse
+                            Width="64"
+                            Height="64"
+                            Stroke="{DynamicResource Brush.OutlineVariant}"
+                            StrokeThickness="3" />
+                        <PathIcon
+                            Width="30"
+                            Height="30"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Data="{StaticResource Geo.SyncAlert}"
+                            Foreground="{DynamicResource Brush.Red}" />
+                    </Panel>
+
+                    <TextBlock
+                        Margin="0,24,0,0"
+                        HorizontalAlignment="Stretch"
+                        Classes="Headline"
+                        Text="{loc:T Account_SyncErrorTitle}"
+                        TextAlignment="Center"
+                        TextWrapping="Wrap" />
+                    <TextBlock
+                        Margin="0,8,0,0"
+                        HorizontalAlignment="Stretch"
+                        Classes="Body"
+                        Foreground="{DynamicResource Brush.OnSurfaceVariant}"
+                        Text="{loc:T Account_SyncErrorHint}"
+                        TextAlignment="Center"
+                        TextWrapping="Wrap" />
+
+                    <!--  «Повторить» → повтор фаз; «Войти заново» → чистка сессии → login/онбординг.
+                          Красным залито только состояние ошибки-глифа, CTA — обычный акцент/тональная.  -->
+                    <Button
+                        x:Name="RetryButton"
+                        Margin="0,24,0,0"
+                        HorizontalAlignment="Stretch"
+                        Classes="Primary"
+                        Command="{Binding SyncRetryCmd}"
+                        Content="{loc:T Account_SyncRetry}" />
+                    <Button
+                        x:Name="ReLoginButton"
+                        Margin="0,12,0,0"
+                        HorizontalAlignment="Stretch"
+                        Classes="Tonal"
+                        Command="{Binding SyncReLoginCmd}"
+                        Content="{loc:T Account_SyncReLogin}" />
+                </StackPanel>
+            </Panel>
+        </Panel>
+    </Border>
+</UserControl>

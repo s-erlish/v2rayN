@@ -1,0 +1,100 @@
+<UserControl
+    x:Class="v2rayN.Desktop.Views.GeoFilesPage"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:loc="clr-namespace:v2rayN.Desktop.Common"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    d:DesignWidth="560"
+    d:DesignHeight="480"
+    Background="{DynamicResource Brush.Bg}"
+    mc:Ignorable="d">
+
+    <UserControl.Resources>
+        <StreamGeometry x:Key="Geo.Sub.Back">M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z</StreamGeometry>
+    </UserControl.Resources>
+
+    <UserControl.Styles>
+        <Style Selector="Button.IconButton">
+            <Setter Property="Transitions">
+                <Transitions>
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Button.IconButton:pressed">
+            <Setter Property="RenderTransform" Value="scale(0.92)" />
+        </Style>
+    </UserControl.Styles>
+
+    <DockPanel MaxWidth="620">
+        <Grid
+            DockPanel.Dock="Top"
+            MinHeight="56"
+            Margin="16,8,16,0"
+            ColumnDefinitions="Auto,*">
+            <Button
+                x:Name="btnBack"
+                Grid.Column="0"
+                Width="40"
+                Height="40"
+                Padding="0"
+                VerticalAlignment="Center"
+                Classes="IconButton"
+                ToolTip.Tip="{loc:T Common_Back}">
+                <PathIcon
+                    Width="22"
+                    Height="22"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Data="{StaticResource Geo.Sub.Back}"
+                    Foreground="{DynamicResource Brush.OnSurface}" />
+            </Button>
+            <TextBlock
+                Grid.Column="1"
+                Margin="16,0,0,0"
+                VerticalAlignment="Center"
+                Classes="Headline"
+                Text="{loc:T Settings_GeoFiles}"
+                TextTrimming="CharacterEllipsis" />
+        </Grid>
+
+        <StackPanel Margin="16,12,16,24" Spacing="8">
+            <TextBlock
+                Classes="Subtitle"
+                Text="{loc:T Geo_Intro}"
+                TextWrapping="Wrap" />
+
+            <Border Classes="Card" Padding="16,4">
+                <StackPanel>
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="56">
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                            <TextBlock Classes="Body" Text="geoip.dat" />
+                            <TextBlock x:Name="txtGeoip" Margin="0,4,0,0" Classes="Subtitle" Text="—" />
+                        </StackPanel>
+                    </Grid>
+                    <Border Height="1" Background="{DynamicResource Brush.OutlineVariant}" />
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="56">
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                            <TextBlock Classes="Body" Text="geosite.dat" />
+                            <TextBlock x:Name="txtGeosite" Margin="0,4,0,0" Classes="Subtitle" Text="—" />
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Button
+                x:Name="btnUpdate"
+                HorizontalAlignment="Stretch"
+                Classes="Primary"
+                Content="{loc:T Geo_UpdateNow}" />
+
+            <TextBlock
+                x:Name="txtStatus"
+                Margin="4,4,4,0"
+                Classes="Subtitle"
+                Text=""
+                TextWrapping="Wrap" />
+        </StackPanel>
+    </DockPanel>
+</UserControl>

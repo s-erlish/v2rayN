@@ -73,6 +73,18 @@ public sealed class SQLiteHelper
         return _dbAsync.Table<T>();
     }
 
+    /// <summary>
+    /// Scalar query on the SYNCHRONOUS connection. Exists for the one launch-path question that has to be
+    /// answered before the first frame is composed (see <c>AppManager.HasStoredProfiles</c>): awaiting the
+    /// async connection there would mean painting that frame from a default instead of a fact. Everything
+    /// else must keep using the async API — this connection is single-threaded and is only touched on the
+    /// startup path.
+    /// </summary>
+    public T ExecuteScalar<T>(string sql)
+    {
+        return _db.ExecuteScalar<T>(sql);
+    }
+
     public async Task DisposeDbConnectionAsync()
     {
         await Task.Factory.StartNew(() =>

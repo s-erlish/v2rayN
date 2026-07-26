@@ -5,155 +5,733 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:dd="clr-namespace:v2rayN.Desktop.DesignData"
     xmlns:dialogHost="clr-namespace:DialogHostAvalonia;assembly=DialogHost.Avalonia"
+    xmlns:loc="clr-namespace:v2rayN.Desktop.Common"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:resx="clr-namespace:ServiceLib.Resx;assembly=ServiceLib"
+    xmlns:views="clr-namespace:v2rayN.Desktop.Views"
     xmlns:vms="clr-namespace:ServiceLib.ViewModels;assembly=ServiceLib"
-    Title="v2rayN"
-    Width="1200"
-    Height="800"
-    MinWidth="600"
+    Title="departament VPN"
+    Width="372"
+    Height="630"
+    MinWidth="340"
+    MinHeight="560"
     x:DataType="vms:MainWindowViewModel"
+    Background="{DynamicResource Brush.Bg}"
     Design.DataContext="{x:Static dd:DesignData.MainWindow}"
-    Icon="/Assets/NotifyIcon1.ico"
+    WindowDecorations="None"
+    FontFamily="{DynamicResource Font.Grotesk}"
+    Icon="/Assets/NotifyShieldOn.ico"
     ShowInTaskbar="True"
     WindowStartupLocation="CenterScreen"
     mc:Ignorable="d">
-    <dialogHost:DialogHost
-        Background="Gray"
-        CloseOnClickAway="True"
-        DisableOpeningAnimation="True">
-        <DockPanel>
-            <DockPanel Margin="{StaticResource Margin8}" DockPanel.Dock="Top">
-                <ContentControl x:Name="conTheme" DockPanel.Dock="Right" />
-                <Menu Margin="{StaticResource Margin4}">
-                    <MenuItem Header="{x:Static resx:ResUI.menuServers}">
-                        <MenuItem
-                            x:Name="menuAddServerViaClipboard"
-                            Header="{x:Static resx:ResUI.menuAddServerViaClipboard}"
-                            InputGesture="Ctrl+V" />
-                        <MenuItem
-                            x:Name="menuAddServerViaScan"
-                            Header="{x:Static resx:ResUI.menuAddServerViaScan}"
-                            InputGesture="Ctrl+S" />
-                        <MenuItem x:Name="menuAddServerViaImage" Header="{x:Static resx:ResUI.menuAddServerViaImage}" />
-                        <MenuItem x:Name="menuAddCustomServer" Header="{x:Static resx:ResUI.menuAddCustomServer}" />
-                        <MenuItem x:Name="menuAddPolicyGroupServer" Header="{x:Static resx:ResUI.menuAddPolicyGroupServer}" />
-                        <MenuItem x:Name="menuAddProxyChainServer" Header="{x:Static resx:ResUI.menuAddProxyChainServer}" />
-                        <Separator />
-                        <MenuItem x:Name="menuAddVmessServer" Header="{x:Static resx:ResUI.menuAddVmessServer}" />
-                        <MenuItem x:Name="menuAddVlessServer" Header="{x:Static resx:ResUI.menuAddVlessServer}" />
-                        <MenuItem x:Name="menuAddShadowsocksServer" Header="{x:Static resx:ResUI.menuAddShadowsocksServer}" />
-                        <MenuItem x:Name="menuAddTrojanServer" Header="{x:Static resx:ResUI.menuAddTrojanServer}" />
-                        <MenuItem x:Name="menuAddHysteria2Server" Header="{x:Static resx:ResUI.menuAddHysteria2Server}" />
-                        <MenuItem x:Name="menuAddWireguardServer" Header="{x:Static resx:ResUI.menuAddWireguardServer}" />
-                        <MenuItem x:Name="menuAddSocksServer" Header="{x:Static resx:ResUI.menuAddSocksServer}" />
-                        <MenuItem x:Name="menuAddHttpServer" Header="{x:Static resx:ResUI.menuAddHttpServer}" />
-                        <Separator />
-                        <MenuItem x:Name="menuAddTuicServer" Header="{x:Static resx:ResUI.menuAddTuicServer}" />
-                        <MenuItem x:Name="menuAddAnytlsServer" Header="{x:Static resx:ResUI.menuAddAnytlsServer}" />
-                        <MenuItem x:Name="menuAddNaiveServer" Header="{x:Static resx:ResUI.menuAddNaiveServer}" />
-                    </MenuItem>
 
-                    <MenuItem Header="{x:Static resx:ResUI.menuSubscription}">
-                        <MenuItem x:Name="menuSubSetting" Header="{x:Static resx:ResUI.menuSubSetting}" />
-                        <Separator />
-                        <MenuItem x:Name="menuSubUpdate" Header="{x:Static resx:ResUI.menuSubUpdate}" />
-                        <MenuItem x:Name="menuSubUpdateViaProxy" Header="{x:Static resx:ResUI.menuSubUpdateViaProxy}" />
-                        <MenuItem x:Name="menuSubGroupUpdate" Header="{x:Static resx:ResUI.menuSubGroupUpdate}" />
-                        <MenuItem x:Name="menuSubGroupUpdateViaProxy" Header="{x:Static resx:ResUI.menuSubGroupUpdateViaProxy}" />
-                    </MenuItem>
+    <!--  Мягкая close-заливка (тема-верная). Ховер «крестика» больше НЕ заливается неон-акцентом
+          Brush.Red (#F04452) на всю пилюлю — это и был «ужасный красный бокс». Вместо него приглушённый
+          ГЛУБОКИЙ красный, вписанный в chrome (как caption-close в Win11), с белым глифом; pressed на шаг
+          темнее. В покое фон прозрачный (как min/max). Ключи резолвятся по ThemeVariant → dark/light/mono
+          корректны (mono/AMOLED строится поверх Dark).  -->
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="Brush.CloseHover" Color="#C43843" />
+                    <SolidColorBrush x:Key="Brush.ClosePressed" Color="#A62C36" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="Brush.CloseHover" Color="#C42B32" />
+                    <SolidColorBrush x:Key="Brush.ClosePressed" Color="#A31F26" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+            <!--  Глиф «X» поверх красной заливки — чистый белый в обеих темах (заливка достаточно тёмная).  -->
+            <SolidColorBrush x:Key="Brush.OnClose" Color="#FFFFFF" />
+        </ResourceDictionary>
+    </Window.Resources>
 
-                    <MenuItem Header="{x:Static resx:ResUI.menuSetting}">
-                        <MenuItem x:Name="menuOptionSetting" Header="{x:Static resx:ResUI.menuOptionSetting}" />
-                        <MenuItem x:Name="menuRoutingSetting" Header="{x:Static resx:ResUI.menuRoutingSetting}" />
-                        <MenuItem x:Name="menuDNSSetting" Header="{x:Static resx:ResUI.menuDNSSetting}" />
-                        <MenuItem x:Name="menuFullConfigTemplate" Header="{x:Static resx:ResUI.menuFullConfigTemplate}" />
-                        <MenuItem
-                            x:Name="menuGlobalHotkeySetting"
-                            Header="{x:Static resx:ResUI.menuGlobalHotkeySetting}"
-                            IsVisible="{Binding BlIsWindows}" />
-                        <Separator />
-                        <MenuItem
-                            x:Name="menuRebootAsAdmin"
-                            Header="{x:Static resx:ResUI.menuRebootAsAdmin}"
-                            IsVisible="{Binding BlIsWindows}" />
-                        <MenuItem
-                            x:Name="menuSettingsSetUWP"
-                            Header="{x:Static resx:ResUI.TbSettingsSetUWP}"
-                            IsVisible="{Binding BlIsWindows}" />
-                        <MenuItem x:Name="menuClearServerStatistics" Header="{x:Static resx:ResUI.menuClearServerStatistics}" />
-                        <Separator />
-                        <MenuItem Header="{x:Static resx:ResUI.menuRegionalPresets}">
-                            <MenuItem x:Name="menuRegionalPresetsDefault" Header="{x:Static resx:ResUI.menuRegionalPresetsDefault}" />
-                            <MenuItem x:Name="menuRegionalPresetsRussia" Header="{x:Static resx:ResUI.menuRegionalPresetsRussia}" />
-                            <MenuItem x:Name="menuRegionalPresetsIran" Header="{x:Static resx:ResUI.menuRegionalPresetsIran}" />
-                        </MenuItem>
-                        <MenuItem x:Name="menuBackupAndRestore" Header="{x:Static resx:ResUI.menuBackupAndRestore}" />
-                        <MenuItem x:Name="menuOpenTheFileLocation" Header="{x:Static resx:ResUI.menuOpenTheFileLocation}" />
-                    </MenuItem>
+    <!--  Кнопки окна (min/max/close) в стиле Incy: прозрачные, hover — min/max subtle darken, close —
+          мягкая глубокая-красная заливка + белый глиф (см. Window.Resources выше).  -->
+    <Window.Styles>
+        <Style Selector="Button.WinBtn">
+            <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
+            <Setter Property="Width" Value="44" />
+            <Setter Property="Height" Value="22" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Stretch" />
+        </Style>
+        <Style Selector="Button.WinBtn /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="Button.WinBtn:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="Button.WinBtn:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <!--  Bug3: ховер-заливка caption-кнопок МГНОВЕННА. BrushTransition на Background убран —
+              при переходе курсора min→max уходящая кнопка гасла плавно (~120мс), а входящая
+              проявлялась → на ~120мс подсвечены ОБЕ («ховер минимайза подсвечивает и максимайз»).
+              Тот же фикс, что для строк сервера (GlobalStyles.axaml Border.ServerRow). Каждая
+              кнопка теперь загорается независимо; close сразу чист (без серо-красной мути), так
+              как убран переход между Brush.Hover и Brush.CloseHover. Path.CloseGlyph держит свой
+              Stroke-переход (тинт глифа) отдельно. RailToggle переопределяет Transitions ниже
+              (TransformOperationsTransition для press-scale) — на него это не влияет.  -->
+        <Style Selector="Border.WinBtnBg">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="VerticalAlignment" Value="Stretch" />
+        </Style>
+        <Style Selector="Button.WinBtn:pointerover Border.WinBtnBg">
+            <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
+        </Style>
+        <!--  Close: мягкая глубокая-красная заливка на ховере, на шаг темнее на нажатии.  -->
+        <Style Selector="Button.WinBtn.close:pointerover Border.WinBtnBg">
+            <Setter Property="Background" Value="{DynamicResource Brush.CloseHover}" />
+        </Style>
+        <Style Selector="Button.WinBtn.close:pressed Border.WinBtnBg">
+            <Setter Property="Background" Value="{DynamicResource Brush.ClosePressed}" />
+        </Style>
+        <!--  Глиф «X»: в покое приглушён (как min/max), на ховере/нажатии — белый поверх красного.
+              Стиль (а не local value), поэтому у Path НЕ должно быть инлайн-Stroke — иначе он победит.
+              BrushTransition гасит любое мерцание при смене цвета глифа.  -->
+        <Style Selector="Path.CloseGlyph">
+            <Setter Property="Stroke" Value="{DynamicResource Brush.OnSurfaceVariant}" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Stroke" Duration="0:0:0.12" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Button.WinBtn.close:pointerover Path.CloseGlyph">
+            <Setter Property="Stroke" Value="{DynamicResource Brush.OnClose}" />
+        </Style>
+        <Style Selector="Button.WinBtn.close:pressed Path.CloseGlyph">
+            <Setter Property="Stroke" Value="{DynamicResource Brush.OnClose}" />
+        </Style>
 
-                    <MenuItem x:Name="menuHelp" Header="{x:Static resx:ResUI.menuHelp}">
-                        <MenuItem x:Name="menuCheckUpdate" Header="{x:Static resx:ResUI.menuCheckUpdate}" />
-                        <Separator />
-                    </MenuItem>
+        <!--  ==================== Свёртка нав-рейла ====================
+              Кнопка внизу рейла (btnRailToggle) сворачивает/разворачивает ЛЕВУЮ навигацию
+              (раньше прятала окно в трей — убрано; трей живёт в App.axaml + title-bar «мин»).
+              Состоянием управляет класс .railCollapsed на bodyRoot (ставит code-behind):
+                • navItems (StackPanel вкладок) едет Width 76→0 + Opacity 1→0 (OutQuint 200мс),
+                  ClipToBounds режет 76-пиксельные пункты, столбец Auto рефлоит контент;
+                • шеврон разворачивается на 180° вокруг СОБСТВЕННОГО центра (RenderTransformOrigin
+                  0.5,0.5 на самом Path, НЕ на кейфрейме): ‹ (свернуть) ⇄ › (развернуть) — вращение
+                  на месте, без смещения.
+              В .lite (reduced-motion) переходы обнуляются — состояние переключается мгновенно.  -->
 
-                    <MenuItem x:Name="menuReload" Header="{x:Static resx:ResUI.menuReload}" />
+        <!--  Кнопка-переключатель рейла: слим 30×30. БЕЗ ФОНА ВООБЩЕ — ни в покое, ни на ховере,
+              ни на нажатии (владелец: никакого фон-бокса под шевроном).
+              Bug3 (мерцание на hover) устранено полностью: hover больше НЕ красит никакой фон —
+              единственная реакция на ховер = ГЛИФ ТЕМНЕЕТ (Stroke → Brush.OnSurfaceVariantHover, см. ниже).
+              Смена цвета глифа не трогает границы элемента, поэтому :pointerover у края НЕ «дребезжит»
+              (нет входа/выхода хит-теста → нет мигания). Press-scale живёт на ВНУТРЕННЕЙ подложке
+              (Border.WinBtnBg, фикс. 30×30), а не на самой кнопке — хит-область кнопки неизменна.  -->
+        <Style Selector="Button.RailToggle">
+            <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
+            <Setter Property="Width" Value="30" />
+            <Setter Property="Height" Value="30" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Stretch" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <!--  Гасим hover-тинт темы Semi: ContentPresenter прозрачен в КАЖДОМ состоянии (rest/hover/press).
+              Без этого BorderlessButton рисовал серый бокс-фон на ховере (как у Button.NavRailItem).  -->
+        <Style Selector="Button.RailToggle /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="Button.RailToggle:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="Button.RailToggle:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <!--  Внутренняя подложка: НЕСЁТ ТОЛЬКО press-scale ОТ ЦЕНТРА (origin 50%,50% = 0.5·W,0.5·H).
+              Фон всегда прозрачен (никакого hover-бокса). Транзишен ТОЛЬКО на RenderTransform —
+              нет BrushTransition фона, который мог бы осциллировать/мигать.  -->
+        <Style Selector="Button.RailToggle Border.WinBtnBg">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill}" />
+            <Setter Property="RenderTransformOrigin" Value="50%,50%" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Button.RailToggle:pointerover Border.WinBtnBg">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="Button.RailToggle:pressed Border.WinBtnBg">
+            <Setter Property="RenderTransform" Value="scale(0.92)" />
+        </Style>
 
-                    <MenuItem x:Name="menuPromotion" Header="{x:Static resx:ResUI.menuPromotion}" />
+        <!--  Шеврон переключателя: по умолчанию ‹ (свернуть). Крутится вокруг своего центра.
+              Центр — относительный «50%,50%»: «0.5,0.5» в этой сборке трактуется как 0.5px ≈ угол,
+              и разворот на 180° уводил глиф ЗА пределы кнопки → шеврон «исчезал» в свёрнутом виде.
+              Цвет глифа задаётся ЗДЕСЬ (не инлайном на Path), чтобы :pointerover-стиль мог его
+              перекрыть — локальное значение на Path перебивало бы стилевой сеттер ховера.  -->
+        <Style Selector="Path.RailToggleGlyph">
+            <Setter Property="Stroke" Value="{DynamicResource Brush.OnSurfaceVariant}" />
+            <Setter Property="RenderTransformOrigin" Value="50%,50%" />
+            <Setter Property="RenderTransform" Value="rotate(0deg)" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.2">
+                        <TransformOperationsTransition.Easing>
+                            <SplineEasing X1="0.22" Y1="1" X2="0.36" Y2="1" />
+                        </TransformOperationsTransition.Easing>
+                    </TransformOperationsTransition>
+                    <BrushTransition Property="Stroke" Duration="0:0:0.12" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <!--  ЕДИНСТВЕННАЯ реакция на hover: глиф темнеет на шаг (Stroke → OnSurfaceVariantHover).
+              Меняется только цвет — границы Path неизменны, hover стабилен, без мерцания.  -->
+        <Style Selector="Button.RailToggle:pointerover Path.RailToggleGlyph">
+            <Setter Property="Stroke" Value="{DynamicResource Brush.OnSurfaceVariantHover}" />
+        </Style>
+        <!--  Свёрнуто → шеврон 180° = › (развернуть).  -->
+        <Style Selector="Grid.railCollapsed Path.RailToggleGlyph">
+            <Setter Property="RenderTransform" Value="rotate(180deg)" />
+        </Style>
 
-                    <MenuItem x:Name="menuClose" Header="{x:Static resx:ResUI.menuExit}" />
-                </Menu>
+        <!--  Столбец вкладок: развёрнут 76, ClipToBounds; плавная свёртка ширины/непрозрачности.  -->
+        <Style Selector="StackPanel.RailItems">
+            <Setter Property="Width" Value="76" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Width" Duration="0:0:0.2">
+                        <DoubleTransition.Easing>
+                            <SplineEasing X1="0.22" Y1="1" X2="0.36" Y2="1" />
+                        </DoubleTransition.Easing>
+                    </DoubleTransition>
+                    <DoubleTransition Property="Opacity" Duration="0:0:0.16" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Grid.railCollapsed StackPanel.RailItems">
+            <Setter Property="Width" Value="0" />
+            <Setter Property="Opacity" Value="0" />
+            <Setter Property="IsHitTestVisible" Value="False" />
+        </Style>
 
-                <Button
-                    x:Name="btnNewUpdate"
-                    Margin="{StaticResource MarginLr8}"
-                    HorizontalAlignment="Left"
-                    Content="{x:Static resx:ResUI.menuNewUpdate}"
-                    IsVisible="False" />
-            </DockPanel>
+        <!--  ==================== Путешествующий индикатор рейла (P0-1) ====================
+              ОДНА акцентная полоса 3×28 у левого края, физически СКОЛЬЗИТ между слотами по Y
+              (M3 nav-rail idiom, НЕ статичный side-stripe). Позицию/скольжение ведёт code-behind
+              (MoveRailIndicator: Motion.Dur.State 220 OutQuint, отмена _indicatorAnim). Здесь —
+              только гашение вместе со свёрткой рейла: при .railCollapsed уезжает в Opacity 0
+              синхронно с navItems (та же длительность 0.16, как у RailItems.Opacity).  -->
+        <Style Selector="Border.RailIndicator">
+            <Setter Property="Opacity" Value="1" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Opacity" Duration="0:0:0.16" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Grid.railCollapsed Border.RailIndicator">
+            <Setter Property="Opacity" Value="0" />
+        </Style>
+        <Style Selector=":is(Window).lite Border.RailIndicator">
+            <Setter Property="Transitions">
+                <Transitions />
+            </Setter>
+        </Style>
 
-            <ContentControl x:Name="contentStatusBarView" DockPanel.Dock="Bottom" />
+        <!--  Reduced-motion: переходы свёртки/шеврона мгновенны (состояние без анимации).  -->
+        <Style Selector=":is(Window).lite StackPanel.RailItems">
+            <Setter Property="Transitions">
+                <Transitions />
+            </Setter>
+        </Style>
+        <Style Selector=":is(Window).lite Path.RailToggleGlyph">
+            <Setter Property="Transitions">
+                <Transitions />
+            </Setter>
+        </Style>
+        <!--  Reduced-motion: press-scale/hover подложки мгновенны (транзишены живут на Border.WinBtnBg).  -->
+        <Style Selector=":is(Window).lite Button.RailToggle Border.WinBtnBg">
+            <Setter Property="Transitions">
+                <Transitions />
+            </Setter>
+        </Style>
 
-            <Grid>
+        <!--  ==================== Индикатор подключения в рейле (C5) ====================
+              Серый (покой) ↔ синий (подключение/подключено). Цвет берётся из ТЕМА-ТОКЕНОВ
+              (Brush.OnSurfaceVariant / Brush.Accent), а НЕ из хардкод-hex, поэтому следует за
+              темой (тёмная/светлая/моно). Смена цвета плавная — BrushTransition 200мс Ease.Standard;
+              класс .on ставит code-behind по IsConnected||IsConnecting. Под .lite переход обнуляется
+              (состояние переключается мгновенно, как остальная свёртка рейла).  -->
+        <Style Selector="Ellipse.ConnDot">
+            <Setter Property="Fill" Value="{DynamicResource Brush.OnSurfaceVariant}" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Fill" Duration="0:0:0.2">
+                        <BrushTransition.Easing>
+                            <SplineEasing X1="0.2" Y1="0" X2="0" Y2="1" />
+                        </BrushTransition.Easing>
+                    </BrushTransition>
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Ellipse.ConnDot.on">
+            <Setter Property="Fill" Value="{DynamicResource Brush.Accent}" />
+        </Style>
+        <Style Selector=":is(Window).lite Ellipse.ConnDot">
+            <Setter Property="Transitions">
+                <Transitions />
+            </Setter>
+        </Style>
+    </Window.Styles>
+
+    <!--  ==================== In-app UI-масштаб + ресайз-грипы (обёртка корня окна) ====================
+          windowRoot — новый корень окна. LayoutTransformControl (uiScaleHost) даёт ИСТИННЫЙ zoom всего
+          интерфейса (масштабирует И layout, И рендер) через ScaleTransform, НЕЗАВИСИМО от OS DPI: на 4K при
+          100% OS-масштабе интерфейс был физически крошечным — теперь пользователь увеличивает его целиком
+          (Ctrl +/Ctrl −/Ctrl 0 и строка настроек «Масштаб интерфейса»), фактор персистится (UiItem.UiScale)
+          и применяется на старте. Ресайз-грипы (resizeGripHost) лежат ЗА трансформом → держат ФИЗИЧЕСКИЕ края
+          окна при любом zoom и тащат нативный ресайз безрамочного окна (Window.BeginResizeDrag).  -->
+    <Panel x:Name="windowRoot">
+        <LayoutTransformControl x:Name="uiScaleHost">
+            <LayoutTransformControl.LayoutTransform>
+                <!--  Тождественный старт; фактический фактор ставит code-behind (ApplyUiScaleToWindow).  -->
+                <ScaleTransform ScaleX="1" ScaleY="1" />
+            </LayoutTransformControl.LayoutTransform>
+            <dialogHost:DialogHost
+                Background="#B3000000"
+                CloseOnClickAway="True"
+                DisableOpeningAnimation="True">
+        <Panel>
+            <Grid x:Name="chromeRoot" RowDefinitions="28,*">
+
+                <!--  ==================== Кастомная строка окна (chrome, высота 28) ====================
+                      Слим-рамка-заголовок (было 40 → 32 → 28 — владелец: «слишком толстая»); держит
+                      мини-вордмарк (лого 18 + «departament» 14) + drag + системные кнопки 44×22.
+                      Глифы уменьшены (~11px) под тонкую полосу.  -->
                 <Grid
-                    x:Name="gridMain"
-                    ColumnDefinitions="1*,10,1*"
-                    IsVisible="False">
-                    <ContentControl x:Name="tabProfiles" Grid.Column="0" />
-                    <GridSplitter Grid.Column="1" HorizontalAlignment="Stretch" />
-                    <TabControl
-                        x:Name="tabMain"
-                        Grid.Column="2"
-                        HorizontalContentAlignment="Left">
-                        <TabItem x:Name="tabMsgView" Header="{x:Static resx:ResUI.MsgInformationTitle}" />
-                        <TabItem x:Name="tabClashProxies" Header="{x:Static resx:ResUI.TbProxies}" />
-                        <TabItem x:Name="tabClashConnections" Header="{x:Static resx:ResUI.TbConnections}" />
-                    </TabControl>
+                    x:Name="titleBar"
+                    Grid.Row="0"
+                    Background="Transparent">
+                    <!--  Мини-вордмарк слева  -->
+                    <StackPanel
+                        Margin="14,0"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal"
+                        Spacing="7">
+                        <Border
+                            Width="18"
+                            Height="18"
+                            Background="{DynamicResource Brush.Accent}"
+                            CornerRadius="6">
+                            <TextBlock
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                FontFamily="{DynamicResource Font.Grotesk}"
+                                FontSize="11"
+                                FontWeight="Bold"
+                                Foreground="{DynamicResource Brush.OnAccent}"
+                                Text="d" />
+                        </Border>
+                        <TextBlock
+                            VerticalAlignment="Center"
+                            FontFamily="{DynamicResource Font.Grotesk}"
+                            FontSize="14"
+                            FontWeight="Bold"
+                            Foreground="{DynamicResource Brush.OnSurface}"
+                            Text="departament" />
+                    </StackPanel>
+
+                    <!--  Системные кнопки справа  -->
+                    <StackPanel
+                        Margin="0,0,6,0"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal"
+                        Spacing="2">
+                        <Button x:Name="btnMin" Classes="WinBtn">
+                            <Border Classes="WinBtnBg">
+                                <Path
+                                    Width="11"
+                                    Height="11"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Data="M0,5.5 H11"
+                                    Stretch="None"
+                                    Stroke="{DynamicResource Brush.OnSurfaceVariant}"
+                                    StrokeLineCap="Round"
+                                    StrokeThickness="1.4" />
+                            </Border>
+                        </Button>
+                        <Button x:Name="btnMax" Classes="WinBtn">
+                            <Border Classes="WinBtnBg">
+                                <Path
+                                    Width="10"
+                                    Height="10"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Data="M0.5,0.5 H9.5 V9.5 H0.5 Z"
+                                    Stretch="None"
+                                    Stroke="{DynamicResource Brush.OnSurfaceVariant}"
+                                    StrokeJoin="Round"
+                                    StrokeThickness="1.4" />
+                            </Border>
+                        </Button>
+                        <Button
+                            x:Name="btnClose"
+                            Classes="WinBtn close">
+                            <Border Classes="WinBtnBg">
+                                <Path
+                                    Width="11"
+                                    Height="11"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Classes="CloseGlyph"
+                                    Data="M0.5,0.5 L10.5,10.5 M10.5,0.5 L0.5,10.5"
+                                    Stretch="None"
+                                    StrokeLineCap="Round"
+                                    StrokeThickness="1.4" />
+                            </Border>
+                        </Button>
+                    </StackPanel>
                 </Grid>
-                <Grid
-                    x:Name="gridMain1"
-                    IsVisible="False"
-                    RowDefinitions="1*,10,1*">
-                    <ContentControl x:Name="tabProfiles1" Grid.Row="0" />
-                    <GridSplitter Grid.Row="1" HorizontalAlignment="Stretch" />
-                    <TabControl
-                        x:Name="tabMain1"
-                        Grid.Row="2"
-                        TabStripPlacement="Left">
-                        <TabItem x:Name="tabMsgView1" Header="{x:Static resx:ResUI.MsgInformationTitle}" />
-                        <TabItem x:Name="tabClashProxies1" Header="{x:Static resx:ResUI.TbProxies}" />
-                        <TabItem x:Name="tabClashConnections1" Header="{x:Static resx:ResUI.TbConnections}" />
-                    </TabControl>
-                </Grid>
-                <Grid x:Name="gridMain2" IsVisible="False">
-                    <TabControl x:Name="tabMain2" TabStripPlacement="Left">
-                        <TabItem x:Name="tabProfiles2" Header="{x:Static resx:ResUI.menuServers}" />
-                        <TabItem x:Name="tabMsgView2" Header="{x:Static resx:ResUI.MsgInformationTitle}" />
-                        <TabItem x:Name="tabClashProxies2" Header="{x:Static resx:ResUI.TbProxies}" />
-                        <TabItem x:Name="tabClashConnections2" Header="{x:Static resx:ResUI.TbConnections}" />
-                    </TabControl>
-                </Grid>
+
+                <!--  ==================== Тело (Row 1): единый адаптивный шелл ↔ онбординг ====================
+                      Пустой старт (нет подписок): виден ТОЛЬКО онбординг на всю ширину под chrome.
+                      После добавления подписки (HomeViewModel.IsEmpty=false) виден bodyRoot.
+                      Видимостью управляет ApplyShellVisibility.  -->
+                <Panel Grid.Row="1">
+
+                    <!--  ==================== Единый адаптивный шелл (bodyRoot) ====================
+                          ОДИН общий contentHost на ОБЕ раскладки. Chrome перекладывается вокруг него:
+                          широкая = [рейл(Auto) | контент(*)], компакт = [контент(*) / нижняя-нав(Auto)].
+                          Строки/столбцы и Grid.Row/Column детей ставит код (ApplyLayoutMode) — сами
+                          контролы НЕ переносятся между деревьями. Ключ к устойчивости свопа: Настройки/
+                          Аккаунт (общие экземпляры) всегда живут в ЕДИНОМ contentHost, поэтому смена
+                          ширины физически не может «перецепить» живой контрол в другой хост (был краш:
+                          компакт→Настройки→расширение). Класс .railCollapsed на bodyRoot управляет
+                          свёрткой рейла (стили выше по Grid.railCollapsed).  -->
+                    <Grid x:Name="bodyRoot" IsVisible="False">
+
+                        <!--  Сквозная (full-bleed) подложка Главной ПОД рейлом и контентом сразу: рейл
+                              больше НЕ красит собственный плоский прямоугольник (на светлой теме плоский
+                              Bg #F4F7FC был светлее края градиента #DFE6F1 → читался «белым блоком» при
+                              свёрнутом рейле). Теперь свёрнутая полоса делит ТОТ ЖЕ градиент, что и
+                              контент: на тёмной теме край градиента == Bg (изменение невидимо), на светлой
+                              «белый блок» исчезает. Span на обе раскладки; клик сквозной.  -->
+                        <Border
+                            Grid.Row="0"
+                            Grid.Column="0"
+                            Grid.RowSpan="2"
+                            Grid.ColumnSpan="2"
+                            Background="{DynamicResource Brush.HomeGradient}"
+                            IsHitTestVisible="False" />
+
+                        <!--  Левый icon-рейл (широкая раскладка). Фон прозрачный → берёт сквозную
+                              подложку выше (в свёрнутом виде НЕ остаётся плоского блока ни в одной теме).  -->
+                        <Border
+                            x:Name="railHost"
+                            Grid.Column="0"
+                            Background="Transparent">
+                            <DockPanel LastChildFill="False">
+
+                                <!--  3 вкладки (Главная · Настройки · Аккаунт). Список серверов живёт
+                                      в левой колонке «Главной», отдельной вкладки «Сервера» нет.
+                                      (Бренд-марка «d» убрана — владелец её не хочет в рейле.)  -->
+                                <!--  Слот-полоса вкладок + ОДИН путешествующий индикатор поверх (P0-1).
+                                      Panel держит и StackPanel пунктов (сворачивается по ширине), и
+                                      railIndicator (акцентная полоса, СКОЛЬЗИТ по Y между слотами —
+                                      см. MoveRailIndicator в code-behind). Прежние три per-item
+                                      Border.NavPill убраны: индикатор теперь ЕДИН.  -->
+                                <Panel
+                                    Margin="0,12,0,0"
+                                    DockPanel.Dock="Top">
+                                    <StackPanel
+                                        x:Name="navItems"
+                                        Classes="RailItems"
+                                        ClipToBounds="True">
+                                        <Button x:Name="navHome" Classes="NavRailItem">
+                                            <StackPanel
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                Spacing="4">
+                                                <PathIcon Data="{StaticResource Geo.Nav.Home}" />
+                                                <TextBlock
+                                                    HorizontalAlignment="Center"
+                                                    Classes="Chip"
+                                                    Text="{loc:T Nav_Home}" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button x:Name="navSettings" Classes="NavRailItem">
+                                            <StackPanel
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                Spacing="4">
+                                                <PathIcon Data="{StaticResource Geo.Nav.Settings}" />
+                                                <TextBlock
+                                                    HorizontalAlignment="Center"
+                                                    Classes="Chip"
+                                                    Text="{loc:T Nav_Settings}" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button x:Name="navAccount" Classes="NavRailItem">
+                                            <StackPanel
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                Spacing="4">
+                                                <PathIcon Data="{StaticResource Geo.Nav.Account}" />
+                                                <TextBlock
+                                                    HorizontalAlignment="Center"
+                                                    Classes="Chip"
+                                                    Text="{loc:T Nav_Account}" />
+                                            </StackPanel>
+                                        </Button>
+                                    </StackPanel>
+                                    <!--  ОДИН акцентный бар: базовая позиция (top,left); реальный слот
+                                          ставит TranslateTransform.Y из code-behind (первый показ —
+                                          мгновенно на активном слоте, дальше — скольжение 220 OutQuint).  -->
+                                    <Border
+                                        x:Name="railIndicator"
+                                        Width="3"
+                                        Height="28"
+                                        HorizontalAlignment="Left"
+                                        VerticalAlignment="Top"
+                                        Background="{DynamicResource Brush.Accent}"
+                                        Classes="RailIndicator"
+                                        CornerRadius="2"
+                                        IsHitTestVisible="False" />
+                                </Panel>
+
+                                <!--  Низ рейла (ВСЕГДА виден): индикатор подключения + кнопка свёртки.
+                                      Шеврон ‹ сворачивает рейл, › разворачивает — навигация не «застревает».  -->
+                                <StackPanel
+                                    Margin="0,0,0,12"
+                                    HorizontalAlignment="Center"
+                                    DockPanel.Dock="Bottom"
+                                    Spacing="10">
+                                    <Ellipse
+                                        x:Name="railStatusDot"
+                                        Width="8"
+                                        Height="8"
+                                        HorizontalAlignment="Center"
+                                        Classes="ConnDot" />
+                                    <Button
+                                        x:Name="btnRailToggle"
+                                        Classes="RailToggle"
+                                        ToolTip.Tip="{loc:T Nav_CollapsePanel}">
+                                        <Border Classes="WinBtnBg">
+                                            <Path
+                                                Width="20"
+                                                Height="20"
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                Classes="RailToggleGlyph"
+                                                Data="M13,4 L7,10 L13,16"
+                                                Stretch="None"
+                                                StrokeJoin="Round"
+                                                StrokeLineCap="Round"
+                                                StrokeThickness="1.6" />
+                                        </Border>
+                                    </Button>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+
+                        <!--  Общая область контента: Incy-градиент рисуется ОДИН раз под ЕДИНЫМ
+                              хостом страниц — каждая вкладка наследует его сквозь прозрачный фон,
+                              поэтому фон не «рвётся» на кроссфейде.  -->
+                        <Panel x:Name="contentArea">
+                            <Border Background="{DynamicResource Brush.HomeGradient}" />
+                            <!--  Keep-alive хост вкладок: ВСЕ вкладки живут детьми этого Panel постоянно
+                                  (measured/arranged), а смена = дешёвая композитная анимация Opacity+
+                                  TranslateY на УЖЕ разложенной вью — БЕЗ detach/reattach и first-layout
+                                  под кадром перехода (корень лага смены вкладок). Rise+fade §A.4 крутит
+                                  code-behind (SwapContent); под .lite — мгновенный своп.  -->
+                            <Panel x:Name="contentHost" Background="Transparent" />
+
+                            <!--  ==================== Bug2/Bug5: скрим низа контента (компакт) ====================
+                                  Компактная раскладка: контент «растворяется» в фон под безрамочной нижней
+                                  навигацией мягким градиент-скримом (Brush.Bg + OpacityMask прозрачно→
+                                  непрозрачно, тема-верно во всех темах).
+                                  Bug2 (последний сервер прятался): раньше скрим был высотой 72 и растворял
+                                  нижние 72px ЖИВОГО контента — на максимальной прокрутке последняя строка
+                                  оказывалась под затуханием и была не видна. Теперь высота скрима = высоте
+                                  трейлинг-спейсера в ServerListView (Border, 24 — реальный child в Extent
+                                  прокрутки, agent D). На макс-прокрутке нижние 24px вьюпорта — это ИМЕННО
+                                  пустой спейсер, а низ последней строки совпадает с ВЕРХНИМ (полностью
+                                  прозрачным, offset 0) краем скрима → последняя строка видна целиком, при
+                                  этом мягкое затухание в нав сохраняется, а во время прокрутки строки всё
+                                  так же плавно «уходят» в фон. Спейсер == высота скрима ⇒ нулевой dead-space.
+                                  Виден ТОЛЬКО в компакте (ApplyLayoutMode гонит IsVisible); в широкой нав нет.
+                                  Клик сквозной.  -->
+                            <Border
+                                x:Name="navScrim"
+                                Height="24"
+                                VerticalAlignment="Bottom"
+                                Background="{DynamicResource Brush.Bg}"
+                                IsHitTestVisible="False"
+                                IsVisible="False">
+                                <Border.OpacityMask>
+                                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                                        <GradientStop Offset="0.0" Color="#00000000" />
+                                        <GradientStop Offset="0.5" Color="#59000000" />
+                                        <GradientStop Offset="1.0" Color="#FF000000" />
+                                    </LinearGradientBrush>
+                                </Border.OpacityMask>
+                            </Border>
+                        </Panel>
+
+                        <!--  Нижняя навигация (компактная раскладка). Ставится в свою строку кодом.  -->
+                        <views:BottomNavBar x:Name="bottomNav" />
+                    </Grid>
+
+                    <!--  Онбординг на всю ширину Row 1 (без рейла/панелей). Виден, пока нет подписок.  -->
+                    <views:OnboardingView x:Name="onboardingView" />
+
+                    <!--  ==================== Оверлей синхронизации аккаунта (E3) ====================
+                          Полноэкранный экран загрузки «Добавляем аккаунт / Загружаем подписки…» — z-выше
+                          онбординга, но НИЖЕ суб-страниц: пока открыт LoginView, он сверху; как только вход
+                          закрывает суб-страницу, виден ЭТОТ оверлей (а НЕ пустой онбординг), пока идёт импорт.
+                          Гейт — ApplyShellVisibility (3-way: syncing > empty > content). Появление/уход —
+                          кроссфейд (C4). По завершении импорта передаёт кадр прямо заполненной «Главной».  -->
+                    <views:AccountSyncView x:Name="accountSyncView" IsVisible="False" />
+
+                    <!--  ==================== Хост суб-страниц (Buy/Login/Devices/History) ====================
+                          Поверх контента И онбординга: суб-вью — полноэкранные, каждая со своим бесшовным
+                          back-тулбаром (Brush.Bg фон полностью перекрывает низлежащее). Стек «назад» ведёт
+                          MainWindow.PushSubPage/PopSubPage; скрыт, пока стек пуст. Открытие/закрытие —
+                          направленный slide+fade (C2) в PushSubPage/PopSubPage.  -->
+                    <ContentControl
+                        x:Name="subPageHost"
+                        Background="{DynamicResource Brush.Bg}"
+                        IsVisible="False"
+                        RenderTransformOrigin="50%,50%" />
+
+                    <!--  ==================== Инлайн-уведомление ОТКЛЮЧЕНО (Bug1) ====================
+                          Владелец не хочет НИКАКИХ нижних уведомлений (ни на подключении, ни на добавлении
+                          подписки, ни на прочих событиях). Разметка пилюли оставлена на месте, но код
+                          (DelegateSnackMsg) — осознанный no-op: этот Border НИКОГДА не показывается
+                          (IsVisible остаётся False). Ошибки подключения отражает состояние Error на
+                          connect-щите. Клик сквозной (IsHitTestVisible=False).  -->
+                    <Border
+                        x:Name="snackHost"
+                        Margin="16,0,16,16"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Bottom"
+                        Classes="Toast"
+                        IsHitTestVisible="False"
+                        IsVisible="False"
+                        RenderTransformOrigin="50%,50%">
+                        <TextBlock
+                            x:Name="snackText"
+                            MaxWidth="420"
+                            TextAlignment="Center"
+                            TextWrapping="Wrap" />
+                    </Border>
+                </Panel>
             </Grid>
-        </DockPanel>
-    </dialogHost:DialogHost>
+
+            <!--  Скрытый StatusBarView: сохраняет обработчики интеракций (буфер/иконка трея/пароль sudo)
+                  и питание StatusBarViewModel. Реальные функции переедут в Настройки/Главную в фазе 1.  -->
+            <ContentControl
+                x:Name="contentStatusBarView"
+                Width="0"
+                Height="0"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Top"
+                ClipToBounds="True"
+                IsHitTestVisible="False"
+                Opacity="0" />
+
+            <!--  ==================== Плавная смена темы: круговая заливка (flood/pour reveal) ====================
+                  Верхний оверлей поверх всего окна. При живой смене темы (Тёмная↔Светлая↔Монохром из настроек)
+                  сюда кладётся СНИМОК (RenderTargetBitmap) текущей темы; под ним App.ApplyTheme мгновенно
+                  перекрашивает живые контролы (DynamicResource), затем снимок «вытекает» расширяющимся круговым
+                  клипом из точки нажатия по тумблеру → новая тема «заливается» на место старой (OutQuint ~520мс).
+                  В lite/reduced-motion переход ПРОПУСКАЕТСЯ — мгновенная смена без снимка. Клик сквозной
+                  (IsHitTestVisible=False), снимок освобождается по завершении/отмене (нет утечки bitmap).
+                  Управляется из code-behind (RunThemeTransition ← App.ThemeTransitionHook); в покое скрыт.  -->
+            <Border
+                x:Name="themeTransitionOverlay"
+                IsHitTestVisible="False"
+                IsVisible="False">
+                <Image
+                    x:Name="themeTransitionImage"
+                    IsHitTestVisible="False"
+                    Stretch="Fill" />
+            </Border>
+        </Panel>
+            </dialogHost:DialogHost>
+        </LayoutTransformControl>
+
+        <!--  ==================== Ресайз-грипы безрамочного окна (8 зон) ====================
+              8 тонких (6px) ПРОЗРАЧНЫХ зон по краям и углам поверх всего интерфейса. Прозрачный фон =
+              зона участвует в хит-тесте; ЦЕНТР Grid (1,1) пуст → клики уходят в контент под ним (грипы не
+              крадут нажатия у кнопок/списков — перехватывают только крайние 6px, как нативная рамка). На
+              PointerPressed каждая зона зовёт кроссплатформенный Window.BeginResizeDrag(WindowEdge, e)
+              (см. WireResizeGrips в code-behind) — ОС ведёт нативный цикл ресайза и уважает MinWidth/
+              MinHeight (мы масштабируем их под UI-zoom). Курсоры: углы — диагональные, края — H/V. Грипы ЗА
+              LayoutTransformControl, поэтому держат ФИЗИЧЕСКИЕ края окна при любом zoom. Видимы только в
+              Normal (в maximized/minimized ресайз бессмыслен — переключает code-behind по WindowState).  -->
+        <Grid
+            x:Name="resizeGripHost"
+            ColumnDefinitions="4,*,4"
+            RowDefinitions="4,*,4">
+            <Border
+                x:Name="gripNW"
+                Grid.Row="0"
+                Grid.Column="0"
+                Background="Transparent"
+                Cursor="TopLeftCorner" />
+            <Border
+                x:Name="gripN"
+                Grid.Row="0"
+                Grid.Column="1"
+                Background="Transparent"
+                Cursor="SizeNorthSouth" />
+            <Border
+                x:Name="gripNE"
+                Grid.Row="0"
+                Grid.Column="2"
+                Background="Transparent"
+                Cursor="TopRightCorner" />
+            <Border
+                x:Name="gripW"
+                Grid.Row="1"
+                Grid.Column="0"
+                Background="Transparent"
+                Cursor="SizeWestEast" />
+            <Border
+                x:Name="gripE"
+                Grid.Row="1"
+                Grid.Column="2"
+                Background="Transparent"
+                Cursor="SizeWestEast" />
+            <Border
+                x:Name="gripSW"
+                Grid.Row="2"
+                Grid.Column="0"
+                Background="Transparent"
+                Cursor="BottomLeftCorner" />
+            <Border
+                x:Name="gripS"
+                Grid.Row="2"
+                Grid.Column="1"
+                Background="Transparent"
+                Cursor="SizeNorthSouth" />
+            <Border
+                x:Name="gripSE"
+                Grid.Row="2"
+                Grid.Column="2"
+                Background="Transparent"
+                Cursor="BottomRightCorner" />
+        </Grid>
+    </Panel>
 </Window>

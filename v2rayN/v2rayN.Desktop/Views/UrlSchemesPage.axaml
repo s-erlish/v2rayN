@@ -1,0 +1,115 @@
+<UserControl
+    x:Class="v2rayN.Desktop.Views.UrlSchemesPage"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:loc="clr-namespace:v2rayN.Desktop.Common"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    d:DesignWidth="560"
+    d:DesignHeight="640"
+    Background="{DynamicResource Brush.Bg}"
+    mc:Ignorable="d">
+
+    <UserControl.Resources>
+        <StreamGeometry x:Key="Geo.Sub.Back">M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z</StreamGeometry>
+    </UserControl.Resources>
+
+    <UserControl.Styles>
+        <Style Selector="Button.IconButton">
+            <Setter Property="Transitions">
+                <Transitions>
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Button.IconButton:pressed">
+            <Setter Property="RenderTransform" Value="scale(0.92)" />
+        </Style>
+    </UserControl.Styles>
+
+    <DockPanel MaxWidth="620">
+        <Grid
+            DockPanel.Dock="Top"
+            MinHeight="56"
+            Margin="16,8,16,0"
+            ColumnDefinitions="Auto,*">
+            <Button
+                x:Name="btnBack"
+                Grid.Column="0"
+                Width="40"
+                Height="40"
+                Padding="0"
+                VerticalAlignment="Center"
+                Classes="IconButton"
+                ToolTip.Tip="{loc:T Common_Back}">
+                <PathIcon
+                    Width="22"
+                    Height="22"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Data="{StaticResource Geo.Sub.Back}"
+                    Foreground="{DynamicResource Brush.OnSurface}" />
+            </Button>
+            <TextBlock
+                Grid.Column="1"
+                Margin="16,0,0,0"
+                VerticalAlignment="Center"
+                Classes="Headline"
+                Text="{loc:T Settings_UrlSchemes}"
+                TextTrimming="CharacterEllipsis" />
+        </Grid>
+
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="16,12,16,24" Spacing="8">
+
+                <Border
+                    Background="{DynamicResource Brush.SurfaceHigh}"
+                    CornerRadius="{DynamicResource Radius.Card}"
+                    Padding="16,12">
+                    <StackPanel Spacing="4">
+                        <TextBlock Classes="Body" Text="{loc:T UrlSchemes_Registration}" />
+                        <TextBlock
+                            x:Name="txtStatus"
+                            Classes="Subtitle"
+                            Text="—"
+                            TextWrapping="Wrap" />
+                        <StackPanel Margin="0,8,0,0" Orientation="Horizontal" Spacing="8">
+                            <Button x:Name="btnRegister" Classes="Primary" Content="{loc:T UrlSchemes_Register}" />
+                            <Button x:Name="btnUnregister" Content="{loc:T UrlSchemes_Remove}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock
+                    Classes="Subtitle"
+                    Text="{loc:T UrlSchemes_Hint}"
+                    TextWrapping="Wrap" />
+
+                <Border Classes="Card" Padding="8,4">
+                    <ItemsControl x:Name="listSchemes">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:CompileBindings="False">
+                                <Grid ColumnDefinitions="*,Auto" MinHeight="48">
+                                    <StackPanel Grid.Column="0" Margin="8,0,0,0" VerticalAlignment="Center">
+                                        <TextBlock
+                                            FontFamily="Consolas,monospace"
+                                            Foreground="{DynamicResource Brush.OnSurface}"
+                                            Text="{Binding Scheme}" />
+                                        <TextBlock Classes="Subtitle" Text="{Binding Hint}" />
+                                    </StackPanel>
+                                    <Button
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        Click="OnCopyClick"
+                                        Content="{loc:T Common_Copy}"
+                                        Tag="{Binding Scheme}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Border>
+
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</UserControl>

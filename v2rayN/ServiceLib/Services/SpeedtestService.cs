@@ -1,4 +1,4 @@
-using ServiceLib.UdpTest;
+﻿using ServiceLib.UdpTest;
 
 namespace ServiceLib.Services;
 
@@ -15,9 +15,23 @@ public class SpeedtestService(Config config, Func<SpeedTestResult, Task> updateF
     {
         Task.Run(async () =>
         {
-            await RunAsync(actionType, selecteds);
-            await ProfileExManager.Instance.SaveTo();
-            await UpdateFunc("", ResUI.SpeedtestingCompleted);
+            // Guarded, with the flush and the completion message in the finally. The task is discarded,
+            // so an early throw (GetClearItem does DB + file I/O; RunAsync dereferences SpeedTestItem)
+            // used to skip BOTH — leaving every row that GetClearItem already marked «Тестирование…»
+            // stuck in that state for the rest of the session, with the results never persisted.
+            try
+            {
+                await RunAsync(actionType, selecteds);
+            }
+            catch (Exception ex)
+            {
+                Logging.SaveLog(_tag, ex);
+            }
+            finally
+            {
+                await ProfileExManager.Instance.SaveTo();
+                await UpdateFunc("", ResUI.SpeedtestingCompleted);
+            }
         });
     }
 
@@ -70,8 +84,9 @@ public class SpeedtestService(Config config, Func<SpeedTestResult, Task> updateF
     private async Task<List<ServerTestItem>> GetClearItem(ESpeedActionType actionType, List<ProfileItem> selecteds)
     {
         var lstSelected = new List<ServerTestItem>(selecteds.Count);
+        // CUSTOM (raw xray-json) nodes are wrapped configs — they have no typed Port on the row but
+        // DO carry a real proxy outbound, so they are testable (IsComplexType() covers them).
         var ids = selecteds.Where(it => !it.IndexId.IsNullOrEmpty()
-            && it.ConfigType != EConfigType.Custom
             && (it.ConfigType.IsComplexType() || it.Port > 0))
             .Select(it => it.IndexId)
             .ToList();
@@ -79,22 +94,32 @@ public class SpeedtestService(Config config, Func<SpeedTestResult, Task> updateF
         for (var i = 0; i < selecteds.Count; i++)
         {
             var it = selecteds[i];
-            if (it.ConfigType == EConfigType.Custom)
-            {
-                continue;
-            }
-
             if (!it.ConfigType.IsComplexType() && it.Port <= 0)
             {
                 continue;
             }
 
             var profile = profileMap.GetValueOrDefault(it.IndexId, it);
+
+            // For a CUSTOM node, resolve the wrapped proxy outbound's real server address/port so a
+            // tcping test has a target (real-ping later rewrites Port to a local inbound port).
+            var address = it.Address;
+            var port = it.Port;
+            if (it.ConfigType == EConfigType.Custom)
+            {
+                var info = XrayJsonTemplateFmt.Introspect(profile);
+                if (info != null)
+                {
+                    address = info.Address.IsNullOrEmpty() ? address : info.Address;
+                    port = info.Port > 0 ? info.Port : port;
+                }
+            }
+
             lstSelected.Add(new ServerTestItem()
             {
                 IndexId = it.IndexId,
-                Address = it.Address,
-                Port = it.Port,
+                Address = address,
+                Port = port,
                 ConfigType = it.ConfigType,
                 QueueNum = i,
                 Profile = profile,
@@ -221,7 +246,11 @@ public class SpeedtestService(Config config, Func<SpeedTestResult, Task> updateF
             }
             else
             {
-                await RunMixedTestAsync(lstSelected, _config.SpeedTestItem.MixedConcurrencyCount, false, exitLoopKey);
+                // lstFailed, not lstSelected: this branch is "retest the failed part". Passing the whole
+                // selection re-tested nodes that had already measured fine, and DoRealPing overwrites
+                // ProfileExManager's stored delay unconditionally — so a good result could be replaced
+                // by a worse one, or by -1.
+                await RunMixedTestAsync(lstFailed, _config.SpeedTestItem.MixedConcurrencyCount, false, exitLoopKey);
             }
         }
     }
@@ -229,12 +258,20 @@ public class SpeedtestService(Config config, Func<SpeedTestResult, Task> updateF
     private async Task<bool> RunRealPingAsync(List<ServerTestItem> selecteds, string exitLoopKey)
     {
         ProcessService processService = null;
+        // departament: snapshot each node's REAL server address/port BEFORE GenerateClientSpeedtestConfig
+        // rewrites ServerTestItem.Port to a local inbound. If the test core can't be started (e.g.
+        // «Реальная задержка» chosen from a fresh start / while disconnected), we probe these originals
+        // with a direct TCP handshake so the row still shows a latency value instead of «—»
+        // (graceful Realping→Tcping fallback — ping works out of the box).
+        var realTargets = selecteds.ToDictionary(it => it, it => (it.Address, it.Port));
         try
         {
             processService = await CoreManager.Instance.LoadCoreConfigSpeedtest(selecteds);
             if (processService is null)
             {
-                return false;
+                // Core not running / config could not be built → TCP-handshake fallback, then report done.
+                await RunRealPingTcpFallbackAsync(selecteds, realTargets, exitLoopKey);
+                return true;
             }
             await Task.Delay(1000);
 
@@ -267,10 +304,52 @@ public class SpeedtestService(Config config, Func<SpeedTestResult, Task> updateF
         {
             if (processService != null)
             {
-                await processService?.StopAsync();
+                // Dispose, not just Stop: StopAsync only kills, it does not release the Process handle
+                // or the redirected streams. A mixed test over 60 servers leaked 60 handles per run.
+                await processService.StopAsync();
+                processService.Dispose();
             }
         }
         return true;
+    }
+
+    // departament: Realping→Tcping graceful fallback. When the speedtest core can't be started, probe
+    // each node's real address/port with the SAME TCP handshake as Tcping (GetTcpingTime) so «Реальная
+    // задержка» still returns a value while disconnected. No AllowTest gate — that flag is only set while
+    // BUILDING the (here-absent) core config, so we probe every node that carries a real address/port.
+    private async Task RunRealPingTcpFallbackAsync(List<ServerTestItem> selecteds, Dictionary<ServerTestItem, (string? Address, int Port)> realTargets, string exitLoopKey)
+    {
+        List<Task> tasks = [];
+        foreach (var it in selecteds)
+        {
+            if (ShouldStopTest(exitLoopKey))
+            {
+                return;
+            }
+
+            var target = realTargets.GetValueOrDefault(it);
+            if (target.Address.IsNullOrEmpty() || target.Port <= 0)
+            {
+                await UpdateFunc(it.IndexId, ResUI.SpeedtestingSkip);
+                continue;
+            }
+
+            tasks.Add(Task.Run(async () =>
+            {
+                try
+                {
+                    var responseTime = await GetTcpingTime(target.Address, target.Port);
+                    ProfileExManager.Instance.SetTestDelay(it.IndexId, responseTime);
+                    await UpdateFunc(it.IndexId, responseTime.ToString());
+                }
+                catch (Exception ex)
+                {
+                    Logging.SaveLog(_tag, ex);
+                }
+            }));
+        }
+
+        await Task.WhenAll(tasks);
     }
 
     private async Task RunUdpTestBatchAsync(List<ServerTestItem> lstSelected, string exitLoopKey, int pageSize = 0)
@@ -347,7 +426,10 @@ public class SpeedtestService(Config config, Func<SpeedTestResult, Task> updateF
         {
             if (processService != null)
             {
-                await processService?.StopAsync();
+                // Dispose, not just Stop: StopAsync only kills, it does not release the Process handle
+                // or the redirected streams. A mixed test over 60 servers leaked 60 handles per run.
+                await processService.StopAsync();
+                processService.Dispose();
             }
         }
         return true;
@@ -408,7 +490,8 @@ public class SpeedtestService(Config config, Func<SpeedTestResult, Task> updateF
                 {
                     if (processService != null)
                     {
-                        await processService?.StopAsync();
+                        await processService.StopAsync();
+                        processService.Dispose();
                     }
                     concurrencySemaphore.Release();
                 }

@@ -66,9 +66,10 @@ public class ThemeSettingViewModel : MyReactiveObject
                 if (CurrentLanguage.IsNotEmpty() && _config.UiItem.CurrentLanguage != CurrentLanguage)
                 {
                     _config.UiItem.CurrentLanguage = CurrentLanguage;
-                    Thread.CurrentThread.CurrentUICulture = new(CurrentLanguage);
                     _ = ConfigHandler.SaveConfig(_config);
-                    NoticeManager.Instance.Enqueue(ResUI.NeedRebootTips);
+                    // Живое переключение без перезапуска: L.SetLanguage синхронизирует CurrentUICulture
+                    // (движок/ResUI) и обновляет открытые {loc:T} биндинги. Reboot-уведомление снято.
+                    Common.L.Instance.SetLanguage(CurrentLanguage);
                 }
             });
     }

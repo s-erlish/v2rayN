@@ -1,0 +1,80 @@
+<UserControl
+    x:Class="v2rayN.Desktop.Views.HomeView"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:dd="clr-namespace:v2rayN.Desktop.DesignData"
+    xmlns:loc="clr-namespace:v2rayN.Desktop.Common"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:views="clr-namespace:v2rayN.Desktop.Views"
+    xmlns:vms="clr-namespace:v2rayN.Desktop.ViewModels"
+    x:DataType="vms:HomeViewModel"
+    Design.DataContext="{x:Static dd:DesignData.Home}"
+    mc:Ignorable="d">
+
+    <!--  Фон Главной — радиальный градиент (bg_home_gradient).  -->
+    <Border Background="{DynamicResource Brush.HomeGradient}">
+
+        <!--  Двухпанельная раскладка: ЛЕВО (440, аккаунт + серверы) | 1px divider | ПРАВО (flex, connect-щит).  -->
+        <Grid ColumnDefinitions="440,1,*">
+
+            <!--  ЛЕВАЯ колонка: чип аккаунта (сверху, только при входе) + единый список подписок→серверов.
+                  Каждая подписка — отдельная секция: её мета-бар (SubscriptionMetaView как header)
+                  бесшовно продолжается в свои серверы. Никакого «Сервера»-заголовка / тулбара / «+».  -->
+            <Grid Grid.Column="0" RowDefinitions="Auto,*" MinWidth="380">
+
+                <!--  Чип аккаунта (CA-1): ОДНО определение (HomeAccountChip), общее с CompactHomeView.
+                      Виден только при входе (сам управляет видимостью по AccountSession); тап → событие
+                      AccountRequested, здесь превращаем в клик по «Аккаунт» рейла.  -->
+                <views:HomeAccountChip
+                    x:Name="AccountChip"
+                    Grid.Row="0"
+                    Margin="16,16,16,4" />
+
+                <!--  Единый список подписок→серверов (мета-бар каждой подписки = её header).  -->
+                <views:ServerListView x:Name="ServerList" Grid.Row="1" />
+            </Grid>
+
+            <!--  Вертикальный разделитель 1px  -->
+            <Border Grid.Column="1" Background="{DynamicResource Brush.OutlineVariant}" />
+
+            <!--  ПРАВАЯ колонка: connect-щит (стата-строка + кольца + диск + щит + подпись сервера + пустое состояние).
+                  Управляется из code-behind по состоянию HomeViewModel (idle/connecting/connected/empty).
+                  Сверху — честный баннер режима маршрутизации (A6): виден, только когда запрошен TUN
+                  «весь трафик», но нет прав, поэтому трафик реально идёт через системный прокси. Скрытый
+                  StatusBarView в MainWindow (0×0) этот баннер не показывал — переносим его сюда, в поле
+                  зрения. Единый тёмный Incy-стиль: полная рамка (без side-stripe), один акцент (CTA).  -->
+            <DockPanel Grid.Column="2" Margin="16">
+                <Border
+                    DockPanel.Dock="Top"
+                    Margin="0,0,0,12"
+                    Padding="14,12"
+                    Background="{DynamicResource Brush.SurfaceHighest}"
+                    BorderBrush="{DynamicResource Brush.OutlineVariant}"
+                    BorderThickness="1"
+                    CornerRadius="{DynamicResource Radius.Chip}"
+                    IsVisible="{Binding StatusBar.TunRequestedButUnavailable}">
+                    <StackPanel Spacing="10">
+                        <TextBlock
+                            Classes="Body"
+                            FontWeight="Medium"
+                            Text="{Binding StatusBar.RoutingModeDisplay}"
+                            TextWrapping="Wrap" />
+                        <TextBlock
+                            Classes="Body"
+                            Foreground="{DynamicResource Brush.OnSurfaceVariant}"
+                            Text="{loc:T Home_TunUnavailable}"
+                            TextWrapping="Wrap" />
+                        <Button
+                            HorizontalAlignment="Left"
+                            Classes="OutlinedAccent"
+                            Command="{Binding StatusBar.RequestTunElevationCmd}"
+                            Content="{loc:T Home_RestartElevated}" />
+                    </StackPanel>
+                </Border>
+
+                <views:ConnectHeroView x:Name="ConnectHero" />
+            </DockPanel>
+        </Grid>
+    </Border>
+</UserControl>

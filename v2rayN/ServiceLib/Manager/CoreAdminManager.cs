@@ -74,10 +74,14 @@ public class CoreAdminManager
                 shFilePath = shFilePath.AppendQuotes();
             }
             var arg = new List<string>() { "-c", $"sudo -S {shFilePath} {_linuxSudoPid}" };
+            // Bounded: this runs inside CoreStopInternal with the global core-op gate held and with no
+            // token on the connect/disconnect/app-exit waits. A sudo prompt waiting on stdin for a
+            // password it will never accept must not wedge the whole app.
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
             var result = await Cli.Wrap(Global.LinuxBash)
                 .WithArguments(arg)
                 .WithStandardInputPipe(PipeSource.FromString(AppManager.Instance.LinuxSudoPwd))
-                .ExecuteBufferedAsync();
+                .ExecuteBufferedAsync(cts.Token);
 
             await UpdateFunc(false, result.StandardOutput.ToString());
         }

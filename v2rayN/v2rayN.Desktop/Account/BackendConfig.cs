@@ -1,0 +1,99 @@
+namespace v2rayN.Desktop.Account;
+
+/// <summary>
+/// Central configuration for the Departament VPN backend + Telegram bot. Ported from V2rayNG
+/// auth/BackendConfig.kt (values baked from build.gradle.kts buildConfigField defaults, since the
+/// desktop build has no BuildConfig).
+///
+/// Base URL is `https://web.departament.site/api`; every path in <see cref="Endpoints"/> is relative
+/// to it. JWT auth uses `Authorization: Bearer &lt;token&gt;` (7-day token, NO refresh endpoint).
+/// </summary>
+public static class BackendConfig
+{
+    /// <summary>Backend base URL (no trailing slash).</summary>
+    public static string BaseUrl => "https://web.departament.site/api".TrimEnd('/');
+
+    /// <summary>Telegram bot username without the leading '@'.</summary>
+    public static string BotUsername => "departamentvpnbot";
+
+    /// <summary>User-Agent used for API + subscription requests (negotiates the response format).</summary>
+    public static string SubscriptionUserAgent => "DepartamentVPN/1.0";
+
+    /// <summary>True only when a backend base URL has been provided.</summary>
+    public static bool IsConfigured() => BaseUrl.IsNotEmpty();
+
+    /// <summary>Relative paths (appended to <see cref="BaseUrl"/>). Parameterized paths use helpers.</summary>
+    public static class Endpoints
+    {
+        // Public
+        public const string PublicConfig = "/public/config";
+        public const string PublicTariffs = "/public/tariffs";
+        public const string ServerStatus = "/public/server-status";
+
+        // Auth
+        public const string TelegramLoginToken = "/client/auth/telegram-login-token";
+        public const string TelegramLoginCheck = "/client/auth/telegram-login-check";
+        public const string Login = "/client/auth/login";
+        public const string TwoFaLogin = "/client/auth/2fa-login";
+        public const string GoogleLogin = "/client/auth/google";
+        public const string Me = "/client/auth/me";
+
+        // Auth — start-page (email/password) register + passwordless flows
+        public const string Register = "/client/auth/register";
+        public const string VerifyEmail = "/client/auth/verify-email";
+        public const string MagicLinkRequest = "/client/auth/magic-link/request";
+        public const string MagicLinkConsume = "/client/auth/magic-link/consume";
+        public const string PasswordResetRequest = "/client/auth/password-reset/request";
+        public const string PasswordResetConsume = "/client/auth/password-reset/consume";
+
+        // Auth — app↔site SSO handoff (issue code while authed, consume it publicly)
+        public const string AppHandoff = "/client/auth/app-handoff";
+        public const string AppHandoffConsume = "/client/auth/app-handoff/consume";
+
+        // Account linking (all authed; attach a missing sign-in method to the current account)
+        public const string LinkTelegramRequest = "/client/link-telegram-request";
+        public const string LinkEmailRequest = "/client/link-email-request";
+        public const string SetPassword = "/client/set-password";
+        public const string LinkGoogle = "/client/link-google";
+
+        // Subscription
+        /// <summary>The authoritative ACTIVE (root) subscription summary — richer than the /all root item.</summary>
+        public const string Subscription = "/client/subscription";
+        public const string SubscriptionAll = "/client/subscription/all";
+        public const string SubscriptionQr = "/client/subscription/qr";
+        public const string UpgradeQuote = "/client/subscriptions/upgrade-quote";
+        public const string Upgrade = "/client/subscriptions/upgrade";
+
+        public static string RenameSubscription(string scope, string id) => $"/client/subscription/{scope}/{id}/name";
+
+        public static string AddDevices(string scope, string id) => $"/client/subscription/{scope}/{id}/add-devices";
+
+        // Devices
+        public const string Devices = "/client/devices";
+        public const string DeleteDevice = "/client/devices/delete";
+
+        // Payments
+        public const string PayPlatega = "/client/payments/platega";
+        public const string PayBalance = "/client/payments/balance";
+        public const string Payments = "/client/payments";
+
+        /// <summary>Scoped card (Platega) purchase/renewal of a chosen (root or secondary) subscription.</summary>
+        public const string PayTariffPlatega = "/client/payments/tariff/platega";
+
+        // Promo / trial / referral
+        public const string PromoCheck = "/client/promo-code/check";
+        public const string PromoActivate = "/client/promo-code/activate";
+        public const string Trial = "/client/trial";
+        public const string ReferralStats = "/client/referral-stats";
+
+        /// <summary>PATCH auto-renew of a secondary subscription — body {enabled}.</summary>
+        public static string SecondaryAutoRenew(string id) => $"/client/secondary-subscriptions/{id}/auto-renew";
+
+        /// <summary>
+        /// PATCH auto-renew of the ACTIVE (root/primary) subscription — no id in the path, body
+        /// {enabled}. NOTE: the real route is `/client/auto-renew` (bug #29 — the former
+        /// `/client/subscription/auto-renew` 404s).
+        /// </summary>
+        public const string PrimaryAutoRenew = "/client/auto-renew";
+    }
+}

@@ -1,4 +1,4 @@
-namespace ServiceLib.Manager;
+﻿namespace ServiceLib.Manager;
 
 public sealed class AppManager
 {
@@ -8,6 +8,7 @@ public sealed class AppManager
     private Config _config;
     private int? _statePort;
     private int? _statePort2;
+    private int? _apiPort;
     public static AppManager Instance => _instance.Value;
     public Config Config => _config;
     public IWindowDialog WindowDialog { get; set; } = null!;
@@ -26,13 +27,41 @@ public sealed class AppManager
         get
         {
             _statePort2 ??= Utils.GetFreePort(GetLocalPort(EInboundProtocol.api2));
-            return _statePort2.Value + (_config.TunModeItem.EnableTun ? 1 : 0);
+            return _statePort2.Value + (_config.TunModeItem.EnableTunEffective ? 1 : 0);
+        }
+    }
+
+    // Seamless server switch (Tier 2 hot-swap): the deterministic local port of the Xray
+    // HandlerService `api` inbound (a dokodemo-door). The generated Xray config binds this port and
+    // CoreManager spawns `xray api ado/rmo --server=127.0.0.1:ApiPort ...` against it to swap the
+    // proxy outbound at runtime with no core restart. Seeded well clear of the metrics StatePort
+    // (api slot) and clash/singbox StatePort2 (api2 slot) so it never collides with them, and wrapped
+    // in GetFreePort so a busy seed falls back to a free port. Memoised once per process so config
+    // generation and the runtime api call always agree on the same port for the life of the session.
+    public int ApiPort
+    {
+        get
+        {
+            _apiPort ??= Utils.GetFreePort(GetLocalPort(EInboundProtocol.api) + 100);
+            return _apiPort.Value;
         }
     }
 
     public string LinuxSudoPwd { get; set; }
 
     public bool ShowInTaskbar { get; set; }
+
+    // departament (idle/perf B5): true while the main window is minimized to the taskbar/tray.
+    // ShowInTaskbar alone only flips false when the window is HIDDEN to tray, never on a plain
+    // minimize, so idle guards keyed on ShowInTaskbar kept doing work for a window the user cannot
+    // see. This flag is set from App (which observes Window.WindowStateProperty) and lets the idle
+    // guards treat "minimized" as "hidden": effective-hidden == (!ShowInTaskbar || IsWindowMinimized).
+    // Additive + defaults false, so nothing regresses if it is never written.
+    public bool IsWindowMinimized { get; set; }
+
+    // departament (idle/perf B5): the app UI is effectively invisible when hidden to tray OR minimized.
+    // Idle work (stats fetch/parse) can safely skip while this is true.
+    public bool IsUiHidden => !ShowInTaskbar || IsWindowMinimized;
 
     public ECoreType RunningCoreType { get; set; }
 
@@ -132,7 +161,9 @@ public sealed class AppManager
             await ConfigHandler.SaveConfig(_config);
             await ProfileExManager.Instance.SaveTo();
             await StatisticsManager.Instance.SaveTo();
-            await CoreManager.Instance.CoreStop();
+            // byUser:true — app exit is a deliberate stop; abort any in-flight auto-restart so a crash
+            // loop can't fight the shutdown.
+            await CoreManager.Instance.CoreStop(byUser: true);
             StatisticsManager.Instance.Close();
 
             Logging.SaveLog("AppExitAsync End");
@@ -180,6 +211,44 @@ public sealed class AppManager
     public async Task<SubItem?> GetSubItem(string? subid)
     {
         return await SQLiteHelper.Instance.TableAsync<SubItem>().FirstOrDefaultAsync(t => t.Id == subid);
+    }
+
+    /// <summary>
+    /// Does the local store hold ANY server at all? Answered SYNCHRONOUSLY, because the shell has to
+    /// choose between the welcome/onboarding surface and the app itself for its very FIRST frame — long
+    /// before the asynchronous profile load lands. Returns <c>null</c> when the store could not be read:
+    /// callers must treat that as UNKNOWN and never as "this user has nothing" — an unknown answered as
+    /// "empty" is exactly what used to flash the welcome screen at returning users on every launch.
+    /// </summary>
+    public bool? HasStoredProfiles()
+    {
+        try
+        {
+            return SQLiteHelper.Instance.ExecuteScalar<int>("select count(*) from ProfileItem") > 0;
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog("HasStoredProfiles", ex);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Async twin of <see cref="HasStoredProfiles"/>, for callers that are already off the launch path
+    /// (and off the UI thread) — they must not touch the synchronous connection. Same contract:
+    /// <c>null</c> means UNKNOWN, not empty.
+    /// </summary>
+    public async Task<bool?> HasStoredProfilesAsync()
+    {
+        try
+        {
+            return await SQLiteHelper.Instance.TableAsync<ProfileItem>().CountAsync() > 0;
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog("HasStoredProfilesAsync", ex);
+            return null;
+        }
     }
 
     public async Task<List<ProfileItem>?> ProfileItems(string subid)

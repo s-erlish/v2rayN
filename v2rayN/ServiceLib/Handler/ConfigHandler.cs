@@ -1,4 +1,4 @@
-using System.Data;
+﻿using System.Data;
 
 namespace ServiceLib.Handler;
 
@@ -89,7 +89,8 @@ public static class ConfigHandler
         };
         config.TunModeItem ??= new TunModeItem
         {
-            EnableTun = false,
+            // departament: a fresh config is TUN by default (whole-device routing) — ModeText shows «TUN».
+            EnableTun = true,
             Mtu = 9000,
             IcmpRouting = Global.TunIcmpRoutingPolicies.First(),
             EnableLegacyProtect = false,
@@ -107,9 +108,9 @@ public static class ConfigHandler
 
         if (config.UiItem.CurrentLanguage.IsNullOrEmpty())
         {
-            config.UiItem.CurrentLanguage = Thread.CurrentThread.CurrentCulture.TwoLetterISOLanguageName.Equals("zh", StringComparison.CurrentCultureIgnoreCase)
-                ? Global.Languages.First()
-                : Global.Languages[2];
+            // departament: default a fresh config to Russian UI. English (and every other language)
+            // stays fully available and switchable via the «Язык» row; this only sets the initial value.
+            config.UiItem.CurrentLanguage = Global.Languages[5]; // "ru"
         }
 
         config.ConstItem ??= new ConstItem();
@@ -141,6 +142,15 @@ public static class ConfigHandler
         {
             config.SpeedTestItem.UdpTestTarget = Global.UdpTestTargets.First();
         }
+        if (config.SpeedTestItem.PingMethod.IsNullOrEmpty())
+        {
+            // Falls back to the MODEL's own default (SpeedTestItem.PingMethod's initializer), which is
+            // the single source of truth. This used to hardcode a second, contradicting opinion
+            // (Realping) that could never run on a fresh install — the initializer had already filled
+            // the field, so IsNullOrEmpty was false — leaving two documented intentions in the tree with
+            // no way to tell which was live. Only an explicitly-null stored value reaches here now.
+            config.SpeedTestItem.PingMethod = new SpeedTestItem().PingMethod;
+        }
 
         config.Mux4RayItem ??= new()
         {
@@ -151,7 +161,9 @@ public static class ConfigHandler
 
         config.Mux4SboxItem ??= new()
         {
-            Protocol = Global.SingboxMuxs.First(),
+            // departament: Mux OFF by default — empty Protocol gates mux off in SingboxOutboundService
+            // (see `Protocol.IsNotEmpty()` guard). The Settings Mux toggle writes a real protocol when on.
+            Protocol = string.Empty,
             MaxConnections = 8
         };
 
@@ -1497,7 +1509,7 @@ public static class ConfigHandler
         var enableLegacyProtect = config.TunModeItem.EnableLegacyProtect;
         if (node.ConfigType != EConfigType.Custom
             && coreType != ECoreType.sing_box
-            && config.TunModeItem.EnableTun
+            && config.TunModeItem.EnableTunEffective
             && enableLegacyProtect)
         {
             itemSocks = new ProfileItem()
@@ -1511,7 +1523,7 @@ public static class ConfigHandler
         else if (node.ConfigType == EConfigType.Custom
             && node.PreSocksPort is > 0 and <= 65535)
         {
-            var preCoreType = config.TunModeItem.EnableTun ? ECoreType.sing_box : ECoreType.Xray;
+            var preCoreType = config.TunModeItem.EnableTunEffective ? ECoreType.sing_box : ECoreType.Xray;
             itemSocks = new ProfileItem()
             {
                 CoreType = preCoreType,
@@ -1661,6 +1673,12 @@ public static class ConfigHandler
         var subRemarks = subItem?.Remarks;
         var preSocksPort = subItem?.PreSocksPort;
 
+        // A departament / Remnawave "XRAY_JSON" body is an array of FULL Xray configs (each carrying
+        // its own routing rules + dns + outbounds). We store every element AS-IS as a CUSTOM node so
+        // the provider's routing/ad-block/geo rules are preserved and applied at connect time — the
+        // faithful Android way. SingboxFmt/V2rayFmt.ResolveFullArray write the raw element to a file
+        // and AddCustomServer imports it (ConfigType=Custom, CoreType=Xray). The real protocol /
+        // transport / ping are recovered later by introspecting the wrapped proxy outbound.
         List<ProfileItem>? lstProfiles = null;
         //Is sing-box array configuration
         if (lstProfiles is null || lstProfiles.Count <= 0)
@@ -1970,7 +1988,13 @@ public static class ConfigHandler
         SubItem subItem = new()
         {
             Id = string.Empty,
-            Url = url
+            Url = url,
+            // Stamp the recognised v2rayNG-family UA on manually-added subs (paste / clipboard / QR)
+            // exactly as the Telegram/account path does. Without it the row carries a blank UA and any
+            // fetch that reads item.UserAgent directly (i.e. does not route through
+            // SubscriptionHandler.ResolveSubUserAgent) would send a blank/branding UA and get the
+            // «Приложение не поддерживается» placeholder instead of the real server list.
+            UserAgent = Global.SubscriptionUserAgent
         };
 
         var uri = Utils.TryUri(url);

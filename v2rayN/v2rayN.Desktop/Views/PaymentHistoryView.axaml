@@ -1,0 +1,351 @@
+<UserControl
+    x:Class="v2rayN.Desktop.Views.PaymentHistoryView"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:loc="clr-namespace:v2rayN.Desktop.Common"
+    xmlns:vms="clr-namespace:v2rayN.Desktop.ViewModels"
+    x:DataType="vms:PaymentHistoryViewModel"
+    mc:Ignorable="d">
+
+    <!--
+        Суб-экран «История платежей» (порт Android activity_payment_history.xml + item_payment.xml,
+        PaymentHistoryActivity.kt / PaymentsAdapter.kt). Бесшовный тулбар (шеврон «назад» + Headline),
+        ниже ровно ОДНО из четырёх состояний: скелет (3 пульсирующих силуэта карточек) / список /
+        пусто (hero-иконка + «Платежей пока нет» + CTA «Купить подписку») / ошибка (текст + «Повторить»).
+
+        Карточка платежа: синий тайл 40 с глифом истории 22 · описание Body + дата Caption ·
+        справа сумма Body/Bold tnum + статус-чип. Цвет чипа НЕСЁТ статус (текст = полный цвет,
+        фон = тот же цвет @18%), не только форма. Incy: pure dark, один синий акцент, радиусы
+        chip 12 / card 20, сетка отступов 4/8/12/16/24, gutter 16, без теней и ripple.
+
+        DATA-DRIVEN: строки приходят из GET /client/payments через PaymentHistoryViewModel
+        (кэш-first, потом сеть); все строки уже отформатированы во вьюмодели. Русский, sentence-case.
+    -->
+
+    <UserControl.Resources>
+        <!--  Глиф истории (порт Android drawable/ic_acc_history, Material history 24dp).  -->
+        <StreamGeometry x:Key="Geo.Pay.History">M13,3c-4.97,0 -9,4.03 -9,9H1l3.89,3.89 0.07,0.14L9,12H6c0,-3.87 3.13,-7 7,-7s7,3.13 7,7 -3.13,7 -7,7c-1.93,0 -3.68,-0.79 -4.94,-2.06l-1.42,1.42C8.27,19.99 10.51,21 13,21c4.97,0 9,-4.03 9,-9s-4.03,-9 -9,-9zM12,8v5l4.28,2.54 0.72,-1.21 -3.5,-2.08V8H12z</StreamGeometry>
+    </UserControl.Resources>
+
+    <!--  Тулбар (Border.SubToolbar + Button.BackNav), статус-чипы (Border.StatusChip +
+          варианты) и скелет (Border.SkelBar + пульс .SkeletonPulse) — всё из GlobalStyles.
+          Локальные копии удалены: чипы больше не держат #2E-литералы, а пульс скелета теперь
+          :not(.lite)-gated (не анимируется в Облегчённом режиме).  -->
+
+    <DockPanel Background="{DynamicResource Brush.Bg}">
+
+        <!--  Бесшовный тулбар суб-экрана: шеврон «назад» + Headline, фон окна, без границы и тени.
+              Колонка выровнена с контентом (MaxWidth 560, gutter 16).  -->
+        <Border DockPanel.Dock="Top" Classes="SubToolbar">
+            <Grid MaxWidth="560" ColumnDefinitions="Auto,*">
+                <Button
+                    Grid.Column="0"
+                    AutomationProperties.Name="{loc:T Common_Back}"
+                    Classes="BackNav"
+                    Click="OnBackClick"
+                    ToolTip.Tip="{loc:T Common_Back}">
+                    <PathIcon Data="{StaticResource Geo.ArrowBack}" />
+                </Button>
+                <TextBlock
+                    Grid.Column="1"
+                    Margin="12,0,0,0"
+                    VerticalAlignment="Center"
+                    Classes="Headline"
+                    Text="{loc:T Common_PaymentHistory}"
+                    TextTrimming="CharacterEllipsis" />
+            </Grid>
+        </Border>
+
+        <!--  Четыре взаимоисключающих состояния (PaymentHistoryViewModel.Recompute).  -->
+        <Panel>
+
+            <!--  СПИСОК: колонка карточек платежей (RecyclerView rv_payments 1:1).  -->
+            <ScrollViewer
+                HorizontalScrollBarVisibility="Disabled"
+                IsVisible="{Binding ShowList}"
+                VerticalScrollBarVisibility="Auto">
+                <ItemsControl
+                    MaxWidth="560"
+                    Margin="16,12,16,24"
+                    ItemsSource="{Binding Payments}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vms:PaymentRow">
+                            <!--  Карточка платежа (item_payment): некликабельная строка-факт.  -->
+                            <Border Classes="Card" Margin="0,0,0,12">
+                                <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
+
+                                    <Border
+                                        Grid.Column="0"
+                                        Classes="Tile Blue"
+                                        VerticalAlignment="Center">
+                                        <PathIcon
+                                            Width="22"
+                                            Height="22"
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Center"
+                                            Data="{StaticResource Geo.Pay.History}"
+                                            Foreground="{DynamicResource Brush.Accent}" />
+                                    </Border>
+
+                                    <!--  Описание + дата (tv_payment_desc / tv_payment_date).  -->
+                                    <StackPanel
+                                        Grid.Column="1"
+                                        Margin="12,0,0,0"
+                                        VerticalAlignment="Center">
+                                        <TextBlock
+                                            Classes="Body"
+                                            Text="{Binding Description}"
+                                            TextTrimming="CharacterEllipsis" />
+                                        <TextBlock
+                                            Margin="0,4,0,0"
+                                            Classes="Caption"
+                                            FontFamily="{DynamicResource Font.Numeric}"
+                                            FontFeatures="tnum,lnum,zero"
+                                            IsVisible="{Binding HasDate}"
+                                            Text="{Binding Date}" />
+                                    </StackPanel>
+
+                                    <!--  Сумма + статус-чип, выровнены по правому краю на одной вертикали (§0.5).  -->
+                                    <StackPanel
+                                        Grid.Column="2"
+                                        Margin="8,0,0,0"
+                                        VerticalAlignment="Center">
+                                        <TextBlock
+                                            HorizontalAlignment="Right"
+                                            Classes="Body Numeric"
+                                            FontFamily="{DynamicResource Font.Numeric}"
+                                            FontFeatures="tnum,lnum,zero"
+                                            FontWeight="Bold"
+                                            Text="{Binding Amount}" />
+                                        <Border
+                                            Margin="0,4,0,0"
+                                            HorizontalAlignment="Right"
+                                            Classes="StatusChip"
+                                            Classes.canceled="{Binding IsCanceled}"
+                                            Classes.failed="{Binding IsFailed}"
+                                            Classes.paid="{Binding IsPaid}"
+                                            Classes.pending="{Binding IsPending}"
+                                            IsVisible="{Binding HasStatus}">
+                                            <TextBlock Classes="Chip" Text="{Binding StatusLabel}" />
+                                        </Border>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+
+            <!--  ЗАГРУЗКА: 3 пульсирующих силуэта карточки платежа (та же геометрия, что у строки,
+                  чтобы смена скелет → список не прыгала).  -->
+            <StackPanel
+                MaxWidth="560"
+                Margin="16,12,16,24"
+                VerticalAlignment="Top"
+                IsVisible="{Binding ShowLoading}">
+
+                <Border Classes="Card SkeletonPulse" Margin="0,0,0,12">
+                    <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
+                        <Border
+                            Grid.Column="0"
+                            Width="40"
+                            Height="40"
+                            Background="{DynamicResource Brush.SurfaceHighest}"
+                            CornerRadius="{StaticResource Radius.Tile}" />
+                        <StackPanel
+                            Grid.Column="1"
+                            Margin="12,0,0,0"
+                            VerticalAlignment="Center">
+                            <Border
+                                Classes="SkelBar"
+                                Width="160"
+                                HorizontalAlignment="Left" />
+                            <Border
+                                Classes="SkelBar"
+                                Width="88"
+                                Height="12"
+                                Margin="0,4,0,0"
+                                HorizontalAlignment="Left" />
+                        </StackPanel>
+                        <StackPanel
+                            Grid.Column="2"
+                            Margin="8,0,0,0"
+                            VerticalAlignment="Center">
+                            <Border
+                                Classes="SkelBar"
+                                Width="56"
+                                HorizontalAlignment="Right" />
+                            <Border
+                                Width="64"
+                                Height="18"
+                                Margin="0,4,0,0"
+                                HorizontalAlignment="Right"
+                                Background="{DynamicResource Brush.SurfaceHighest}"
+                                CornerRadius="{StaticResource Radius.Chip}" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <Border Classes="Card SkeletonPulse" Margin="0,0,0,12">
+                    <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
+                        <Border
+                            Grid.Column="0"
+                            Width="40"
+                            Height="40"
+                            Background="{DynamicResource Brush.SurfaceHighest}"
+                            CornerRadius="{StaticResource Radius.Tile}" />
+                        <StackPanel
+                            Grid.Column="1"
+                            Margin="12,0,0,0"
+                            VerticalAlignment="Center">
+                            <Border
+                                Classes="SkelBar"
+                                Width="128"
+                                HorizontalAlignment="Left" />
+                            <Border
+                                Classes="SkelBar"
+                                Width="88"
+                                Height="12"
+                                Margin="0,4,0,0"
+                                HorizontalAlignment="Left" />
+                        </StackPanel>
+                        <StackPanel
+                            Grid.Column="2"
+                            Margin="8,0,0,0"
+                            VerticalAlignment="Center">
+                            <Border
+                                Classes="SkelBar"
+                                Width="56"
+                                HorizontalAlignment="Right" />
+                            <Border
+                                Width="64"
+                                Height="18"
+                                Margin="0,4,0,0"
+                                HorizontalAlignment="Right"
+                                Background="{DynamicResource Brush.SurfaceHighest}"
+                                CornerRadius="{StaticResource Radius.Chip}" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <Border Classes="Card SkeletonPulse" Margin="0,0,0,12">
+                    <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
+                        <Border
+                            Grid.Column="0"
+                            Width="40"
+                            Height="40"
+                            Background="{DynamicResource Brush.SurfaceHighest}"
+                            CornerRadius="{StaticResource Radius.Tile}" />
+                        <StackPanel
+                            Grid.Column="1"
+                            Margin="12,0,0,0"
+                            VerticalAlignment="Center">
+                            <Border
+                                Classes="SkelBar"
+                                Width="144"
+                                HorizontalAlignment="Left" />
+                            <Border
+                                Classes="SkelBar"
+                                Width="88"
+                                Height="12"
+                                Margin="0,4,0,0"
+                                HorizontalAlignment="Left" />
+                        </StackPanel>
+                        <StackPanel
+                            Grid.Column="2"
+                            Margin="8,0,0,0"
+                            VerticalAlignment="Center">
+                            <Border
+                                Classes="SkelBar"
+                                Width="56"
+                                HorizontalAlignment="Right" />
+                            <Border
+                                Width="64"
+                                Height="18"
+                                Margin="0,4,0,0"
+                                HorizontalAlignment="Right"
+                                Background="{DynamicResource Brush.SurfaceHighest}"
+                                CornerRadius="{StaticResource Radius.Chip}" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </StackPanel>
+
+            <!--  ПУСТО (ll_empty_state): hero-иконка 64/32 (§0.4) + «Платежей пока нет» +
+                  wire-ready CTA «Купить подписку» → событие BuyRequested.  -->
+            <StackPanel
+                Margin="24,0"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                IsVisible="{Binding ShowEmpty}">
+                <Border
+                    Width="64"
+                    Height="64"
+                    HorizontalAlignment="Center"
+                    Background="{DynamicResource Brush.Tile.Blue}"
+                    CornerRadius="20">
+                    <PathIcon
+                        Width="32"
+                        Height="32"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Data="{StaticResource Geo.Pay.History}"
+                        Foreground="{DynamicResource Brush.Accent}" />
+                </Border>
+                <TextBlock
+                    Margin="0,12,0,0"
+                    HorizontalAlignment="Center"
+                    Classes="Body"
+                    Foreground="{DynamicResource Brush.OnSurfaceVariant}"
+                    Text="{loc:T History_Empty}"
+                    TextAlignment="Center" />
+                <Button
+                    Margin="0,16,0,0"
+                    HorizontalAlignment="Center"
+                    Classes="Primary"
+                    Click="OnBuyClick"
+                    Content="{loc:T Common_BuySubscription}" />
+            </StackPanel>
+
+            <!--  ОШИБКА: тот же силуэт, но нейтральный тайл + причина + «Повторить» (retry).
+                  CTA покупки здесь нет — это ошибка, а не «платежей ещё нет» (PaymentHistoryActivity).  -->
+            <StackPanel
+                Margin="24,0"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                IsVisible="{Binding ShowError}">
+                <Border
+                    Width="64"
+                    Height="64"
+                    HorizontalAlignment="Center"
+                    Background="{DynamicResource Brush.Tile.Neutral}"
+                    CornerRadius="20">
+                    <PathIcon
+                        Width="32"
+                        Height="32"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Data="{StaticResource Geo.Pay.History}"
+                        Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+                </Border>
+                <TextBlock
+                    MaxWidth="360"
+                    Margin="0,12,0,0"
+                    HorizontalAlignment="Center"
+                    Classes="Body"
+                    Foreground="{DynamicResource Brush.OnSurfaceVariant}"
+                    Text="{Binding ErrorText}"
+                    TextAlignment="Center"
+                    TextWrapping="Wrap" />
+                <Button
+                    Margin="0,16,0,0"
+                    HorizontalAlignment="Center"
+                    Classes="Tonal"
+                    Command="{Binding LoadCmd}"
+                    Content="{loc:T Common_Retry}" />
+            </StackPanel>
+        </Panel>
+    </DockPanel>
+</UserControl>

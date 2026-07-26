@@ -45,7 +45,11 @@ public class MsgViewModel : MyReactiveObject
 
         EnqueueQueueMsg(msg);
 
-        if (!AppManager.Instance.ShowInTaskbar)
+        // Idle guard (B5): pause the log pump whenever the UI is not visible. IsUiHidden covers
+        // both hidden-to-tray (ShowInTaskbar == false) AND minimized — the queue is still filled
+        // above (so nothing is lost), but the expensive dispatcher pump is skipped for a window the
+        // user cannot see.
+        if (AppManager.Instance.IsUiHidden)
         {
             return;
         }
