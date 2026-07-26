@@ -338,19 +338,25 @@ public class SettingsViewModel : MyReactiveObject
     /// </summary>
     public async Task SetTunMode(bool enable)
     {
-        if (_designMode || _config.TunModeItem.EnableTun == enable)
+        if (_designMode
+            || (_config.TunModeItem.EnableTun == enable && _config.TunModeItem.EnableTunEffective == enable))
         {
             return;
         }
 
+        // EnableTun is the persisted INTENT; TunUnavailable is this session's capability. Picking TUN in
+        // a session that cannot create one records the intent and leaves the session downgraded (the A6
+        // banner reports it) instead of erasing the choice on the next autosave.
         _config.TunModeItem.EnableTun = enable;
+        _config.TunModeItem.TunUnavailable = enable && !StatusBarViewModel.Instance.TunAvailable;
         await ConfigHandler.SaveConfig(_config);
 
         // Keep the shared status-bar VM in sync WITHOUT triggering its reload/UAC path: DoEnableTun
-        // early-returns because _config.TunModeItem.EnableTun already equals the value we assign here.
-        StatusBarViewModel.Instance.EnableTun = enable;
-        ModeText = enable ? "TUN" : Common.L.T("Settings_ModeProxy");
-        IsTunMode = enable;
+        // early-returns because the effective config already equals the value we assign here.
+        var effective = _config.TunModeItem.EnableTunEffective;
+        StatusBarViewModel.Instance.EnableTun = effective;
+        ModeText = effective ? "TUN" : Common.L.T("Settings_ModeProxy");
+        IsTunMode = effective;
 
         // Re-apply live only if the core is already up; a disconnected app stays disconnected.
         if (IsCoreRunning())

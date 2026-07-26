@@ -608,9 +608,20 @@
         </DockPanel>
 
         <!--  ============ Оверлей «Способ оплаты»: скрим + шит снизу окна ============  -->
+        <!--  ЗАКРЫТЫЙ ШИТ НЕ ДОЛЖЕН ЛОВИТЬ КЛАВИАТУРУ (00-rules 12.2). Закрытое состояние —
+              это Opacity 0 + translateY (иначе не проиграть анимацию закрытия), а НЕ IsVisible=False.
+              Avalonia исключает контрол из обхода Tab по IsEffectivelyVisible/IsEffectivelyEnabled —
+              прозрачность в этом расчёте не участвует, а IsHitTestVisible гасит ТОЛЬКО указатель.
+              Поэтому строки способов оплаты (Button.Flat + PickCmd) оставались полноценными
+              таб-стопами при закрытом шите: Tab уводил фокус на невидимые кнопки, а Enter выбирал
+              способ оплаты и уносил экран в чекаут «из ниоткуда». IsEnabled, привязанный к тому же
+              IsSheetOpen, убирает всю ветку из обхода Tab, пока шит закрыт, и возвращает её, когда
+              открыт (внутри шита клавиатура работает как прежде, Escape закрывает — BuyView.axaml.cs:167).
+              IsVisible здесь применить нельзя — он оборвал бы анимацию ухода.  -->
         <Panel
             x:Name="SheetOverlay"
             Classes.open="{Binding IsSheetOpen}"
+            IsEnabled="{Binding IsSheetOpen}"
             IsHitTestVisible="{Binding IsSheetOpen}">
 
             <!--  Скрим: тап закрывает шит (общий токен Brush.Scrim, ~60%).  -->

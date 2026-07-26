@@ -508,7 +508,9 @@ public class StatusBarViewModel : MyReactiveObject
 
     private async Task DoEnableTun(bool c)
     {
-        if (_config.TunModeItem.EnableTun == EnableTun)
+        // Compare against the EFFECTIVE value: the persisted intent may legitimately be "on" while this
+        // session runs downgraded, and that combination must not read as "the user just changed it".
+        if (_config.TunModeItem.EnableTunEffective == EnableTun)
         {
             return;
         }
@@ -517,14 +519,17 @@ public class StatusBarViewModel : MyReactiveObject
         // report a downgrade to system-proxy when TUN turns out to be unavailable.
         _tunRequested = EnableTun;
         _config.TunModeItem.EnableTun = EnableTun;
+        _config.TunModeItem.TunUnavailable = EnableTun && !AllowEnableTun();
 
         if (EnableTun && AllowEnableTun() == false)
         {
-            // When running as a non-administrator, reboot to administrator mode
+            // When running as a non-administrator, reboot to administrator mode. The INTENT stays true
+            // on disk — the whole point of relaunching elevated is to come back with the tunnel on;
+            // writing false here (as this used to) meant the elevated relaunch reappeared with TUN off.
             if (Utils.IsWindows())
             {
-                _config.TunModeItem.EnableTun = false;
                 UpdateRoutingModeStatus();
+                await ConfigHandler.SaveConfig(_config);
                 await AppManager.Instance.RebootAsAdmin();
                 return;
             }
@@ -533,10 +538,13 @@ public class StatusBarViewModel : MyReactiveObject
                 var password = await PasswordInputInteraction.Handle(Unit.Default);
                 if (password.IsNullOrEmpty())
                 {
-                    _config.TunModeItem.EnableTun = false;
+                    // The intent is kept; only this session is downgraded, and the A6 banner says so.
                     UpdateRoutingModeStatus();
+                    await ConfigHandler.SaveConfig(_config);
                     return;
                 }
+                // The sudo password is now held, so the session can create the tunnel after all.
+                _config.TunModeItem.TunUnavailable = false;
             }
         }
 
@@ -549,7 +557,7 @@ public class StatusBarViewModel : MyReactiveObject
     // notice from the current effective state. Called from the constructor and after every TUN change.
     private void UpdateRoutingModeStatus()
     {
-        var tunActive = _config.TunModeItem.EnableTun && EnableTun;
+        var tunActive = _config.TunModeItem.EnableTunEffective && EnableTun;
         RoutingModeDisplay = tunActive ? "Весь трафик · TUN" : "Через системный прокси";
         TunAvailable = AllowEnableTun();
         TunRequestedButUnavailable = _tunRequested && !TunAvailable;

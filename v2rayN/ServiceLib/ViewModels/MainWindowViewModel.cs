@@ -798,8 +798,93 @@ public class MainWindowViewModel : MyReactiveObject
 
     #region core job
 
-    private bool _hasNextReloadJob = false;
+    // Pending follow-up job for whoever owns _reloadSemaphore. Ordered by STRENGTH: a full reload
+    // subsumes a seamless switch, never the other way round. The old protocol was a single non-volatile
+    // bool, which destroyed the job's KIND at defer time — so every deferred SwitchServer replayed as a
+    // Reload (CoreStopInternal → CoreRunningStateChanged(false) → a visible disconnect and, on Windows,
+    // a TUN adapter flap) instead of the make-before-break swap the feature exists to provide.
+    private const int JobNone = 0;
+    private const int JobSwitch = 1;
+    private const int JobReload = 2;
+
+    // int + Interlocked, not a plain bool: this is written from the UI scheduler (a user picking a
+    // server) and read from the TaskManager pool thread (the hourly subscription auto-update reload),
+    // so it needs both atomicity and the fences the Interlocked ops provide.
+    private int _pendingJob = JobNone;
     private readonly SemaphoreSlim _reloadSemaphore = new(1, 1);
+
+    /// <summary>
+    /// Publishes a follow-up job, keeping whichever of the pending/new job is stronger. Always executes
+    /// at least one <see cref="Interlocked.CompareExchange(ref int, int, int)"/>, so the publish is a
+    /// full fence — which the correctness argument in <see cref="PublishPendingJob"/> relies on.
+    /// </summary>
+    private void PublishJobKind(int job)
+    {
+        int seen, next;
+        do
+        {
+            seen = Volatile.Read(ref _pendingJob);
+            next = seen > job ? seen : job;
+        }
+        while (Interlocked.CompareExchange(ref _pendingJob, next, seen) != seen);
+    }
+
+    /// <summary>
+    /// Defers <paramref name="job"/> to the current gate owner AND closes the lost-wakeup window that
+    /// used to strand it. Returns true only when this call actually ran the job itself.
+    ///
+    /// The window it closes: a requester whose <c>WaitAsync(0)</c> failed could be preempted before its
+    /// write, the owner could then release and run its post-release check (seeing nothing), and the
+    /// write would land afterwards with nobody left to consume it — the user's server switch was simply
+    /// never performed, while the list already painted the new row active and the shield settled to
+    /// "connected" on its 12 s deadline.
+    ///
+    /// Why the re-probe below makes that impossible rather than merely rarer. After the publish (a full
+    /// fence) exactly two cases exist, and both consume the marker:
+    ///   * the probe FAILS -> some owner holds the gate right now. Its release happens after our probe,
+    ///     which happens after our publish, so its finally-block drain is guaranteed to observe the
+    ///     marker (or to lose the Interlocked.Exchange race to us, which is the same thing).
+    ///   * the probe SUCCEEDS -> no owner holds the gate, so no future drain is scheduled by anyone
+    ///     else; we drain it here. If we are racing an owner that has released but not yet drained,
+    ///     the single Interlocked.Exchange in DrainPendingJob decides which of us runs it — exactly
+    ///     one does, never zero and never both.
+    /// The recursion (drain -> Reload/SwitchServer -> possibly defer again) needs a fresh owner to
+    /// appear between our Release and the inner WaitAsync each time, and the marker survives every
+    /// round, so it terminates and cannot lose work.
+    /// </summary>
+    private async Task<bool> PublishPendingJob(int job)
+    {
+        PublishJobKind(job);
+
+        if (!await _reloadSemaphore.WaitAsync(0))
+        {
+            return false;
+        }
+
+        _reloadSemaphore.Release();
+        return await DrainPendingJob();
+    }
+
+    /// <summary>
+    /// Atomically claims the pending job and runs it in its ORIGINAL form. Exactly one caller can claim
+    /// a given marker, so a drain racing a publisher's re-probe never double-runs it.
+    /// </summary>
+    private async Task<bool> DrainPendingJob()
+    {
+        var job = Interlocked.Exchange(ref _pendingJob, JobNone);
+        switch (job)
+        {
+            case JobReload:
+                return await Reload();
+
+            case JobSwitch:
+                await SwitchServer();
+                return true;
+
+            default:
+                return false;
+        }
+    }
 
     /// <summary>
     /// Returns true when THIS call actually ran the core-load attempt to completion (whatever its
@@ -813,13 +898,13 @@ public class MainWindowViewModel : MyReactiveObject
         //If there are unfinished reload job, marked with next job.
         if (!await _reloadSemaphore.WaitAsync(0))
         {
-            _hasNextReloadJob = true;
-            return false;
+            return await PublishPendingJob(JobReload);
         }
 
         if (DesignMode)
         {
             _reloadSemaphore.Release();
+            await DrainPendingJob();
             return true;
         }
 
@@ -869,12 +954,8 @@ public class MainWindowViewModel : MyReactiveObject
         {
             SetReloadEnabled(true);
             _reloadSemaphore.Release();
-            //If there is a next reload job, execute it.
-            if (_hasNextReloadJob)
-            {
-                _hasNextReloadJob = false;
-                await Reload();
-            }
+            //If there is a next job, execute it IN ITS ORIGINAL FORM (switch stays a switch).
+            await DrainPendingJob();
         }
 
         return true;
@@ -893,14 +974,16 @@ public class MainWindowViewModel : MyReactiveObject
     {
         if (!await _reloadSemaphore.WaitAsync(0))
         {
-            // A reload/switch is already in flight; mark a follow-up so the newest target still lands.
-            _hasNextReloadJob = true;
+            // A reload/switch is already in flight; mark a follow-up so the newest target still lands —
+            // as a SWITCH, so the seamless path is not silently downgraded to a full stop/start.
+            await PublishPendingJob(JobSwitch);
             return;
         }
 
         if (DesignMode)
         {
             _reloadSemaphore.Release();
+            await DrainPendingJob();
             return;
         }
 
@@ -949,11 +1032,7 @@ public class MainWindowViewModel : MyReactiveObject
         {
             SetReloadEnabled(true);
             _reloadSemaphore.Release();
-            if (_hasNextReloadJob)
-            {
-                _hasNextReloadJob = false;
-                await Reload();
-            }
+            await DrainPendingJob();
         }
     }
 
