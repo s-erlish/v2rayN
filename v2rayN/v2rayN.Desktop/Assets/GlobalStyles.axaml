@@ -33,15 +33,22 @@
         <!--                                                                          -->
         <!--  ФОРМА URI: ПАПКА, а не отдельный .ttf. Golos Text приезжает тремя         -->
         <!--  статическими начертаниями (Regular 400 / Medium 500 / Bold 700).          -->
-        <!--  Ссылка на один файл дала бы коллекцию из ОДНОГО начертания, и             -->
+        <!--  Ссылка на ОДИН файл собрала бы коллекцию из ОДНОГО начертания, и          -->
         <!--  FontWeight="Bold" получил бы СИНТЕТИЧЕСКИЙ жир (fake-bold Skia),          -->
-        <!--  который 5.4 запрещает. Папочная форма собирает семейство целиком,          -->
-        <!--  и вес выбирает НАСТОЯЩЕЕ начертание.                                      -->
-        <!--  Golos Text Medium несёт собственное имя семейства в name-таблице,          -->
-        <!--  поэтому у веса 500 отдельный ключ Font.Ui.Medium.                          -->
+        <!--  который 5.4 запрещает по имени. Папочная форма собирает семейство         -->
+        <!--  целиком, и вес выбирает НАСТОЯЩЕЕ начертание.                             -->
+        <!--                                                                            -->
+        <!--  ОДИН ключ на гарнитуру, вес выбирается через FontWeight — второго          -->
+        <!--  ключа «под Medium» здесь СОЗНАТЕЛЬНО нет. Golos Text Medium несёт           -->
+        <!--  собственное имя семейства в legacy-записи name-таблицы, и какое из двух     -->
+        <!--  имён вернёт стек Skia/FreeType, зависит от версии — то есть отдельный        -->
+        <!--  ключ был бы ставкой на нерешённое. Одно семейство «Golos Text» такой         -->
+        <!--  ставки не делает: вес 700 всегда попадает в настоящий Bold, а вес 500        -->
+        <!--  либо попадает в настоящий Medium, либо честно опускается до Regular          -->
+        <!--  (ближайшее реальное начертание). Худший исход — 400 вместо 500;              -->
+        <!--  у ставки на второе имя худший исход — вся строка системным шрифтом.          -->
         <!-- ==================================================================== -->
         <FontFamily x:Key="Font.Ui">avares://departament/Assets/Fonts#Golos Text</FontFamily>
-        <FontFamily x:Key="Font.Ui.Medium">avares://departament/Assets/Fonts#Golos Text Medium, Golos Text</FontFamily>
         <FontFamily x:Key="Font.Brand">avares://departament/Assets/Fonts/SpaceGrotesk.ttf#Space Grotesk</FontFamily>
 
         <!-- ==================================================================== -->
@@ -357,7 +364,7 @@
           невыбранный сегмент. Отдельный ключ семейства: у Golos Text Medium
           собственное имя семейства, иначе вес 500 схлопнулся бы в 400.  -->
     <Style Selector="TextBlock.TitleMedium">
-        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui.Medium}" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
         <Setter Property="FontWeight" Value="Medium" />
         <Setter Property="FontSize" Value="16" />
         <Setter Property="LineHeight" Value="20" />
@@ -711,7 +718,7 @@
         <Setter Property="MinHeight" Value="{DynamicResource Size.Btn}" />
         <Setter Property="MinWidth" Value="{DynamicResource Size.BtnMinWidth}" />
         <Setter Property="Padding" Value="24,0" />
-        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui.Medium}" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
         <Setter Property="FontWeight" Value="Medium" />
         <Setter Property="FontSize" Value="16" />
         <Setter Property="HorizontalContentAlignment" Value="Center" />
@@ -769,7 +776,7 @@
         <Setter Property="MinHeight" Value="{DynamicResource Size.Btn}" />
         <Setter Property="MinWidth" Value="{DynamicResource Size.BtnMinWidth}" />
         <Setter Property="Padding" Value="24,0" />
-        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui.Medium}" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
         <Setter Property="FontWeight" Value="Medium" />
         <Setter Property="FontSize" Value="16" />
         <Setter Property="HorizontalContentAlignment" Value="Center" />
@@ -1294,14 +1301,12 @@
     <Style Selector="Button.LinkAction, Button.Tertiary, Button.TextAction">
         <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
         <Setter Property="RenderTransformOrigin" Value="50%,50%" />
-        <Setter Property="MinHeight" Value="{DynamicResource Size.Btn}" />
         <Setter Property="Padding" Value="12,0" />
         <Setter Property="CornerRadius" Value="{DynamicResource Radius.Button}" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
-        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui.Medium}" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
         <Setter Property="FontWeight" Value="Medium" />
-        <Setter Property="FontSize" Value="16" />
         <Setter Property="HorizontalContentAlignment" Value="Center" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="Cursor" Value="Hand" />
@@ -1310,6 +1315,23 @@
                 <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.16" Easing="{StaticResource Ease.OutQuint}" />
             </Transitions>
         </Setter>
+    </Style>
+    <!--  Каноническая третичная: 48 минимум, подпись 16/500 — те же метрики, что
+          у остальных четырёх вариантов, поэтому третичная рядом с первичной
+          стоит на одной базовой линии.  -->
+    <Style Selector="Button.Tertiary, Button.TextAction">
+        <Setter Property="MinHeight" Value="{DynamicResource Size.Btn}" />
+        <Setter Property="FontSize" Value="16" />
+    </Style>
+    <!--  Легаси LinkAction (17 живых разметок, часто ВНУТРИ строки) сохраняет свой
+          покоящийся размер 40/14: подъём до 48/16 вырастил бы каждую такую строку
+          с 56 до 72 и переразметил бы аккаунт и настройки за спиной у их владельцев.
+          Единственная правка здесь — Height → MinHeight: фиксированная высота
+          обрезала бы подпись при 200%, а минимум просто отпускает её расти.
+          Долг вывода: разметки переезжают на Button.Tertiary поэкранно.  -->
+    <Style Selector="Button.LinkAction">
+        <Setter Property="MinHeight" Value="40" />
+        <Setter Property="FontSize" Value="14" />
     </Style>
     <Style Selector="Button.LinkAction /template/ ContentPresenter#PART_ContentPresenter, Button.Tertiary /template/ ContentPresenter#PART_ContentPresenter, Button.TextAction /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="Transparent" />
@@ -1347,7 +1369,7 @@
         <Setter Property="CornerRadius" Value="{DynamicResource Radius.Button}" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.RedText}" />
-        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui.Medium}" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
         <Setter Property="FontWeight" Value="Medium" />
         <Setter Property="FontSize" Value="16" />
         <Setter Property="HorizontalContentAlignment" Value="Center" />
@@ -1742,7 +1764,7 @@
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineVariant}" />
         <Setter Property="BorderThickness" Value="1.5" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
-        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui.Medium}" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
         <Setter Property="FontWeight" Value="Medium" />
         <Setter Property="FontSize" Value="16" />
         <Setter Property="HorizontalContentAlignment" Value="Center" />
@@ -2269,7 +2291,7 @@
         </Setter>
     </Style>
     <Style Selector="Button.NavItem TextBlock">
-        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui.Medium}" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
         <Setter Property="FontSize" Value="11" />
         <Setter Property="LineHeight" Value="14" />
         <Setter Property="FontWeight" Value="Medium" />
