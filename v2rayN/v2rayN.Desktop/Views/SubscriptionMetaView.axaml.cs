@@ -110,6 +110,11 @@ public partial class SubscriptionMetaView : UserControl
         //  Reactive width: the traffic row switches one-line ↔ stacked so the pill and expiry
         //  never collide in compact (~372) yet stay on one line when there is room.
         _boundsSub = this.GetObservable(BoundsProperty).Subscribe(b => ApplyTrafficLayout(b.Width));
+        // Detach tears the GROUP hook down too (Unhook), and a re-attach with an UNCHANGED DataContext
+        // raises no DataContextChanged — so without this the container came back permanently deaf to
+        // HomeServerGroup.IsExpanded and its collapse chevron froze at whatever angle it had while the
+        // rows below kept expanding. Re-hook here, symmetrically with OnMetaDetached.
+        Rehook();
         ApplyMotionMode();
     }
 
@@ -242,6 +247,20 @@ public partial class SubscriptionMetaView : UserControl
         {
             _group.PropertyChanged -= OnGroupPropertyChanged;
         }
+    }
+
+    /// <summary>Idempotent re-subscribe for a container that came back into the visual tree with the
+    /// same group. -= before += so a double attach cannot double-register.</summary>
+    private void Rehook()
+    {
+        if (Design.IsDesignMode || _group is null)
+        {
+            return;
+        }
+
+        _group.PropertyChanged -= OnGroupPropertyChanged;
+        _group.PropertyChanged += OnGroupPropertyChanged;
+        SyncCollapsed();
     }
 
     private void Rebind()
@@ -582,11 +601,21 @@ public partial class SubscriptionMetaView : UserControl
     // Pin toggle: flip SubItem.Pinned and persist it (pinned subs sort first / become default tab).
     private async void OnPinClick(object? sender, RoutedEventArgs e)
     {
+        // Re-entrancy latch, mirroring _refreshing. Two fast clicks used to interleave as
+        // read/read -> flip/flip -> write/write: both reads observed the same Pinned value, both wrote
+        // the same result, so the second click was silently lost while the tint was applied twice.
+        if (_pinning)
+        {
+            return;
+        }
+
         var subId = _currentSubId;
         if (subId.IsNullOrEmpty())
         {
             return;
         }
+
+        _pinning = true;
         try
         {
             var sub = await AppManager.Instance.GetSubItem(subId);
@@ -601,10 +630,25 @@ public partial class SubscriptionMetaView : UserControl
             {
                 PinIcon.Foreground = sub.Pinned ? _accent : _muted;
             }
+
+            // GetSubItem returns a FRESH row from SQLite, a different object from the ones cached in
+            // ProfilesViewModel.SubItems — and HomeViewModel orders its groups from that cache. Without
+            // this refresh the pin tinted but the list never reordered until the next launch, so the
+            // icon asserted a state the list contradicted for the rest of the session. The delete
+            // handler below already refreshes for the same reason.
+            var profiles = Profiles;
+            if (profiles is not null)
+            {
+                await profiles.RefreshServers();
+            }
         }
         catch (Exception ex)
         {
             Logging.SaveLog("SubscriptionMetaView.Pin", ex);
+        }
+        finally
+        {
+            _pinning = false;
         }
     }
 

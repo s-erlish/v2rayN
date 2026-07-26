@@ -247,6 +247,18 @@ public partial class CoreConfigV2rayService(CoreConfigContext context)
                 return ret;
             }
 
+            // This PER-NODE generator has no Custom branch, unlike GenerateClientConfig (which routes to
+            // GenerateClientCustomConfig) and unlike the BATCH speedtest generator (whose
+            // CoreConfigHandler.InjectCustomSpeedtestNodes grafts each Custom node's real proxy outbound,
+            // inbound and routing rule). Departament subscription elements ARE Custom, so without this
+            // guard a per-node test built a bogus outbound from the sample template and reported success.
+            // Bail with a real message; the batch path is what these nodes must go through.
+            if (_node.ConfigType == EConfigType.Custom)
+            {
+                ret.Msg = ResUI.Incorrectconfiguration + $" - {EConfigType.Custom}";
+                return ret;
+            }
+
             var result = EmbedUtils.GetEmbedText(Global.V2raySampleClient);
             if (result.IsNullOrEmpty())
             {

@@ -1,9 +1,11 @@
-using System.Reactive.Concurrency;
+﻿using System.Reactive.Concurrency;
 
 namespace ServiceLib.ViewModels;
 
 public class MainWindowViewModel : MyReactiveObject
 {
+    private static readonly string _tag = "MainWindowViewModel";
+
     public Interaction<Unit, string?> ReadTextFromClipboardInteraction { get; } = new();
     public Interaction<Unit, byte[]?> ScanScreenInteraction { get; } = new();
     public Interaction<Unit, string?> BrowseImageFileInteraction { get; } = new();
@@ -254,7 +256,7 @@ public class MainWindowViewModel : MyReactiveObject
         AppEvents.AddServerViaClipboardRequested
             .AsObservable()
             .ObserveOn(RxSchedulers.MainThreadScheduler)
-            .Subscribe(async _ => await AddServerViaClipboardAsync(null));
+            .Subscribe(async _ => await SafeHandler(nameof(AddServerViaClipboardAsync), () => AddServerViaClipboardAsync(null)));
 
         AppEvents.HasUpdateNotified
             .AsObservable()
@@ -274,7 +276,7 @@ public class MainWindowViewModel : MyReactiveObject
         {
             reloadRequested
                 .ObserveOn(RxSchedulers.MainThreadScheduler)
-                .Subscribe(async _ => await Reload());
+                .Subscribe(async _ => await SafeHandler(nameof(Reload), () => Reload()));
         }
 
         // Seamless server switch: a live server change routes here instead of Reload() so the tunnel
@@ -282,35 +284,32 @@ public class MainWindowViewModel : MyReactiveObject
         ProfilesViewModel.SwitchRequested
             .AsObservable()
             .ObserveOn(RxSchedulers.MainThreadScheduler)
-            .Subscribe(async _ => await SwitchServer());
+            .Subscribe(async _ => await SafeHandler(nameof(SwitchServer), SwitchServer));
 
         StatusBarViewModel.AddServerViaScanRequested
             .AsObservable()
             .ObserveOn(RxSchedulers.MainThreadScheduler)
-            .Subscribe(async _ => await AddServerViaScanAsync());
+            .Subscribe(async _ => await SafeHandler(nameof(AddServerViaScanAsync), AddServerViaScanAsync));
 
         StatusBarViewModel.AddServerViaClipboardRequested
             .AsObservable()
             .ObserveOn(RxSchedulers.MainThreadScheduler)
-            .Subscribe(async _ => await AddServerViaClipboardAsync(null));
+            .Subscribe(async _ => await SafeHandler(nameof(AddServerViaClipboardAsync), () => AddServerViaClipboardAsync(null)));
 
         StatusBarViewModel.ShowHideWindowRequested
             .AsObservable()
             .ObserveOn(RxSchedulers.MainThreadScheduler)
-            .Subscribe(async blShow =>
-            {
-                await ShowHideWindowInteraction.Handle(blShow);
-            });
+            .Subscribe(async blShow => await SafeHandler(nameof(ShowHideWindowInteraction), async () => await ShowHideWindowInteraction.Handle(blShow)));
 
         StatusBarViewModel.SetDefaultServerRequested
             .AsObservable()
             .ObserveOn(RxSchedulers.MainThreadScheduler)
-            .Subscribe(async indexId => await ProfilesViewModel.SetDefaultServer(indexId));
+            .Subscribe(async indexId => await SafeHandler(nameof(ProfilesViewModel.SetDefaultServer), () => ProfilesViewModel.SetDefaultServer(indexId)));
 
         StatusBarViewModel.SubscriptionsUpdateRequested
             .AsObservable()
             .ObserveOn(RxSchedulers.MainThreadScheduler)
-            .Subscribe(async blProxy => await UpdateSubscriptionProcess("", blProxy));
+            .Subscribe(async blProxy => await SafeHandler(nameof(UpdateSubscriptionProcess), () => UpdateSubscriptionProcess("", blProxy)));
 
         _ = Init();
     }
@@ -324,25 +323,58 @@ public class MainWindowViewModel : MyReactiveObject
             return;
         }
 
-        //await ConfigHandler.InitBuiltinRouting(_config);
-        await ConfigHandler.InitBuiltinDNS(_config);
-        await ConfigHandler.InitBuiltinFullConfigTemplate(_config);
-        await ProfileExManager.Instance.Init();
-        await CoreManager.Instance.Init(_config, UpdateHandler);
-        await CertPemManager.Instance.Init(_config);
-        TaskManager.Instance.RegUpdateTask(_config, UpdateTaskHandler);
-
-        if (_config.GuiItem.EnableStatistics || _config.GuiItem.DisplayRealTimeSpeed)
+        // The whole body is guarded and SetReloadEnabled(true) lives in the finally. This task is
+        // discarded by its caller (`_ = Init();`), so a throw from any single initializer used to be
+        // unobserved AND skip the enable — leaving BlReloadEnabled false for the rest of the session,
+        // i.e. a permanently dead Connect affordance with nothing on screen to explain it.
+        try
         {
-            await StatisticsManager.Instance.Init(_config, UpdateStatisticsHandler);
-        }
-        await RefreshServersDispatcherAsync();
+            //await ConfigHandler.InitBuiltinRouting(_config);
+            await ConfigHandler.InitBuiltinDNS(_config);
+            await ConfigHandler.InitBuiltinFullConfigTemplate(_config);
+            await ProfileExManager.Instance.Init();
+            await CoreManager.Instance.Init(_config, UpdateHandler);
+            await CertPemManager.Instance.Init(_config);
+            TaskManager.Instance.RegUpdateTask(_config, UpdateTaskHandler);
 
-        // Consumer-VPN (Happ) model: the app starts DISCONNECTED. Do NOT auto-connect the core on
-        // startup. The core is started only on an explicit user action — tapping the Home shield
-        // (HomeViewModel.ConnectToggle → Reload) or picking a server (SetDefaultServer → Reload).
-        // The connect/disconnect paths (Reload / CoreManager.CoreStop) remain fully intact.
-        SetReloadEnabled(true);
+            if (_config.GuiItem.EnableStatistics || _config.GuiItem.DisplayRealTimeSpeed)
+            {
+                await StatisticsManager.Instance.Init(_config, UpdateStatisticsHandler);
+            }
+            await RefreshServersDispatcherAsync();
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog(_tag, ex);
+            NoticeManager.Instance.SendMessage(ex.Message);
+        }
+        finally
+        {
+            // Consumer-VPN (Happ) model: the app starts DISCONNECTED. Do NOT auto-connect the core on
+            // startup. The core is started only on an explicit user action — tapping the Home shield
+            // (HomeViewModel.ConnectToggle → Reload) or picking a server (SetDefaultServer → Reload).
+            // The connect/disconnect paths (Reload / CoreManager.CoreStop) remain fully intact.
+            SetReloadEnabled(true);
+        }
+    }
+
+    /// <summary>
+    /// Runs an <c>Rx Subscribe(async …)</c> handler body. Those lambdas bind as <c>Action&lt;T&gt;</c>,
+    /// so Rx discards the returned Task and the handler is effectively <c>async void</c>: a throw is
+    /// neither reported nor logged, and the tap that caused it simply does nothing at all. Everything
+    /// funnelled through here at least reaches the log and the message panel.
+    /// </summary>
+    private async Task SafeHandler(string what, Func<Task> body)
+    {
+        try
+        {
+            await body();
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog($"{_tag}.{what}", ex);
+            NoticeManager.Instance.SendMessage(ex.Message);
+        }
     }
 
     #endregion Init
@@ -425,14 +457,19 @@ public class MainWindowViewModel : MyReactiveObject
         // await Task.Delay(200);
     }
 
+    // StartAsync, NOT Start: the async lambda binds to Start<TResult>(Func<TResult>) with TResult =
+    // Task, so the awaited observable yields the INNER task and discards it — the await completed as
+    // soon as RefreshServers hit its first incomplete await, not when the list was actually refreshed.
+    // Every caller here reads the refreshed state immediately afterwards (Init enables Connect,
+    // UpdateTaskHandler decides whether to Reload, the clipboard/scan/subscription imports repaint).
     private async Task RefreshServersDispatcherAsync()
     {
-        await Observable.Start(async () => await RefreshServers(), RxSchedulers.MainThreadScheduler);
+        await Observable.StartAsync(RefreshServers, RxSchedulers.MainThreadScheduler);
     }
 
     private async Task RefreshSubscriptions()
     {
-        await Observable.Start(async () => await ProfilesViewModel.RefreshSubscriptions(), RxSchedulers.MainThreadScheduler);
+        await Observable.StartAsync(ProfilesViewModel.RefreshSubscriptions, RxSchedulers.MainThreadScheduler);
     }
 
     #endregion Servers && Groups

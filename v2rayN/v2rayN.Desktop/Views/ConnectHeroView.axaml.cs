@@ -687,8 +687,12 @@ public partial class ConnectHeroView : UserControl
     // ── Press диска: quart-in 90мс / quint-out 160мс (без цвета/заливки — только масштаб) ──
     private void OnDiscPointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        _pressing = true;
-        if (ReducedMotion)
+        // ТОЛЬКО левая кнопка. Диск — обычный Border с сырыми Pointer-событиями, а не Button, поэтому
+        // фильтра кнопок «бесплатно» тут нет: правый клик (за которым пользователь идёт в контекстное
+        // меню, которого у диска нет) или средний клик поднимали и рвали туннель. Все остальные
+        // pointer-контролы приложения этот фильтр уже делают (ServerListView, AccountView, MainWindow).
+        _pressing = e.GetCurrentPoint(ConnectDisc).Properties.IsLeftButtonPressed;
+        if (!_pressing || ReducedMotion)
         {
             return;
         }
@@ -708,7 +712,7 @@ public partial class ConnectHeroView : UserControl
     private void OnDiscPointerReleased(object? sender, PointerReleasedEventArgs e)
     {
         ReleaseDiscScale();
-        if (_pressing)
+        if (_pressing && e.InitialPressMouseButton == MouseButton.Left)
         {
             _pressing = false;
             ConnectToggleRequested?.Invoke(this, EventArgs.Empty);

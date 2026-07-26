@@ -59,6 +59,17 @@ public partial class CoreConfigV2rayService
 
     private void FillOutbound(Outbounds4Ray outbound)
     {
+        // Checked BEFORE the try, deliberately: an unresolvable ConfigType must FAIL the generation, not
+        // be logged and shrugged off. The switch below has no Custom case, so a Custom node used to
+        // throw KeyNotFoundException on the ProtocolTypes lookup, get swallowed by the catch, and leave
+        // the caller shipping the untouched Sample template (vmess -> v2ray.cool:10086) as the run
+        // config's ONLY proxy outbound — with Success = true. Every measurement taken through that decoy
+        // fails, and the failure is attributed to the user's server instead of to the generator.
+        if (!Global.ProtocolTypes.ContainsKey(_node.ConfigType))
+        {
+            throw new InvalidOperationException($"No Xray outbound protocol mapping for {_node.ConfigType}");
+        }
+
         try
         {
             var protocolExtra = _node.GetProtocolExtra();

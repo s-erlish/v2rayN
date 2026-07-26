@@ -68,6 +68,13 @@ public class SettingsViewModel : MyReactiveObject
     [Reactive] public string ProxyUser { get; set; } = string.Empty;
     [Reactive] public string ProxyPass { get; set; } = string.Empty;
 
+    /// <summary>
+    /// True while the typed port was rejected (not 1..65534) and the field was snapped back. The error
+    /// STATE lives here so the settings screen can render it; the inline caption that renders it is a
+    /// markup change and is not part of this pass. Cleared by the next valid commit.
+    /// </summary>
+    [Reactive] public bool PortInvalid { get; set; }
+
     #endregion Local-proxy editable fields
 
     #region One-way display values (read from the real config)
@@ -370,19 +377,21 @@ public class SettingsViewModel : MyReactiveObject
     // реальный конфиг и по возврату освежают значения строк через RefreshDisplayValues (см. DnsText).
 
     /// <summary>Локальный прокси: commit the inline-edited port / SOCKS5 credentials to <c>Inbound[0]</c>.
-    /// Invalid port → revert the field to the persisted value (never write a broken port). Reloads live
-    /// only if the core is already running.</summary>
-    public async Task CommitLocalProxyAsync()
+    /// Invalid port → revert the field to the persisted value (never write a broken port) AND report it:
+    /// returns <c>false</c> and raises <see cref="PortInvalid"/>, so the caller keeps the panel open on
+    /// the offending field instead of collapsing it over a silent revert. Reloads live only if the core
+    /// is already running.</summary>
+    public async Task<bool> CommitLocalProxyAsync()
     {
         if (_designMode)
         {
-            return;
+            return true;
         }
 
         var inbound = _config.Inbound.FirstOrDefault();
         if (inbound == null)
         {
-            return;
+            return true;
         }
 
         var user = ProxyUser?.Trim() ?? string.Empty;
@@ -391,21 +400,32 @@ public class SettingsViewModel : MyReactiveObject
         var portOk = int.TryParse(LocalPortText?.Trim(), out var port) && port > 0 && port < Global.MaxPort;
         if (!portOk)
         {
-            // Reject silently and restore the real value so the UI never shows an un-persisted port.
+            // Restore the real value so the UI never shows an un-persisted port — but do NOT reject in
+            // silence. The engine VM this screen replaced enqueued a real message for exactly this input
+            // (OptionSettingViewModel → ResUI.FillLocalListeningPort); dropping it was a regression, and
+            // on the collapse path the corrective snap-back is not even on screen when it happens.
             LocalPortText = inbound.LocalPort.ToString();
             port = inbound.LocalPort;
         }
+        PortInvalid = !portOk;
+
+        // Normalise what the user is looking at, whether or not anything changed: " 10808 " and "010808"
+        // both parse to the persisted port, and the early return below used to leave the raw string in
+        // the box while the config held the clean value. Same for the trimmed user name.
+        LocalPortText = port.ToString();
+        ProxyUser = user;
 
         var changed = inbound.LocalPort != port || (inbound.User ?? string.Empty) != user || (inbound.Pass ?? string.Empty) != pass;
         if (!changed)
         {
-            return;
+            return portOk;
         }
 
         inbound.LocalPort = port;
         inbound.User = user;
         inbound.Pass = pass;
         await PersistAndMaybeReload();
+        return portOk;
     }
 
     /// <summary>Число соединений Mux row: cycle through the real option set; persists + reloads live.</summary>

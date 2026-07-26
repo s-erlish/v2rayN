@@ -171,7 +171,15 @@ public partial class LoginView : UserControl
         Loaded += OnFirstLoaded;
 
         DataContextChanged += (_, _) => Rebind();
-        AttachedToVisualTree += (_, _) => Rebind();
+        AttachedToVisualTree += (_, _) =>
+        {
+            // _detached — состояние, а не надгробие. Оно существует, чтобы отложенный finally → TryHandoff
+            // (после ~0,4 с success-бита) не выстрелил на СНЯТОЙ вью; на вернувшейся в дерево вью запрет
+            // держаться не должен — иначе она переигрывает success-бит и уже никогда не поднимает
+            // BackRequested, и пользователь остаётся на лишней странице входа с галочкой «успех».
+            _detached = false;
+            Rebind();
+        };
         DetachedFromVisualTree += (_, _) =>
         {
             _detached = true;

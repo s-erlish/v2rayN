@@ -214,21 +214,50 @@ public partial class SettingsView : UserControl
         _ = anim.RunAsync(target);
     }
 
+    // Re-entrancy latch: строка — обычный Tapped без гарда, а RevealPanel не отменяем. Двойной тап
+    // запускал открытие и закрытие ОДНОВРЕМЕННО на одном Opacity/TranslateY, и хвост открытия
+    // (Opacity=1, RenderTransform=null) мог приземлиться ПОСЛЕ того, как закрытие уже спрятало панель —
+    // шеврон и IsVisible расходились. Пока переход идёт, повторный тап игнорируется.
+    private bool _proxyPanelBusy;
+
     private async void ToggleLocalProxy()
     {
-        var open = !LocalProxyPanel.IsVisible;
-        SetProxyChevron(open);
-        if (open)
+        if (_proxyPanelBusy)
         {
-            LocalProxyPanel.IsVisible = true;
-            await RevealPanel(LocalProxyPanel, show: true);
+            return;
         }
-        else
+        _proxyPanelBusy = true;
+        try
         {
+            var open = !LocalProxyPanel.IsVisible;
+            if (open)
+            {
+                SetProxyChevron(true);
+                LocalProxyPanel.IsVisible = true;
+                await RevealPanel(LocalProxyPanel, show: true);
+                return;
+            }
+
+            // Сворачивание = коммит введённых значений (порт/логин/пароль → Inbound[0]). Коммитим ДО
+            // скрытия: раньше панель гасла первой, поэтому единственная существующая обратная связь —
+            // откат поля к сохранённому порту — происходила за кадром, и «ввёл порт, свернул, ничего не
+            // произошло» было неотличимо от «приложение меня не увидело». Неверный порт теперь ОСТАВЛЯЕТ
+            // панель раскрытой и возвращает фокус в поле.
+            var ok = Vm is null || await Vm.CommitLocalProxyAsync();
+            if (!ok)
+            {
+                ProxyPortBox.Focus();
+                ProxyPortBox.SelectAll();
+                return;
+            }
+
+            SetProxyChevron(false);
             await RevealPanel(LocalProxyPanel, show: false);
             LocalProxyPanel.IsVisible = false;
-            // Сворачивание = коммит введённых значений (порт/логин/пароль → Inbound[0]).
-            _ = Vm?.CommitLocalProxyAsync();
+        }
+        finally
+        {
+            _proxyPanelBusy = false;
         }
     }
 

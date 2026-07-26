@@ -420,9 +420,20 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         // свопаются при смене ширины; устаревший IsHitTestVisible=true на скрытом инстансе Home перехватывал
         // клики поверх видимого → «мёртвый» выбор сервера/подключение в широкой раскладке. Теперь ровно одна
         // вкладка (target) хит-тестируется, остальные — прозрачны для указателя.
+        // Заодно ЧИНИМ strand от прерванного свопа. Avalonia на отмене анимации НЕ откатывает свойство к
+        // базовому: AnimationInstance.Unsubscribed() -> ApplyFinalFill() пишет ПОСЛЕДНЕЕ интерполированное
+        // значение как LocalValue (FillMode.Forward). Отменённый выход оставлял вкладку прибитой на 0,05..0,82
+        // непрозрачности навсегда — ранний return в AnimateContentSwap пропускает единственное место, где
+        // previous.Opacity обнулялся, а оба места очистки трогают только ТЕКУЩУЮ previous. Нормализуем здесь
+        // каждую невовлечённую поверхность: previous исключена — она сейчас гаснет со своей текущей opacity.
         foreach (var v in new Control[] { _homeView, _compactHome, _settingsView, _accountView })
         {
             v.IsHitTestVisible = ReferenceEquals(v, target);
+            if (!ReferenceEquals(v, target) && !ReferenceEquals(v, previous))
+            {
+                v.Opacity = 0d;
+                v.RenderTransform = null;
+            }
         }
         target.IsHitTestVisible = true;   // покрывает и PREVIEW_VIEW (target вне keep-alive-набора)
 
@@ -1215,6 +1226,16 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     // BackRequested поднимается и по кнопке «назад», и по успешному входу (закрывает суб-страницу).
     public void OpenLogin()
     {
+        // Идемпотентность — тот же гард, что уже стоит в HandleAuthCallback. Вторая активация CTA входа
+        // (клавиатурой: кнопка онбординга остаётся сфокусированной и включённой под непрозрачным хостом,
+        // а Enter/пробел идут в фокус, а не по хит-тесту) клала ВТОРОЙ LoginView на стек и отцепляла
+        // первый; после успешного входа первый возвращался и залипал с галочкой «успех», потому что
+        // хэндофф на нём уже запрещён. VM общая, так что повторный вызов и так попадает в живую вью.
+        if (_subStack.LastOrDefault() is LoginView)
+        {
+            return;
+        }
+
         var view = new LoginView { DataContext = _accountVm };
         view.BackRequested += (_, _) =>
         {

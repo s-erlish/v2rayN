@@ -183,15 +183,38 @@ public class HomeViewModel : MyReactiveObject, IDisposable
     /// <summary>Shield tap: connect if idle, disconnect if running.</summary>
     public void ConnectToggle()
     {
+        // A tap during a transition is NOT a new command. Without this the disc was the opposite of a
+        // toggle in exactly the two states where the user taps hardest:
+        //  • during «Подключение…» every impatient tap re-armed the 12 s deadline and queued another
+        //    Reload, so the attempt could be pushed out indefinitely;
+        //  • during a disconnect the hero still says «Подключено» for the whole teardown (IsConnected
+        //    only flips in SyncState at the end), so a second tap ran a SECOND CoreStop +
+        //    UpdateSysProxy against a core already being torn down.
+        if (IsConnecting || _disconnecting)
+        {
+            return;
+        }
+
         if (IsConnected)
         {
             _ = Disconnect();
         }
         else
         {
+            // Nothing to connect to: the shield is already painted as unavailable (0.38 outline,
+            // «Выберите сервер»), and firing anyway produced 12 s of fake «Подключение…» ending in a red
+            // «Не удалось подключиться» — a connection failure reported to someone with no server.
+            if (!HasServers)
+            {
+                return;
+            }
             _ = Connect();
         }
     }
+
+    /// <summary>Teardown in flight. Guards the disc (see <see cref="ConnectToggle"/>) — the hero cannot
+    /// paint a busy state for it, so the gate has to live here.</summary>
+    private bool _disconnecting;
 
     private async Task Connect()
     {
@@ -203,7 +226,22 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         // Reload builds the config and starts the core with the current default server. Its return
         // value tells us whether it actually RAN the attempt or merely deferred to a reload already in
         // flight (semaphore contended — e.g. a rapid second tap, or a background reload).
-        var executed = await _main.Reload();
+        bool executed;
+        try
+        {
+            executed = await _main.Reload();
+        }
+        catch (Exception ex)
+        {
+            // A throw out of the build/start path used to leave the shield spinning to its 12 s deadline
+            // with no explanation. Report it as the failure it is, now.
+            Logging.SaveLog("HomeConnect", ex);
+            IsConnecting = false;
+            _connectingUntil = null;
+            ConnectFailed = true;
+            SyncState();
+            return;
+        }
 
         // Truthful failure, but ONLY when Reload actually executed: it has then fully awaited the core
         // start, so a not-running core means the attempt failed (wrong exe / bad config / blocked) —
@@ -231,15 +269,31 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         // A deliberate user disconnect ends any mid-switch hold and is not a failure.
         _awaitingCoreCycle = false;
         ConnectFailed = false;
-        // byUser:true records sticky user-stop intent and aborts any in-flight auto-restart so the
-        // tunnel the user just tore down can never be silently re-established (C1).
-        await CoreManager.Instance.CoreStop(byUser: true);
-        // Clear the Windows system proxy so the user keeps internet after disconnecting. Without
-        // this the OS keeps routing through the now-dead 127.0.0.1:port and every browser breaks
-        // until reconnect/reboot. forceDisable=true mirrors AppManager.AppExitAsync.
-        await SysProxyHandler.UpdateSysProxy(_config, true);
-        _connectedSince = null;
-        SyncState();
+        _disconnecting = true;
+        try
+        {
+            // byUser:true records sticky user-stop intent and aborts any in-flight auto-restart so the
+            // tunnel the user just tore down can never be silently re-established (C1).
+            await CoreManager.Instance.CoreStop(byUser: true);
+            // Clear the Windows system proxy so the user keeps internet after disconnecting. Without
+            // this the OS keeps routing through the now-dead 127.0.0.1:port and every browser breaks
+            // until reconnect/reboot. forceDisable=true mirrors AppManager.AppExitAsync.
+            await SysProxyHandler.UpdateSysProxy(_config, true);
+        }
+        catch (Exception ex)
+        {
+            // UpdateSysProxy can throw (registry write, netsh, insufficient rights). Without this catch
+            // the throw skipped SyncState(), so IsConnected stayed true over an already-stopped core —
+            // a shield reading «Подключено» on a dead tunnel — and UpdateStateTick stops the timer in
+            // exactly that state, so nothing ever self-healed it.
+            Logging.SaveLog("HomeDisconnect", ex);
+        }
+        finally
+        {
+            _connectedSince = null;
+            _disconnecting = false;
+            SyncState();
+        }
     }
 
     /// <summary>Server-row click: make it the default server, then connect per the W1d contract.</summary>
