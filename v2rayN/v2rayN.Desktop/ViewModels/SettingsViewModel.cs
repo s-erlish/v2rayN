@@ -161,7 +161,15 @@ public class SettingsViewModel : MyReactiveObject
         EnableIpv6 = _config.TunModeItem.EnableIPv6Address;
         MuxEnabled = _config.Mux4SboxItem.Protocol.IsNotEmpty();
         FragmentEnabled = _config.CoreBasicItem.EnableFragment;
-        AutoStart = _config.GuiItem.AutoRun;
+        // Показываем ФАКТ, а не намерение. На Windows автозапуск живёт в реестре, и он мог разойтись
+        // с сохранённым флагом (другая реализация, задача планировщика вместо Run-значения, отключение
+        // в «Диспетчере задач», восстановление конфига из бэкапа). Раньше переключатель читал только
+        // конфиг и уверенно показывал «включено» у приложения, которое не стартовало, — и починить это
+        // из интерфейса было нельзя, потому что обработчик выходит сразу, если значение не изменилось.
+        // Reconcile приводит реестр к намерению и возвращает то, что получилось на самом деле.
+        AutoStart = _designMode
+            ? _config.GuiItem.AutoRun
+            : v2rayN.Desktop.Common.AutostartHelper.Reconcile(_config.GuiItem.AutoRun);
         LiteMode = _config.UiItem.LiteMode;
         BlackTheme = _config.UiItem.BlackTheme;
 
@@ -247,12 +255,19 @@ public class SettingsViewModel : MyReactiveObject
 
     private async Task OnAutoStartChanged(bool v)
     {
-        if (_designMode || _config.GuiItem.AutoRun == v)
+        if (_designMode)
         {
             return;
         }
+        // Намеренно НЕ выходим, когда сохранённый флаг уже равен v: расходится с реальностью именно
+        // реестр, и ранний выход означал бы, что пользователь видит «включено», автозапуска нет, а
+        // переключатель бессилен. Запись в реестр идемпотентна, повторить её ничего не стоит.
+        var changed = _config.GuiItem.AutoRun != v;
         _config.GuiItem.AutoRun = v;
-        await ConfigHandler.SaveConfig(_config);
+        if (changed)
+        {
+            await ConfigHandler.SaveConfig(_config);
+        }
         // Windows: write/remove the human-readable HKCU\...\Run value «departament» → exe.
         // Non-Windows: AutostartHelper is a no-op, so the shared handler owns autostart there.
         if (Utils.IsWindows())
