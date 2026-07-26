@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - claude/dp-desktop-incy
+      - claude/app-audit-agents-hyyftk
 
 permissions:
   contents: read
