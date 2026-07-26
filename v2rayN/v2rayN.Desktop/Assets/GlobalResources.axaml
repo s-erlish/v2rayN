@@ -35,20 +35,24 @@
     <!--  Значения 1:1 из Android res/values(-night) + §3.3 (light column).       -->
     <!-- ==================================================================== -->
 
-    <!--  Акцент — ОДИН синий на все темы (#4C8DFF). Connected-щит всегда синий.  -->
+    <!--  ЛАЙЕР 1 — ПРИМИТИВЫ. Цвет без роли; из View не адресуется никогда. Роль ему даёт
+          лайер 2 внутри ThemeDictionaries. blue_60 #4C8DFF = бренд-синий (акцент тёмной),
+          blue_50 #1E5FC7 = акцент светлой (10-design-system §1.1.3).  -->
     <Color x:Key="Color.Accent">#4C8DFF</Color>
     <Color x:Key="Color.OnAccent">#00183A</Color>
-    <SolidColorBrush x:Key="Brush.Accent" Color="{StaticResource Color.Accent}" />
-    <SolidColorBrush x:Key="Brush.OnAccent" Color="{StaticResource Color.OnAccent}" />
 
-    <!--  Плитки иконок: полупрозрачный акцент (общий для light/dark, как Android icon_tile_*).  -->
-    <SolidColorBrush x:Key="Brush.Tile.Blue" Color="#4C8DFF" Opacity="0.20" />
-    <SolidColorBrush x:Key="Brush.Tile.Green" Color="#22C55E" Opacity="0.20" />
-
-    <!--  Акцент темы Semi = наш синий (если Semi берёт по DynamicResource).  -->
-    <SolidColorBrush x:Key="SemiColorPrimary" Color="{StaticResource Color.Accent}" />
-    <SolidColorBrush x:Key="SemiColorPrimaryHover" Color="#5F9AFF" />
-    <SolidColorBrush x:Key="SemiColorPrimaryActive" Color="#3D7EF0" />
+    <!-- ==================================================================== -->
+    <!--  R11 (22-components §1, 00-rules §3.5). Brush.Accent, Brush.OnAccent,   -->
+    <!--  ВСЕ Brush.Tile.*, Brush.SelectedFill и ВСЕ Brush.StatusChip.* раньше    -->
+    <!--  лежали ЗДЕСЬ, вне ThemeDictionaries, — то есть светлая тема держала      -->
+    <!--  тёмный #4C8DFF. На светлом фоне #F4F7FC это 2.98:1: ниже даже UI-порога  -->
+    <!--  3:1, и этим значением рисовалось КАЖДОЕ кольцо фокуса, каждая выбранная  -->
+    <!--  сегмент-метка и 17 текстовых CTA. Специфика называет это единственным    -->
+    <!--  P1-дефектом доступности во всей системе токенов. Ключи ПЕРЕЕХАЛИ внутрь  -->
+    <!--  Dark/Light (ниже) БЕЗ переименования: ни один DynamicResource-потребитель -->
+    <!--  править не нужно. Светлый акцент = #1E5FC7 (5.56:1 на фоне, 5.97:1 на    -->
+    <!--  карточке), on-accent на светлой = #FFFFFF (5.97:1).                       -->
+    <!-- ==================================================================== -->
 
     <!-- ==================================================================== -->
     <!--  ТЕМА-ЗАВИСИМЫЕ ТОКЕНЫ. Каждый Brush.* резолвится по активному          -->
@@ -60,6 +64,15 @@
 
         <!--  ТЁМНАЯ (Incy, res/values-night)  -->
         <ResourceDictionary x:Key="Dark">
+            <!--  Акцент (R11). Тёмная = бренд-синий #4C8DFF: 6.15:1 на фоне, 5.66:1 на карточке.
+                  On-accent #00183A на акценте = 5.51:1 (метка Primary-кнопки).  -->
+            <SolidColorBrush x:Key="Brush.Accent" Color="#4C8DFF" />
+            <SolidColorBrush x:Key="Brush.OnAccent" Color="#00183A" />
+            <!--  Шаги взаимодействия акцента (только PC: у Android press = ripple + масштаб,
+                  а не подмена фона; 10-design-system §5.5). Всегда на шаг ТЕМНЕЕ акцента,
+                  никогда светлее и никогда со сменой тона: blue_56 → blue_54.  -->
+            <SolidColorBrush x:Key="Brush.AccentHover" Color="#3D7EF0" />
+            <SolidColorBrush x:Key="Brush.AccentPressed" Color="#3877E0" />
             <SolidColorBrush x:Key="Brush.Bg" Color="#0A0B0D" />
             <SolidColorBrush x:Key="Brush.Surface" Color="#141619" />
             <SolidColorBrush x:Key="Brush.SurfaceHigh" Color="#1A1D21" />
@@ -74,6 +87,13 @@
             <SolidColorBrush x:Key="Brush.OnSurfaceVariantHover" Color="#6E7480" />
             <SolidColorBrush x:Key="Brush.Outline" Color="#2A2E36" />
             <SolidColorBrush x:Key="Brush.OutlineVariant" Color="#20242B" />
+            <!--  D-9: ГРАНИЦА КОНТРОЛА (поле ввода, outlined-кнопка, трек сегментов).
+                  Brush.Outline #2A2E36 даёт 1.45:1 на фоне #0A0B0D и проваливает порог
+                  WCAG 1.4.11 (3:1 для границ компонентов), поэтому им контрол обводить
+                  НЕЛЬЗЯ. #646C7C = 3.73:1 на фоне, 3.43:1 на карточке. Brush.OutlineVariant
+                  сохраняет свою роль волосяной линии (разделители/рамка карточки): это
+                  структурный декор, 1.4.11 к нему не применяется.  -->
+            <SolidColorBrush x:Key="Brush.OutlineControl" Color="#646C7C" />
             <SolidColorBrush x:Key="Brush.AccentContainer" Color="#17325C" />
             <SolidColorBrush x:Key="Brush.OnAccentContainer" Color="#CFE0FF" />
             <SolidColorBrush x:Key="Brush.Green" Color="#22C55E" />
@@ -82,9 +102,48 @@
                   Brush.Red ради контраста ≥4.5:1: #FF6069 = 6.7:1 на Bg #0A0B0D, ~5.9:1 на Surface
                   #141619. Brush.Red остаётся для заливок/рамок/глифов, RedText — только для текста.  -->
             <SolidColorBrush x:Key="Brush.RedText" Color="#FF6069" />
+            <!--  Предупреждение (истекает / ждёт оплаты). Единственный янтарь в продукте:
+                  #EAB308 = 10.27:1 на фоне. Заливка/глиф и текст на тёмной совпадают —
+                  тёмная подложка чипа достаточно темна, второй тон не нужен (D-10).  -->
+            <SolidColorBrush x:Key="Brush.Amber" Color="#EAB308" />
+            <SolidColorBrush x:Key="Brush.AmberText" Color="#EAB308" />
+            <!--  Успех-ТЕКСТ на чипе (оплачено / активно). На тёмной = сам зелёный: 6.60:1
+                  на заливке чипа. Светлая колонка отличается — см. D-10 ниже.  -->
+            <SolidColorBrush x:Key="Brush.Ping.Good" Color="#22C55E" />
+            <!--  Плитки иконок (D-5): живая система — ровно ТРИ (accent / destructive /
+                  neutral). Blue = акцент, Red = деструктив, Neutral = всё остальное.
+                  Purple ≡ Blue по определению, поэтому тянется за акцентом.
+                  Green / Orange / Yellow РЕТИРОВАНЫ: новая работа их не берёт, ключи живут
+                  до миграции последней ссылки (список — в отчёте агента).  -->
+            <SolidColorBrush x:Key="Brush.Tile.Blue" Color="#4C8DFF" Opacity="0.20" />
+            <SolidColorBrush x:Key="Brush.Tile.Purple" Color="#4C8DFF" Opacity="0.20" />
+            <SolidColorBrush x:Key="Brush.Tile.Red" Color="#F04452" Opacity="0.20" />
+            <SolidColorBrush x:Key="Brush.Tile.Green" Color="#22C55E" Opacity="0.20" />
+            <SolidColorBrush x:Key="Brush.Tile.Orange" Color="#FB923C" Opacity="0.20" />
+            <SolidColorBrush x:Key="Brush.Tile.Yellow" Color="#EAB308" Opacity="0.20" />
             <SolidColorBrush x:Key="Brush.Tile.Neutral" Color="#20242B" />
-            <SolidColorBrush x:Key="Brush.Hover" Color="#000000" Opacity="0.32" />
+            <!--  Заливка ВЫБРАННОГО (строка сервера / тариф / опция цены): акцент @12%.
+                  OnSurface поверх неё на фоне (#121B2A) = 15.68:1.  -->
+            <SolidColorBrush x:Key="Brush.SelectedFill" Color="#4C8DFF" Opacity="0.12" />
+            <!--  Статус-чипы: заливка = свой тон @18%, текст на тёмной = тот же тон
+                  (зелёный 6.60:1, красный 5.65:1, янтарь 7.51:1 — все AA).
+                  Orange / Yellow ретированы R12 (четыре тона статуса стали тремя).  -->
+            <SolidColorBrush x:Key="Brush.StatusChip.Green" Color="#22C55E" Opacity="0.18" />
+            <SolidColorBrush x:Key="Brush.StatusChip.Red" Color="#F04452" Opacity="0.18" />
+            <SolidColorBrush x:Key="Brush.StatusChip.Orange" Color="#FB923C" Opacity="0.18" />
+            <SolidColorBrush x:Key="Brush.StatusChip.Yellow" Color="#EAB308" Opacity="0.18" />
+            <!--  D-8: ХОВЕР = БЕЛЫЙ @6%, а не чёрный @32%. Замер: 32% чёрного поверх
+                  почти-чёрной земли #0A0B0D даёт #070709 — дельта 1.16:1, то есть ховера
+                  фактически не было видно. 6% белого — заметный шаг, не зависящий от плана
+                  под контролом, и всё ещё «чуть изменилось», а не свечение.  -->
+            <SolidColorBrush x:Key="Brush.Hover" Color="#FFFFFF" Opacity="0.06" />
             <SolidColorBrush x:Key="Brush.Toast.Bg" Color="#20242B" />
+            <!--  Акцент темы Semi (её контролы тянут primary по DynamicResource). Тоже
+                  тема-зависимый: пока ключи лежали снаружи, светлая Semi-кнопка и фокус
+                  Semi-контрола рисовались тёмно-темовым синим. Тёмные значения — как были.  -->
+            <SolidColorBrush x:Key="SemiColorPrimary" Color="#4C8DFF" />
+            <SolidColorBrush x:Key="SemiColorPrimaryHover" Color="#5F9AFF" />
+            <SolidColorBrush x:Key="SemiColorPrimaryActive" Color="#3D7EF0" />
             <RadialGradientBrush x:Key="Brush.HomeGradient"
                                  Center="50%,30%"
                                  GradientOrigin="50%,30%"
@@ -98,6 +157,14 @@
 
         <!--  СВЕТЛАЯ (§3.3, res/values). Реальные светлые поверхности + тёмные чернила.  -->
         <ResourceDictionary x:Key="Light">
+            <!--  Акцент (R11) — ЗДЕСЬ и был весь дефект. Светлая = blue_50 #1E5FC7:
+                  5.56:1 на фоне #F4F7FC, 5.97:1 на карточке #FFFFFF. Бренд-синий #4C8DFF
+                  давал на этом фоне 2.98:1. On-accent на светлой = белый (5.97:1).  -->
+            <SolidColorBrush x:Key="Brush.Accent" Color="#1E5FC7" />
+            <SolidColorBrush x:Key="Brush.OnAccent" Color="#FFFFFF" />
+            <!--  Шаги взаимодействия акцента, светлая ветка (00-rules §3.5).  -->
+            <SolidColorBrush x:Key="Brush.AccentHover" Color="#1A54B4" />
+            <SolidColorBrush x:Key="Brush.AccentPressed" Color="#17499E" />
             <SolidColorBrush x:Key="Brush.Bg" Color="#F4F7FC" />
             <SolidColorBrush x:Key="Brush.Surface" Color="#FFFFFF" />
             <SolidColorBrush x:Key="Brush.SurfaceHigh" Color="#EAEFF7" />
@@ -110,6 +177,9 @@
             <SolidColorBrush x:Key="Brush.OnSurfaceVariantHover" Color="#3C475E" />
             <SolidColorBrush x:Key="Brush.Outline" Color="#C3CCDC" />
             <SolidColorBrush x:Key="Brush.OutlineVariant" Color="#DCE3EF" />
+            <!--  D-9, светлая ветка: #7D8BA3 = 3.45:1 на карточке, 3.21:1 на фоне —
+                  оба выше порога 3:1 для границ компонентов.  -->
+            <SolidColorBrush x:Key="Brush.OutlineControl" Color="#7D8BA3" />
             <SolidColorBrush x:Key="Brush.AccentContainer" Color="#D8E4FF" />
             <SolidColorBrush x:Key="Brush.OnAccentContainer" Color="#14468F" />
             <SolidColorBrush x:Key="Brush.Green" Color="#0B7D4A" />
@@ -118,9 +188,45 @@
                   Surface #FFFFFF (оба ≥4.5:1) — совпадает с Brush.Red (на светлой он уже тёмный,
                   отдельный текстовый оттенок не нужен). Ключ существует во ВСЕХ темах ради единого API.  -->
             <SolidColorBrush x:Key="Brush.RedText" Color="#C42B32" />
+            <!--  D-10 — светлая тема требует ОТДЕЛЬНЫХ затемнённых ТЕКСТОВЫХ тонов:
+                  на светлой статус-чип не красится своим же тоном, потому что тон поверх
+                  собственной заливки @18% даёт 4.05:1 зелёный / 4.22:1 красный / 4.82:1
+                  янтарь и проваливает AA. Заливка/глиф янтаря = #8A6300 (5.43:1 на
+                  карточке), ТЕКСТ янтаря = #6B5000 (6.72:1 на заливке #FBF1D3),
+                  ТЕКСТ успеха = #065132 (7.34:1 на заливке #D3E8DE). Красный текст
+                  совпадает с заливкой (#C42B32 на светлой уже тёмный, 5.62:1).  -->
+            <SolidColorBrush x:Key="Brush.Amber" Color="#8A6300" />
+            <SolidColorBrush x:Key="Brush.AmberText" Color="#6B5000" />
+            <SolidColorBrush x:Key="Brush.Ping.Good" Color="#065132" />
+            <!--  Плитки иконок, светлая ветка (D-5). Живые три тянутся за светлой
+                  семантикой: accent #1E5FC7, destructive #C42B32, neutral #E3EAF4.
+                  Purple ≡ Blue. Green / Orange / Yellow ретированы — держим ОДНО значение
+                  на обе темы (как Android icon_tile_*, у которого нет values-night),
+                  чтобы ретированный токен не менял вид перед удалением.  -->
+            <SolidColorBrush x:Key="Brush.Tile.Blue" Color="#1E5FC7" Opacity="0.20" />
+            <SolidColorBrush x:Key="Brush.Tile.Purple" Color="#1E5FC7" Opacity="0.20" />
+            <SolidColorBrush x:Key="Brush.Tile.Red" Color="#C42B32" Opacity="0.20" />
+            <SolidColorBrush x:Key="Brush.Tile.Green" Color="#22C55E" Opacity="0.20" />
+            <SolidColorBrush x:Key="Brush.Tile.Orange" Color="#FB923C" Opacity="0.20" />
+            <SolidColorBrush x:Key="Brush.Tile.Yellow" Color="#EAB308" Opacity="0.20" />
             <SolidColorBrush x:Key="Brush.Tile.Neutral" Color="#E3EAF4" />
+            <!--  Заливка выбранного, светлая: акцент @12%.  -->
+            <SolidColorBrush x:Key="Brush.SelectedFill" Color="#1E5FC7" Opacity="0.12" />
+            <!--  Статус-чипы, светлая: заливки дают ровно те значения, на которых считался
+                  контраст текста — #0B7D4A@18% над белым = #D3E8DE, #C42B32@18% = #F4D9DA,
+                  #EAB308@18% = #FBF1D3. Текст берётся из Brush.Ping.Good / Brush.RedText /
+                  Brush.AmberText выше, НЕ из тона заливки.  -->
+            <SolidColorBrush x:Key="Brush.StatusChip.Green" Color="#0B7D4A" Opacity="0.18" />
+            <SolidColorBrush x:Key="Brush.StatusChip.Red" Color="#C42B32" Opacity="0.18" />
+            <SolidColorBrush x:Key="Brush.StatusChip.Orange" Color="#FB923C" Opacity="0.18" />
+            <SolidColorBrush x:Key="Brush.StatusChip.Yellow" Color="#EAB308" Opacity="0.18" />
+            <!--  D-8: на светлой ховер = ЧЁРНЫЙ @6% (симметрично белым 6% на тёмной).  -->
             <SolidColorBrush x:Key="Brush.Hover" Color="#000000" Opacity="0.06" />
             <SolidColorBrush x:Key="Brush.Toast.Bg" Color="#E3EAF4" />
+            <!--  Акцент темы Semi, светлая ветка = наши три шага акцента.  -->
+            <SolidColorBrush x:Key="SemiColorPrimary" Color="#1E5FC7" />
+            <SolidColorBrush x:Key="SemiColorPrimaryHover" Color="#1A54B4" />
+            <SolidColorBrush x:Key="SemiColorPrimaryActive" Color="#17499E" />
             <RadialGradientBrush x:Key="Brush.HomeGradient"
                                  Center="50%,30%"
                                  GradientOrigin="50%,30%"
@@ -146,9 +252,25 @@
     <Thickness x:Key="Pad.Card">16</Thickness>
     <Thickness x:Key="Gutter">16,0</Thickness>
 
-    <!--  Радиусы  -->
+    <!--  Радиусы. Шкала формы = ЧЕТЫРЕ живых радиуса и одна губа:
+          12 фитинги (чип/бейдж/плитка/флаг/аватар-квадрат/бегунок сегментов) ·
+          16 контролы, которые нажимают или в которые печатают (все варианты кнопок,
+             поле ввода, поиск, опция цены, трек сегментов) ·
+          20 объекты (карточка, диалог, тело флайаута/шита, тост) ·
+          24 сверху — губа нижнего шита ·
+          полный круг — ТОЛЬКО круги и треки (иконочная кнопка, аватар, точка пагинации,
+             ручка шита, connect-диск, трек прогресса/тумблера).
+          Учебная строка: пилюля — для кругов и треков, никогда для широкой капсулы
+          с меткой внутри.  -->
     <CornerRadius x:Key="Radius.Chip">12</CornerRadius>
     <CornerRadius x:Key="Radius.Tile">12</CornerRadius>
+    <!--  D-6: КНОПКА — скруглённый ПРЯМОУГОЛЬНИК 16, не капсула (владелец отклонил
+          капсульные CTA, GlobalStyles.axaml:3-14). 16 достраивает шкалу chip 12 /
+          button 16 / card 20 / sheet 24 и держит концентричность: карточка 20 с
+          паддингом 16 внутри себя несёт кнопку 16. D-7 отдаёт этот же радиус полю
+          ввода, поиску, опции цены и треку сегментов. Токен ЖИЛ в GlobalStyles
+          (Styles.Resources) — место кнопочного радиуса не в файле стилей, а здесь.  -->
+    <CornerRadius x:Key="Radius.Button">16</CornerRadius>
     <CornerRadius x:Key="Radius.Card">20</CornerRadius>
     <CornerRadius x:Key="Radius.Sheet">24,24,0,0</CornerRadius>
     <CornerRadius x:Key="Radius.Pill">100</CornerRadius>
@@ -161,6 +283,19 @@
     <x:Double x:Key="Dot">6</x:Double>
     <x:Double x:Key="Dot.Active">8</x:Double>
     <x:Double x:Key="Dot.Gap">8</x:Double>
+
+    <!--  Кнопки и поля (R2 / R10). ДВЕ высоты кнопки и ни одной больше: 48 — всё, что
+          в потоке; 52 — ОДИН полноширинный primary-CTA экрана (модификатор .Tall).
+          Ставить ТОЛЬКО как MinHeight, никогда как Height: фиксированная высота режет
+          двухстрочную метку на 200% DPI, а это P1 по §14.5. Size.BtnMinWidth 96 — чтобы
+          двухсловная метка не рисовала обрубок. Size.Field 56 намеренно равен Size.Row:
+          форма и список делят один ритм. Size.Meter 6 — полоса детерминированного
+          прогресса/трафика (концы скругляет Radius.Pill, клампясь до половины высоты).  -->
+    <x:Double x:Key="Size.Btn">48</x:Double>
+    <x:Double x:Key="Size.BtnTall">52</x:Double>
+    <x:Double x:Key="Size.BtnMinWidth">96</x:Double>
+    <x:Double x:Key="Size.Field">56</x:Double>
+    <x:Double x:Key="Size.Meter">6</x:Double>
 
     <!--  Шрифт: Space Grotesk (переменный)  -->
     <FontFamily x:Key="Font.Grotesk">avares://departament/Assets/Fonts/SpaceGrotesk.ttf#Space Grotesk</FontFamily>
@@ -220,13 +355,11 @@
     <!--  Brush.OnAccentContainer (текст на контейнере акцента: чип протокола, тариф-бейдж,
           аватар) теперь тема-зависимый — определён в ThemeDictionaries выше.  -->
 
-    <!--  Цветные плитки иконок (настройки/аккаунт): фон 20% + сплошной глиф.
-          blue/green/purple/red/yellow/neutral. purple≡blue, глиф blue/green/purple/red/neutral
-          уже покрыты Accent/Green/Red/OnSurfaceVariant.  -->
-    <SolidColorBrush x:Key="Brush.Tile.Orange" Color="#FB923C" Opacity="0.20" />
-    <SolidColorBrush x:Key="Brush.Tile.Purple" Color="#4C8DFF" Opacity="0.20" />
-    <SolidColorBrush x:Key="Brush.Tile.Red" Color="#F04452" Opacity="0.20" />
-    <SolidColorBrush x:Key="Brush.Tile.Yellow" Color="#EAB308" Opacity="0.20" />
+    <!--  Цветные плитки иконок ПЕРЕЕХАЛИ в ThemeDictionaries (R11): весь Brush.Tile.*
+          определён там, в обеих темах, одним списком ключей. Здесь остаются только
+          сплошные ГЛИФ-цвета оранжевой/жёлтой плитки — они не Brush.Tile.* и тона на
+          светлой не меняют. Оба РЕТИРОВАНЫ D-5 (система плиток = accent/destructive/
+          neutral): новая работа их не берёт, ключи живут до миграции последней ссылки.  -->
     <SolidColorBrush x:Key="Brush.Icon.Orange" Color="#FB923C" />
     <SolidColorBrush x:Key="Brush.Icon.Yellow" Color="#EAB308" />
 
@@ -237,25 +370,24 @@
     <!--  History / Buy / Login / Devices). Промоушен по REVIEW_BACKLOG P1 18.   -->
     <!-- ==================================================================== -->
 
-    <!--  Заливка выбранного (bg selected: server row / тариф / опция цены):
-          синий акцент @ 12% (#1F = 31/255). Единый токен вместо литерала         -->
-    <SolidColorBrush x:Key="Brush.SelectedFill" Color="#4C8DFF" Opacity="0.12" />
+    <!--  Brush.SelectedFill (заливка выбранного, акцент @12%) ПЕРЕЕХАЛ в
+          ThemeDictionaries (R11): на светлой он теперь #1E5FC7 @12%, а не тёмный синий.  -->
 
-    <!--  ЕДИНЫЙ ХОВЕР (rows / icon-buttons / nav): лёгкое ЗАТЕМНЕНИЕ полупрозрачным
-          чёрным (владелец: «лучше бы оно просто чуть темнело»). Тема-зависимый:
-          тёмная 32%, светлая 6% (чтобы не пережигать светлые поверхности) —
-          определён в ThemeDictionaries выше. Чёрная-оверлей заменяет на белый лифт. -->
+    <!--  ЕДИНЫЙ ХОВЕР (rows / icon-buttons / nav) — тема-зависимый, определён в
+          ThemeDictionaries выше. D-8 переопределил его: 6% БЕЛОГО на тёмной, 6% чёрного
+          на светлой. Прежние 32% чёрного на земле #0A0B0D давали #070709 (дельта 1.16:1),
+          то есть просьбу владельца «чтобы оно просто чуть темнело» старый токен исполнял
+          в ноль: темнеть на почти-чёрном нечему. Шаг того же размера, но в сторону света,
+          виден в обеих темах и не зависит от плана под контролом.  -->
 
     <!--  Деструктив: базовый Red (#F04452) + затемнённый hover/pressed.          -->
     <Color x:Key="Color.RedPressed">#D93844</Color>
     <SolidColorBrush x:Key="Brush.RedPressed" Color="{StaticResource Color.RedPressed}" />
 
-    <!--  Статус чипы истории платежей (PaymentsAdapter): текст = полный цвет,
-          фон = тот же цвет @ 18% (0x2E). Один источник на всё приложение.        -->
-    <SolidColorBrush x:Key="Brush.StatusChip.Green" Color="#22C55E" Opacity="0.18" />
-    <SolidColorBrush x:Key="Brush.StatusChip.Orange" Color="#FB923C" Opacity="0.18" />
-    <SolidColorBrush x:Key="Brush.StatusChip.Red" Color="#F04452" Opacity="0.18" />
-    <SolidColorBrush x:Key="Brush.StatusChip.Yellow" Color="#EAB308" Opacity="0.18" />
+    <!--  Статус-чипы ПЕРЕЕХАЛИ в ThemeDictionaries (R11). Заливка = тон @18% в обеих
+          темах, но ТЕКСТ на светлой берётся из отдельных затемнённых токенов
+          (Brush.Ping.Good / Brush.RedText / Brush.AmberText, D-10), а не из тона заливки:
+          тон поверх своей же заливки на светлой = 4.05 / 4.22 / 4.82:1 и проваливает AA.  -->
 
     <!--  Скрим модалок/шитов (~60% чёрный), общий для всех тем.                   -->
     <SolidColorBrush x:Key="Brush.Scrim" Color="#000000" Opacity="0.6" />
@@ -280,7 +412,14 @@
     <SolidColorBrush x:Key="Brush.Ring.Outer" Color="#334C8DFF" />
     <SolidColorBrush x:Key="Brush.Ring.Inner" Color="#804C8DFF" />
 
-    <!--  Дополнительные радиусы  -->
+    <!--  РЕТИРОВАННЫЕ радиусы (D-7 / 10-design-system §2.6). Оба вне шкалы формы:
+          14 и 8 не входят в 12 / 16 / 20 / 24-сверху / круг.
+            · Radius.Search 14 → Radius.Button 16 (поиск, поле ввода, опция цены);
+            · Radius.Traffic 8 → Radius.Pill (полоса метра сама клампит радиус до
+              половины своей высоты 6 и даёт настоящие круглые концы).
+          Ключи ОСТАЮТСЯ определёнными: их ещё держат Views и GlobalStyles, которыми
+          владеют другие агенты, а удалённый токен = мгновенно сломанная сборка.
+          Снимать — экран за экраном, в волне миграции; полный список ссылок в отчёте.  -->
     <CornerRadius x:Key="Radius.Search">14</CornerRadius>
     <CornerRadius x:Key="Radius.Traffic">8</CornerRadius>
 
@@ -292,10 +431,12 @@
     <x:Double x:Key="Size.ConnectArc">212</x:Double>
 
     <!--  Размерные токены §5.3 (promoted компоненты). Все сеточные, без дрейфа.
-          Radius опции/поля = Radius.Search (14); верх шита = Radius.Sheet
+          Radius опции/поля/поиска = Radius.Button (16) по D-7; верх шита = Radius.Sheet
           (24,24,0,0) — отдельные токены не заводим, переиспользуем.              -->
     <x:Double x:Key="Size.IconButton">40</x:Double>
     <x:Double x:Key="Size.SubToolbar">56</x:Double>
+    <!--  Size.CtaTall = прежний ключ высоты CTA. Его заменяет Size.BtnTall (52, то же
+          число), ключ живёт до миграции последней ссылки — см. отчёт агента.  -->
     <x:Double x:Key="Size.CtaTall">52</x:Double>
     <x:Double x:Key="Size.SegmentChip">44</x:Double>
     <x:Double x:Key="Size.EmptyIcon">64</x:Double>
