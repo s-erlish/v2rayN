@@ -48,6 +48,13 @@ public class HomeViewModel : MyReactiveObject, IDisposable
     private readonly IDisposable? _coreStateSub;
     private readonly IDisposable? _switchSettledSub;
     private readonly IDisposable? _statsSub;
+    private readonly IDisposable? _noticeSub;
+
+    // Last message the engine published while THIS connect attempt was in flight, and when it landed.
+    // Only a message from the current attempt may be shown as its reason (see ConnectFailReason).
+    private string? _lastNotice;
+    private DateTime _lastNoticeAt = DateTime.MinValue;
+    private DateTime? _attemptStartedAt;
     // Per-item live-sync: latency/speed results are reported by MUTATING the ProfileItems instances in
     // place (ProfilesViewModel.SetSpeedTestResult sets Delay/DelayVal/SpeedVal/IpInfo) — a per-ITEM
     // property change that raises NO CollectionChanged, so the CollectionChanged-driven reconcile never
@@ -87,6 +94,19 @@ public class HomeViewModel : MyReactiveObject, IDisposable
     /// disconnect or an invalid server pick.
     /// </summary>
     [Reactive] public bool ConnectFailed { get; set; }
+
+    /// <summary>
+    /// Why the last attempt failed, in the engine's own words, or null when there is nothing to add.
+    ///
+    /// The engine already explains every connect failure — a bad config, a core that would not start,
+    /// a routing rule pointing at a missing node — through <c>NoticeManager</c>. On this client those
+    /// messages reach no surface at all: the bottom toast was deliberately removed and its handler
+    /// re-routes into the inline message panel, which the Incy shell never places, so the whole channel
+    /// ends nowhere. That is why a failed connect said «Не удалось подключиться» and nothing else, and
+    /// why the owner's report is «не знаю в чем причина». Captured here per attempt and shown in the
+    /// hero's existing Error-state hint line, in place of the generic retry hint.
+    /// </summary>
+    [Reactive] public string? ConnectFailReason { get; set; }
 
     [Reactive] public bool HasServers { get; set; }
 
@@ -168,6 +188,22 @@ public class HomeViewModel : MyReactiveObject, IDisposable
             .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ => OnCoreSwitchSettled());
 
+        // The engine's notify channel — everything CoreManager reports with notify:true, which is
+        // exactly the set of connect outcomes (bad config, core would not start, no server selected,
+        // routing rule pointing at a missing node). Remembered so a failed attempt can say WHY.
+        _noticeSub = AppEvents.SendSnackMsgRequested
+            .AsObservable()
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .Subscribe(msg =>
+            {
+                if (msg.IsNullOrEmpty())
+                {
+                    return;
+                }
+                _lastNotice = msg;
+                _lastNoticeAt = DateTime.Now;
+            });
+
         // Reflect whatever the core is doing right now (it may already be running when this VM builds).
         SyncState();
         UpdateStateTick();
@@ -223,6 +259,23 @@ public class HomeViewModel : MyReactiveObject, IDisposable
             return;
         }
         BeginConnecting();
+        // A connect that carries nothing is not a connect. When this session will not tunnel (no
+        // elevation / no sudo, or the user picked proxy mode) the OS has to reach the app through its
+        // local proxy, and a fresh config ships the system proxy set to "force clear" — so the core
+        // came up, everything said «Подключено», and not a byte went through it, with nothing on
+        // screen to say why. See StatusBarViewModel.EnsureTrafficPathAsync.
+        if (StatusBar != null)
+        {
+            try
+            {
+                await StatusBar.EnsureTrafficPathAsync();
+            }
+            catch (Exception ex)
+            {
+                // Never let the routing-path guard block the connect itself.
+                Logging.SaveLog("HomeConnect", ex);
+            }
+        }
         // Reload builds the config and starts the core with the current default server. Its return
         // value tells us whether it actually RAN the attempt or merely deferred to a reload already in
         // flight (semaphore contended — e.g. a rapid second tap, or a background reload).
@@ -238,7 +291,7 @@ public class HomeViewModel : MyReactiveObject, IDisposable
             Logging.SaveLog("HomeConnect", ex);
             IsConnecting = false;
             _connectingUntil = null;
-            ConnectFailed = true;
+            FailConnect();
             SyncState();
             return;
         }
@@ -256,8 +309,9 @@ public class HomeViewModel : MyReactiveObject, IDisposable
             _connectingUntil = null;
             // A4: surface a distinct FAILURE state instead of collapsing silently to Idle. Sticky
             // until the next attempt / a successful connect; drives the hero's Error shield — which is
-            // the ONLY surface for connect state now (no bottom snack: the owner doesn't want it).
-            ConnectFailed = true;
+            // the ONLY surface for connect state now (no bottom snack: the owner doesn't want it), so
+            // it also has to carry the reason the engine reported.
+            FailConnect();
         }
         SyncState();
     }
@@ -322,6 +376,20 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         var willConnect = changed || !wasConnected;
         if (willConnect)
         {
+            // Same guarantee the shield tap makes: a pick that starts the core must leave the OS with
+            // a route into it. SetDefaultServer's own Reload connects without passing through
+            // Connect(), so the check has to happen here too.
+            if (StatusBar != null)
+            {
+                try
+                {
+                    await StatusBar.EnsureTrafficPathAsync();
+                }
+                catch (Exception ex)
+                {
+                    Logging.SaveLog("HomeSelectServer", ex);
+                }
+            }
             BeginConnecting();
             if (wasConnected)
             {
@@ -363,11 +431,30 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         IsConnecting = true;
         // A new attempt clears the previous failure (A4): the hero leaves Error for Connecting.
         ConnectFailed = false;
+        ConnectFailReason = null;
+        _attemptStartedAt = DateTime.Now;
         // Safety deadline so a failed connect can't leave the shield spinning forever.
         _connectingUntil = DateTime.Now.AddSeconds(12);
         // Run the transient tick while pending so the deadline is actually evaluated even when the
         // connect came from a fire-and-forget Reload (server switch) that raises no failure event.
         UpdateStateTick();
+    }
+
+    /// <summary>
+    /// Paint the truthful failure state AND carry the engine's own explanation with it. Every failure
+    /// path goes through here so the hero can never show «Не удалось подключиться» while the reason the
+    /// engine already produced is sitting unread.
+    /// </summary>
+    private void FailConnect()
+    {
+        // Only a message published during THIS attempt explains it — anything older belongs to an
+        // earlier action (a subscription update, a previous connect) and would be a misleading caption.
+        ConnectFailReason = _attemptStartedAt is { } started
+            && _lastNoticeAt >= started
+            && _lastNotice.IsNotEmpty()
+                ? _lastNotice
+                : null;
+        ConnectFailed = true;
     }
 
     private static bool IsCoreRunning() =>
@@ -430,7 +517,7 @@ public class HomeViewModel : MyReactiveObject, IDisposable
                 // via the deadline.
                 IsConnecting = false;
                 _connectingUntil = null;
-                ConnectFailed = true;
+                FailConnect();
             }
         }
     }
@@ -845,6 +932,7 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         _coreStateSub?.Dispose();
         _switchSettledSub?.Dispose();
         _statsSub?.Dispose();
+        _noticeSub?.Dispose();
     }
 
     #endregion Teardown

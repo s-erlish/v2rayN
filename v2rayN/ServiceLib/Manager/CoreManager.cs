@@ -399,7 +399,8 @@ public class CoreManager
 
     /// <summary>
     /// Tier 2 — hot-swap the live Xray proxy outbound to the new server with no core restart.
-    /// Reads the freshly generated config, lifts its first proxy-protocol outbound, RE-TAGS it to the
+    /// Reads the freshly generated config, lifts the outbound its OWN routing sends traffic to (not
+    /// merely the first proxy-protocol entry — a template can lead with a decoy), RE-TAGS it to the
     /// tag the LIVE routing already references (<see cref="_runningProxyTag"/>), then
     /// <c>xray api rmo</c> (remove old) + <c>xray api ado</c> (add new) against the running core's
     /// HandlerService. Routing/inbounds/TUN/sing-box are all untouched. Returns false on any failure so
@@ -411,14 +412,12 @@ public class CoreManager
         try
         {
             if (JsonUtils.ParseJson(await File.ReadAllTextAsync(newConfigFile)) is not JsonObject root
-                || root["outbounds"] is not JsonArray outbounds)
+                || root["outbounds"] is not JsonArray)
             {
                 return false;
             }
 
-            var proxy = outbounds
-                .OfType<JsonObject>()
-                .FirstOrDefault(o => XrayJsonTemplateFmt.IsProxyProtocol(GetOutboundProtocol(o)));
+            var proxy = XrayJsonTemplateFmt.ResolveProxyOutbound(root);
             if (proxy == null)
             {
                 return false;
@@ -540,13 +539,14 @@ public class CoreManager
                 return;
             }
 
-            // Proxy tag: the first proxy-protocol outbound's tag (Global.ProxyTag for a normal node,
-            // the provider tag for a custom node).
-            if (root["outbounds"] is JsonArray outbounds)
+            // Proxy tag: the tag of the outbound this config's OWN routing carries traffic through
+            // (Global.ProxyTag for a normal node, the provider tag for a custom node). It must be the
+            // routed one, not the first proxy entry: the live routing references THIS tag, so a
+            // later hot-swap that re-tags to a decoy would replace an outbound nothing routes to and
+            // leave the user on the previous server.
+            if (root["outbounds"] is JsonArray)
             {
-                var proxy = outbounds
-                    .OfType<JsonObject>()
-                    .FirstOrDefault(o => XrayJsonTemplateFmt.IsProxyProtocol(GetOutboundProtocol(o)));
+                var proxy = XrayJsonTemplateFmt.ResolveProxyOutbound(root);
                 var tag = proxy?["tag"] as JsonValue;
                 if (tag != null && tag.TryGetValue<string>(out var tagStr) && tagStr.IsNotEmpty())
                 {
@@ -577,15 +577,6 @@ public class CoreManager
             _runningProxyTag = null;
             _runningApiPort = 0;
         }
-    }
-
-    private static string? GetOutboundProtocol(JsonObject outbound)
-    {
-        if (outbound["protocol"] is JsonValue v && v.TryGetValue<string>(out var s))
-        {
-            return s;
-        }
-        return null;
     }
 
     /// <summary>

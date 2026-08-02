@@ -128,10 +128,12 @@ public class StatusBarViewModel : MyReactiveObject
 
     #endregion UI
 
-    // departament (A6): remembers the last requested TUN intent (config at startup, or the user's
-    // toggle) so RoutingModeDisplay / TunRequestedButUnavailable can report an honest routing state
-    // even after the in-memory config is downgraded to false (so core-config generation stays valid).
-    private bool _tunRequested;
+    // departament (A6): the requested TUN intent. It is NOT tracked separately any more — it IS
+    // `_config.TunModeItem.EnableTun`, the persisted intent, which the session downgrade can no longer
+    // touch (TunUnavailable is [JsonIgnore] and carries the capability instead). A private duplicate is
+    // exactly what let the two TUN surfaces disagree: only this view model updated it, so a change made
+    // from Settings left the honest banner reporting the previous intent until the next launch.
+    private bool TunRequested => _config.TunModeItem.EnableTun;
 
     public StatusBarViewModel()
     {
@@ -142,9 +144,6 @@ public class StatusBarViewModel : MyReactiveObject
         BlSystemProxyPacVisible = Utils.IsWindows();
         BlIsNonWindows = Utils.IsNonWindows();
 
-        // A6: capture whether TUN was requested BEFORE the in-memory downgrade below, so we can
-        // surface "requested but unavailable" instead of silently switching to system-proxy.
-        _tunRequested = _config.TunModeItem.EnableTun;
         // Downgrade the EFFECTIVE routing to false when this process cannot create a tunnel (so the
         // generated core config never requests one it cannot build) WITHOUT touching the persisted
         // intent. TunUnavailable is [JsonIgnore], so neither the 20-minute autosave nor the exit save
@@ -174,9 +173,15 @@ public class StatusBarViewModel : MyReactiveObject
                 y => y >= 0)
             .Subscribe(async c => await DoSystemProxySelected(c));
 
+        // Skip(1): WhenAnyValue replays the CURRENT value on subscribe, and the current value is the
+        // one the constructor just seeded from the config a few lines above. Handling that replay as a
+        // user toggle is what would make a downgraded session write EnableTun=false back to disk on
+        // every launch, erasing the intent the [JsonIgnore] capability flag exists to protect. Only
+        // real changes — the toggle, the tray, the elevation command, Settings — reach DoEnableTun.
         this.WhenAnyValue(
                 x => x.EnableTun,
                 y => y == true)
+            .Skip(1)
             .Subscribe(async c => await DoEnableTun(c));
 
         CopyProxyCmdToClipboardCmd = ReactiveCommand.CreateFromTask(async () =>
@@ -205,7 +210,7 @@ public class StatusBarViewModel : MyReactiveObject
             // A6: honour an explicit opt-in to elevation. Record the intent and drive the same TUN
             // enable path the toggle uses. If the toggle is already on (config off = unavailable),
             // call DoEnableTun directly since WhenAnyValue won't re-fire on an unchanged value.
-            _tunRequested = true;
+            _config.TunModeItem.EnableTun = true;
             if (EnableTun)
             {
                 await DoEnableTun(true);
@@ -275,10 +280,28 @@ public class StatusBarViewModel : MyReactiveObject
         await ConfigHandler.InitBuiltinRouting(_config);
         await RefreshRoutingsMenu();
         await InboundDisplayStatus();
-        await ChangeSystemProxyAsync(_config.SystemProxyItem.SysProxyType, true);
+        // Startup must not point the OS at a local proxy port nothing is listening on. This client
+        // starts DISCONNECTED, so applying a stored "set system proxy" here breaks browsing before the
+        // user has ever pressed connect — and a setting a crashed previous run left behind has to go
+        // either way. So: reflect the stored choice in the UI, clear the OS setting while no core is
+        // running (Unchanged is respected — UpdateSysProxy leaves it alone), and let the connect path
+        // re-assert it once the core is actually up (MainWindowViewModel.Reload does exactly that).
+        if (IsAnyCoreRunning())
+        {
+            await ChangeSystemProxyAsync(_config.SystemProxyItem.SysProxyType, true);
+        }
+        else
+        {
+            await SysProxyHandler.UpdateSysProxy(_config, true);
+            await RefreshSystemProxyStatus(_config.SystemProxyItem.SysProxyType);
+        }
 
         BlRouting = true;
     }
+
+    private static bool IsAnyCoreRunning()
+        => AppManager.Instance.IsRunningCore(ECoreType.Xray)
+        || AppManager.Instance.IsRunningCore(ECoreType.sing_box);
 
     private async Task CopyProxyCmdToClipboard()
     {
@@ -438,7 +461,15 @@ public class StatusBarViewModel : MyReactiveObject
     public async Task ChangeSystemProxyAsync(ESysProxyType type, bool blChange)
     {
         await SysProxyHandler.UpdateSysProxy(_config, false);
+        await RefreshSystemProxyStatus(type, blChange);
+    }
 
+    /// <summary>
+    /// Bring the surfaced system-proxy state (the mode flags and the tray icon) in line with
+    /// <paramref name="type"/>, without touching the OS setting itself.
+    /// </summary>
+    private async Task RefreshSystemProxyStatus(ESysProxyType type, bool blChange = true)
+    {
         BlSystemProxyClear = type == ESysProxyType.ForcedClear;
         BlSystemProxySet = type == ESysProxyType.ForcedChange;
         BlSystemProxyNothing = type == ESysProxyType.Unchanged;
@@ -508,16 +539,21 @@ public class StatusBarViewModel : MyReactiveObject
 
     private async Task DoEnableTun(bool c)
     {
-        // Compare against the EFFECTIVE value: the persisted intent may legitimately be "on" while this
-        // session runs downgraded, and that combination must not read as "the user just changed it".
-        if (_config.TunModeItem.EnableTunEffective == EnableTun)
+        // Compare BOTH the intent and the capability, exactly as SettingsViewModel.SetTunMode does —
+        // one setting, two surfaces, one guard. Comparing the effective value alone made the toggle
+        // ONE-WAY in a downgraded session: switching TUN off evaluated (true && !true) == false against
+        // an already-false toggle, returned early, and wrote nothing. The persisted intent stayed stuck
+        // at true, the constructor re-read that stuck true on every later launch, and the honest banner
+        // could never be dismissed.
+        if (_config.TunModeItem.EnableTun == EnableTun
+            && _config.TunModeItem.EnableTunEffective == EnableTun)
         {
             return;
         }
 
-        // A6: the toggle value is the user's routing intent — remember it so the UI can honestly
-        // report a downgrade to system-proxy when TUN turns out to be unavailable.
-        _tunRequested = EnableTun;
+        // The toggle value is the user's routing intent. It is the ONLY thing persisted; the capability
+        // below is session-scoped, so the UI can honestly report a downgrade to system-proxy without
+        // the downgrade ever erasing the choice.
         _config.TunModeItem.EnableTun = EnableTun;
         _config.TunModeItem.TunUnavailable = EnableTun && !AllowEnableTun();
 
@@ -553,14 +589,64 @@ public class StatusBarViewModel : MyReactiveObject
         ReloadRequested.Publish();
     }
 
-    // departament (A6): recompute the surfaced routing mode + the "TUN requested but unavailable"
-    // notice from the current effective state. Called from the constructor and after every TUN change.
+    /// <summary>
+    /// departament (A6): recompute the surfaced routing mode + the "TUN requested but unavailable"
+    /// notice from the current state. Called from the constructor and after every TUN change made
+    /// HERE. Public because the same setting has a second surface (the Settings mode row) which writes
+    /// the config directly: without a way to re-derive, the honest banner reported the previous intent
+    /// until the next launch — up forever after the user turned the mode off, absent after they turned
+    /// it on in a session that cannot tunnel.
+    /// </summary>
+    public void RefreshRoutingModeStatus() => UpdateRoutingModeStatus();
+
     private void UpdateRoutingModeStatus()
     {
         var tunActive = _config.TunModeItem.EnableTunEffective && EnableTun;
         RoutingModeDisplay = tunActive ? "Весь трафик · TUN" : "Через системный прокси";
         TunAvailable = AllowEnableTun();
-        TunRequestedButUnavailable = _tunRequested && !TunAvailable;
+        TunRequestedButUnavailable = TunRequested && !TunAvailable;
+    }
+
+    /// <summary>
+    /// Guarantee this session can actually carry traffic before a connect.
+    ///
+    /// The app routes the OS through the tunnel (TUN) or through its local proxy (system proxy). With
+    /// neither, the core starts, every surface reports "connected", and not one byte leaves through it
+    /// — the reported «подключается, но не работает», with nothing on screen to explain it. A fresh
+    /// config ships <see cref="ESysProxyType.ForcedClear"/> (enum default 0) and nothing in the
+    /// connect path ever promotes it, so any session that does not tunnel — a downgraded one, or one
+    /// where the user picked proxy mode — connects to nothing at all.
+    ///
+    /// So when the session will not tunnel and the system proxy is set to FORCED CLEAR, set it. Clear
+    /// means "actively wipe the OS proxy", which cannot coexist with a running core: it is this app's
+    /// own disconnected state. <see cref="ESysProxyType.Unchanged"/> and Pac are deliberate user
+    /// choices and are left alone.
+    ///
+    /// Only the stored choice is written when no core is running: pointing the OS at a local port
+    /// nothing is listening on would break browsing for a user who is deliberately disconnected. The
+    /// connect path re-asserts the system proxy right after the core comes up, so writing the value
+    /// here is enough for it to take effect on this very connect.
+    /// </summary>
+    public async Task EnsureTrafficPathAsync()
+    {
+        if (_config.TunModeItem.EnableTunEffective
+            || _config.SystemProxyItem.SysProxyType != ESysProxyType.ForcedClear)
+        {
+            return;
+        }
+
+        _config.SystemProxyItem.SysProxyType = ESysProxyType.ForcedChange;
+        SystemProxySelected = (int)ESysProxyType.ForcedChange;
+        await ConfigHandler.SaveConfig(_config);
+
+        if (IsAnyCoreRunning())
+        {
+            await ChangeSystemProxyAsync(ESysProxyType.ForcedChange, true);
+        }
+        else
+        {
+            await RefreshSystemProxyStatus(ESysProxyType.ForcedChange);
+        }
     }
 
     private bool AllowEnableTun()

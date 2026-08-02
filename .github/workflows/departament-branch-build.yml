@@ -8,7 +8,10 @@ on:
   workflow_dispatch:
   push:
     branches:
+      # Every branch the work has lived on. A workflow that builds only yesterday's branch produces
+      # no artefact for today's, and a fix nobody can install is indistinguishable from no fix.
       - claude/app-audit-agents-hyyftk
+      - claude/project-analysis-status-9cefax
 
 permissions:
   contents: read

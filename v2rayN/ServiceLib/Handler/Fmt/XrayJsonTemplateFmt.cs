@@ -116,8 +116,18 @@ public class XrayJsonTemplateFmt : BaseFmt
     }
 
     /// <summary>
-    /// The first real proxy outbound of a config (skips freedom / blackhole / dns / direct helpers),
-    /// mirroring Android's <c>getProxyOutbound()</c>.
+    /// The outbound that actually carries this config's traffic.
+    ///
+    /// Taking the first proxy-protocol outbound is wrong for operator templates, which routinely ship
+    /// several proxy outbounds and pick one with a routing rule. A template can, for instance, place a
+    /// decoy outbound tagged "proxy" first and send all tcp/udp traffic to a differently-tagged one:
+    /// reading the first entry then reports the wrong host, so the row shows the wrong protocol, the
+    /// TCP ping probes a host that is not the server and never answers, and the delay test measures the
+    /// wrong outbound entirely.
+    ///
+    /// So follow the routing the way the core does — the first rule that matches ordinary outbound
+    /// traffic wins — and fall back to the old first-match behaviour only when routing says nothing.
+    /// Port of Android's <c>V2rayConfig.getProxyOutbound()</c>.
     /// </summary>
     public static Outbounds4Ray? GetProxyOutbound(V2rayConfig? config)
     {
@@ -125,8 +135,164 @@ public class XrayJsonTemplateFmt : BaseFmt
         {
             return null;
         }
-        return config.outbounds.FirstOrDefault(o => o.protocol.IsNotEmpty() && _proxyProtocols.Contains(o.protocol));
+        return ResolveRoutedOutbound(config) ?? FirstProxyOutbound(config);
     }
+
+    /// <summary>First outbound whose protocol names a real proxy, ignoring routing.</summary>
+    private static Outbounds4Ray? FirstProxyOutbound(V2rayConfig config)
+        => config.outbounds.FirstOrDefault(o => o != null && IsProxyProtocol(o.protocol));
+
+    private static Outbounds4Ray? OutboundByTag(V2rayConfig config, string? tag)
+        => tag.IsNullOrEmpty()
+            ? null
+            : config.outbounds.FirstOrDefault(o => string.Equals(o?.tag, tag, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Walks <c>routing</c> in core order and returns the proxy outbound ordinary traffic reaches, or
+    /// <c>null</c> when no rule applies to it.
+    ///
+    /// Only rules that can match GENERIC traffic are considered: a rule constrained by ip, domain,
+    /// port, source, user, inbound tag, process or application protocol describes a special case
+    /// (private ranges, bittorrent, a bypass list), not the default path. Of the rest, the first one
+    /// wins, mirroring the core's top-down evaluation.
+    /// </summary>
+    private static Outbounds4Ray? ResolveRoutedOutbound(V2rayConfig config)
+    {
+        var rules = config.routing?.rules;
+        if (rules is null)
+        {
+            return null;
+        }
+
+        foreach (var rule in rules)
+        {
+            if (rule is null || !MatchesGenericTraffic(rule))
+            {
+                continue;
+            }
+
+            var direct = OutboundByTag(config, rule.outboundTag);
+            if (direct != null)
+            {
+                // A rule sending everything to freedom/blackhole is a kill-switch or a bypass, not this
+                // profile's server — keep looking rather than reporting "the server is freedom".
+                if (!IsProxyProtocol(direct.protocol))
+                {
+                    continue;
+                }
+                return direct;
+            }
+
+            // A balancer names its members by tag prefix; any member is representative enough for the
+            // display name, the ping target and the delay probe.
+            var balancer = rule.balancerTag.IsNullOrEmpty()
+                ? null
+                : config.routing?.balancers?.FirstOrDefault(b =>
+                    string.Equals(b?.tag, rule.balancerTag, StringComparison.OrdinalIgnoreCase));
+            if (balancer is null)
+            {
+                continue;
+            }
+
+            Outbounds4Ray? member = null;
+            foreach (var prefix in balancer.selector ?? [])
+            {
+                if (prefix.IsNullOrEmpty())
+                {
+                    continue;
+                }
+                member = config.outbounds.FirstOrDefault(o =>
+                    o?.tag != null
+                    && o.tag.StartsWith(prefix!, StringComparison.OrdinalIgnoreCase)
+                    && IsProxyProtocol(o.protocol));
+                if (member != null)
+                {
+                    break;
+                }
+            }
+            if (member is null)
+            {
+                var fallback = OutboundByTag(config, balancer.fallbackTag);
+                member = fallback != null && IsProxyProtocol(fallback.protocol) ? fallback : null;
+            }
+            if (member != null)
+            {
+                return member;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// True when this rule is not narrowed to a particular destination, source or protocol, so it
+    /// applies to ordinary outbound traffic. A bare <c>network: "tcp,udp"</c> still counts — that is
+    /// how templates spell "everything else".
+    /// </summary>
+    private static bool MatchesGenericTraffic(RulesItem4Ray rule)
+    {
+        if (rule.outboundTag.IsNullOrEmpty() && rule.balancerTag.IsNullOrEmpty())
+        {
+            return false;
+        }
+
+        return IsEmpty(rule.ip)
+            && IsEmpty(rule.domain)
+            && IsEmpty(rule.process)
+            && IsEmpty(rule.protocol)
+            && IsEmpty(rule.source)
+            && IsEmpty(rule.user)
+            && IsEmpty(rule.inboundTag)
+            && rule.port.IsNullOrEmpty()
+            && rule.sourcePort.IsNullOrEmpty()
+            && rule.attrs is null;
+    }
+
+    private static bool IsEmpty(List<string>? values) => values is not { Count: > 0 };
+
+    /// <summary>
+    /// Raw-JSON twin of <see cref="GetProxyOutbound(V2rayConfig)"/>, for the call sites that work on a
+    /// parsed config root rather than the typed model (the hot-swap outbound lift, the running-proxy
+    /// tag capture, the batch-speedtest outbound graft). Resolves the routed outbound through the same
+    /// rules and returns the ORIGINAL node, so callers keep every as-authored field. Falls back to the
+    /// first proxy-protocol outbound when the config cannot be modelled or routing names nothing.
+    /// </summary>
+    public static JsonObject? ResolveProxyOutbound(JsonObject? root)
+    {
+        if (root?["outbounds"] is not JsonArray outbounds)
+        {
+            return null;
+        }
+
+        var candidates = outbounds
+            .OfType<JsonObject>()
+            .Where(o => IsProxyProtocol(GetJsonString(o, "protocol")))
+            .ToList();
+        if (candidates.Count == 0)
+        {
+            return null;
+        }
+        if (candidates.Count == 1)
+        {
+            return candidates[0];
+        }
+
+        var resolvedTag = GetProxyOutbound(JsonUtils.Deserialize<V2rayConfig>(root.ToJsonString()))?.tag;
+        if (resolvedTag.IsNotEmpty())
+        {
+            var match = candidates.FirstOrDefault(o =>
+                string.Equals(GetJsonString(o, "tag"), resolvedTag, StringComparison.OrdinalIgnoreCase));
+            if (match != null)
+            {
+                return match;
+            }
+        }
+
+        return candidates[0];
+    }
+
+    private static string? GetJsonString(JsonObject obj, string key)
+        => obj[key] is JsonValue v && v.TryGetValue<string>(out var s) ? s : null;
 
     /// <summary>True when the protocol names a real proxy outbound (vless/vmess/trojan/ss/socks/http).</summary>
     public static bool IsProxyProtocol(string? protocol) => protocol.IsNotEmpty() && _proxyProtocols.Contains(protocol!);

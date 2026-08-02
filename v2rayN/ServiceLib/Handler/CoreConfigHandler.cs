@@ -369,10 +369,12 @@ public static class CoreConfigHandler
 
     /// <summary>
     /// Add CUSTOM (raw xray-json) nodes to a batch Xray speedtest config. For each custom node we
-    /// parse its stored template, strip non-Xray root keys, take the single real proxy outbound
-    /// (mirroring Android's <c>buildV2rayCustomConfig4Speedtest</c> — routing/balancer/observatory/
-    /// dns are dropped so the delay routes straight through the proxy), retag it uniquely and wire it
-    /// to its own local inbound via a routing rule. The node's <see cref="ServerTestItem.Port"/> is
+    /// parse its stored template, strip non-Xray root keys, take the outbound the template's OWN
+    /// routing carries traffic through (mirroring Android's <c>buildV2rayCustomConfig4Speedtest</c>,
+    /// which promotes exactly that outbound to index 0 — routing/balancer/observatory/dns are dropped
+    /// so the delay routes straight through the proxy), retag it uniquely and wire it to its own local
+    /// inbound via a routing rule. Taking the first proxy outbound instead would measure a decoy on a
+    /// template that selects its server with a rule. The node's <see cref="ServerTestItem.Port"/> is
     /// set to that local inbound port so the real-ping request goes through the proxy.
     /// </summary>
     private static void InjectCustomSpeedtestNodes(RetResult result, List<ServerTestItem> selecteds)
@@ -430,14 +432,15 @@ public static class CoreConfigHandler
             {
                 continue;
             }
-            if (customRoot["outbounds"] is not JsonArray customOutbounds)
+            if (customRoot["outbounds"] is not JsonArray)
             {
                 continue;
             }
 
-            var proxy = customOutbounds
-                .OfType<JsonObject>()
-                .FirstOrDefault(o => XrayJsonTemplateFmt.IsProxyProtocol(GetJsonProtocol(o)));
+            // Promote the outbound the template's OWN routing sends ordinary traffic to, not whichever
+            // proxy outbound happens to be first: a template whose leading entry is a decoy would
+            // otherwise be measured instead of the server the profile actually uses.
+            var proxy = XrayJsonTemplateFmt.ResolveProxyOutbound(customRoot);
             if (proxy == null)
             {
                 continue;

@@ -359,11 +359,25 @@ public class SettingsViewModel : MyReactiveObject
         await ConfigHandler.SaveConfig(_config);
 
         // Keep the shared status-bar VM in sync WITHOUT triggering its reload/UAC path: DoEnableTun
-        // early-returns because the effective config already equals the value we assign here.
+        // early-returns because the config we just wrote already equals the value we assign here (its
+        // guard compares intent AND capability, exactly as this method does).
         var effective = _config.TunModeItem.EnableTunEffective;
         StatusBarViewModel.Instance.EnableTun = effective;
         ModeText = effective ? "TUN" : Common.L.T("Settings_ModeProxy");
         IsTunMode = effective;
+
+        // The honest "all traffic is unavailable" banner on Главная is derived state, and this method
+        // is the OTHER surface for the same setting — without re-deriving it, the banner reported the
+        // intent from the last launch: stuck up after the user chose proxy mode, and absent after they
+        // chose TUN in a session that cannot create one.
+        StatusBarViewModel.Instance.RefreshRoutingModeStatus();
+
+        // Proxy mode has to actually route: with no tunnel the OS reaches the app only through its
+        // local proxy, and a config that still carries the "force clear" default would leave the user
+        // connected to nothing. A no-op whenever the tunnel is genuinely in effect (it owns routing),
+        // and deliberately NOT a no-op when TUN was picked in a session that cannot create one — the
+        // fallback path is what carries traffic there.
+        await StatusBarViewModel.Instance.EnsureTrafficPathAsync();
 
         // Re-apply live only if the core is already up; a disconnected app stays disconnected.
         if (IsCoreRunning())
