@@ -101,7 +101,9 @@ public partial class ServerListView : UserControl
         // Delete confirmation ("Удалить сервер?" → yes/no).
         _interactionHandlers.Add(profiles.ShowYesNoInteraction.RegisterHandler(async interaction =>
         {
-            var result = await UI.ShowYesNo(interaction.Input);
+            // Каждый вопрос этого канала — удаление (ProfilesViewModel зовёт его только с
+            // ResUI.RemoveServer), поэтому подтверждение красное и с глаголом «Удалить» (D3).
+            var result = await UI.ShowYesNo(interaction.Input, L.T("Common_Delete"), destructive: true);
             interaction.SetOutput(result == ButtonResult.Yes);
         }));
 
@@ -191,6 +193,23 @@ public partial class ServerListView : UserControl
         }
 
         ClearRowPress();
+    }
+
+    // Клавиатура: строка объявлена Focusable/IsTabStop и получает кольцо фокуса, но НИЧЕГО не делала
+    // по Enter/Space — то есть фокус вёл в тупик, а выбор сервера оставался действием только для мыши
+    // (00-rules 12.2 запрещает это прямо). Тот же путь, что у клика: выбор, а не переключение живого
+    // туннеля.
+    private void OnRowKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key is not (Key.Enter or Key.Space))
+        {
+            return;
+        }
+        if (sender is Border { DataContext: ProfileItemModel item } && DataContext is HomeViewModel vm)
+        {
+            e.Handled = true;
+            _ = vm.SelectServer(item.IndexId);
+        }
     }
 
     private void OnRowPointerExited(object? sender, PointerEventArgs e)
@@ -749,11 +768,15 @@ public partial class ServerListView : UserControl
         return null;
     }
 
+    // «Сделать основным» — то же самое действие, что клик по строке, поэтому и путь тот же
+    // (Android: onSetDefault = { setSelectServer(guid) }). Раньше пункт звал SetDefaultServer напрямую
+    // и переключал ЖИВОЙ туннель без спроса, хотя клик по строке уже спрашивает — два способа сделать
+    // одно и то же вели себя по-разному, и молчаливым был как раз более скрытый.
     private void OnRowMakeDefault(object? sender, RoutedEventArgs e)
     {
-        if (_actionTarget is { } item && DataContext is HomeViewModel { Profiles: { } profiles })
+        if (_actionTarget is { } item && DataContext is HomeViewModel vm)
         {
-            _ = profiles.SetDefaultServer(item.IndexId);
+            _ = vm.SelectServer(item.IndexId);
         }
     }
 

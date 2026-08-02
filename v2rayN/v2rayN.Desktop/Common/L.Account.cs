@@ -125,7 +125,12 @@ public sealed partial class L
             "We'll email a confirmation link to this address.");
         Add("Account_EmailSent", "Письмо отправлено на {0}", "Email sent to {0}");
         Add("Account_Send", "Отправить", "Send");
-        Add("Account_LinkDone", "Готово", "Done");
+        Add("Account_LinkDone", "Telegram привязан", "Telegram linked");
+        // Инструкция, а не намёк: открылся чат с ботом — скажите, что именно в нём отправить.
+        // Без этой строки на экране были две несвязанные вещи: чат бота и код в пилюле.
+        Add("Account_TgLinkSend", "Отправьте боту команду /link {0}", "Send the bot the command /link {0}");
+        // Ожидание закончилось ничем. Кнопка «Привязать» вернулась — говорим об этом прямо.
+        Add("Account_LinkExpired", "Привязка не подтверждена — код истёк", "Linking wasn't confirmed — the code expired");
 
         // ── Login screen (LoginView) ──
         Add("Login_SignIn", "Вход", "Sign in");

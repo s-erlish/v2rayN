@@ -80,9 +80,11 @@
             <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
         </Style>
 
-        <!--  Заголовок строки «Управление»: Medium (не тяжёлый Bold), одна строка + эллипсис.  -->
+        <!--  Заголовок строки «Управление»: Medium (не тяжёлый Bold), одна строка + эллипсис.
+              Гарнитура ИНТЕРФЕЙСНАЯ: заголовки строк здесь русские, а в брендовой нет кириллицы —
+              строка рисовалась фолбэком ОС и не совпадала по метрикам с соседними (D-1/D-2).  -->
         <Style Selector="Border.Row TextBlock.Title">
-            <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+            <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
             <Setter Property="FontWeight" Value="Medium" />
             <Setter Property="TextWrapping" Value="NoWrap" />
             <Setter Property="TextTrimming" Value="CharacterEllipsis" />
@@ -177,7 +179,7 @@
             <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineVariant}" />
             <Setter Property="BorderThickness" Value="1.5" />
             <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
-            <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+            <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
             <Setter Property="FontWeight" Value="Medium" />
             <Setter Property="FontSize" Value="14" />
             <Setter Property="HorizontalContentAlignment" Value="Center" />
@@ -264,7 +266,7 @@
                                 <TextBlock
                                     HorizontalAlignment="Center"
                                     VerticalAlignment="Center"
-                                    FontFamily="{DynamicResource Font.Grotesk}"
+                                    FontFamily="{DynamicResource Font.Ui}"
                                     FontSize="20"
                                     FontWeight="Bold"
                                     Foreground="{DynamicResource Brush.Accent}"
@@ -1411,75 +1413,106 @@
             </StackPanel>
         </ScrollViewer>
 
-        <!-- ================= НЕ ВОШЁЛ: центрированный гейт входа ================= -->
-        <Grid IsVisible="{Binding ShowLoginCta}" Margin="16">
-            <Border
-                Classes="Card"
-                MaxWidth="380"
-                HorizontalAlignment="Stretch"
-                VerticalAlignment="Center">
-                <StackPanel Spacing="20">
-                    <Border
-                        Width="56"
-                        Height="56"
+        <!-- ================= НЕ ВОШЁЛ: гейт входа =================
+             ЭТО — ЭКРАН, А НЕ КАРТОЧКА. Владелец: «вкладка аккаунт вообще хуёво выглядит не
+             стилизованно, на андроиде в 100 раз лучше». Он смотрел на ЭТО состояние: карточка
+             380 px, посаженная по центру панели шириной за 1100, — то есть визитка посреди пустого
+             стола. На телефоне (layout_auth_gate.xml) карточки нет вовсе: гейт занимает экран, а
+             композиция ПЛАВАЕТ между двумя взвешенными пружинами 3 : 4 — заголовок не приколот к
+             верху, кнопки не свалены в самый низ (это и была жалоба C3).
+
+             Структура и иерархия перенесены 1 : 1, выражены нативно:
+               пружина 3 · знак · заголовок + строка · слот ошибки · Telegram (Primary Tall) ·
+               почта/сайт (Tertiary) · пружина 4.
+             Ничего не убрано: тот же знак, тот же заголовок, та же подсказка, те же две кнопки —
+             у них появились иерархия, мера и место, где могут появиться слова об отказе.
+
+             МЕРА: колонка 420 — читаемая строка, а не растянутая на всю ширину панели; но это
+             колонка НА ЭКРАНЕ, а не карточка В пустоте. Заголовок поднят с Title 16 до Headline 24:
+             это заголовок экрана, а не строки.
+
+             СЛОТ ОШИБКИ держит своё место всегда (Height 20 у Panel): без него появление сообщения
+             двигало бы обе кнопки вниз под курсором — та же мина, что в LoginView. -->
+        <Grid IsVisible="{Binding ShowLoginCta}" Margin="24,16" RowDefinitions="3*,Auto,4*">
+            <StackPanel
+                Grid.Row="1"
+                MaxWidth="420"
+                HorizontalAlignment="Center"
+                Spacing="24">
+                <Border
+                    Width="64"
+                    Height="64"
+                    HorizontalAlignment="Center"
+                    Classes="Avatar">
+                    <PathIcon
+                        Width="32"
+                        Height="32"
                         HorizontalAlignment="Center"
-                        Classes="Avatar">
-                        <PathIcon
-                            Width="28"
-                            Height="28"
-                            HorizontalAlignment="Center"
-                            VerticalAlignment="Center"
-                            Data="{StaticResource Geo.Acc.Telegram}"
-                            Foreground="{DynamicResource Brush.Accent}" />
-                    </Border>
+                        VerticalAlignment="Center"
+                        Data="{StaticResource Geo.Acc.Telegram}"
+                        Foreground="{DynamicResource Brush.Accent}" />
+                </Border>
 
-                    <StackPanel Spacing="6">
-                        <TextBlock
-                            HorizontalAlignment="Center"
-                            Classes="Title"
-                            Text="{loc:T Account_SignInTitle}"
-                            TextAlignment="Center" />
-                        <TextBlock
-                            HorizontalAlignment="Center"
-                            Classes="Subtitle"
-                            Text="{loc:T Account_SignInHint}"
-                            TextAlignment="Center"
-                            TextWrapping="Wrap" />
-                    </StackPanel>
-
-                    <StackPanel Spacing="12">
-                        <Button
-                            x:Name="LoginTelegramButton"
-                            HorizontalAlignment="Stretch"
-                            Classes="Primary Tall"
-                            Command="{Binding LoginTelegramCmd}">
-                            <StackPanel
-                                HorizontalAlignment="Center"
-                                Orientation="Horizontal"
-                                Spacing="10"
-                                VerticalAlignment="Center">
-                                <PathIcon
-                                    Width="20"
-                                    Height="20"
-                                    VerticalAlignment="Center"
-                                    Data="{StaticResource Geo.Acc.Telegram}"
-                                    Foreground="{DynamicResource Brush.OnAccent}" />
-                                <TextBlock
-                                    VerticalAlignment="Center"
-                                    Foreground="{DynamicResource Brush.OnAccent}"
-                                    Text="{loc:T Common_SignInTelegram}" />
-                            </StackPanel>
-                        </Button>
-
-                        <Button
-                            x:Name="LoginSiteButton"
-                            HorizontalAlignment="Stretch"
-                            HorizontalContentAlignment="Center"
-                            Classes="Tonal"
-                            Content="{loc:T Common_SignInWebsite}" />
-                    </StackPanel>
+                <StackPanel Spacing="8">
+                    <TextBlock
+                        HorizontalAlignment="Center"
+                        Classes="Headline"
+                        Text="{loc:T Account_SignInTitle}"
+                        TextAlignment="Center"
+                        TextWrapping="Wrap" />
+                    <TextBlock
+                        HorizontalAlignment="Center"
+                        Classes="Subtitle"
+                        Text="{loc:T Account_SignInHint}"
+                        TextAlignment="Center"
+                        TextWrapping="Wrap" />
                 </StackPanel>
-            </Border>
+
+                <StackPanel Spacing="12">
+                    <!--  Зарезервированный слот отказа: место занято всегда, текст появляется в нём.  -->
+                    <Panel Height="20">
+                        <TextBlock
+                            HorizontalAlignment="Center"
+                            Classes="FieldError"
+                            IsVisible="{Binding HasError}"
+                            Text="{Binding ErrorText}"
+                            TextAlignment="Center"
+                            TextTrimming="CharacterEllipsis" />
+                    </Panel>
+
+                    <Button
+                        x:Name="LoginTelegramButton"
+                        HorizontalAlignment="Stretch"
+                        Classes="Primary Tall"
+                        Command="{Binding LoginTelegramCmd}">
+                        <StackPanel
+                            HorizontalAlignment="Center"
+                            Orientation="Horizontal"
+                            Spacing="10"
+                            VerticalAlignment="Center">
+                            <PathIcon
+                                Width="20"
+                                Height="20"
+                                VerticalAlignment="Center"
+                                Data="{StaticResource Geo.Acc.Telegram}"
+                                Foreground="{DynamicResource Brush.OnAccent}" />
+                            <TextBlock
+                                VerticalAlignment="Center"
+                                Foreground="{DynamicResource Brush.OnAccent}"
+                                Text="{loc:T Common_SignInTelegram}" />
+                        </StackPanel>
+                    </Button>
+
+                    <!--  Альтернативный способ — третичный, как на телефоне (Button.Tertiary):
+                          две сплошные кнопки подряд спорят за одно и то же внимание.  -->
+                    <Button
+                        x:Name="LoginSiteButton"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Center"
+                        Classes="Tertiary"
+                        Content="{loc:T Common_SignInWebsite}" />
+                </StackPanel>
+            </StackPanel>
         </Grid>
 
     </Panel>

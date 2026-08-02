@@ -18,7 +18,7 @@
     Background="{DynamicResource Brush.Bg}"
     Design.DataContext="{x:Static dd:DesignData.MainWindow}"
     WindowDecorations="None"
-    FontFamily="{DynamicResource Font.Grotesk}"
+    FontFamily="{DynamicResource Font.Ui}"
     Icon="/Assets/NotifyShieldOn.ico"
     ShowInTaskbar="True"
     WindowStartupLocation="CenterScreen"
@@ -49,6 +49,15 @@
     <!--  Кнопки окна (min/max/close) в стиле Incy: прозрачные, hover — min/max subtle darken, close —
           мягкая глубокая-красная заливка + белый глиф (см. Window.Resources выше).  -->
     <Window.Styles>
+        <!--  Действие тоста обязано читаться как ДЕЙСТВИЕ. Глобальный «Border.Toast TextBlock»
+              красит ЛЮБОЙ текст внутри пилюли в OnSurface — включая подпись кнопки, которая от этого
+              переставала отличаться от самой фразы. Возвращаем ей акцент; стиль уровня окна
+              применяется после Application.Styles, поэтому выигрывает.  -->
+        <Style Selector="Border.Toast Button.LinkAction TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+            <Setter Property="FontWeight" Value="Bold" />
+        </Style>
+
         <Style Selector="Button.WinBtn">
             <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
             <Setter Property="Width" Value="44" />
@@ -614,12 +623,23 @@
                         IsVisible="False"
                         RenderTransformOrigin="50%,50%" />
 
-                    <!--  ==================== Инлайн-уведомление ОТКЛЮЧЕНО (Bug1) ====================
-                          Владелец не хочет НИКАКИХ нижних уведомлений (ни на подключении, ни на добавлении
-                          подписки, ни на прочих событиях). Разметка пилюли оставлена на месте, но код
-                          (DelegateSnackMsg) — осознанный no-op: этот Border НИКОГДА не показывается
-                          (IsVisible остаётся False). Ошибки подключения отражает состояние Error на
-                          connect-щите. Клик сквозной (IsHitTestVisible=False).  -->
+                    <!--  ==================== Тост: ответ на действие пользователя ====================
+                          ЕДИНСТВЕННАЯ поверхность, на которой приложение отвечает словами. Раньше её не
+                          было ни одной: Enqueue уходил в DelegateSnackMsg-no-op, SendMessage — в
+                          MsgViewModel, у которого в этой оболочке нет ни одного места создания. 156
+                          сообщений публиковались в пустоту, поэтому «вставил ссылку на подписку — ничего
+                          не происходит» было неотличимо от настоящей поломки.
+
+                          ЧТО ОН ГОВОРИТ, А ЧТО НЕТ. Тост отвечает ТОЛЬКО на явное действие пользователя
+                          (вставка/скан, привязка, отвязка устройства, оплата, копирование) и на отказы,
+                          которые иначе останутся немыми. Состояние подключения он НЕ комментирует —
+                          щит на «Главной» уже его показывает, и именно эту болтовню владелец отклонил.
+
+                          ФОРМА — класс Border.Toast (§8.1 «Transient feedback → Toast»), не новый язык:
+                          та же поверхность, радиус карты, мягкая тень. Внутри — строка и НЕОБЯЗАТЕЛЬНОЕ
+                          действие («Повторить»/«Переподключиться»): отказ обязан предлагать выход там же,
+                          где о нём сообщил. Показ/уход и авто-скрытие ведёт code-behind (ShowToast).
+                          В покое скрыт и сквозной для мыши; с действием — принимает клик.  -->
                     <Border
                         x:Name="snackHost"
                         Margin="16,0,16,16"
@@ -628,12 +648,22 @@
                         Classes="Toast"
                         IsHitTestVisible="False"
                         IsVisible="False"
+                        Opacity="0"
                         RenderTransformOrigin="50%,50%">
-                        <TextBlock
-                            x:Name="snackText"
-                            MaxWidth="420"
-                            TextAlignment="Center"
-                            TextWrapping="Wrap" />
+                        <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                            <TextBlock
+                                x:Name="snackText"
+                                MaxWidth="420"
+                                VerticalAlignment="Center"
+                                TextAlignment="Left"
+                                TextWrapping="Wrap" />
+                            <Button
+                                x:Name="snackAction"
+                                Classes="LinkAction"
+                                Click="SnackAction_Click"
+                                IsVisible="False"
+                                VerticalAlignment="Center" />
+                        </StackPanel>
                     </Border>
                 </Panel>
             </Grid>

@@ -27,7 +27,7 @@
             </Setter>
         </Style>
         <Style Selector="Button.IconButton:pressed">
-            <Setter Property="RenderTransform" Value="scale(0.92)" />
+            <Setter Property="RenderTransform" Value="scale(0.97)" />
         </Style>
 
         <!--  Строка профиля маршрутизации: тап = сделать активным. Press scale, hover-подсветка.  -->

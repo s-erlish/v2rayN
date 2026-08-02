@@ -350,8 +350,21 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         }
     }
 
-    /// <summary>Server-row click: make it the default server, then connect per the W1d contract.</summary>
-    public async Task SelectServer(string? indexId)
+    /// <summary>
+    /// Клик по строке сервера: сделать его основным и подключиться по контракту W1d.
+    ///
+    /// ВЫБОР ≠ ПЕРЕКЛЮЧЕНИЕ ЖИВОГО ТУННЕЛЯ (владелец G1, порт с Android
+    /// <c>MainActivity.setSelectServer</c> / <c>promptApplySelectedServer</c>). Пока соединения НЕТ,
+    /// выбор подключает — как и раньше, это то поведение, которое на телефоне как раз считается
+    /// недоделанным. Но когда туннель УЖЕ поднят, выбор его больше не роняет: он только запоминает
+    /// сервер, а оболочка предлагает «Переподключиться», называя выбранный сервер. Отказ оставляет
+    /// соединение ровно таким, каким оно было.
+    /// </summary>
+    /// <param name="applyToRunningTunnel">
+    /// True — пользователь уже согласился перенести живое соединение (нажал «Переподключиться»).
+    /// False (по умолчанию) — просто выбор; поднятый туннель не трогаем.
+    /// </param>
+    public async Task SelectServer(string? indexId, bool applyToRunningTunnel = false)
     {
         if (Profiles == null || indexId.IsNullOrEmpty())
         {
@@ -373,7 +386,11 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         // and restarts it — a genuine reconnect, even from a live connection), and ANY pick while
         // disconnected (it connects). The ONLY tap that spins nothing is re-selecting the already-
         // active server WHILE CONNECTED: it reloads nothing, so the shield stays Connected.
-        var willConnect = changed || !wasConnected;
+        // ...с ОДНОЙ поправкой (G1): смена основного сервера ПРИ ЖИВОМ туннеле больше не крутит
+        // спиннер и ничего не перезапускает, пока пользователь не подтвердил это явно. Иначе выбор
+        // и переключение — одно действие, а разорвать работающее соединение он не просил.
+        var switchingLive = changed && wasConnected;
+        var willConnect = !wasConnected || (changed && applyToRunningTunnel);
         if (willConnect)
         {
             // Same guarantee the shield tap makes: a pick that starts the core must leave the OS with
@@ -403,7 +420,7 @@ public class HomeViewModel : MyReactiveObject, IDisposable
             }
         }
 
-        if (!await Profiles.SetDefaultServer(indexId))
+        if (!await Profiles.SetDefaultServer(indexId, applyToRunningCore: !switchingLive || applyToRunningTunnel))
         {
             // Invalid / failed pick — abort the spinner, do not connect.
             IsConnecting = false;
@@ -424,6 +441,71 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         {
             SyncState();
         }
+
+        // Соединение живо, сервер выбран, но не применён — предлагаем перенести, называя сервер.
+        // Ровно как Android: Snackbar с действием «Переподключиться» рядом со списком; отказ ничего
+        // не делает, выбор остаётся на следующее подключение.
+        if (switchingLive && !applyToRunningTunnel)
+        {
+            await OfferReconnect(indexId);
+        }
+    }
+
+    /// <summary>
+    /// Предложение «Переподключиться» к только что выбранному серверу при живом туннеле.
+    /// Порт <c>promptApplySelectedServer</c>: та же формулировка, то же место (транзиентная
+    /// поверхность внизу, рядом со списком), тот же исход при отказе — ничего.
+    /// </summary>
+    private async Task OfferReconnect(string indexId)
+    {
+        var name = string.Empty;
+        try
+        {
+            var item = await AppManager.Instance.GetProfileItem(indexId);
+            name = ProfileDisplay.StripLeadingFlag(item?.Remarks);
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog("HomeOfferReconnect", ex);
+        }
+
+        var msg = name.IsNotEmpty()
+            ? L.F("Home_ServerSelectedReconnect", name)
+            : L.T("Home_ServerSelectedReconnectGeneric");
+
+        Notify.Show(msg, L.T("Home_ReconnectAction"), () => _ = ApplySelectionToRunningTunnel());
+    }
+
+    /// <summary>
+    /// Переносит РАБОТАЮЩИЙ туннель на выбранный сервер. Порт
+    /// <c>HomeFragment.applySelectionToRunningTunnel</c>: щит уходит в «Подключение…», дальше всё
+    /// идёт через обычную машину состояний, поэтому застрявший перезапуск отчитается как любой
+    /// другой неудавшийся старт, а не оставит герой на прежнем сервере.
+    /// </summary>
+    public async Task ApplySelectionToRunningTunnel()
+    {
+        if (Profiles == null || !IsConnected)
+        {
+            return;
+        }
+
+        if (StatusBar != null)
+        {
+            try
+            {
+                await StatusBar.EnsureTrafficPathAsync();
+            }
+            catch (Exception ex)
+            {
+                Logging.SaveLog("HomeApplySelection", ex);
+            }
+        }
+
+        BeginConnecting();
+        IsConnected = false;
+        _awaitingCoreCycle = true;
+        Profiles.ApplySelectedServerToRunningCore();
+        SyncState();
     }
 
     private void BeginConnecting()

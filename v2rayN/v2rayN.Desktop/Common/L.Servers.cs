@@ -21,14 +21,14 @@ public sealed partial class L
         Add("Servers_ShareLink", "Поделиться · ссылка", "Share · link");
         // Copy-law 9.5 «No servers» empty state, verbatim (same pair as Home_NoSubs/Home_NoSubsHint).
         Add("Servers_Empty", "Нет серверов", "No servers");
-        Add("Servers_EmptyHint", "Добавьте провайдера или отсканируйте QR-код, чтобы появились серверы.", "Add a provider or scan a QR code to get servers.");
+        Add("Servers_EmptyHint", "Добавьте подписку или отсканируйте QR-код, чтобы появились серверы.", "Add a subscription or scan a QR code to get servers.");
         Add("Servers_SearchPlaceholder", "Поиск серверов…", "Search servers…");
 
         // ── Provider meta bar (SubscriptionMetaView) ──
         Add("Sub_CollapseServers", "Свернуть серверы", "Collapse servers");
         Add("Sub_Pin", "Закрепить", "Pin");
-        Add("Sub_Delete", "Удалить провайдера", "Delete provider");
-        Add("Sub_DeleteConfirm", "Удалить провайдера и его серверы?", "Delete the provider and its servers?");
+        Add("Sub_Delete", "Удалить подписку", "Delete subscription");
+        Add("Sub_DeleteConfirm", "Удалить подписку и её серверы?", "Delete the subscription and its servers?");
         Add("Sub_OpenSupport", "Открыть поддержку", "Open support");
         Add("Sub_Support", "Поддержка", "Support");
         // Same word as the account card (Account_HealthExpired), one term per state.

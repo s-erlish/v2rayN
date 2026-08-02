@@ -83,7 +83,7 @@
                         x:Name="AccountInitial"
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
-                        FontFamily="{DynamicResource Font.Grotesk}"
+                        FontFamily="{DynamicResource Font.Ui}"
                         FontSize="18"
                         FontWeight="Bold"
                         Foreground="{DynamicResource Brush.Accent}"

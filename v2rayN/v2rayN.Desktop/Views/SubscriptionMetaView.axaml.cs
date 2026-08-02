@@ -700,7 +700,7 @@ public partial class SubscriptionMetaView : UserControl
             // WindowDialog.TryGetOwnerWindow, which THROWS InvalidOperationException when no window is
             // visible (app hidden to tray) — and this is an async void handler, so that throw had no
             // catch anywhere above it.
-            if (await UI.ShowYesNo(L.T("Sub_DeleteConfirm")) != ButtonResult.Yes)
+            if (await UI.ShowYesNo(L.T("Sub_DeleteConfirm"), L.T("Common_Delete"), destructive: true) != ButtonResult.Yes)
             {
                 return;
             }

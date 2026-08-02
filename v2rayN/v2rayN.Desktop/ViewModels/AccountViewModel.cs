@@ -184,6 +184,10 @@ public class AccountViewModel : MyReactiveObject
 
     [Reactive] public string ErrorText { get; set; } = string.Empty;
 
+    /// <summary>Есть ли что сказать об отказе. Нужен слоту ошибки, который держит своё место
+    /// ВСЕГДА: без зарезервированной высоты появление сообщения сдвигало бы кнопки под курсором.</summary>
+    [Reactive] public bool HasError { get; set; }
+
     // The four mutually-exclusive hero states (skeleton / active / empty / error).
     [Reactive] public bool ShowSkeleton { get; set; }
     [Reactive] public bool ShowActiveSub { get; set; }
@@ -332,7 +336,8 @@ public class AccountViewModel : MyReactiveObject
             Profile = AuthTokenStore.GetUser();
         }
 
-        RefreshProfileCmd = ReactiveCommand.CreateFromTask(RefreshProfile);
+        // Команда отдаёт Unit: свежий профиль нужен только пуллеру привязки, который зовёт метод напрямую.
+        RefreshProfileCmd = ReactiveCommand.CreateFromTask(async () => { await RefreshProfile(); });
         LoadSubscriptionsCmd = ReactiveCommand.CreateFromTask(LoadSubscriptions);
         LoadTariffsCmd = ReactiveCommand.CreateFromTask(LoadTariffs);
         LoadPaymentsCmd = ReactiveCommand.CreateFromTask(LoadPayments);
@@ -564,7 +569,14 @@ public class AccountViewModel : MyReactiveObject
         await LoadPayments();
     }
 
-    private async Task RefreshProfile()
+    /// <summary>
+    /// Перечитывает профиль и обновляет вью-модель. ВОЗВРАЩАЕТ свежий профиль (или <c>null</c> при
+    /// отказе), потому что применение идёт через <see cref="RunOnUi"/>, а он с фонового потока
+    /// ПОСТИТ — то есть после <c>await RefreshProfile()</c> поле <see cref="Profile"/> ещё старое.
+    /// Опрос привязки Telegram читал именно его и отставал на целую итерацию, а подтверждение,
+    /// пришедшее в последнем окне опроса, терял совсем. Пуллеры обязаны читать возвращённое значение.
+    /// </summary>
+    private async Task<UserProfileDto?> RefreshProfile()
     {
         var result = await _repo.RefreshProfile();
         RunOnUi(() =>
@@ -582,6 +594,7 @@ public class AccountViewModel : MyReactiveObject
                 .OnFailure(Report);
             Recompute();
         });
+        return result.GetOrNull();
     }
 
     private async Task LoadSubscriptions()
@@ -1851,8 +1864,12 @@ public class AccountViewModel : MyReactiveObject
                     TelegramCanLink = false;
                     OpenLinkBot();
                     ScheduleLinkPoll();
+                    // Пользователю сказали, ЧТО делать. Раньше открывался чат с ботом, а код лежал в
+                    // пилюле рядом с кнопкой на другом экране — связи между двумя фактами не было ни
+                    // одной, и «привязка не работает» означало «я не понял, что от меня хотят».
+                    Notify.Show(L.F("Account_TgLinkSend", dto.Code));
                 })
-                .OnFailure(err => AppEvents.SendSnackMsgRequested.Publish(MessageFor(err)));
+                .OnFailure(err => Notify.Show(MessageFor(err), L.T("Common_Retry"), () => _ = StartLinkTelegram()));
         });
     }
 
@@ -1872,6 +1889,17 @@ public class AccountViewModel : MyReactiveObject
         }
     }
 
+    /// <summary>
+    /// Ждёт подтверждения привязки в Telegram. Такт и потолок — те же, что у входа
+    /// (<c>AuthManager.BeginTelegramLogin</c>: опрос раз в ~2 с, потолок ~3 мин), чтобы два
+    /// одинаковых на вид ожидания не вели себя по-разному.
+    ///
+    /// ЗАВЕРШАЕТСЯ ВСЕГДА, и это главное здесь. Раньше цикл, не дождавшись, просто заканчивался:
+    /// <see cref="TelegramLinkPending"/> оставался <c>true</c> НАВСЕГДА, а
+    /// <see cref="TelegramCanLink"/> вычисляется как <c>!TelegramLinked &amp;&amp; !TelegramLinkPending</c> —
+    /// значит кнопка «Привязать» не возвращалась до перезапуска приложения. Одна неудачная попытка
+    /// делала привязку невозможной — ровно то, о чём владелец сообщил как «не подвязывается».
+    /// </summary>
     private void ScheduleLinkPoll()
     {
         _linkPollCts?.Cancel();
@@ -1881,24 +1909,41 @@ public class AccountViewModel : MyReactiveObject
         {
             try
             {
-                for (var attempt = 0; attempt < 40 && !cts.IsCancellationRequested; attempt++)
+                var deadline = DateTime.UtcNow.AddMinutes(3);
+                while (DateTime.UtcNow < deadline && !cts.IsCancellationRequested)
                 {
-                    await Task.Delay(TimeSpan.FromSeconds(3), cts.Token);
-                    await RefreshProfile();
-                    if (Profile?.TelegramLinked == true)
+                    await Task.Delay(TimeSpan.FromSeconds(2), cts.Token);
+                    // Читаем ВОЗВРАЩЁННЫЙ профиль, а не поле: применение идёт через Dispatcher.Post,
+                    // поэтому поле здесь ещё старое (см. RefreshProfile).
+                    var fresh = await RefreshProfile();
+                    if (fresh?.TelegramLinked == true)
                     {
                         RunOnUi(() =>
                         {
                             TelegramLinkPending = false;
-                            AppEvents.SendSnackMsgRequested.Publish(L.T("Account_LinkDone"));
+                            TelegramLinkCodeText = string.Empty;
+                            Notify.Show(L.T("Account_LinkDone"));
                         });
                         return;
                     }
                 }
+
+                if (!cts.IsCancellationRequested)
+                {
+                    // Истекло. Возвращаем кнопку и говорим, почему — молчащее ожидание без выхода
+                    // неотличимо от сломанной функции.
+                    RunOnUi(() =>
+                    {
+                        TelegramLinkPending = false;
+                        TelegramLinkCodeText = string.Empty;
+                        TelegramCanLink = !TelegramLinked;
+                        Notify.Show(L.T("Account_LinkExpired"), L.T("Common_Retry"), () => _ = StartLinkTelegram());
+                    });
+                }
             }
             catch (OperationCanceledException)
             {
-                // Cancelled by logout or a newer link attempt.
+                // Отменено выходом из аккаунта или более свежей попыткой — состояние ставит она.
             }
         });
     }
@@ -2151,6 +2196,7 @@ public class AccountViewModel : MyReactiveObject
 
         // Error text
         ErrorText = Error != null ? MessageFor(Error) : string.Empty;
+        HasError = ErrorText.IsNotEmpty();
 
         // Logged-out: the profile card shows the Telegram login gate and the whole subscription hero is
         // hidden. Guarding here (not just on Profile == null) is what stops a signed-out user from

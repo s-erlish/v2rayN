@@ -618,7 +618,22 @@ public class ProfilesViewModel : MyReactiveObject
 
     // Returns TRUE when <paramref name="indexId"/> is the active default and is ready to be
     // connected; FALSE on an invalid / missing / failed pick. See the A5 contract below.
-    public async Task<bool> SetDefaultServer(string? indexId)
+    /// <summary>
+    /// Moves an ALREADY-RUNNING core onto whatever is currently the default server. Split out of
+    /// <see cref="SetDefaultServer(string?, bool)"/> so a selection can be made WITHOUT disturbing a
+    /// live tunnel, and the switch performed later, only if the user asks for it.
+    /// </summary>
+    public void ApplySelectedServerToRunningCore() => SwitchRequested.Publish();
+
+    /// <param name="applyToRunningCore">
+    /// False = persist the pick and repaint, but LEAVE A RUNNING CORE ALONE. Selecting a server is
+    /// not the same act as moving a live connection onto it, and only the user gets to decide the
+    /// second one — see the reconnect offer in the desktop shell (owner G1, ported from Android
+    /// <c>MainActivity.setSelectServer</c> / <c>promptApplySelectedServer</c>).
+    /// Ignored while disconnected: with no core running there is nothing to disturb, and a pick then
+    /// connects exactly as before.
+    /// </param>
+    public async Task<bool> SetDefaultServer(string? indexId, bool applyToRunningCore = true)
     {
         if (indexId.IsNullOrEmpty())
         {
@@ -654,7 +669,11 @@ public class ProfilesViewModel : MyReactiveObject
                 || AppManager.Instance.IsRunningCore(ECoreType.sing_box);
             if (running)
             {
-                SwitchRequested.Publish();
+                // Only when the caller asked for it: a bare selection must not bounce a live tunnel.
+                if (applyToRunningCore)
+                {
+                    SwitchRequested.Publish();
+                }
             }
             else
             {

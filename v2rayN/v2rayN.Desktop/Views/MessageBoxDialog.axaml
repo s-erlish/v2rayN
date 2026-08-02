@@ -7,7 +7,7 @@
     xmlns:resx="clr-namespace:ServiceLib.Resx;assembly=ServiceLib"
     Background="{DynamicResource Brush.Bg}"
     CanResize="False"
-    FontFamily="{DynamicResource Font.Grotesk}"
+    FontFamily="{DynamicResource Font.Ui}"
     ShowInTaskbar="False"
     SizeToContent="WidthAndHeight"
     WindowDecorations="None"
@@ -49,7 +49,14 @@
                     TextWrapping="Wrap" />
             </ScrollViewer>
 
-            <!--  Действия: «Отмена» (тональная) слева · «Подтвердить» (акцентная) справа.  -->
+            <!--  Действия: «Отмена» (тональная) слева · подтверждение (сплошная заливка) справа.
+                  Класс подтверждающей и её подпись ставит code-behind: у ДЕСТРУКТИВНОГО вопроса это
+                  Button.Destructive и глагол «Удалить», у обычного — Button.Primary и «Подтвердить».
+                  Раньше подтверждающая всегда была Primary, чей фон объявлялся на КНОПКЕ и никогда на
+                  презентере, который его рисует, — поэтому в покое она брала нейтральный тон темы
+                  Semi и рядом со сплошной «Отменой» читалась ВЫКЛЮЧЕННОЙ (D3). Покой презентера
+                  теперь объявлен у всех архетипов (GlobalStyles), а деструктивное действие вдобавок
+                  окрашено красным: оно обязано читаться как главное, а не как погашенное.  -->
             <StackPanel
                 HorizontalAlignment="Right"
                 Orientation="Horizontal"

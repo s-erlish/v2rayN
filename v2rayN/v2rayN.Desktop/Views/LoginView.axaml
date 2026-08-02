@@ -85,7 +85,8 @@
             <Setter Property="HorizontalAlignment" Value="Stretch" />
             <Setter Property="HorizontalContentAlignment" Value="Center" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
-            <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+            <!--  «Вход»/«Регистрация» — русские подписи, значит интерфейсная гарнитура.  -->
+            <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
             <Setter Property="FontSize" Value="14" />
             <Setter Property="Transitions">
                 <Transitions>

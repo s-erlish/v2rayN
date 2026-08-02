@@ -327,12 +327,6 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
                 interaction.SetOutput(Unit.Default);
             }).DisposeWith(disposables);
 
-            AppEvents.SendSnackMsgRequested
-              .AsObservable()
-              .ObserveOn(RxSchedulers.MainThreadScheduler)
-              .Subscribe(async content => await DelegateSnackMsg(content))
-              .DisposeWith(disposables);
-
             AppEvents.AppExitRequested
               .AsObservable()
               .ObserveOn(RxSchedulers.MainThreadScheduler)
@@ -1002,6 +996,39 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
             ShowHideWindow(true);
             interaction.SetOutput(result);
         }).DisposeWith(_windowInteractions);
+
+        // ТА ЖЕ ПРИЧИНА, ЧТО И ВЫШЕ, для канала СООБЩЕНИЙ. Раньше подписка на SendSnackMsgRequested
+        // жила под WhenActivated и снималась при деактивации окна — ровно та мина, которую здесь уже
+        // обезвредили для интеракций: угловой «+» открывает MenuFlyout, окно деактивируется, и ответ
+        // на действие терялся бы именно тогда, когда пользователь его ждёт. Живёт на время жизни окна.
+        AppEvents.SendSnackMsgRequested
+          .AsObservable()
+          .ObserveOn(RxSchedulers.MainThreadScheduler)
+          .Subscribe(async content => await DelegateSnackMsg(content))
+          .DisposeWith(_windowInteractions);
+
+        // Исход добавления серверов из ЛЮБОЙ точки входа (угловой «+», Ctrl+V, онбординг, трей).
+        AppEvents.AddServerOutcomeReported
+          .AsObservable()
+          .ObserveOn(RxSchedulers.MainThreadScheduler)
+          .Subscribe(OnAddServerOutcome)
+          .DisposeWith(_windowInteractions);
+
+        // Канал с ДЕЙСТВИЕМ (Notify): «Повторить» у отказа, «Переподключиться» у выбора сервера.
+        // Отписка — в OnClosed вместе с прочей статикой (Notify статичен, иначе окно жило бы вечно).
+        Notify.Requested += OnNotifyRequested;
+    }
+
+    private void OnNotifyRequested(Notify.Message msg)
+    {
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            ShowToast(msg.Text, msg.ActionLabel, msg.Action);
+        }
+        else
+        {
+            Dispatcher.UIThread.Post(() => ShowToast(msg.Text, msg.ActionLabel, msg.Action));
+        }
     }
 
     // Создаёт HomeViewModel поверх реального движка (ProfilesViewModel + StatusBarViewModel из
@@ -1829,19 +1856,146 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
             DispatcherPriority.Default);
     }
 
-    // ==================== Нижняя пилюля-тост ОТКЛЮЧЕНА; фидбэк уходит в панель сообщений (Bug8) ====================
-    // Владелец: НИКАКИХ всплывающих нижних тостов (snackHost) — ни на подключении/отключении, ни на
-    // добавлении/обновлении подписки. Пилюля снизу по-прежнему НЕ показывается (snackHost остаётся
-    // скрытым). Но раньше это был ПОЛНЫЙ no-op: весь фидбэк добавления (пустой буфер, неверные данные,
-    // дубликат, успех) шёл через NoticeManager.Enqueue → это событие и молча ПРОПАДАЛ → «добавляю
-    // подписку — ничего не происходит, без объяснений». Теперь вместо тоста маршрутизируем текст в
-    // ИНЛАЙН-панель сообщений (NoticeManager.SendMessage → SendMsgViewRequested → MsgViewModel-лог) —
-    // не плавающий тост, а лог-поверхность (owner-aligned): исход добавления больше не теряется.
-    // (SubscriptionImportLogHandler в MainWindowViewModel уже пишет прогресс скачивания в ту же панель.)
+    // ==================== Тост: единственная поверхность, где приложение отвечает словами ====================
+    // ЧТО БЫЛО СЛОМАНО. Оба канала сообщений упирались в тупик: Enqueue → SendSnackMsgRequested →
+    // DelegateSnackMsg, который просто перекладывал текст в SendMessage → SendMsgViewRequested →
+    // MsgViewModel, а MsgView в этой оболочке НЕ создаётся ни разу (только вью-локатор и DesignData).
+    // Итог: ~156 мест публиковали сообщения в пустоту, и «вставил ссылку на подписку — ничего не
+    // происходит» было неотличимо от настоящего отказа. Теперь текст доходит до экрана.
+    //
+    // ГРАНИЦА, которую владелец провёл и которая здесь соблюдена: тост НЕ комментирует состояние
+    // подключения — его показывает щит на «Главной». Тост отвечает только на ЯВНОЕ действие
+    // пользователя и на отказ, который иначе останется немым.
+    //
+    // Лог не теряем: текст по-прежнему уходит в SendMessage, поэтому панель сообщений (когда её
+    // наконец поселят в оболочке) увидит ту же строку.
     private Task DelegateSnackMsg(string content)
     {
         NoticeManager.Instance.SendMessage(content);
+        ShowToast(content);
         return Task.CompletedTask;
+    }
+
+    // Действие тоста («Повторить» / «Переподключиться») живёт ровно один показ: ставится в ShowToast,
+    // снимается при уходе. Хранить его в поле, а не в Tag, чтобы клик не мог выстрелить чужой лямбдой.
+    private Action? _toastAction;
+    private CancellationTokenSource? _toastCts;
+
+    /// <summary>
+    /// Показывает одну строку ответа. <paramref name="actionLabel"/>/<paramref name="action"/> —
+    /// необязательный выход: отказ обязан предлагать восстановление ТАМ ЖЕ, где о нём сообщил.
+    /// Повторный вызов вытесняет предыдущий тост (последнее сообщение всегда актуальнее).
+    /// Темп читается в момент воспроизведения (Motion.Play → MotionState.IsLite), никогда не кэшируется.
+    /// </summary>
+    public void ShowToast(string? content, string? actionLabel = null, Action? action = null)
+    {
+        if (content.IsNullOrEmpty() || snackHost is null || snackText is null || snackAction is null)
+        {
+            return;
+        }
+
+        _toastCts?.Cancel();
+        var cts = new CancellationTokenSource();
+        _toastCts = cts;
+
+        snackText.Text = content;
+        _toastAction = action;
+        var hasAction = action is not null && actionLabel.IsNotEmpty();
+        snackAction.Content = hasAction ? actionLabel : null;
+        snackAction.IsVisible = hasAction;
+        // Сквозной для мыши, пока не несёт действия: тост не должен перехватывать клик по контенту.
+        snackHost.IsHitTestVisible = hasAction;
+        snackHost.IsVisible = true;
+
+        _ = RunToast(cts, hasAction);
+    }
+
+    private async Task RunToast(CancellationTokenSource cts, bool hasAction)
+    {
+        // Режим движения читается ЗДЕСЬ, в момент воспроизведения (а не в конструкторе) — ровно для
+        // этого и написан MotionState. Под «Облегчённым» тост появляется и уходит мгновенно: нужен
+        // сам ответ, а не его выезд.
+        var lite = MotionState.IsLite;
+        try
+        {
+            if (lite)
+            {
+                snackHost.Opacity = 1;
+            }
+            else
+            {
+                await RunTranslateFade(snackHost, TranslateTransform.YProperty, 12, 0, 0, 1, Motion.Dur.State, Motion.Ease.Standard, cts.Token);
+            }
+
+            // С действием держим дольше: у пользователя должно хватить времени прочитать и нажать.
+            await Task.Delay(hasAction ? TimeSpan.FromSeconds(7) : TimeSpan.FromSeconds(4), cts.Token);
+
+            if (!lite)
+            {
+                await RunTranslateFade(snackHost, TranslateTransform.YProperty, 0, 8, 1, 0, Motion.Dur.StateExit, Motion.Ease.Standard, cts.Token);
+            }
+            HideToast();
+        }
+        catch (OperationCanceledException)
+        {
+            // Вытеснен более свежим сообщением либо снят кликом — состояние ставит вытеснивший вызов.
+        }
+    }
+
+    private void HideToast()
+    {
+        if (snackHost is null)
+        {
+            return;
+        }
+        snackHost.IsVisible = false;
+        snackHost.IsHitTestVisible = false;
+        snackHost.Opacity = 0;
+        snackHost.RenderTransform = null;
+        _toastAction = null;
+    }
+
+    private void SnackAction_Click(object? sender, RoutedEventArgs e)
+    {
+        var act = _toastAction;
+        _toastCts?.Cancel();
+        HideToast();
+        act?.Invoke();
+    }
+
+    // ==================== Исход добавления серверов → одна фраза пользователю ====================
+    // Канал языконезависим по контракту (ServiceLib общий с WPF-клиентом и слов не выбирает), поэтому
+    // слова живут ЗДЕСЬ, в таблице копирайта десктопа. Срабатывает из ЛЮБОЙ точки входа: угловой «+»,
+    // Ctrl+V, онбординг, меню трея — все они сходятся в один метод движка.
+    private void OnAddServerOutcome(AddServerOutcome outcome)
+    {
+        switch (outcome.Outcome)
+        {
+            case EAddOutcome.ServersImported:
+                ShowToast(L.F("Home_AddedServers", outcome.Count));
+                break;
+
+            case EAddOutcome.SubscriptionAdded:
+                ShowToast(L.T("Home_SubscriptionAdded"));
+                break;
+
+            case EAddOutcome.SubscriptionAlreadyExists:
+                ShowToast(L.T("Home_SubscriptionExists"));
+                break;
+
+            case EAddOutcome.ClipboardEmpty:
+                ShowToast(L.T("Home_ClipboardEmpty"));
+                break;
+
+            case EAddOutcome.NothingRecognised:
+                ShowToast(L.T("Home_NothingToAdd"));
+                break;
+
+            default:
+                // Отказ обязан предлагать выход там же, где сообщил о себе (G2).
+                ShowToast(L.T("Common_SomethingWrong"), L.T("Common_Retry"), () => _ = AddServerViaClipboardAsync());
+                break;
+        }
     }
 
     // ==================== Общие аниматоры оболочки (transform+opacity, §A) ====================
@@ -1943,6 +2097,8 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         // на мёртвом окне (оно трогает chromeRoot.Bounds ДО спасительной проверки !IsVisible).
         UiScaleState.Changed -= OnUiScaleChanged;
         MotionState.Changed -= OnMotionStateChanged;
+        Notify.Requested -= OnNotifyRequested;
+        _toastCts?.Cancel();
         if (App.ThemeTransitionHook?.Target == this)
         {
             App.ThemeTransitionHook = null;

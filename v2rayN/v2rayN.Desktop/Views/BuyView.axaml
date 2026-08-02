@@ -78,7 +78,7 @@
             <Setter Property="Background" Value="Transparent" />
         </Style>
         <Style Selector="Button.Flat:pressed">
-            <Setter Property="RenderTransform" Value="scale(0.96)" />
+            <Setter Property="RenderTransform" Value="scale(0.97)" />
         </Style>
 
         <!--  Тулбар (Border.SubToolbar) и back-кнопка (Button.BackNav) — глобальные классы

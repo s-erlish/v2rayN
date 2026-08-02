@@ -31,13 +31,13 @@ public sealed partial class L
         // Title + line are the copy-law 9.5 «No servers» pair, verbatim. No exclamation marks (9.1).
         Add("Home_Welcome", "Добро пожаловать", "Welcome");
         Add("Home_NoSubs", "Нет серверов", "No servers");
-        Add("Home_NoSubsHint", "Добавьте провайдера или отсканируйте QR-код, чтобы появились серверы.", "Add a provider or scan a QR code to get servers.");
+        Add("Home_NoSubsHint", "Добавьте подписку или отсканируйте QR-код, чтобы появились серверы.", "Add a subscription or scan a QR code to get servers.");
 
         // First-run onboarding hero (OnboardingView): active-verb title names the exact job, subtitle
         // tells the concrete "how" and promises immediacy. Home_Welcome/Home_NoSubsHint kept above for
         // any other consumer; the onboarding screen uses these. Divider is the short sentence-case form
         // of Onboarding_OrSignIn (L.Account.cs), inside the two-hairline "или …" rule.
-        Add("Onboarding_Title", "Добавьте провайдера", "Add a provider");
+        Add("Onboarding_Title", "Добавьте подписку", "Add a subscription");
         Add("Onboarding_Subtitle", "Отсканируйте QR-код или вставьте ссылку из буфера. Доступ появится сразу.", "Scan a QR code or paste a link from the clipboard. Access appears right away.");
         Add("Onboarding_OrSignInShort", "или войдите в аккаунт", "or sign in to your account");
 
@@ -59,5 +59,24 @@ public sealed partial class L
         // Registered per plan §2.1 for reuse; HomeAccountChip.axaml is outside WP1's file scope,
         // so its literal is not converted here; this key is available for whoever owns that view.
         Add("Home_ManageAccount", "Управление аккаунтом", "Manage account");
+
+        // ── Ответ на добавление серверов (MainWindow.OnAddServerOutcome) ──
+        // Слова к языконезависимому исходу EAddOutcome: ServiceLib общий с WPF-клиентом и слов не
+        // выбирает. Формулировки в настоящем времени и говорят, ЧТО СЕЙЧАС ПРОИСХОДИТ, а не только
+        // что что-то случилось: подписка добавлена → серверы уже грузятся, повторная вставка →
+        // обновляем, а не «ошибка». Активный глагол, sentence-case, без восклицаний (9.1).
+        Add("Home_SubscriptionAdded", "Подписка добавлена, загружаем серверы", "Subscription added, fetching servers");
+        Add("Home_SubscriptionExists", "Эта подписка уже добавлена, обновляем её", "This subscription is already added, refreshing it");
+        Add("Home_AddedServers", "Добавлено серверов: {0}", "Servers added: {0}");
+        Add("Home_ClipboardEmpty", "В буфере обмена пусто — скопируйте ссылку и повторите", "The clipboard is empty — copy a link and try again");
+        Add("Home_NothingToAdd", "В буфере нет ссылки на подписку или сервер", "No subscription or server link in the clipboard");
+
+        // ── Предложение переподключиться (G1) ──
+        // 1:1 с Android: server_selected_reconnect_prompt / _generic / _action. Формулировка,
+        // пунктуация и роль совпадают дословно — это тот самый паттерн, который владелец назвал
+        // примером и попросил перенести «1 в 1».
+        Add("Home_ServerSelectedReconnect", "Выбран {0}. Переподключиться к нему?", "{0} selected. Reconnect to it?");
+        Add("Home_ServerSelectedReconnectGeneric", "Сервер выбран. Переподключиться к нему?", "Server selected. Reconnect to it?");
+        Add("Home_ReconnectAction", "Переподключиться", "Reconnect");
     }
 }

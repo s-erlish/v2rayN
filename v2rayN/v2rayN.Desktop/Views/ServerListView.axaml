@@ -127,7 +127,9 @@
 
                                             <!--  Server row (bg_server_row): default flat, hover SurfaceHigh, pressed
                                                   scale 0.96, selected = blue pill (12% accent fill + 1.5px Accent,
-                                                  radius 16). Tap → SelectServer (default + connect). Right-click → §2.13.
+                                                  radius 16). Тап → ВЫБОР: пока соединения нет — выбор и подключение,
+                                                  при живом туннеле — только выбор, а перенос предлагается отдельным
+                                                  действием «Переподключиться» (G1). Правый клик → §2.13.
                                                   ONE grid: 56 rhythm, 40 tile, single inset divider, no vertical margin.  -->
                                             <!--  Loaded → одноразовый reveal-стаггер первой заливки списка
                                                   (первые ≤8 строк всплывают 12→0 + fade, задержка i×40мс,
@@ -159,6 +161,7 @@
                                                 Loaded="OnServerRowLoaded"
                                                 PointerCaptureLost="OnRowPointerCaptureLost"
                                                 PointerExited="OnRowPointerExited"
+                                                KeyDown="OnRowKeyDown"
                                                 PointerPressed="OnRowPointerPressed"
                                                 PointerReleased="OnRowPointerReleased">
                                                 <Border.ContextMenu>
@@ -300,8 +303,11 @@
             </StackPanel>
         </ScrollViewer>
 
-        <!--  Empty state (layout_servers_empty): hero icon 64 + «Список пуст». The full onboarding
-              CTAs live in the connect-hero (right panel of Home), so this stays quiet.  -->
+        <!--  Пустое состояние (layout_servers_empty): иконка 64 + «Список пуст» + строка + ОДНО
+              действие. Действие добавлено по формуле 9.5 «заголовок · строка · действие»: строка уже
+              говорила «добавьте подписку», но нажать было нечего — совет без кнопки заставляет искать
+              её глазами по всему экрану. Кнопка ровно одна и делает ровно то, что советует строка;
+              QR остаётся на connect-герое, чтобы пустой список не превращался во второй онбординг.  -->
         <StackPanel
             Margin="24,0"
             HorizontalAlignment="Center"
@@ -323,6 +329,12 @@
                 Text="{loc:T Servers_EmptyHint}"
                 TextAlignment="Center"
                 TextWrapping="Wrap" />
+            <Button
+                Margin="0,2,0,0"
+                HorizontalAlignment="Center"
+                Classes="Tonal"
+                Command="{Binding AddViaClipboardCmd}"
+                Content="{loc:T Common_AddFromClipboard}" />
         </StackPanel>
     </Grid>
 </UserControl>

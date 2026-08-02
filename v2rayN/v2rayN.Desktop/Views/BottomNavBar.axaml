@@ -59,7 +59,7 @@
             <Setter Property="Background" Value="Transparent" />
         </Style>
         <Style Selector="Button.BottomNavItem:pressed">
-            <Setter Property="RenderTransform" Value="scale(0.92)" />
+            <Setter Property="RenderTransform" Value="scale(0.97)" />
         </Style>
 
         <!--  Глиф/подпись — неактивные (серый), плавный переход цвета.  -->
@@ -74,8 +74,11 @@
                 </Transitions>
             </Setter>
         </Style>
+        <!--  Подписи навигации — РУССКИЕ («Главная»/«Аккаунт»/«Настройки»), поэтому интерфейсная
+              гарнитура. В Space Grotesk нет ни одного кириллического глифа: эти три слова рисовались
+              необъявленным фолбэком ОС — своей гарнитурой на каждой системе (D-1/D-2).  -->
         <Style Selector="Button.BottomNavItem TextBlock.NavLabel">
-            <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+            <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
             <Setter Property="FontSize" Value="11" />
             <Setter Property="FontWeight" Value="Medium" />
             <Setter Property="HorizontalAlignment" Value="Center" />

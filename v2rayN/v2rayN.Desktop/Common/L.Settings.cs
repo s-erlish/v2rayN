@@ -61,8 +61,8 @@ public sealed partial class L
         Add("Settings_AutostartHint", "Открывать departament при входе в систему", "Open departament when you sign in");
 
         Add("Settings_SecSubscription", "Подписка", "Subscription");
-        // Terminology lock 9.3: the URL sources are «провайдеры»; «подписка» is the paid service.
-        Add("Settings_SubAutoUpdate", "Автообновление провайдеров", "Auto-update providers");
+        // ВЛАДЕЛЕЦ B1: «подписка», не «провайдер» — см. L.Common.cs.
+        Add("Settings_SubAutoUpdate", "Автообновление подписок", "Auto-update subscriptions");
         Add("Settings_Routing", "Маршрутизация", "Routing");
         Add("Settings_GeoFiles", "Файлы ресурсов", "Resource files");
 
@@ -146,7 +146,7 @@ public sealed partial class L
         Add("About_SystemInfo", "ОС: {0}\nАрхитектура: {1}\n.NET: {2}", "OS: {0}\nArchitecture: {1}\n.NET: {2}");
 
         // ── BackupPage ──
-        Add("Backup_Intro", "Сохраните все настройки, провайдеров и серверы в один .zip-файл или восстановите их из ранее сохранённой копии.", "Save all settings, providers, and servers to a single .zip file, or restore them from a previous backup.");
+        Add("Backup_Intro", "Сохраните все настройки, подписки и серверы в один .zip-файл или восстановите их из ранее сохранённой копии.", "Save all settings, subscriptions, and servers to a single .zip file, or restore them from a previous backup.");
         Add("Backup_Export", "Экспорт", "Export");
         Add("Backup_ExportHint", "Сохранить копию в файл", "Save a backup to a file");
         Add("Backup_Save", "Сохранить…", "Save…");
@@ -186,10 +186,10 @@ public sealed partial class L
         Add("UrlSchemes_RemoveFailed", "Не удалось убрать схему. Запустите departament от имени администратора и повторите. ", "Couldn't remove the scheme. Run departament as administrator and try again. ");
 
         // ── ProviderSettingsPage ──
-        Add("Provider_Title", "Настройки провайдеров", "Provider settings");
+        Add("Provider_Title", "Настройки подписок", "Subscription settings");
         Add("Provider_SecUpdates", "Обновление", "Updates");
         Add("Provider_AutoUpdate", "Автообновление", "Auto-update");
-        Add("Provider_AutoUpdateHint", "Автоматически обновлять серверы провайдеров", "Refresh provider servers automatically");
+        Add("Provider_AutoUpdateHint", "Автоматически обновлять серверы подписок", "Refresh subscription servers automatically");
         Add("Provider_Interval", "Интервал обновления", "Update interval");
         Add("Provider_SecNetwork", "Сеть", "Network");
         Add("Provider_Hwid", "Идентификатор устройства (HWID)", "Device ID (HWID)");

@@ -513,10 +513,19 @@ public class MainWindowViewModel : MyReactiveObject
 
     public async Task AddServerViaClipboardAsync(string? clipboardData)
     {
-        // Bug 8: every add outcome must be OBSERVABLE. The bottom snack (Enqueue) is a no-op sink on
-        // this build, and a subscription-URL add deliberately raises no snack at all, so each branch
-        // below ALSO writes a concise inline status line to the message panel (SendMessageEx) — the
-        // user always sees that the tap did something. Exceptions are caught + logged, never swallowed.
+        // Every add outcome must be OBSERVABLE, and it is this method's job to make it so, because it
+        // is the single funnel: the corner «+» flyout, Ctrl+V, the onboarding surface, the tray menu
+        // and the status bar all arrive here.
+        //
+        // It reports twice, on purpose, because the two channels have different jobs:
+        //  • SendMessageEx — the running log (engine progress, one line per step). Diagnostic.
+        //  • AddServerOutcomeReported — the one sentence the USER is owed for the action they just
+        //    took. Language-neutral by contract (ServiceLib is shared with the WPF client), so the
+        //    shell that owns the copy table writes the words.
+        // The subscription branch used to write to the log ONLY, and the shell has no renderer for
+        // the log — so pasting a subscription link looked exactly like a dead button. That is the
+        // defect this shape exists to make impossible: no branch may return without an outcome.
+        var outcome = new AddServerOutcome(EAddOutcome.Failed);
         try
         {
             var stringData = clipboardData;
@@ -526,16 +535,16 @@ public class MainWindowViewModel : MyReactiveObject
                 if (result.IsNullOrEmpty())
                 {
                     // Empty/unavailable clipboard — surface it instead of a silent no-op.
-                    NoticeManager.Instance.SendMessageEx("Нет данных для добавления");
-                    NoticeManager.Instance.Enqueue(ResUI.OperationFailed);
+                    outcome = new AddServerOutcome(EAddOutcome.ClipboardEmpty);
+                    NoticeManager.Instance.SendMessageEx(ResUI.OperationFailed);
                     return;
                 }
                 stringData = result;
             }
 
             // Detect a subscription-URL paste and whether that URL is already stored, so a duplicate
-            // re-paste surfaces "подписка уже добавлена" instead of silently re-fetching. (AddSubItem
-            // returns 0 for an existing URL too, so ret alone cannot tell new from duplicate.)
+            // re-paste can say "already added" instead of silently re-fetching. (AddSubItem returns 0
+            // for an existing URL too, so ret alone cannot tell new from duplicate.)
             var isSubUrl = ContainsSubscriptionUrl(stringData);
             var alreadyExists = isSubUrl && await SubscriptionUrlAlreadyExistsAsync(stringData);
 
@@ -546,18 +555,15 @@ public class MainWindowViewModel : MyReactiveObject
                 await RefreshServersDispatcherAsync();
                 if (isSubUrl)
                 {
-                    // Subscription add: no bottom notification (owner request) — its download progress
-                    // streams into the message panel below; here we mark the add itself.
-                    NoticeManager.Instance.SendMessageEx(alreadyExists
-                        ? "Подписка уже добавлена, обновляю данные"
-                        : "Подписка добавлена, загружаю серверы");
+                    outcome = new AddServerOutcome(alreadyExists
+                        ? EAddOutcome.SubscriptionAlreadyExists
+                        : EAddOutcome.SubscriptionAdded);
                 }
                 else
                 {
-                    // Direct server-link import — keep the snack AND mirror it inline.
-                    var msg = string.Format(ResUI.SuccessfullyImportedServerViaClipboard, ret);
-                    NoticeManager.Instance.Enqueue(msg);
-                    NoticeManager.Instance.SendMessageEx(msg);
+                    // Direct server-link import — mirror the count into the log too.
+                    outcome = new AddServerOutcome(EAddOutcome.ServersImported, ret);
+                    NoticeManager.Instance.SendMessageEx(string.Format(ResUI.SuccessfullyImportedServerViaClipboard, ret));
                 }
                 // A pasted http(s) URL only creates a SubItem — no servers were fetched yet. Download
                 // them now so ProfileItems populates and onboarding is replaced (Android does this
@@ -567,16 +573,22 @@ public class MainWindowViewModel : MyReactiveObject
             else
             {
                 // Nothing recognised in the pasted data (invalid / unsupported / already-present with
-                // nothing new). Surface it inline as well as via the snack sink.
-                NoticeManager.Instance.SendMessageEx("Нет данных для добавления");
-                NoticeManager.Instance.Enqueue(ResUI.OperationFailed);
+                // nothing new).
+                outcome = new AddServerOutcome(EAddOutcome.NothingRecognised);
+                NoticeManager.Instance.SendMessageEx(ResUI.OperationFailed);
             }
         }
         catch (Exception ex)
         {
             // Never let the import path throw into an unobserved fire-and-forget task.
+            outcome = new AddServerOutcome(EAddOutcome.Failed);
             Logging.SaveLog("AddServerViaClipboardAsync", ex);
             NoticeManager.Instance.SendMessageEx(ResUI.OperationFailed);
+        }
+        finally
+        {
+            // finally, not per-branch: an early return or a throw must still tell the user something.
+            AppEvents.AddServerOutcomeReported.Publish(outcome);
         }
     }
 
@@ -595,6 +607,13 @@ public class MainWindowViewModel : MyReactiveObject
     public async Task AddServerViaImageAsync()
     {
         var imageFileName = await BrowseImageFileInteraction.Handle(Unit.Default);
+        // A CANCELLED file picker is not a failed import: the user closed the dialog and expects
+        // nothing to happen. Returning here (instead of falling into the parse with an empty path)
+        // is what keeps "нечего добавить" out of the way of someone who simply changed their mind.
+        if (imageFileName.IsNullOrEmpty())
+        {
+            return;
+        }
         await AddScanResultAsync(imageFileName);
     }
 
@@ -611,14 +630,15 @@ public class MainWindowViewModel : MyReactiveObject
 
     private async Task AddScanResultAsync(string? result)
     {
-        // Bug 8: mirror the clipboard path — every outcome is surfaced inline (message panel) so a
-        // scan is never a silent no-op, and the whole flow is wrapped so nothing throws unobserved.
+        // Mirrors AddServerViaClipboardAsync exactly — same funnel, same contract: one outcome per
+        // attempt, published in a finally so no branch can return silently. See that method's header.
+        var outcome = new AddServerOutcome(EAddOutcome.Failed);
         try
         {
             if (result.IsNullOrEmpty())
             {
+                outcome = new AddServerOutcome(EAddOutcome.NothingRecognised);
                 NoticeManager.Instance.SendMessageEx(ResUI.NoValidQRcodeFound);
-                NoticeManager.Instance.Enqueue(ResUI.NoValidQRcodeFound);
                 return;
             }
 
@@ -632,15 +652,13 @@ public class MainWindowViewModel : MyReactiveObject
                 await RefreshServersDispatcherAsync();
                 if (isSubUrl)
                 {
-                    // Subscription add: no bottom notification (owner request) — mark it inline instead.
-                    NoticeManager.Instance.SendMessageEx(alreadyExists
-                        ? "Подписка уже добавлена, обновляю данные"
-                        : "Подписка добавлена, загружаю серверы");
+                    outcome = new AddServerOutcome(alreadyExists
+                        ? EAddOutcome.SubscriptionAlreadyExists
+                        : EAddOutcome.SubscriptionAdded);
                 }
                 else
                 {
-                    // Direct server-link scan — keep the snack AND mirror it inline.
-                    NoticeManager.Instance.Enqueue(ResUI.SuccessfullyImportedServerViaScan);
+                    outcome = new AddServerOutcome(EAddOutcome.ServersImported, ret);
                     NoticeManager.Instance.SendMessageEx(ResUI.SuccessfullyImportedServerViaScan);
                 }
                 // A scanned http(s) URL only creates a SubItem — fetch its servers now (OFF-model:
@@ -649,14 +667,19 @@ public class MainWindowViewModel : MyReactiveObject
             }
             else
             {
-                NoticeManager.Instance.SendMessageEx("Нет данных для добавления");
-                NoticeManager.Instance.Enqueue(ResUI.OperationFailed);
+                outcome = new AddServerOutcome(EAddOutcome.NothingRecognised);
+                NoticeManager.Instance.SendMessageEx(ResUI.OperationFailed);
             }
         }
         catch (Exception ex)
         {
+            outcome = new AddServerOutcome(EAddOutcome.Failed);
             Logging.SaveLog("AddScanResultAsync", ex);
             NoticeManager.Instance.SendMessageEx(ResUI.OperationFailed);
+        }
+        finally
+        {
+            AppEvents.AddServerOutcomeReported.Publish(outcome);
         }
     }
 
@@ -674,9 +697,10 @@ public class MainWindowViewModel : MyReactiveObject
             return;
         }
 
-        // No bottom toast on subscription add — the engine progress already streams into the message
-        // panel via SubscriptionImportLogHandler. (Owner request: adding a subscription must raise no
-        // bottom notifications.)
+        // The fetch itself stays quiet: its per-step progress streams into the message log via
+        // SubscriptionImportLogHandler. The user already got the one sentence they were owed from the
+        // add's own outcome ("subscription added, fetching servers") — a second announcement per step
+        // is noise, which is what the owner rejected.
         await Task.Run(async () => await SubscriptionHandler.UpdateProcess(_config, "", false, SubscriptionImportLogHandler));
 
         await RefreshSubscriptions();
