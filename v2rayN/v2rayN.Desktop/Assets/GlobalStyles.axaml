@@ -789,7 +789,12 @@
     <!-- ==================================================================== -->
     <Style Selector="Button.Tonal, Button.Secondary">
         <Setter Property="RenderTransformOrigin" Value="50%,50%" />
-        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHighest}" />
+        <!--  Brush.ControlFill, а не Brush.SurfaceHighest: у КНОПКИ и у поверхности разные
+              обязанности. Значение в тёмной/светлой темах то же самое, что было, но в монохроме
+              плашка кнопки поднимается до 3:1 к своей поверхности (WCAG 1.4.11), а чипы и метры
+              остаются тихой ступенью поверхности. Без этого mono снимал тон — и вторичная кнопка
+              переставала быть фигурой: 1.19:1 на тёмной, 1.23:1 на светлой.  -->
+        <Setter Property="Background" Value="{DynamicResource Brush.ControlFill}" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
         <Setter Property="CornerRadius" Value="{DynamicResource Radius.Button}" />
         <Setter Property="MinHeight" Value="{DynamicResource Size.Btn}" />
@@ -1383,7 +1388,12 @@
         <Setter Property="RenderTransformOrigin" Value="50%,50%" />
         <Setter Property="Padding" Value="12,0" />
         <Setter Property="CornerRadius" Value="{DynamicResource Radius.Button}" />
-        <Setter Property="Background" Value="Transparent" />
+        <!--  Brush.ActionFill = Transparent в тёмной и светлой (как и было). В монохроме подпись
+              текст-действия становится ТЕМ ЖЕ цветом, что проза вокруг (1.1:1 на тёмной, 1.0:1 на
+              светлой — то есть совсем ничем), потому что единственное, чем она отличалась, был
+              синий. Тон вернуть нельзя — mono про это; поэтому в mono токен даёт действию тихую
+              подложку: у него появляется тело, и оно снова читается как действие, а не как текст.  -->
+        <Setter Property="Background" Value="{DynamicResource Brush.ActionFill}" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
         <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
         <Setter Property="FontWeight" Value="Medium" />
@@ -1414,7 +1424,7 @@
         <Setter Property="FontSize" Value="14" />
     </Style>
     <Style Selector="Button.LinkAction /template/ ContentPresenter#PART_ContentPresenter, Button.Tertiary /template/ ContentPresenter#PART_ContentPresenter, Button.TextAction /template/ ContentPresenter#PART_ContentPresenter">
-        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Background" Value="{DynamicResource Brush.ActionFill}" />
         <Setter Property="CornerRadius" Value="{DynamicResource Radius.Button}" />
     </Style>
     <!--  Ховер третичной: заливки в покое нет, поэтому ховер несёт САМ фон
@@ -2009,6 +2019,45 @@
                 </KeyFrame>
             </Animation>
         </Style.Animations>
+    </Style>
+
+    <!-- ==================================================================== -->
+    <!--  ОБЛЕГЧЁННЫЙ РЕЖИМ У СПИННЕРА — то, чего ему не дали, когда давали      -->
+    <!--  SkeletonPulse (владелец: «в лёгком режиме везде появляется кусочек      -->
+    <!--  кружка и он статический, не крутится»).                                -->
+    <!--                                                                          -->
+    <!--  Вращение под lite не аттачится — это правильно. Но индикатор здесь НЕ    -->
+    <!--  кольцо, а ДУГА: сегмент задаётся штрих-пунктиром. Остановить дугу        -->
+    <!--  значит показать обрывок окружности, и это читается не как «идёт          -->
+    <!--  работа», а как поломанная отрисовка.                                     -->
+    <!--                                                                          -->
+    <!--  Два ограничения, записанные выше в этом же файле, задают решение:        -->
+    <!--   1) конкурирующий стиль не отменяет запущенную анимацию → гасим          -->
+    <!--      селектором (уже сделано);                                            -->
+    <!--   2) ЛОКАЛЬНОЕ значение на экземпляре стилем не перебить → значит         -->
+    <!--      StrokeDashArray НЕЛЬЗЯ оставлять в разметке потребителя.             -->
+    <!--  Поэтому геометрия дуги переехала СЮДА, под тот же гейт :not(.lite):      -->
+    <!--  под lite штрих-пунктир просто не назначается, и та же самая фигура       -->
+    <!--  рисуется ПОЛНЫМ кольцом — законченная статичная форма вместо обрывка.    -->
+    <!--  Класс выбирается по диаметру спиннера (числа — прежние, из разметки).    -->
+    <!--                                                                          -->
+    <!--  Непрозрачность 0.7 — ровно как у lite-двойника SkeletonPulse: статично,  -->
+    <!--  но по-прежнему читается как «идёт работа», а не как погасший элемент.    -->
+    <!-- ==================================================================== -->
+    <Style Selector=":is(Window):not(.lite) Ellipse.Spinner.Arc15">
+        <Setter Property="StrokeDashArray" Value="5.9,17.7" />
+    </Style>
+    <Style Selector=":is(Window):not(.lite) Ellipse.Spinner.Arc16">
+        <Setter Property="StrokeDashArray" Value="6.3,18.8" />
+    </Style>
+    <Style Selector=":is(Window):not(.lite) Ellipse.Spinner.Arc22">
+        <Setter Property="StrokeDashArray" Value="6.9,20.8" />
+    </Style>
+    <Style Selector=":is(Window):not(.lite) Ellipse.Spinner.Arc64">
+        <Setter Property="StrokeDashArray" Value="16.75,50.25" />
+    </Style>
+    <Style Selector=":is(Window).lite Ellipse.Spinner">
+        <Setter Property="Opacity" Value="0.7" />
     </Style>
 
     <!-- ==================================================================== -->

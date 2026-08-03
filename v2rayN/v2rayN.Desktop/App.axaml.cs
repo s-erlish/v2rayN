@@ -614,38 +614,78 @@ public partial class App : Application
             ["Brush.OnSurfaceVariant"] = Solid(onSurfaceVariant),
             ["Brush.Outline"] = Solid(light ? "#D2D2D6" : "#38383C"),
             ["Brush.OutlineVariant"] = Solid(light ? "#E6E6E8" : "#28282C"),
+            // ГРАНИЦА КОНТРОЛА (контурная кнопка, поле ввода, трек сегментов). Ключ был ПРОПУЩЕН,
+            // поэтому в монохроме держался базовый сине-серый (#646C7C / #7D8BA3) — единственный
+            // синий, оставшийся на контуре кнопки. Нейтральный эквивалент того же назначения:
+            // тёмная #8A8A90 = 5.4:1 на карточке, светлая #6E6E73 = 5.2:1 на карточке (порог 3:1).
+            ["Brush.OutlineControl"] = Solid(light ? "#6E6E73" : "#8A8A90"),
 
             // ── Акцент → серый (схлопывание #4C8DFF) ──
             ["Brush.Accent"] = Solid(accent),
             ["Brush.OnAccent"] = Solid(onAccent),
             ["Brush.AccentContainer"] = Solid(accentContainer),
             ["Brush.OnAccentContainer"] = Solid(onAccentContainer),
+            // Шаги взаимодействия акцента. Ключи были ПРОПУЩЕНЫ, из-за чего каждая первичная кнопка
+            // под курсором и под нажатием СИНЕЛА посреди монохрома (#3D7EF0 / #3877E0 из базы) —
+            // ровно то, чего mono не допускает. Значения — те же, что уже стоят у SemiColorPrimary*
+            // ниже, чтобы наши кнопки и контролы Semi шагали в ногу.
+            ["Brush.AccentHover"] = Solid(light ? "#2A2A2E" : "#E7E7E9"),
+            ["Brush.AccentPressed"] = Solid(light ? "#000000" : "#C9C9CD"),
             // Semi-тема тянет primary по DynamicResource — тоже в серый, иначе синие фокусы/кнопки.
             ["SemiColorPrimary"] = Solid(accent),
             ["SemiColorPrimaryHover"] = Solid(light ? "#2A2A2E" : "#E7E7E9"),
             ["SemiColorPrimaryActive"] = Solid(light ? "#000000" : "#C9C9CD"),
 
+            // ── КНОПКИ ОБЯЗАНЫ ОСТАВАТЬСЯ ВИДИМЫМИ (владелец: «в монохроме кнопки сливаются») ──
+            // Контракт mono — «нет акцентного ТОНА», а не «нет контраста». Забрав тон, набор забирал
+            // и единственное, чем два архетипа отличались от окружения:
+            //   • вторичная (тональная) кнопка была плашкой SurfaceHighest — 1.19:1 на тёмной
+            //     карточке и 1.23:1 на светлой, то есть не фигура, а только подпись в воздухе;
+            //   • текст-действие («Забыли пароль?», «Открыть Telegram») красилось акцентом, который
+            //     в mono совпадает с цветом прозы: 1.1:1 на тёмной и РОВНО 1.0:1 на светлой.
+            // Возвращаем разницу тем, что mono разрешает, — значением и телом, без тона и градиента.
+            // ControlFill: тёмная #626268 = 3.09:1 к карточке (подпись на ней 5.51:1), светлая
+            // #949498 = 3.02:1 (подпись 6.20:1) — порог WCAG 1.4.11 для границы компонента взят.
+            ["Brush.ControlFill"] = Solid(light ? "#949498" : "#626268"),
+            // ActionFill: тихая подложка под текст-действием — оно снова читается как контрол,
+            // но не спорит с первичной кнопкой (в тёмной/светлой темах остаётся прозрачным).
+            ["Brush.ActionFill"] = light ? Alpha("#000000", 0.10) : Alpha("#FFFFFF", 0.12),
+            // Ховер иконочной навигации: ключ был ПРОПУЩЕН → под курсором глиф уезжал в базовый
+            // сине-серый. Нейтральный шаг от OnSurfaceVariant: ярче на тёмной, темнее на светлой.
+            ["Brush.OnSurfaceVariantHover"] = Solid(light ? "#3C3C40" : "#D0D0D4"),
+
             // ── Семантика: зелёный/оранжевый/жёлтый → серый; КРАСНЫЙ остаётся (деструктив) ──
             ["Brush.Green"] = Solid(connected), // «подключено»/успех = mono connected (серо-белый)
             ["Brush.Red"] = Solid(red),
             ["Brush.RedText"] = Solid(redText),
+            // Значок задержки (badge «хороший»/«средний» пинг) — ещё три тема-зависимых ключа,
+            // пропущенных набором: в монохроме бейдж оставался ЗЕЛЁНЫМ и ЖЁЛТЫМ. Зелёный сходится
+            // с «подключено» (как Brush.Green выше), янтарный — с нейтральным глифом.
+            ["Brush.Ping.Good"] = Solid(connected),
+            ["Brush.Amber"] = Solid(onSurfaceVariant),
+            ["Brush.AmberText"] = Solid(onSurfaceVariant),
 
             // ── Плитки иконок: цветные → серые; красная плитка остаётся красной ──
+            // ПРОЗРАЧНОСТЬ = 0.20, как у цветных плиток в базе (там тоже 0.20). Здесь стояло 0.10 —
+            // половина, — и это била дважды: нейтральный тинт и так виден слабее цветного, а его
+            // ещё и разбавили вдвое. Плитки настроек и круги степпера (±) превращались в 1.31:1,
+            // то есть почти в фон. При равной прозрачности разница читается снова.
             ["Brush.Tile.Neutral"] = Solid(highest),
-            ["Brush.Tile.Blue"] = Alpha(greyTint, 0.10),
-            ["Brush.Tile.Purple"] = Alpha(greyTint, 0.10),
-            ["Brush.Tile.Green"] = Alpha(greyTint, 0.10),
-            ["Brush.Tile.Orange"] = Alpha(greyTint, 0.10),
-            ["Brush.Tile.Yellow"] = Alpha(greyTint, 0.10),
+            ["Brush.Tile.Blue"] = Alpha(greyTint, 0.20),
+            ["Brush.Tile.Purple"] = Alpha(greyTint, 0.20),
+            ["Brush.Tile.Green"] = Alpha(greyTint, 0.20),
+            ["Brush.Tile.Orange"] = Alpha(greyTint, 0.20),
+            ["Brush.Tile.Yellow"] = Alpha(greyTint, 0.20),
             ["Brush.Tile.Red"] = Alpha(red, 0.20),
             ["Brush.Icon.Orange"] = Solid(onSurfaceVariant),
             ["Brush.Icon.Yellow"] = Solid(onSurfaceVariant),
 
             // ── Выбор / статус-чипы: серые; failed остаётся красным ──
-            ["Brush.SelectedFill"] = Alpha(greyTint, 0.12),
-            ["Brush.StatusChip.Green"] = Alpha(greyTint, 0.12),
-            ["Brush.StatusChip.Orange"] = Alpha(greyTint, 0.12),
-            ["Brush.StatusChip.Yellow"] = Alpha(greyTint, 0.12),
+            // Те же 0.16 / 0.18, что у цветных аналогов в базе: mono снимает тон, а не заливку.
+            ["Brush.SelectedFill"] = Alpha(greyTint, 0.16),
+            ["Brush.StatusChip.Green"] = Alpha(greyTint, 0.18),
+            ["Brush.StatusChip.Orange"] = Alpha(greyTint, 0.18),
+            ["Brush.StatusChip.Yellow"] = Alpha(greyTint, 0.18),
             ["Brush.StatusChip.Red"] = Alpha(red, 0.18),
 
             // ── Ховер: белый лифт на тёмной базе, чёрное затемнение на светлой ──

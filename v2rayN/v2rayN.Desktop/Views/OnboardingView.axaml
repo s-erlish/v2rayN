@@ -15,8 +15,8 @@
 
     <UserControl.Styles>
         <!--  §A4: единая высота CTA 52 с экраном «Вход» (там Primary/Tonal .Tall = 52). Глобально .Tall
-              задан только для Primary — добавляем локальный Tonal.Tall, чтобы тональные CTA онбординга
-              (буфер / Telegram) тоже были 52, а не 48 — конец расхождения высот двух бренд-экранов.  -->
+              задан только для Primary — добавляем локальный Tonal.Tall, чтобы тональный CTA онбординга
+              (Telegram) тоже был 52, а не 48 — конец расхождения высот двух бренд-экранов.  -->
         <Style Selector="Button.Tonal.Tall">
             <Setter Property="Height" Value="52" />
         </Style>
@@ -29,13 +29,20 @@
 
           Раскладка (сверху вниз, центрированная колонка ≤440 на радиальном фоне Главной): фирменный
           щит-логотип (тот же, что в LoginView — общий элемент на переходе онбординг→вход) + вордмарк →
-          заголовок (Display) + подзаголовок → путь «завести доступ» QR (Primary) + буфер (Tonal) →
+          заголовок (Display) + подзаголовок → путь «завести доступ»: буфер обмена (Primary) →
           разделитель «или войдите» → путь «войти» Telegram (Tonal) + сайт (LinkAction, текст-ссылка).
-          ОДИН залитый акцент — QR; сайт демотирован до текст-ссылки (убран двойной акцент). Ритм 24
+          ОДИН залитый акцент — буфер; сайт демотирован до текст-ссылки (убран двойной акцент). Ритм 24
           между группами / 8 внутри. Focus-кольца — автоматические (FocusAdorner) у стандартных классов.
 
+          ТРИ ДВЕРИ, КАЖДАЯ ВЕДЁТ ТУДА, ЧТО НАПИСАНА (владелец, 2026-08-03). «Добавить по QR-коду»
+          с первого кадра СНЯТ — добавление осталось одно, из буфера обмена; сам QR-путь никуда не
+          делся и доступен из углового «+» на «Главной» (ConnectHeroView). Telegram и сайт стартуют
+          свой способ входа СРАЗУ, без промежуточного выбора метода: у Telegram это уже так
+          (StartTelegramLogin входит в ожидание синхронно), у сайта — теперь тоже
+          (AccountViewModel.OpenSiteLoginBrowser выставляет AwaitingSite до открытия браузера).
+
           Тексты: Onboarding_Title / Onboarding_Subtitle / Onboarding_OrSignInShort (L.Home.cs) +
-          reuse Common_AddViaQr / Common_AddFromClipboard / Common_SignInTelegram / Common_SignInWebsite.
+          reuse Common_AddFromClipboard / Common_SignInTelegram / Common_SignInWebsite.
           Incy: pure dark + один синий, Space Grotesk, sentence-case. Движение — code-behind (entrance-
           стаггер один раз, затем статика; под lite/preview — сразу видно). Действия — по DataContext.
           =================================================================================  -->
@@ -102,9 +109,10 @@
                         TextWrapping="Wrap" />
 
                     <!--  ── Путь «завести доступ» (provision) ──  -->
-                    <!--  Добавить по QR-коду (home_empty_add_qr) — ЕДИНСТВЕННЫЙ залитый акцент.  -->
+                    <!--  Добавить из буфера обмена (home_empty_add_clipboard) — ЕДИНСТВЕННОЕ действие
+                          добавления на первом кадре и потому ЕДИНСТВЕННЫЙ залитый акцент. Глиф ic_copy.  -->
                     <Button
-                        x:Name="AddQrButton"
+                        x:Name="AddClipboardButton"
                         Margin="0,24,0,0"
                         HorizontalAlignment="Stretch"
                         HorizontalContentAlignment="Center"
@@ -119,39 +127,12 @@
                                 Width="20"
                                 Height="20"
                                 VerticalAlignment="Center"
-                                Data="F1 M181.333333 384a32 32 0 0 1-64 0v-111.146667a155.52 155.52 0 0 1 155.52-155.52H384a32 32 0 0 1 0 64h-111.146667a91.52 91.52 0 0 0-91.52 91.52V384zM640 181.333333a32 32 0 0 1 0-64h111.146667a155.52 155.52 0 0 1 155.52 155.52V384a32 32 0 0 1-64 0v-111.146667a91.52 91.52 0 0 0-91.52-91.52H640zM842.666667 640a32 32 0 0 1 64 0v111.146667a155.52 155.52 0 0 1-155.52 155.52H640a32 32 0 0 1 0-64h111.146667a91.52 91.52 0 0 0 91.52-91.52V640zM384 842.666667a32 32 0 0 1 0 64h-111.146667a155.52 155.52 0 0 1-155.52-155.52V640a32 32 0 0 1 64 0v111.146667a91.52 91.52 0 0 0 91.52 91.52H384z m-192-298.666667a32 32 0 0 1 0-64h640a32 32 0 0 1 0 64H192z"
-                                Foreground="{DynamicResource Brush.OnAccent}"
-                                />
-                            <TextBlock
-                                VerticalAlignment="Center"
-                                Foreground="{DynamicResource Brush.OnAccent}"
-                                Text="{loc:T Common_AddViaQr}" />
-                        </StackPanel>
-                    </Button>
-
-                    <!--  Добавить из буфера обмена (home_empty_add_clipboard) — глиф ic_copy.  -->
-                    <Button
-                        x:Name="AddClipboardButton"
-                        Margin="0,8,0,0"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Center"
-                        VerticalContentAlignment="Center"
-                        Classes="Tonal Tall">
-                        <StackPanel
-                            HorizontalAlignment="Center"
-                            Orientation="Horizontal"
-                            Spacing="8"
-                            VerticalAlignment="Center">
-                            <PathIcon
-                                Width="20"
-                                Height="20"
-                                VerticalAlignment="Center"
                                 Data="F1 M16,1L4,1c-1.1,0 -2,0.9 -2,2v14h2L4,3h12L16,1zM19,5L8,5c-1.1,0 -2,0.9 -2,2v14c0,1.1 0.9,2 2,2h11c1.1,0 2,-0.9 2,-2L21,7c0,-1.1 -0.9,-2 -2,-2zM19,21L8,21L8,7h11v14z"
-                                Foreground="{DynamicResource Brush.OnSurface}"
+                                Foreground="{DynamicResource Brush.OnAccent}"
                                 />
                             <TextBlock
                                 VerticalAlignment="Center"
-                                Foreground="{DynamicResource Brush.OnSurface}"
+                                Foreground="{DynamicResource Brush.OnAccent}"
                                 Text="{loc:T Common_AddFromClipboard}" />
                         </StackPanel>
                     </Button>

@@ -20,6 +20,18 @@ public partial class MessageBoxDialog : Window
     {
         InitializeComponent();
 
+        // Отступ 16 существует ровно для тени: она рисуется В НЁМ. Если композитор попиксельной
+        // прозрачности не даёт, эти 16 px — не пустота, а закрашенный периметр окна, и тень в нём
+        // читается вторым контуром вокруг карточки. Тогда карточка занимает окно целиком: заливка
+        // окна (TransparencyBackgroundFallback) совпадает с заливкой карточки, и периметра нет.
+        // Читается в конструкторе — окно уже имеет платформенную реализацию, поэтому решение
+        // принимается ДО первой раскладки и окно не передёргивает размером.
+        if (ActualTransparencyLevel != WindowTransparencyLevel.Transparent)
+        {
+            dialogCard.Margin = default;
+            dialogCard.BoxShadow = default;
+        }
+
         if (Design.IsDesignMode)
         {
             caption = "departament";

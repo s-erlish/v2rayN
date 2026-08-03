@@ -13,11 +13,11 @@ namespace v2rayN.Desktop.Views;
 /// Значения/тумблеры биндятся к реальному <see cref="SettingsViewModel"/> (данные читаются из
 /// живого <c>Config</c> и пишутся обратно через <c>ConfigHandler.SaveConfig</c>). КАЖДАЯ строка —
 /// реальная рабочая функция, и КАЖДЫЙ правый affordance ЧЕСТЕН (Round2 Фаза D):
-///   • шеврон = НАВИГАЦИЯ (тап открывает суб-страницу): Прокси по приложениям, DNS, Пинг,
+///   • шеврон = НАВИГАЦИЯ (тап открывает суб-страницу): Прокси по приложениям, DNS,
 ///     Маршрутизация, Файлы ресурсов, О приложении, Резервное копирование, Схемы URL;
 ///   • шеврон-раскрытие (0↔90) = инлайн-панель: Локальный прокси;
-///   • unfold_more = значение ЦИКЛИТСЯ на месте (≥3 значений): Язык, Автообновление, Число Mux,
-///     Масштаб интерфейса;
+///   • unfold_more = СПИСОК ЗНАЧЕНИЙ раскрывается у самой строки (ChoiceFlyout): Пинг, Язык,
+///     Автообновление, Число Mux, Масштаб интерфейса;
 ///   • инлайн-сегмент (2 состояния) = смена на месте: Режим (TUN/Прокси), Оформление (Тёмная/Светлая);
 ///   • тумблер = булево: Обход сети, IPv6, Mux, Фрагментация, Облегчённый режим, Монохром, Запуск.
 ///
@@ -42,20 +42,23 @@ public partial class SettingsView : UserControl
         // --- Строки-НАВИГАЦИИ (шеврон): тап кладёт Incy суб-страницу на общий стек оболочки ---
         WireRow(RowPerApp, () => OpenPage(new PerAppProxyPage(), refresh: true));
         WireRow(RowDns, () => OpenPage(new DnsSubView(), refresh: true));
-        WireRow(RowPingMethod, () => OpenPage(new PingSettingsPage(), refresh: true));
         WireRow(RowRouting, () => OpenPage(new RoutingSubView()));
         WireRow(RowAssets, () => OpenPage(new GeoFilesPage()));
         WireRow(RowAbout, () => OpenPage(new AboutPage()));
         WireRow(RowBackup, () => OpenPage(new BackupPage()));
         WireRow(RowUrlScheme, () => OpenPage(new UrlSchemesPage()));
 
-        // --- Строки-ЦИКЛА значения (unfold_more): тап продвигает реальное значение на месте ---
-        WireRow(RowMuxConcurrency, () => _ = Vm?.CycleMuxConcurrencyAsync());
-        WireRow(RowLanguage, () => _ = Vm?.CycleLanguageAsync());
-        WireRow(RowSubAutoUpdate, () => _ = Vm?.CycleAutoUpdateAsync());
-        // Масштаб интерфейса: тап циклит пресеты zoom (те же значения — на Ctrl +/Ctrl −). Оболочка
-        // (MainWindow) применяет фактор мгновенно через общий UiScaleState.
-        WireRow(RowUiScale, () => Vm?.CycleUiScale());
+        // --- Строки-ВЫБОРА (unfold_more): тап раскрывает СПИСОК ЗНАЧЕНИЙ у самой строки ---
+        // Владелец: «надо, чтобы просто варианты пинга при нажатии сбоку у кнопки высвечивались, и это
+        // касается многих таких настроек». Здесь сходятся два прежних поведения, и оба были плохи:
+        // «Пинг» занимал целую суб-страницу ради выбора из двух, а Язык / Автообновление / Число Mux /
+        // Масштаб перещёлкивали значение вслепую — набор значений человек не видел вовсе. Теперь у всех
+        // одна форма: нажал строку — увидел все значения рядом, выбрал — список закрылся.
+        WireRow(RowPingMethod, ShowPingChoice);
+        WireRow(RowMuxConcurrency, ShowMuxConcurrencyChoice);
+        WireRow(RowLanguage, ShowLanguageChoice);
+        WireRow(RowSubAutoUpdate, ShowAutoUpdateChoice);
+        WireRow(RowUiScale, ShowUiScaleChoice);
 
         // --- Локальный прокси — раскрытие инлайн-панели (анимированный шеврон 0↔90 + слайд панели) ---
         WireRow(RowLocalProxy, ToggleLocalProxy);
@@ -136,6 +139,126 @@ public partial class SettingsView : UserControl
                 e.Handled = true;
             }
         };
+    }
+
+    // ===================== Строки-выбора: список значений у строки =====================
+
+    /// <summary>«Пинг»: метод измерения задержки + два параметра проверки, которые его сопровождают.
+    /// Прежде это была целая суб-страница (тулбар, «назад», три карточки) ради выбора из двух —
+    /// её содержимое целиком переехало сюда: те же два метода, тот же адрес, тот же тайм-аут.
+    /// Метод применяется сразу; параметры коммитятся при закрытии списка (пустое поле = «как было»).</summary>
+    private void ShowPingChoice()
+    {
+        if (Vm is not { } vm)
+        {
+            return;
+        }
+
+        var url = new TextBox
+        {
+            Text = vm.PingTestUrl,
+            VerticalContentAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            PlaceholderText = "https://www.gstatic.com/generate_204",
+        };
+        var timeout = new TextBox
+        {
+            Text = vm.PingTimeout > 0 ? vm.PingTimeout.ToString() : string.Empty,
+            MaxLength = 3,
+            VerticalContentAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            PlaceholderText = "5",
+        };
+
+        var footer = new StackPanel { Spacing = 6 };
+        footer.Children.Add(Caption(L.T("Ping_TestAddress")));
+        footer.Children.Add(url);
+        footer.Children.Add(Caption(L.T("Ping_Timeout"), topGap: true));
+        footer.Children.Add(timeout);
+
+        ChoiceFlyout.Show(
+            RowPingMethod,
+            [
+                new ChoiceItem(L.T("Ping_RealTitle"), L.T("Ping_RealHint"), vm.PingMethod == SettingsViewModel.PingMethodReal,
+                    () => _ = vm.SetPingMethodAsync(SettingsViewModel.PingMethodReal)),
+                new ChoiceItem("TCP", L.T("Ping_TcpHint"), vm.PingMethod == SettingsViewModel.PingMethodTcp,
+                    () => _ = vm.SetPingMethodAsync(SettingsViewModel.PingMethodTcp)),
+            ],
+            footer,
+            () => _ = vm.SetPingParamsAsync(url.Text, timeout.Text));
+    }
+
+    /// <summary>«Число соединений Mux»: реальный набор значений движка.</summary>
+    private void ShowMuxConcurrencyChoice()
+    {
+        if (Vm is not { } vm)
+        {
+            return;
+        }
+        var cur = vm.MuxConcurrency;
+        ChoiceFlyout.Show(
+            RowMuxConcurrency,
+            [.. SettingsViewModel.MuxConcurrencyOptions.Select(n =>
+                new ChoiceItem(n.ToString(), null, n == cur, () => _ = vm.SetMuxConcurrencyAsync(n)))]);
+    }
+
+    /// <summary>«Язык»: переключается вживую, без перезапуска.</summary>
+    private void ShowLanguageChoice()
+    {
+        if (Vm is not { } vm)
+        {
+            return;
+        }
+        var cur = vm.CurrentLanguage;
+        ChoiceFlyout.Show(
+            RowLanguage,
+            [.. SettingsViewModel.LanguageOptions.Select(code =>
+                new ChoiceItem(LanguageLabel(code), null, code == cur, () => _ = vm.SetLanguageAsync(code)))]);
+    }
+
+    /// <summary>Подпись языка — на самом языке (так его узнают, не зная текущего).</summary>
+    private static string LanguageLabel(string code) => code switch
+    {
+        "en" => "English",
+        _ => L.T("Settings_LangRussian"),
+    };
+
+    /// <summary>«Автообновление подписок»: интервалы в часах (значение хранится в минутах).</summary>
+    private void ShowAutoUpdateChoice()
+    {
+        if (Vm is not { } vm)
+        {
+            return;
+        }
+        var cur = vm.AutoUpdateInterval;
+        ChoiceFlyout.Show(
+            RowSubAutoUpdate,
+            [.. SettingsViewModel.AutoUpdateOptions.Select(m =>
+                new ChoiceItem(L.F("Common_HoursShort", m / 60), null, m == cur, () => _ = vm.SetAutoUpdateAsync(m)))]);
+    }
+
+    /// <summary>«Масштаб интерфейса»: пресеты zoom; те же значения дают Ctrl +/Ctrl −/Ctrl 0.</summary>
+    private void ShowUiScaleChoice()
+    {
+        if (Vm is not { } vm)
+        {
+            return;
+        }
+        var cur = vm.UiScale;
+        ChoiceFlyout.Show(
+            RowUiScale,
+            [.. SettingsViewModel.UiScaleOptions.Select(s =>
+                new ChoiceItem(SettingsViewModel.FormatUiScale(s), null, Math.Abs(s - cur) < 0.001, () => vm.SetUiScale(s)))]);
+    }
+
+    /// <summary>Подпись поля в подвале списка выбора (Subtitle, с отступом сверху у второго и далее).</summary>
+    private static TextBlock Caption(string text, bool topGap = false)
+    {
+        var block = new TextBlock { Text = text };
+        block.Classes.Add("Subtitle");
+        if (topGap)
+        {
+            block.Margin = new Thickness(0, 6, 0, 0);
+        }
+        return block;
     }
 
     // ===================== Инлайн-сегменты (Режим / Оформление) =====================

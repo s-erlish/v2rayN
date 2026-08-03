@@ -960,12 +960,16 @@ public class AccountViewModel : MyReactiveObject
     /// </summary>
     private void OpenSiteLoginBrowser()
     {
+        // Входим в ожидание сайта СИНХРОННО и ДО запуска браузера — ровно как StartTelegramLogin входит
+        // в своё ожидание. Владелец: «через сайт только через сайт, без дополнительных окон». Раньше эта
+        // команда состояние не трогала, поэтому «Войти через сайт» с первого кадра открывала браузер И
+        // оставляла на экране общий блок выбора способа — сегмент «Вход | Регистрация», форму
+        // email/пароля, чужие провайдеры. LoginView наблюдает CurrentLoginState инлайн на UI-потоке,
+        // так что это состояние успевает до первой раскладки суб-страницы: сайт ведёт только на сайт.
         RunOnUi(() =>
         {
-            if (CurrentLoginState is LoginState.Error)
-            {
-                CurrentLoginState = new LoginState.Idle();
-            }
+            TwoFaTempToken = null;
+            CurrentLoginState = new LoginState.AwaitingSite();
         });
         var url = $"{SiteLoginUrl}?return={AppScheme}://auth";
         try
@@ -974,7 +978,12 @@ public class AccountViewModel : MyReactiveObject
         }
         catch
         {
-            RunOnUi(() => AppEvents.SendSnackMsgRequested.Publish(L.T("Common_SomethingWrong")));
+            // Браузер не открылся — ждать нечего: возвращаем выбор способа и говорим об этом.
+            RunOnUi(() =>
+            {
+                CurrentLoginState = new LoginState.Idle();
+                AppEvents.SendSnackMsgRequested.Publish(L.T("Common_SomethingWrong"));
+            });
         }
     }
 

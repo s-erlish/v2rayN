@@ -402,7 +402,9 @@
 
                     <Border Classes="SettingDivider" />
 
-                    <!--  Пинг → редактор параметров реальной проверки задержки  -->
+                    <!--  Пинг → список методов измерения задержки у самой строки (плюс адрес и
+                          тайм-аут проверки в подвале списка). Раньше это была суб-страница ради
+                          выбора из двух — см. SettingsView.axaml.cs, ShowPingChoice.  -->
                     <Border x:Name="RowPingMethod" Classes="SettingRow">
                         <Grid ColumnDefinitions="Auto,*,Auto,Auto">
                             <Border
@@ -427,8 +429,8 @@
                                 Text="{Binding PingMethodText}" />
                             <PathIcon
                                 Grid.Column="3"
-                                Classes="Chevron"
-                                Data="{StaticResource Geo.Set.Chevron}" />
+                                Classes="Unfold"
+                                Data="{StaticResource Geo.Set.UnfoldMore}" />
                         </Grid>
                     </Border>
 

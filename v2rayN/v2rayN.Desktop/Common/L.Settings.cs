@@ -5,10 +5,10 @@ namespace v2rayN.Desktop.Common;
 // Keys: Settings_*, Dns_*, Routing_*, PerApp_*, Ping_*, Geo_*, About_*, Backup_*,
 //       UrlSchemes_*, Provider_* (+ Common_* references).
 // Views: SettingsView(.axaml/.cs), SettingsViewModel, DnsSubView, RoutingSubView,
-//        PerAppProxyPage, PingSettingsPage, GeoFilesPage, AboutPage, BackupPage,
+//        PerAppProxyPage, GeoFilesPage, AboutPage, BackupPage,
 //        UrlSchemesPage, ProviderSettingsPage, ThemeSettingViewModel.
 // Inventory: LOCALIZATION_PLAN.md §2.3.
-// NOTE (WP0 already done): the language-switch wiring in SettingsViewModel.CycleLanguageAsync
+// NOTE (WP0 already done): the language-switch wiring in SettingsViewModel.SetLanguageAsync
 //       and ThemeSettingViewModel already calls L.Instance.SetLanguage(...) and the reboot
 //       notice is dropped. WP3 only needs to convert the Resolve*Text() resolvers to
 //       language-aware output. This is the ONLY L file WP3 edits.
@@ -112,8 +112,7 @@ public sealed partial class L
         Add("PerApp_TunHint", "Работает в режиме TUN (sing-box). Правила применяются при следующем подключении.", "Works in TUN mode (sing-box). Rules apply on the next connection.");
         Add("PerApp_ProgramFileType", "Программа", "Program");
 
-        // ── PingSettingsPage (only Real / TCP rows) ──
-        Add("Ping_Intro", "Как измерять задержку серверов. Ниже задаются адрес и тайм-аут проверки.", "How to measure server latency. The test address and timeout are set below.");
+        // ── Пинг: список выбора у строки настроек (SettingsView.ShowPingChoice) — only Real / TCP ──
         Add("Ping_RealTitle", "Реальная задержка", "Real latency");
         Add("Ping_RealHint", "Через ядро, как при подключении", "Through the core, as when connected");
         Add("Ping_TcpHint", "TCP-подключение к серверу", "TCP connection to the server");

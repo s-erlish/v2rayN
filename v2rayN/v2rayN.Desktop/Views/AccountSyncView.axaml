@@ -74,10 +74,9 @@
                             x:Name="SyncSpinner"
                             Width="64"
                             Height="64"
-                            Classes="Spinner"
+                            Classes="Spinner Arc64"
                             RenderTransformOrigin="50%,50%"
                             Stroke="{DynamicResource Brush.Accent}"
-                            StrokeDashArray="16.75,50.25"
                             StrokeLineCap="Round"
                             StrokeThickness="3" />
                         <PathIcon

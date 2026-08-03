@@ -31,15 +31,25 @@ public class SettingsViewModel : MyReactiveObject
     // Protocol written to Mux4SboxItem when the Mux switch is turned on (matches Global.SingboxMuxs).
     private const string DefaultMuxProtocol = "h2mux";
 
-    // Cycle-on-tap option sets (no picker sub-screen exists yet → advance through real values in place).
-    // Auto-update interval is stored in MINUTES: 60/360/720/1440 == 1/6/12/24 ч. (default 60 = 1 ч.).
-    private static readonly int[] AutoUpdateOptions = [60, 360, 720, 1440];
-    private static readonly int[] MuxConcurrencyOptions = [4, 8, 16, 32, 64, 128];
+    // Наборы значений строк «выбери одно из N». Раньше строка ПЕРЕЩЁЛКИВАЛА их по кругу вслепую —
+    // человек не видел, какие значения вообще есть, и до нужного доходил перебором. Теперь набор
+    // раскрывается списком у самой строки (SettingsView → ChoiceFlyout), поэтому он публичный:
+    // выбирается КОНКРЕТНОЕ значение, а не «следующее».
+    // Интервал автообновления хранится в МИНУТАХ: 60/360/720/1440 == 1/6/12/24 ч. (по умолчанию 60).
+    public static readonly int[] AutoUpdateOptions = [60, 360, 720, 1440];
+    public static readonly int[] MuxConcurrencyOptions = [4, 8, 16, 32, 64, 128];
 
-    // «Масштаб интерфейса» пресеты (in-app zoom, доля). Тап по строке продвигает к следующему пресету
-    // строго больше текущего (обрабатывая и промежуточные значения с горячих клавиш Ctrl +/−), с оборотом
-    // на минимум. Диапазон совпадает с UiScaleState.Min..Max (0.8..2.0).
-    private static readonly double[] UiScaleOptions = [0.8, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0];
+    // «Масштаб интерфейса» пресеты (in-app zoom, доля). Диапазон совпадает с UiScaleState.Min..Max
+    // (0.8..2.0); те же значения дают горячие клавиши Ctrl +/Ctrl −/Ctrl 0.
+    public static readonly double[] UiScaleOptions = [0.8, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0];
+
+    // Языки интерфейса: живая таблица L + ресурсы движка. Порядок — как в списке.
+    public static readonly string[] LanguageOptions = ["ru", "en"];
+
+    // Методы измерения задержки. Ядро реально умеет только эти два: остальные (Httping/Icmping) в
+    // движке отсутствуют, и ранее сохранённое значение сводится к Realping.
+    public const string PingMethodReal = "Realping";
+    public const string PingMethodTcp = "Tcping";
 
     #region Toggle-backed settings (two-way from the iOS switches → real config)
 
@@ -442,59 +452,109 @@ public class SettingsViewModel : MyReactiveObject
         return portOk;
     }
 
-    /// <summary>Число соединений Mux row: cycle through the real option set; persists + reloads live.</summary>
-    public async Task CycleMuxConcurrencyAsync()
+    /// <summary>Текущее число соединений Mux (0/неизвестное читается как 8 — как и подпись строки).</summary>
+    public int MuxConcurrency => _config.Mux4SboxItem.MaxConnections > 0 ? _config.Mux4SboxItem.MaxConnections : 8;
+
+    /// <summary>Число соединений Mux: применяет ВЫБРАННОЕ значение; persists + reloads live.</summary>
+    public async Task SetMuxConcurrencyAsync(int value)
     {
-        if (_designMode)
+        if (_designMode || value <= 0 || value == _config.Mux4SboxItem.MaxConnections)
         {
             return;
         }
 
-        var cur = _config.Mux4SboxItem.MaxConnections;
-        var idx = Array.IndexOf(MuxConcurrencyOptions, cur);
-        // Unknown/0 → start at 8 (index 1), otherwise advance one step.
-        var next = MuxConcurrencyOptions[idx < 0 ? 1 : (idx + 1) % MuxConcurrencyOptions.Length];
-
-        _config.Mux4SboxItem.MaxConnections = next;
+        _config.Mux4SboxItem.MaxConnections = value;
         await PersistAndMaybeReload();
-        MuxConcurrencyText = next.ToString();
+        MuxConcurrencyText = value.ToString();
     }
 
-    /// <summary>Автообновление подписки row: cycle Выкл / 6 / 12 / 24 / 48 ч; persists the real interval.</summary>
-    public async Task CycleAutoUpdateAsync()
+    /// <summary>Текущий интервал автообновления подписок, в минутах.</summary>
+    public int AutoUpdateInterval => _config.GuiItem.AutoUpdateInterval;
+
+    /// <summary>Автообновление подписки: применяет ВЫБРАННЫЙ интервал (в минутах).</summary>
+    public async Task SetAutoUpdateAsync(int minutes)
     {
-        if (_designMode)
+        if (_designMode || minutes == _config.GuiItem.AutoUpdateInterval)
         {
             return;
         }
 
-        var cur = _config.GuiItem.AutoUpdateInterval;
-        var idx = Array.IndexOf(AutoUpdateOptions, cur);
-        var next = AutoUpdateOptions[idx < 0 ? 0 : (idx + 1) % AutoUpdateOptions.Length];
-
-        _config.GuiItem.AutoUpdateInterval = next;
+        _config.GuiItem.AutoUpdateInterval = minutes;
         await ConfigHandler.SaveConfig(_config);
         SubAutoUpdateText = ResolveAutoUpdateText();
     }
 
-    /// <summary>Язык row: toggle Русский ↔ English; persists the real language + culture and prompts a
-    /// restart to apply everywhere. Value updates immediately.</summary>
-    public async Task CycleLanguageAsync()
+    /// <summary>Текущий язык интерфейса («ru» по умолчанию).</summary>
+    public string CurrentLanguage => _config.UiItem.CurrentLanguage.IsNullOrEmpty() ? "ru" : _config.UiItem.CurrentLanguage!;
+
+    /// <summary>Язык: применяет ВЫБРАННЫЙ язык вживую, без перезапуска.</summary>
+    public async Task SetLanguageAsync(string code)
     {
-        if (_designMode)
+        if (_designMode || code.IsNullOrEmpty() || code == CurrentLanguage)
         {
             return;
         }
 
-        var next = _config.UiItem.CurrentLanguage == "en" ? "ru" : "en";
-        _config.UiItem.CurrentLanguage = next;
+        _config.UiItem.CurrentLanguage = code;
         await ConfigHandler.SaveConfig(_config);
 
         // Живое переключение языка без перезапуска: L.SetLanguage синхронизирует CurrentUICulture
         // (движок/ResUI) и обновляет все открытые {loc:T} биндинги; RefreshDisplayValues
         // пере-вычисляет значения строк-резолверов. Уведомление о перезапуске больше не нужно.
-        Common.L.Instance.SetLanguage(next);
+        Common.L.Instance.SetLanguage(code);
         RefreshDisplayValues();
+    }
+
+    /// <summary>Текущий метод измерения задержки (неподдержанные значения сводятся к реальной задержке).</summary>
+    public string PingMethod => _config.SpeedTestItem?.PingMethod == PingMethodTcp ? PingMethodTcp : PingMethodReal;
+
+    /// <summary>Метод измерения задержки: применяет ВЫБРАННЫЙ метод. Persist only — ядро не трогаем.</summary>
+    public async Task SetPingMethodAsync(string method)
+    {
+        if (_designMode || method == _config.SpeedTestItem.PingMethod)
+        {
+            return;
+        }
+
+        _config.SpeedTestItem.PingMethod = method;
+        await ConfigHandler.SaveConfig(_config);
+        PingMethodText = ResolvePingMethodText();
+    }
+
+    /// <summary>Адрес проверки задержки (пусто — значение движка по умолчанию).</summary>
+    public string PingTestUrl => _config.SpeedTestItem?.SpeedPingTestUrl ?? string.Empty;
+
+    /// <summary>Тайм-аут проверки в секундах; 0 — не задан.</summary>
+    public int PingTimeout => _config.SpeedTestItem?.SpeedTestTimeout ?? 0;
+
+    /// <summary>
+    /// Параметры проверки задержки (адрес + тайм-аут) — сопровождают выбор метода, но выбором не
+    /// являются. Пустое/некорректное поле НЕ затирает сохранённое значение: пустой ввод здесь означает
+    /// «оставить как было», а не «стереть». Тайм-аут ограничен теми же 1…599 с, что и раньше.
+    /// </summary>
+    public async Task SetPingParamsAsync(string? url, string? timeout)
+    {
+        if (_designMode)
+        {
+            return;
+        }
+
+        var changed = false;
+        var trimmed = url?.Trim();
+        if (trimmed.IsNotEmpty() && trimmed != _config.SpeedTestItem.SpeedPingTestUrl)
+        {
+            _config.SpeedTestItem.SpeedPingTestUrl = trimmed;
+            changed = true;
+        }
+        if (int.TryParse(timeout?.Trim(), out var t) && t is > 0 and < 600 && t != _config.SpeedTestItem.SpeedTestTimeout)
+        {
+            _config.SpeedTestItem.SpeedTestTimeout = t;
+            changed = true;
+        }
+        if (changed)
+        {
+            await ConfigHandler.SaveConfig(_config);
+        }
     }
 
     /// <summary>Оформление-сегмент: set a SPECIFIC base variant (Светлая when <paramref name="light"/>,
@@ -523,33 +583,29 @@ public class SettingsViewModel : MyReactiveObject
         IsLightTheme = light;
     }
 
-    /// <summary>Масштаб интерфейса row: цикл по пресетам 80…200% (следующий СТРОГО больше текущего, с
-    /// оборотом на минимум — корректно и после произвольных значений с горячих клавиш Ctrl +/−). Толкает
-    /// фактор в общий <c>UiScaleState</c> → оболочка (MainWindow) применяет zoom мгновенно (трансформ + мин-
-    /// размер + брейкпоинт), и персистит в <c>UiItem.UiScale</c>. Подпись обновит подписка на Changed;
+    /// <summary>Текущий фактор масштаба интерфейса (тот, что реально применён оболочкой).</summary>
+    public double UiScale => v2rayN.Desktop.Common.UiScaleState.Current;
+
+    /// <summary>Масштаб интерфейса: применяет ВЫБРАННЫЙ пресет. Толкает фактор в общий
+    /// <c>UiScaleState</c> → оболочка (MainWindow) применяет zoom мгновенно (трансформ + мин-размер +
+    /// брейкпоинт), и персистит в <c>UiItem.UiScale</c>. Подпись обновит подписка на Changed;
     /// выставляем и напрямую для мгновенной отзывчивости.</summary>
-    public void CycleUiScale()
+    public void SetUiScale(double scale)
     {
         if (_designMode)
         {
             return;
         }
 
-        var cur = v2rayN.Desktop.Common.UiScaleState.Current;
-        // Первый пресет строго больше текущего; если текущий ≥ максимума — оборот на минимум.
-        var next = UiScaleOptions.FirstOrDefault(o => o > cur + 0.001);
-        if (next < UiScaleOptions[0])
-        {
-            next = UiScaleOptions[0];
-        }
-
+        var next = v2rayN.Desktop.Common.UiScaleState.Clamp(scale);
         v2rayN.Desktop.Common.UiScaleState.Set(next);
         _config.UiItem.UiScale = next;
         _ = ConfigHandler.SaveConfig(_config);
         UiScaleText = FormatUiScale(next);
     }
 
-    private static string FormatUiScale(double scale) => $"{Math.Round(scale * 100)}%";
+    /// <summary>Подпись пресета масштаба — та же в строке и в списке вариантов.</summary>
+    public static string FormatUiScale(double scale) => $"{Math.Round(scale * 100)}%";
 
     /// <summary>Re-read values that a sub-screen (per-app / ping / provider / etc.) may have changed,
     /// so the row value labels stay truthful after the dialog closes.</summary>

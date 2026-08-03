@@ -11,11 +11,13 @@ namespace v2rayN.Desktop.Views;
 /// <see cref="HomeViewModel.IsEmpty"/> = true, и прячет её (открывая обычный шелл), как только подписка
 /// добавлена. Это буквально первый кадр нового пользователя.
 ///
-/// «Добавить по QR-коду» / «из буфера обмена» бьют в реальный движок через HomeViewModel (тот же путь,
-/// что онбординг-CTA в HomeView). «Войти через Telegram» / «через сайт» СРАЗУ стартуют соответствующую
-/// авторизацию (без промежуточного выбора метода): Telegram открывает deep link и переходит в ожидание,
-/// сайт открывает форму email/пароля. Шелл скрыт, пока пусто, поэтому вход показываем оверлеем; «назад»
-/// возвращает к онбордингу.
+/// ТРИ ДВЕРИ, И КАЖДАЯ ВЕДЁТ ТУДА, ЧТО НА НЕЙ НАПИСАНО (владелец, 2026-08-03). «Добавить по QR-коду»
+/// с первого кадра снят — добавление одно, «из буфера обмена», и оно же единственный залитый акцент;
+/// QR-путь остаётся доступен из углового «+» на «Главной». «Войти через Telegram» / «через сайт» СРАЗУ
+/// стартуют свой способ авторизации, без промежуточного выбора метода и без формы email/пароля:
+/// Telegram открывает deep link и входит в ожидание подтверждения, сайт открывает браузер и показывает
+/// шаг ожидания сайта (<see cref="LoginState.AwaitingSite"/>). Шелл скрыт, пока пусто, поэтому вход
+/// показываем оверлеем; «назад» возвращает к онбордингу.
 ///
 /// Движение (§6/P1 + §3a/§3b P2): один хореографированный entrance при первом показе — 4 АВТОРСКИХ бита
 /// (щит → идентичность → «завести доступ» → «войти»), щит scale 0.90→1 (общий с connect-героем), остальное
@@ -43,7 +45,6 @@ public partial class OnboardingView : UserControl
     {
         InitializeComponent();
 
-        AddQrButton.Click += OnAddQr;
         AddClipboardButton.Click += OnAddClipboard;
         LoginTelegramButton.Click += OnLoginTelegram;
         LoginSiteButton.Click += OnLoginSite;
@@ -84,15 +85,6 @@ public partial class OnboardingView : UserControl
     }
 
     // ── Действия (проводка CTA по DataContext) ──────────────────────────────
-
-    // Добавить по QR-коду → скан экрана (MainWindowViewModel.AddServerViaScanAsync).
-    private void OnAddQr(object? sender, RoutedEventArgs e)
-    {
-        if (DataContext is HomeViewModel vm)
-        {
-            _ = vm.AddViaQr();
-        }
-    }
 
     // Добавить из буфера обмена → импорт из clipboard (MainWindowViewModel.AddServerViaClipboardAsync).
     private void OnAddClipboard(object? sender, RoutedEventArgs e)
@@ -138,14 +130,14 @@ public partial class OnboardingView : UserControl
 
     /// <summary>
     /// Задержка entrance-бита по роли ребёнка колонки (§3a). Порядок XAML: 0 щит; 1–3 идентичность
-    /// (вордмарк + заголовок + подзаголовок); 4–5 «завести доступ» (QR + буфер); 6–8 «войти»
-    /// (разделитель + Telegram + сайт). Члены бита делят его задержку — 4 бита, а не 9-шаговый drip.
+    /// (вордмарк + заголовок + подзаголовок); 4 «завести доступ» (буфер обмена); 5–7 «войти»
+    /// (разделитель + Telegram + сайт). Члены бита делят его задержку — 4 бита, а не 8-шаговый drip.
     /// </summary>
     private static int BeatDelayMs(int childIndex) => childIndex switch
     {
         0 => 0,               // бит 1 · щит-марка
         1 or 2 or 3 => 60,    // бит 2 · идентичность
-        4 or 5 => 140,        // бит 3 · завести доступ
+        4 => 140,             // бит 3 · завести доступ
         _ => 200,             // бит 4 · войти (и любой хвост)
     };
 

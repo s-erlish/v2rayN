@@ -793,8 +793,8 @@ public partial class ServerListView : UserControl
     // implementable without a core change, so they are dead options. This resolver therefore only
     // ever yields the two working probes (Tcping / Realping); any other persisted value (incl. a
     // stale «Httping»/«Icmping» left by an earlier build) safely falls back to Realping so ping still
-    // works. The dead HTTP/ICMP rows must be removed from the picker — see PingSettingsPage.axaml
-    // (RowHttp/RowIcmp), which this wave does not own; flagged for the settings owner.
+    // works. The picker (Настройки → Пинг, now a choice flyout — SettingsView.ShowPingChoice) offers
+    // only those two, so a user can no longer pick a probe the core cannot run.
     private static ESpeedActionType ResolvePingAction()
         => AppManager.Instance.Config.SpeedTestItem.PingMethod == "Tcping"
             ? ESpeedActionType.Tcping

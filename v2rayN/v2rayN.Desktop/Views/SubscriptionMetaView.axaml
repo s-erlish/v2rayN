@@ -169,10 +169,9 @@
                                 Height="16"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
-                                Classes="Spinner"
+                                Classes="Spinner Arc16"
                                 IsVisible="False"
                                 Stroke="{DynamicResource Brush.Accent}"
-                                StrokeDashArray="6.3,18.8"
                                 StrokeLineCap="Round"
                                 StrokeThickness="2">
                                 <!--  Явный центр вращения (половина 16px = 8): глобальный

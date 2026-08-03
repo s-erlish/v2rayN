@@ -196,7 +196,10 @@ public class HomeViewModel : MyReactiveObject, IDisposable
             .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(msg =>
             {
-                if (msg.IsNullOrEmpty())
+                // «Визитка» узла («[Custom] [Xray]ғı Finland») — отладочная подпись апстрима, а не
+                // причина. Подписать ею щит значило бы объяснить отказ строкой, которую человек не
+                // читает; отказы (FailedToRunCore, ошибки сборки конфига) проходят как проходили.
+                if (msg.IsNullOrEmpty() || NoticePolicy.IsNodeSummary(msg))
                 {
                     return;
                 }

@@ -17,6 +17,17 @@ public abstract record LoginState
     public sealed record SiteLoading : LoginState;
 
     /// <summary>
+    /// The browser was sent to the site's /app-login page and the app is waiting for the user to finish
+    /// there. Nothing is polled — the site returns through the <c>departamentvpn://auth</c> deep link
+    /// (or the user pastes the code), which moves the flow on to <see cref="SiteHandoffLoading"/>.
+    ///
+    /// This state exists so that "sign in via the website" IS the website: entering it before the browser
+    /// opens keeps the shared method block — the sign-in/register segment, the email/password form, the
+    /// other providers — off screen for a user who already chose their door on the first frame.
+    /// </summary>
+    public sealed record AwaitingSite : LoginState;
+
+    /// <summary>
     /// A browser→app SSO handoff code was received (custom-scheme callback or a pasted code) and is being
     /// exchanged for a session via <see cref="AuthManager.ConsumeAppHandoff"/>. The UI shows a focused
     /// «завершаем вход через сайт…» step while the one-time code is redeemed.

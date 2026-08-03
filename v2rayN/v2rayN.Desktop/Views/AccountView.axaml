@@ -904,10 +904,9 @@
                                                                         Height="18"
                                                                         HorizontalAlignment="Center"
                                                                         VerticalAlignment="Center"
-                                                                        Classes="Spinner spinning"
+                                                                        Classes="Spinner spinning Arc16"
                                                                         IsVisible="{Binding IsRenewing}"
                                                                         Stroke="{DynamicResource Brush.OnAccent}"
-                                                                        StrokeDashArray="6.3,18.8"
                                                                         StrokeLineCap="Round"
                                                                         StrokeThickness="2">
                                                                         <Ellipse.RenderTransform>

@@ -187,6 +187,13 @@ public sealed partial class L
         Add("Login_CodePaste", "Вставьте код из браузера", "Paste the code from your browser");
         // Transient step while the departamentvpn://auth handoff code is being redeemed.
         Add("Login_SiteHandoff", "Завершаем вход через сайт…", "Finishing sign-in via the website…");
+        // «Войти через сайт» leads to the website and nowhere else: the browser is open and the app waits
+        // here instead of showing the shared sign-in/register form (owner, 2026-08-03).
+        Add("Login_SiteWaitingTitle", "Продолжите на сайте", "Continue on the website");
+        Add("Login_SiteWaitingHint",
+            "Мы открыли сайт в браузере. Войдите там и вернитесь — остальное сделаем сами.",
+            "We've opened the website in your browser. Sign in there and come back — we'll take care of the rest.");
+        Add("Login_OpenSiteAgain", "Открыть сайт снова", "Open the website again");
 
         // Email-pending states (verify email · magic link sent · reset sent). {0} = the address.
         Add("Login_VerifyTitle", "Подтвердите почту", "Confirm your email");

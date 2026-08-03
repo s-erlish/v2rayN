@@ -94,6 +94,18 @@
                   сохраняет свою роль волосяной линии (разделители/рамка карточки): это
                   структурный декор, 1.4.11 к нему не применяется.  -->
             <SolidColorBrush x:Key="Brush.OutlineControl" Color="#646C7C" />
+            <!--  ЗАЛИВКА ВТОРИЧНОЙ КНОПКИ и ЗАЛИВКА ТЕКСТ-ДЕЙСТВИЯ — отдельные токены, а не
+                  SurfaceHighest/Transparent «по совпадению». Причина — монохром: там у интерфейса
+                  отбирают тон, и всё, чем вторичная кнопка отличалась от карточки (сине-серая
+                  плашка на нейтральной), а текст-действие от прозы (синий на сером), исчезает —
+                  владелец: «когда включаешь монохром версию, кнопки перестают быть видны, они
+                  просто начинают сливаться». Тон отбирать можно, КОНТРАСТ — нет: в mono-наборе
+                  эти два токена получают собственные значения (плашка 3:1 к поверхности, у
+                  текст-действия появляется тихая подложка), а роль поверхности SurfaceHighest
+                  (чипы, метры, статус-бар) при этом не съезжает.
+                  В тёмной и светлой темах значения РОВНО те, что были: ноль изменений вне mono.  -->
+            <SolidColorBrush x:Key="Brush.ControlFill" Color="#20242B" />
+            <SolidColorBrush x:Key="Brush.ActionFill" Color="Transparent" />
             <SolidColorBrush x:Key="Brush.AccentContainer" Color="#17325C" />
             <SolidColorBrush x:Key="Brush.OnAccentContainer" Color="#CFE0FF" />
             <SolidColorBrush x:Key="Brush.Green" Color="#22C55E" />
@@ -180,6 +192,10 @@
             <!--  D-9, светлая ветка: #7D8BA3 = 3.45:1 на карточке, 3.21:1 на фоне —
                   оба выше порога 3:1 для границ компонентов.  -->
             <SolidColorBrush x:Key="Brush.OutlineControl" Color="#7D8BA3" />
+            <!--  Светлая ветка тех же двух токенов (см. комментарий в Dark): значения РОВНО те,
+                  что вторичная кнопка и текст-действие имели раньше — расходятся только в mono.  -->
+            <SolidColorBrush x:Key="Brush.ControlFill" Color="#E3EAF4" />
+            <SolidColorBrush x:Key="Brush.ActionFill" Color="Transparent" />
             <SolidColorBrush x:Key="Brush.AccentContainer" Color="#D8E4FF" />
             <SolidColorBrush x:Key="Brush.OnAccentContainer" Color="#14468F" />
             <SolidColorBrush x:Key="Brush.Green" Color="#0B7D4A" />
