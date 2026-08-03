@@ -525,6 +525,14 @@ public class MainWindowViewModel : MyReactiveObject
         // The subscription branch used to write to the log ONLY, and the shell has no renderer for
         // the log — so pasting a subscription link looked exactly like a dead button. That is the
         // defect this shape exists to make impossible: no branch may return without an outcome.
+        //
+        // AND THE OUTCOME MUST NAME WHAT THE USER GOT, NOT WHAT WE WROTE DOWN. The first version of
+        // this reported success off ConfigHandler.AddBatchServers' return value, which counts a
+        // subscription URL as imported the moment its SubItem row is written — before a single server
+        // has been fetched. So an unreachable subscription announced "subscription added, fetching
+        // servers", the fetch then failed into the log, and the user was left on the first-run screen
+        // with a promise and no explanation. The subscription branch now waits for the fetch and
+        // reports its server count, or SubscriptionNoServers when it produced none.
         var outcome = new AddServerOutcome(EAddOutcome.Failed);
         try
         {
@@ -551,24 +559,28 @@ public class MainWindowViewModel : MyReactiveObject
             var ret = await ConfigHandler.AddBatchServers(_config, stringData, _config.SubIndexId, false);
             if (ret > 0)
             {
-                await RefreshSubscriptions();
-                await RefreshServersDispatcherAsync();
                 if (isSubUrl)
                 {
-                    outcome = new AddServerOutcome(alreadyExists
-                        ? EAddOutcome.SubscriptionAlreadyExists
-                        : EAddOutcome.SubscriptionAdded);
+                    // A pasted http(s) URL only creates a SubItem — no servers were fetched yet.
+                    // Download them now so ProfileItems populates and onboarding is replaced (Android
+                    // does this immediately after import). Never starts the core (OFF-model). It also
+                    // does the list/meta refresh, so no refresh runs before it: at that point there is
+                    // by definition nothing new to show.
+                    var imported = await DownloadImportedSubscriptionAsync(stringData);
+                    outcome = imported > 0
+                        ? new AddServerOutcome(alreadyExists
+                            ? EAddOutcome.SubscriptionAlreadyExists
+                            : EAddOutcome.SubscriptionAdded, imported)
+                        : new AddServerOutcome(EAddOutcome.SubscriptionNoServers);
                 }
                 else
                 {
+                    await RefreshSubscriptions();
+                    await RefreshServersDispatcherAsync();
                     // Direct server-link import — mirror the count into the log too.
                     outcome = new AddServerOutcome(EAddOutcome.ServersImported, ret);
                     NoticeManager.Instance.SendMessageEx(string.Format(ResUI.SuccessfullyImportedServerViaClipboard, ret));
                 }
-                // A pasted http(s) URL only creates a SubItem — no servers were fetched yet. Download
-                // them now so ProfileItems populates and onboarding is replaced (Android does this
-                // immediately after import). Never starts the core (OFF-model).
-                await DownloadImportedSubscriptionAsync(stringData);
             }
             else
             {
@@ -648,22 +660,25 @@ public class MainWindowViewModel : MyReactiveObject
             var ret = await ConfigHandler.AddBatchServers(_config, result, _config.SubIndexId, false);
             if (ret > 0)
             {
-                await RefreshSubscriptions();
-                await RefreshServersDispatcherAsync();
                 if (isSubUrl)
                 {
-                    outcome = new AddServerOutcome(alreadyExists
-                        ? EAddOutcome.SubscriptionAlreadyExists
-                        : EAddOutcome.SubscriptionAdded);
+                    // A scanned http(s) URL only creates a SubItem — fetch its servers now (OFF-model:
+                    // never starts the core) so the list populates and onboarding is replaced. Same
+                    // contract as the clipboard branch: the outcome names what the FETCH produced.
+                    var imported = await DownloadImportedSubscriptionAsync(result);
+                    outcome = imported > 0
+                        ? new AddServerOutcome(alreadyExists
+                            ? EAddOutcome.SubscriptionAlreadyExists
+                            : EAddOutcome.SubscriptionAdded, imported)
+                        : new AddServerOutcome(EAddOutcome.SubscriptionNoServers);
                 }
                 else
                 {
+                    await RefreshSubscriptions();
+                    await RefreshServersDispatcherAsync();
                     outcome = new AddServerOutcome(EAddOutcome.ServersImported, ret);
                     NoticeManager.Instance.SendMessageEx(ResUI.SuccessfullyImportedServerViaScan);
                 }
-                // A scanned http(s) URL only creates a SubItem — fetch its servers now (OFF-model:
-                // never starts the core) so the list populates and onboarding is replaced.
-                await DownloadImportedSubscriptionAsync(result);
             }
             else
             {
@@ -689,22 +704,42 @@ public class MainWindowViewModel : MyReactiveObject
     /// downloads immediately after import so the first-run onboarding flow does not dead-lock with an
     /// empty server list. OFF-model contract: this path NEVER starts the core — the dedicated
     /// log-only handler refreshes the list/meta without a Reload(), unlike the scheduled-update path.
+    ///
+    /// IT FETCHES THE SUBSCRIPTIONS THIS ADD ACTUALLY BROUGHT, AND NOTHING ELSE. It used to pass an
+    /// empty subId, which <c>SubscriptionHandler.IsValidSubscription</c> reads as "every subscription
+    /// stored" — so adding one link re-fetched and re-imported all of them, one after another. That is
+    /// not merely slow: each of those re-imports runs <c>RemoveServersViaSubid</c> and re-creates every
+    /// row with a fresh IndexId, so an add rebuilt subscriptions the user had not touched. Empty still
+    /// means "all" for the callers that want it (the scheduled auto-update, the manual refresh-all);
+    /// only this call site is narrowed.
     /// </summary>
-    private async Task DownloadImportedSubscriptionAsync(string? importedData)
+    /// <returns>How many servers arrived. 0 means the subscription was stored but brought nothing —
+    /// the caller must report that rather than claim success.</returns>
+    private async Task<int> DownloadImportedSubscriptionAsync(string? importedData)
     {
-        if (!ContainsSubscriptionUrl(importedData))
+        var subIds = await ImportedSubscriptionIdsAsync(importedData);
+        if (subIds.Count == 0)
         {
-            return;
+            return 0;
         }
 
-        // The fetch itself stays quiet: its per-step progress streams into the message log via
-        // SubscriptionImportLogHandler. The user already got the one sentence they were owed from the
-        // add's own outcome ("subscription added, fetching servers") — a second announcement per step
-        // is noise, which is what the owner rejected.
-        await Task.Run(async () => await SubscriptionHandler.UpdateProcess(_config, "", false, SubscriptionImportLogHandler));
+        // The fetch's per-step progress still streams into the message log via
+        // SubscriptionImportLogHandler — a second announcement per step is noise, which the owner
+        // rejected. What it may NOT do is swallow the result: the count returned here is what the
+        // add's outcome is built from, so an unreachable subscription can no longer be reported as
+        // "added, fetching servers" and then go quiet forever.
+        var imported = 0;
+        await Task.Run(async () =>
+        {
+            foreach (var subId in subIds)
+            {
+                imported += await SubscriptionHandler.UpdateProcess(_config, subId, false, SubscriptionImportLogHandler);
+            }
+        });
 
         await RefreshSubscriptions();
         await RefreshServersDispatcherAsync();
+        return imported;
     }
 
     private static bool ContainsSubscriptionUrl(string? data)
@@ -726,14 +761,7 @@ public class MainWindowViewModel : MyReactiveObject
     /// </summary>
     private static async Task<bool> SubscriptionUrlAlreadyExistsAsync(string? data)
     {
-        if (data.IsNullOrEmpty())
-        {
-            return false;
-        }
-        var urls = data.Split('\n', '\r')
-            .Select(line => line.Trim())
-            .Where(line => line.StartsWith(Global.HttpsProtocol) || line.StartsWith(Global.HttpProtocol))
-            .ToList();
+        var urls = ExtractSubscriptionUrls(data);
         if (urls.Count == 0)
         {
             return false;
@@ -745,6 +773,53 @@ public class MainWindowViewModel : MyReactiveObject
         }
         var existing = subItems.Select(s => s.Url).Where(u => u.IsNotEmpty()).ToHashSet();
         return urls.All(existing.Contains);
+    }
+
+    /// <summary>Every http(s) subscription URL contained in <paramref name="data"/>, in order.</summary>
+    private static List<string> ExtractSubscriptionUrls(string? data)
+    {
+        if (data.IsNullOrEmpty())
+        {
+            return [];
+        }
+        return data!.Split('\n', '\r')
+            .Select(line => line.Trim())
+            .Where(line => line.StartsWith(Global.HttpsProtocol) || line.StartsWith(Global.HttpProtocol))
+            .Distinct()
+            .ToList();
+    }
+
+    /// <summary>
+    /// The stored <c>SubItem</c> ids for the subscription URLs just imported from
+    /// <paramref name="importedData"/> — i.e. exactly the subscriptions this add is responsible for,
+    /// and no others.
+    /// </summary>
+    private static async Task<List<string>> ImportedSubscriptionIdsAsync(string? importedData)
+    {
+        var urls = ExtractSubscriptionUrls(importedData);
+        if (urls.Count == 0)
+        {
+            return [];
+        }
+        var subItems = await AppManager.Instance.SubItems();
+        if (subItems is null || subItems.Count == 0)
+        {
+            return [];
+        }
+        // Matched on the TRIMMED url on both sides. AddBatchServersCommon hands the raw split line to
+        // AddSubItem without trimming it, so a pasted link with a trailing space is stored with that
+        // space; matching it verbatim would find nothing and report a perfectly good add as "no
+        // servers came back".
+        var byUrl = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var s in subItems)
+        {
+            var key = s.Url.TrimEx();
+            if (key.IsNotEmpty() && s.Id.IsNotEmpty() && !byUrl.ContainsKey(key))
+            {
+                byUrl[key] = s.Id;
+            }
+        }
+        return urls.Where(byUrl.ContainsKey).Select(u => byUrl[u]).Distinct().ToList();
     }
 
     /// <summary>

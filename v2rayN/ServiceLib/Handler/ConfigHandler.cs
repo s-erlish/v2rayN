@@ -1591,7 +1591,18 @@ public static class ConfigHandler
 
         var countServers = 0;
         List<ProfileItem> lstAdd = [];
-        var arrData = strData.Split(Environment.NewLine.ToCharArray()).Where(t => !t.IsNullOrEmpty());
+        // EACH LINE IS TRIMMED BEFORE IT IS JUDGED. Two things made that necessary, and both showed
+        // up as "I pasted a link and nothing happened":
+        //  • the subscription test below is StartsWith on the raw line, so ONE leading space in a
+        //    copied link (which is what selecting a link in a chat client usually yields) made the
+        //    whole paste fall through to the share-link parser, fail there too, and come back as
+        //    "nothing recognised" — about a link that was perfectly valid;
+        //  • the split is on Environment.NewLine's characters, which on Linux and macOS is "\n"
+        //    ALONE, so Windows-authored CRLF text leaves a trailing "\r" on every line and the
+        //    subscription URL was stored with it attached.
+        // Leading and trailing whitespace is never significant in a share link or a subscription
+        // URL, so this only widens what is accepted; nothing that parsed before stops parsing.
+        var arrData = strData.Split(Environment.NewLine.ToCharArray()).Select(t => t.TrimEx()).Where(t => t.IsNotEmpty());
         if (isSub)
         {
             arrData = arrData.Distinct();

@@ -19,6 +19,14 @@ namespace v2rayN.Desktop.Views;
 /// шаг ожидания сайта (<see cref="LoginState.AwaitingSite"/>). Шелл скрыт, пока пусто, поэтому вход
 /// показываем оверлеем; «назад» возвращает к онбордингу.
 ///
+/// ДЕЙСТВИЕ В РАБОТЕ ПОКАЗЫВАЕТ ЭТО И НЕ ЗАПУСКАЕТСЯ ДВАЖДЫ (правило владельца). «Добавить из буфера
+/// обмена» — сетевая операция: сохранить подписку и забрать у провайдера список серверов. Пока этого
+/// состояния не было, всё ожидание выглядело в точности как мёртвая кнопка, а каждое повторное нажатие
+/// запускало ещё один параллельный импорт той же подписки. Занятость ведёт
+/// <see cref="HomeViewModel.IsAdding"/>: содержимое CTA уступает место дуге-спиннеру (тот же приём и
+/// тот же класс, что у первичных CTA «Входа»), кнопка отключена, лишние нажатия отбрасываются в самой
+/// вью-модели — то есть и из углового «+», и из Ctrl+V, и из пустого состояния списка.
+///
 /// Движение (§6/P1 + §3a/§3b P2): один хореографированный entrance при первом показе — 4 АВТОРСКИХ бита
 /// (щит → идентичность → «завести доступ» → «войти»), щит scale 0.90→1 (общий с connect-героем), остальное
 /// rise translateY 8→0 + fade, 300мс OutQuint, ≈500мс всего, затем ПОЛНАЯ статика (product-register: без
@@ -41,6 +49,9 @@ public partial class OnboardingView : UserControl
     // Колонка пред-скрыта в ctor под entrance-стаггер — стаггер ещё не сыгран.
     private bool _entryPending;
 
+    // Подписка на HomeViewModel.IsAdding живёт ровно столько, сколько текущий DataContext.
+    private IDisposable? _addingSub;
+
     public OnboardingView()
     {
         InitializeComponent();
@@ -48,6 +59,12 @@ public partial class OnboardingView : UserControl
         AddClipboardButton.Click += OnAddClipboard;
         LoginTelegramButton.Click += OnLoginTelegram;
         LoginSiteButton.Click += OnLoginSite;
+
+        // Занятость добавления: DataContext ставит MainWindow уже ПОСЛЕ конструктора, поэтому
+        // подписываемся на его смену, а не читаем один раз (та же ошибка, что «прочитать
+        // reduced-motion в конструкторе»).
+        DataContextChanged += OnDataContextChanged;
+        SetAdding(false);
 
         // Entrance-стаггер: пред-скрываем детей колонки (opacity 0), чтобы раскрыть их сверху вниз без
         // пред-вспышки (приём LoginView). ТОЛЬКО при включённом движении; под lite/preview/дизайн —
@@ -82,6 +99,46 @@ public partial class OnboardingView : UserControl
             return;
         }
         PlayEntryStagger();
+    }
+
+    // ── Состояние «идёт добавление» ─────────────────────────────────────────
+
+    private void OnDataContextChanged(object? sender, EventArgs e)
+    {
+        _addingSub?.Dispose();
+        _addingSub = null;
+        if (DataContext is not HomeViewModel vm)
+        {
+            SetAdding(false);
+            return;
+        }
+        _addingSub = vm.WhenAnyValue(x => x.IsAdding)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .Subscribe(SetAdding);
+    }
+
+    /// <summary>
+    /// Импорт в работе: содержимое CTA уступает место дуге-спиннеру, сама кнопка отключена биндингом
+    /// на <see cref="HomeViewModel.IsAdding"/>. Один в один с первичными CTA «Входа»
+    /// (<c>LoginView.SetSiteBusy</c>), включая lite: под облегчённым режимом дуга не крутится, но
+    /// рисуется полным статичным кольцом (гейт живёт в стиле), поэтому индикатор виден ВСЕГДА —
+    /// прятать его под lite значило бы вернуть немое ожидание, ради устранения которого он и заведён.
+    /// </summary>
+    private void SetAdding(bool adding)
+    {
+        AddClipboardContent.IsVisible = !adding;
+        AddClipboardSpinner.IsVisible = adding;
+        if (adding && !IsReducedMotion())
+        {
+            if (!AddClipboardSpinner.Classes.Contains("spinning"))
+            {
+                AddClipboardSpinner.Classes.Add("spinning");
+            }
+        }
+        else
+        {
+            AddClipboardSpinner.Classes.Remove("spinning");
+        }
     }
 
     // ── Действия (проводка CTA по DataContext) ──────────────────────────────

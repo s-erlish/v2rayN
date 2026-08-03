@@ -2015,11 +2015,19 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
                 break;
 
             case EAddOutcome.SubscriptionAdded:
-                ShowToast(L.T("Home_SubscriptionAdded"));
+                ShowToast(L.F("Home_SubscriptionAdded", L.Plural("Common_ServersPlural", outcome.Count)));
                 break;
 
             case EAddOutcome.SubscriptionAlreadyExists:
-                ShowToast(L.T("Home_SubscriptionExists"));
+                ShowToast(L.F("Home_SubscriptionExists", L.Plural("Common_ServersPlural", outcome.Count)));
+                break;
+
+            // Подписка сохранена, но серверов не пришло. Раньше этот исход был НЕОТЛИЧИМ от успеха:
+            // добавление отчитывалось по факту записи строки подписки, а настоящий отказ загрузки уходил
+            // в журнал, которого в этой оболочке нет, — экран так и оставался первым кадром, без
+            // единого слова. Теперь он называет себя и предлагает выход там же (G2).
+            case EAddOutcome.SubscriptionNoServers:
+                ShowToast(L.T("Home_SubscriptionNoServers"), L.T("Common_Retry"), () => _ = AddServerViaClipboardAsync());
                 break;
 
             case EAddOutcome.ClipboardEmpty:
@@ -2217,14 +2225,28 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
 
     // Оба помощника ниже вызываются из async void KeyDown, поэтому ловят сами: непойманный бросок из
     // импорта движка стал бы необработанным исключением на UI-потоке, а не строкой в панели сообщений.
+
+    /// <summary>
+    /// Ctrl+V и «Повторить» у тоста — ТОТ ЖЕ путь, что кнопка на первом кадре и угловой «+»:
+    /// <see cref="HomeViewModel.AddViaClipboard"/>. Через него идёт гейт «не выстрелить дважды» и
+    /// индикатор занятости, поэтому собственная копия здесь была бы вторым входом мимо обоих —
+    /// удерживая Ctrl+V, можно было запустить сколько угодно параллельных импортов одной подписки.
+    /// Прежняя копия ещё и молчала на ПУСТОМ буфере (<c>IsNotEmpty()</c> и выход), тогда как движку
+    /// пустой буфер — это исход <c>ClipboardEmpty</c>, который пользователю показывают словами.
+    /// Прямой путь остаётся только как запасной, пока «Главная» ещё не построена.
+    /// </summary>
     public async Task AddServerViaClipboardAsync()
     {
         try
         {
-            var clipboardData = await AvaUtils.GetClipboardData(this);
-            if (clipboardData.IsNotEmpty() && ViewModel != null)
+            if (_homeViewModel != null)
             {
-                await ViewModel.AddServerViaClipboardAsync(clipboardData);
+                await _homeViewModel.AddViaClipboard();
+                return;
+            }
+            if (ViewModel != null)
+            {
+                await ViewModel.AddServerViaClipboardAsync(null);
             }
         }
         catch (Exception ex)

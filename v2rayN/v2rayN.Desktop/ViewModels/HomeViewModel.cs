@@ -126,6 +126,18 @@ public class HomeViewModel : MyReactiveObject, IDisposable
 
     [Reactive] public string Uptime { get; set; } = "00:00:00";
 
+    /// <summary>
+    /// An import (clipboard or QR) is in flight.
+    ///
+    /// Adding a подписка is not instant — it stores the row, then fetches the provider's server list
+    /// over the network — and until this existed the whole of that wait looked identical to a dead
+    /// button: no spinner, no disabled state, nothing. It is also the fire-twice guard: every entry
+    /// point routes through <see cref="AddViaClipboard"/> / <see cref="AddViaQr"/>, so a second press
+    /// while the first is running is dropped here rather than starting a second import that races the
+    /// first through the same subscription rows.
+    /// </summary>
+    [Reactive] public bool IsAdding { get; set; }
+
     #endregion Reactive state
 
     #region Commands
@@ -149,8 +161,12 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         Profiles = main.ProfilesViewModel;
         StatusBar = main.StatusBarViewModel;
 
-        AddViaClipboardCmd = ReactiveCommand.CreateFromTask(AddViaClipboard);
-        AddViaQrCmd = ReactiveCommand.CreateFromTask(AddViaQr);
+        // Тот же гейт, что у первого кадра, но для командных поверхностей (пустое состояние списка
+        // серверов, меню углового «+»): пока импорт идёт, кнопка ОТКЛЮЧЕНА, а не просто игнорирует
+        // нажатие. Метод всё равно проверяет флаг сам — canExecute отвечает за вид, метод за факт.
+        var canAdd = this.WhenAnyValue(x => x.IsAdding, adding => !adding);
+        AddViaClipboardCmd = ReactiveCommand.CreateFromTask(AddViaClipboard, canAdd);
+        AddViaQrCmd = ReactiveCommand.CreateFromTask(AddViaQr, canAdd);
         RefreshSubscriptionCmd = ReactiveCommand.CreateFromTask(RefreshSubscription);
 
         // Reconcile grouped list + counters whenever the real server collection changes. The
@@ -688,19 +704,44 @@ public class HomeViewModel : MyReactiveObject, IDisposable
 
     #region Import / refresh (wraps MainWindowViewModel)
 
+    /// <summary>
+    /// Import from the clipboard. Guarded by <see cref="IsAdding"/>, which is BOTH the in-flight
+    /// signal the surfaces render and the "cannot be fired twice" gate — the onboarding CTA is
+    /// fire-and-forget (<c>_ = vm.AddViaClipboard()</c>), so nothing upstream of here would stop a
+    /// second press. The flag is cleared in a finally: an import that throws must not leave every
+    /// add affordance in the app disabled for the rest of the session.
+    /// </summary>
     public async Task AddViaClipboard()
     {
-        if (_main != null)
+        if (_main == null || IsAdding)
+        {
+            return;
+        }
+        IsAdding = true;
+        try
         {
             await _main.AddServerViaClipboardAsync(null);
+        }
+        finally
+        {
+            IsAdding = false;
         }
     }
 
     public async Task AddViaQr()
     {
-        if (_main != null)
+        if (_main == null || IsAdding)
+        {
+            return;
+        }
+        IsAdding = true;
+        try
         {
             await _main.AddServerViaScanAsync();
+        }
+        finally
+        {
+            IsAdding = false;
         }
     }
 
