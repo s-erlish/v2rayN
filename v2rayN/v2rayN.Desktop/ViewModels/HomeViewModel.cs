@@ -71,6 +71,19 @@ public class HomeViewModel : MyReactiveObject, IDisposable
     // the still-running OLD core can't snap the shield straight back to Connected before the switch
     // actually re-establishes. Cleared on the stop event, on the deadline, or on an aborted pick.
     private bool _awaitingCoreCycle;
+
+    /// <summary>
+    /// Сервер, на котором ЖИВЁТ поднятый туннель, — а это не то же самое, что основной сервер, и всё
+    /// предложение «Переподключиться» существует именно потому, что это не одно и то же.
+    ///
+    /// Выбор при живом туннеле только запоминает сервер и не трогает соединение (G1). Значит, стоит
+    /// пользователю отказаться от переноса — основной уходит ВПЕРЁД туннеля и там и остаётся. Без
+    /// этого поля единственным ориентиром был <c>_config.IndexId</c>, то есть сам выбор: повторное
+    /// нажатие по уже выбранной строке давало <c>changed == false</c>, предложение не поднималось, и
+    /// вернуться к нему было нечем. Пишется только по фактам ядра — см. SyncState и OnCoreSwitchSettled.
+    /// </summary>
+    private string? _runningIndexId;
+
     private ServerSpeedItem? _lastSpeed;
 
     // Launch-time snapshot of "does the local store hold any server?", read synchronously by the shell
@@ -409,6 +422,13 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         // спиннер и ничего не перезапускает, пока пользователь не подтвердил это явно. Иначе выбор
         // и переключение — одно действие, а разорвать работающее соединение он не просил.
         var switchingLive = changed && wasConnected;
+        // ПРЕДЛОЖЕНИЕ РЕШАЕТСЯ ПО РАБОТАЮЩЕМУ СЕРВЕРУ, А НЕ ПО ВЫБРАННОМУ. Раньше здесь стоял тот же
+        // `switchingLive`, то есть «выбор изменился», — и после ПЕРВОГО же отказа выбор совпадал с
+        // тем, что под курсором, `changed` становился false, а нажатие по этой строке не делало
+        // ровно ничего: ни переноса, ни предложения его сделать. Вопрос всегда был один — туннель
+        // уже на этом сервере или ещё нет.
+        var alreadyApplied = _runningIndexId is not null && _runningIndexId == indexId;
+        var offerReconnect = wasConnected && !alreadyApplied;
         var willConnect = !wasConnected || (changed && applyToRunningTunnel);
         if (willConnect)
         {
@@ -464,7 +484,7 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         // Соединение живо, сервер выбран, но не применён — предлагаем перенести, называя сервер.
         // Ровно как Android: Snackbar с действием «Переподключиться» рядом со списком; отказ ничего
         // не делает, выбор остаётся на следующее подключение.
-        if (switchingLive && !applyToRunningTunnel)
+        if (offerReconnect && !applyToRunningTunnel)
         {
             await OfferReconnect(indexId);
         }
@@ -583,6 +603,11 @@ public class HomeViewModel : MyReactiveObject, IDisposable
 
         if (running)
         {
+            // Сервер, на котором туннель ФАКТИЧЕСКИ поднят. Берётся в момент, когда ядро только что
+            // стало запущенным: до этого его подняли ровно на текущем основном сервере. Дальше
+            // основной может уйти вперёд (выбор ≠ переключение), и тогда это поле — единственное,
+            // что помнит, откуда предлагать переподключение. См. SelectServer.
+            _runningIndexId ??= _config?.IndexId;
             _connectedSince ??= DateTime.Now;
             IsConnected = true;
             IsConnecting = false;
@@ -603,6 +628,7 @@ public class HomeViewModel : MyReactiveObject, IDisposable
             // Core is down — any mid-switch hold is over (the old core stopped). Belt-and-suspenders
             // to the stop-event clear, so a hold can never outlive an observed not-running state.
             _awaitingCoreCycle = false;
+            _runningIndexId = null;
             _connectedSince = null;
             IsConnected = false;
             Uptime = "00:00:00";
@@ -651,6 +677,11 @@ public class HomeViewModel : MyReactiveObject, IDisposable
     /// </summary>
     private void OnCoreSwitchSettled()
     {
+        // Бесшовное переключение не роняет ядро, значит SyncState не проходит через ветку «не
+        // запущено» и _runningIndexId не обнулится сам. Поднимаем его здесь, иначе после переноса
+        // туннеля поле осталось бы указывать на ПРЕДЫДУЩИЙ сервер и предложение вернулось бы к
+        // тому, на котором уже всё работает.
+        _runningIndexId = _config?.IndexId;
         _awaitingCoreCycle = false;
         _connectingUntil = null;
         IsConnecting = false;
