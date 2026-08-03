@@ -41,6 +41,11 @@ public partial class App : Application
                 // (X-HWID) on every subscription GET, so a panel with HWID device-limit enabled serves
                 // the real server list instead of the «Приложение не поддерживается» placeholder.
                 ServiceLib.Global.SubscriptionHwidProvider = () => v2rayN.Desktop.Account.AuthTokenStore.DeviceId();
+
+                // Имя подписки: ранжирование живёт в ServiceLib (его делит WPF-клиент апстрима),
+                // СЛОВО — здесь, в живой ru/en таблице. Так «Подписка» переключается вместе с языком
+                // без перезапуска, а ServiceLib остаётся без единой русской строки.
+                SubscriptionNaming.UntitledNameProvider = () => L.T("Home_SubUntitled");
             }
 
             var mainWindowViewModel = new MainWindowViewModel();

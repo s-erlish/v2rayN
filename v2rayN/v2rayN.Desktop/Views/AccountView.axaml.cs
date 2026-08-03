@@ -58,6 +58,7 @@ public partial class AccountView : UserControl
         }
 
         BuyRow.Tapped += (_, _) => BuyRequested?.Invoke(this, EventArgs.Empty);
+        DevicesRow.Tapped += (_, _) => DevicesRequested?.Invoke(this, EventArgs.Empty);
         HistoryRow.Tapped += (_, _) => HistoryRequested?.Invoke(this, EventArgs.Empty);
         LoginSiteButton.Click += (_, _) => LoginRequested?.Invoke(this, EventArgs.Empty);
         CopyReferralButton.Click += OnCopyReferral;
@@ -77,6 +78,7 @@ public partial class AccountView : UserControl
 
         // Press-scale 0.99 (§0.1) на всех строках навигации: тап ощущается до выезда суб-страницы.
         WirePress(BuyRow);
+        WirePress(DevicesRow);
         WirePress(HistoryRow);
         WirePress(LogoutRow);
 

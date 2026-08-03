@@ -360,9 +360,13 @@ public partial class SubscriptionMetaView : UserControl
         _currentSubId = sub.Id;
         _boundSub = sub;
 
-        // Title: profile-title -> remarks -> group name (never fabricated).
-        var title = sub.ProfileTitle.IsNotEmpty() ? sub.ProfileTitle : (sub.Remarks ?? string.Empty);
-        TitleText.Text = title.IsNotEmpty() ? title : (_group?.Name ?? string.Empty);
+        // Title through the ONE resolver (profile-title -> remarks, placeholders refused), then the
+        // group heading, then «Подписка». The local ranking that used to live here was the same shape
+        // but had no placeholder filter, so a freshly pasted подписка headed its own card «import_sub»
+        // — and, with no rename UI (OWNER-DECISION-2026-08-02 §5), permanently.
+        TitleText.Text = SubscriptionNaming.NameOf(sub)
+            ?? SubscriptionNaming.RealName(_group?.Name)
+            ?? L.T("Home_SubUntitled");
 
         // Subtitle: last-update time + auto-update interval.
         var subtitle = FormatSubtitle(sub);

@@ -1,7 +1,7 @@
 using Avalonia.Automation;
 using Avalonia.Controls.Primitives;
+using Avalonia.Controls.Primitives.PopupPositioning;
 using Avalonia.Layout;
-using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Styling;
 
 namespace v2rayN.Desktop.Common;
@@ -32,7 +32,18 @@ public sealed record ChoiceItem(string Label, string? Hint, bool Selected, Actio
 /// список раскрывается ровно там, где стоит значение и шеврон, то есть у той части строки, которую
 /// человек и нажимает. Привязка к самому значению с <c>Placement=Right</c> уводила бы список за правый
 /// край окна (карточка настроек прижата к нему на 16), и позиционер отражал бы его ПОВЕРХ подписи
-/// строки. По вертикали позиционер сам переворачивает список вверх, когда снизу места нет.
+/// строки.
+///
+/// СПИСОК ОТКРЫВАЕТСЯ ВНИЗ И ОСТАЁТСЯ ВНИЗУ. Владелец: «чтобы они ниже открывались, а не сверху».
+/// По умолчанию позиционер Avalonia ПЕРЕВОРАЧИВАЕТ поповер вверх, как только снизу не хватает места,
+/// — и список накрывал ту самую строку, по которой только что нажали, читаясь как совсем другой
+/// контрол. <see cref="PopupPositionerConstraintAdjustment"/> без <c>FlipY</c> запрещает переворот:
+/// список только СДВИГАЕТСЯ в пределах экрана. Чтобы сдвигать было куда, он и должен быть маленьким —
+/// см. <see cref="MaxHeight"/> и правило «только варианты, ничего кроме».
+///
+/// ТОЛЬКО ВАРИАНТЫ. Ни полей, ни подвала, ни «применить»: «как бы как доп меню просто где выбрать
+/// можно, маленькое». Всё, что относится к настройке, но выбором НЕ является, на этой поверхности не
+/// живёт — иначе она перестаёт быть меню и снова становится окном, только без рамки.
 /// </summary>
 public static class ChoiceFlyout
 {
@@ -43,18 +54,21 @@ public static class ChoiceFlyout
     private const double Width = 264d;
 
     /// <summary>
+    /// Потолок высоты списка. Пять вариантов помещаются целиком; всё, что длиннее, прокручивается
+    /// ВНУТРИ списка, а не растит его до высоты окна. Это и есть то, что делает запрет переворота
+    /// безопасным: низкому списку почти всегда хватает места под строкой, и правило «открывается
+    /// вниз» перестаёт зависеть от того, где именно на экране оказалась строка.
+    /// </summary>
+    private const double MaxHeight = 320d;
+
+    /// <summary>
     /// Раскрывает список вариантов у <paramref name="anchor"/>. Флайаут собирается на КАЖДЫЙ показ:
     /// и набор вариантов, и текущий выбор к этому моменту уже другие, а живой перевод подписей ловится
     /// тем же способом — строки берутся в момент открытия.
     /// </summary>
     /// <param name="anchor">Строка настройки. Она же цель показа и якорь позиционирования.</param>
     /// <param name="items">Варианты, ровно один из которых <see cref="ChoiceItem.Selected"/>.</param>
-    /// <param name="footer">
-    /// Необязательный «подвал» — параметры, которые относятся к выбору, но выбором не являются
-    /// (адрес и тайм-аут проверки у «Пинга»). Отделяется волоском; null — список без подвала.
-    /// </param>
-    /// <param name="onClosed">Вызывается при закрытии — сюда вешается коммит полей подвала.</param>
-    public static void Show(Control anchor, IReadOnlyList<ChoiceItem> items, Control? footer = null, Action? onClosed = null)
+    public static void Show(Control anchor, IReadOnlyList<ChoiceItem> items)
     {
         if (items.Count == 0)
         {
@@ -65,29 +79,23 @@ public static class ChoiceFlyout
         var flyout = new Flyout
         {
             Placement = PlacementMode.BottomEdgeAlignedRight,
+            // БЕЗ FlipY: позиционеру разрешено только сдвигать список, но не переворачивать его над
+            // строкой. SlideX/SlideY держат его в пределах экрана у правого и нижнего края.
+            PlacementConstraintAdjustment = PopupPositionerConstraintAdjustment.SlideX
+                | PopupPositionerConstraintAdjustment.SlideY,
             FlyoutPresenterTheme = anchor.FindResource("IncyFlyoutTheme") as ControlTheme,
-            Content = column,
+            Content = new ScrollViewer
+            {
+                MaxHeight = MaxHeight,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                Content = column,
+            },
         };
 
         foreach (var item in items)
         {
             column.Children.Add(BuildOption(item, flyout));
-        }
-
-        if (footer is not null)
-        {
-            // Волосок отделяет параметры от выбора. Кисть — ДИНАМИЧЕСКИЙ ресурс, а не разовое чтение:
-            // тема (в т.ч. монохром) может смениться при открытом флайауте, а замороженное значение
-            // ровно это и ломает — то же правило, что «{DynamicResource Brush.*} only» в разметке.
-            var divider = new Border { Height = 1, Margin = new Thickness(0, 4, 0, 4) };
-            divider.Bind(Border.BackgroundProperty, new DynamicResourceExtension("Brush.OutlineVariant"));
-            column.Children.Add(divider);
-            column.Children.Add(footer);
-        }
-
-        if (onClosed is not null)
-        {
-            flyout.Closed += (_, _) => onClosed();
         }
 
         FlyoutBase.SetAttachedFlyout(anchor, flyout);

@@ -370,7 +370,10 @@
 
                     <Border Classes="SettingDivider" />
 
-                    <!--  DNS → Cloudflare  -->
+                    <!--  DNS → список провайдеров у самой строки. Была суб-страница (тулбар, «назад»,
+                          три карточки) ради выбора одного из четырёх; владелец: «у днс также сделай».
+                          Аффорданс сменился с шеврона на unfold_more — это ЗНАЧЕНИЕ, а не навигация,
+                          и правая иконка обязана говорить правду.  -->
                     <Border x:Name="RowDns" Classes="SettingRow">
                         <Grid ColumnDefinitions="Auto,*,Auto,Auto">
                             <Border
@@ -395,16 +398,53 @@
                                 Text="{Binding DnsText}" />
                             <PathIcon
                                 Grid.Column="3"
-                                Classes="Chevron"
-                                Data="{StaticResource Geo.Set.Chevron}" />
+                                Classes="Unfold"
+                                Data="{StaticResource Geo.Set.UnfoldMore}" />
                         </Grid>
                     </Border>
 
                     <Border Classes="SettingDivider" />
 
-                    <!--  Пинг → список методов измерения задержки у самой строки (плюс адрес и
-                          тайм-аут проверки в подвале списка). Раньше это была суб-страница ради
-                          выбора из двух — см. SettingsView.axaml.cs, ShowPingChoice.  -->
+                    <!--  FakeIP — единственное со старой страницы DNS, что сохраняет редактор.
+                          Это булево, меняющее РАЗРЕШЕНИЕ ИМЁН внутри туннеля: установка с
+                          включённым FakeIP и без способа его выключить — сломанная установка без
+                          выхода. Булеву место в строке-тумблере, страница ему не нужна.  -->
+                    <Border x:Name="RowFakeIp" Classes="SettingRow">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <Border
+                                Grid.Column="0"
+                                Classes="Tile"
+                                VerticalAlignment="Center">
+                                <PathIcon
+                                    Classes="Glyph"
+                                    Data="{StaticResource Geo.Set.Globe}"
+                                    Foreground="{DynamicResource Brush.OnSurface}" />
+                            </Border>
+                            <StackPanel
+                                Grid.Column="1"
+                                Margin="16,0,8,0"
+                                VerticalAlignment="Center">
+                                <TextBlock Classes="Body" Text="FakeIP" />
+                                <TextBlock
+                                    Margin="0,4,0,0"
+                                    Classes="Subtitle"
+                                    Text="{loc:T Settings_FakeIpHint}"
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ToggleSwitch
+                                x:Name="SwitchFakeIp"
+                                Grid.Column="2"
+                                Classes="RowSwitch"
+                                IsChecked="{Binding FakeIp, Mode=TwoWay}"
+                                Theme="{DynamicResource ToggleSwitch.iOS}" />
+                        </Grid>
+                    </Border>
+
+                    <Border Classes="SettingDivider" />
+
+                    <!--  Пинг → два метода измерения задержки у самой строки, и ничего кроме.
+                          Адрес проверки и тайм-аут сняты с редактирования (владелец) — см.
+                          SettingsView.axaml.cs, ShowPingChoice.  -->
                     <Border x:Name="RowPingMethod" Classes="SettingRow">
                         <Grid ColumnDefinitions="Auto,*,Auto,Auto">
                             <Border

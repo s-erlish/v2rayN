@@ -30,7 +30,11 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     // только < 736), чтобы окно, «припаркованное» на границе, не мигало между раскладками при драге.
     private const double CompactBreakpointWidth = 760.0;
     private const double LayoutHysteresis = 24.0;
-    private bool _compactMode = true;          // старт компактный (дефолт 372×630 < 760)
+    // Стартовая раскладка НЕ ЗАХАРДКОЖЕНА. Она вычисляется в конструкторе из того размера, с которым
+    // окно реально откроется (сохранённый, иначе дефолт разметки) — см. SeedLayoutMode. Прежде здесь
+    // стояло безусловное true с комментарием «дефолт 372×630 < 760»: как только дефолт стал 800×700,
+    // окно открывалось бы кадром в телефонной раскладке и тут же перекладывалось по Bounds-вотчеру.
+    private bool _compactMode = true;
 
     // Целевые размеры тумблера раскладки (двойной клик по навигации / drag-to-edge). Компакт
     // держит title-bar на маленьком окне; широкая — рабочий десктоп. Оба клампятся в WorkingArea.
@@ -237,6 +241,7 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
 
         // Первичная раскладка + вотчер ширины окна. Наблюдаем Bounds окна (ширина клиентской
         // области); при пересечении брейкпоинта раскладка меняется РОВНО один раз (гистерезис).
+        SeedLayoutMode();
         ApplyLayoutMode(_compactMode);
         // Брейкпоинт компакт/широкая живёт в КООРДИНАТАХ КОНТЕНТА (после UI-zoom): LayoutTransformControl
         // масштабирует контент на _uiScale, поэтому контент видит ширину Bounds.Width/_uiScale. Делим здесь,
@@ -711,6 +716,31 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         {
             ApplyLayoutMode(compact);
         }
+    }
+
+    /// <summary>
+    /// Ставит стартовую раскладку по тому размеру, с которым окно ОТКРОЕТСЯ: сохранённый размер, если
+    /// он есть, иначе дефолт разметки. Первый кадр рисуется правильной раскладкой, а Bounds-вотчер
+    /// потом лишь подтверждает её вместо того, чтобы переложить оболочку на глазах.
+    ///
+    /// Сохранённый размер читается ТОЛЬКО для этого решения: применяет его по-прежнему
+    /// <see cref="v2rayN.Desktop.Base.WindowBase{T}.OnLoaded"/>, и он же остаётся единственным местом,
+    /// где возвращающийся пользователь получает своё окно обратно. Новый дефолт — это семя, а не
+    /// приказ: у кого размер сохранён, у того окно после обновления не прыгнет.
+    /// </summary>
+    private void SeedLayoutMode()
+    {
+        var width = Width;
+        try
+        {
+            var saved = ConfigHandler.GetWindowSizeItem(_config, GetType().Name);
+            if (saved is { Width: > 0 })
+            {
+                width = saved.Width;
+            }
+        }
+        catch { }
+        _compactMode = width / (_uiScale > 0 ? _uiScale : 1.0) < CompactBreakpointWidth;
     }
 
     // Переклад chrome вокруг ЕДИНОГО contentHost: широкая = [рейл(Auto) | контент(*)], компакт =

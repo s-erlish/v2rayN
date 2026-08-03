@@ -50,9 +50,12 @@ public sealed class DepartamentApiClient : IDepartamentApiClient
                 request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {token}");
             }
 
-            // Stable per-install HWID + OS/device so the panel keeps ONE device entry per machine.
+            // Stable per-machine HWID + OS/device so the panel keeps ONE device entry per machine.
+            // The OS is DETECTED, not assumed: this literal was «windows» on every platform, so a Linux
+            // or macOS install described itself as a Windows PC in the owner's own devices list — the
+            // one place where telling two devices apart is the entire job of the row.
             request.Headers.TryAddWithoutValidation(HeaderHwid, AuthTokenStore.DeviceId());
-            request.Headers.TryAddWithoutValidation(HeaderDeviceOs, "windows");
+            request.Headers.TryAddWithoutValidation(HeaderDeviceOs, Global.DevicePlatformName);
             request.Headers.TryAddWithoutValidation(HeaderVerOs, Environment.OSVersion.Version.ToString());
             request.Headers.TryAddWithoutValidation(HeaderDeviceModel, Environment.MachineName);
 

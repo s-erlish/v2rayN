@@ -41,7 +41,6 @@ public partial class SettingsView : UserControl
 
         // --- Строки-НАВИГАЦИИ (шеврон): тап кладёт Incy суб-страницу на общий стек оболочки ---
         WireRow(RowPerApp, () => OpenPage(new PerAppProxyPage(), refresh: true));
-        WireRow(RowDns, () => OpenPage(new DnsSubView(), refresh: true));
         WireRow(RowRouting, () => OpenPage(new RoutingSubView()));
         WireRow(RowAssets, () => OpenPage(new GeoFilesPage()));
         WireRow(RowAbout, () => OpenPage(new AboutPage()));
@@ -55,6 +54,7 @@ public partial class SettingsView : UserControl
         // Масштаб перещёлкивали значение вслепую — набор значений человек не видел вовсе. Теперь у всех
         // одна форма: нажал строку — увидел все значения рядом, выбрал — список закрылся.
         WireRow(RowPingMethod, ShowPingChoice);
+        WireRow(RowDns, ShowDnsChoice);
         WireRow(RowMuxConcurrency, ShowMuxConcurrencyChoice);
         WireRow(RowLanguage, ShowLanguageChoice);
         WireRow(RowSubAutoUpdate, ShowAutoUpdateChoice);
@@ -69,6 +69,7 @@ public partial class SettingsView : UserControl
         // --- Тумблер-строки: тап по всей строке (56dp) + Enter/Space переключают тумблер ---
         WireToggleRow(RowBypassLan, SwitchBypassLan);
         WireToggleRow(RowIpv6, SwitchIpv6);
+        WireToggleRow(RowFakeIp, SwitchFakeIp);
         WireToggleRow(RowMux, SwitchMux);
         WireToggleRow(RowFragment, SwitchFragment);
         WireToggleRow(RowLiteMode, SwitchLiteMode);
@@ -143,36 +144,23 @@ public partial class SettingsView : UserControl
 
     // ===================== Строки-выбора: список значений у строки =====================
 
-    /// <summary>«Пинг»: метод измерения задержки + два параметра проверки, которые его сопровождают.
-    /// Прежде это была целая суб-страница (тулбар, «назад», три карточки) ради выбора из двух —
-    /// её содержимое целиком переехало сюда: те же два метода, тот же адрес, тот же тайм-аут.
-    /// Метод применяется сразу; параметры коммитятся при закрытии списка (пустое поле = «как было»).</summary>
+    /// <summary>
+    /// «Пинг»: ДВА варианта метода измерения задержки, и больше на этой поверхности ничего.
+    ///
+    /// Владелец: «у пинга оно огромное, там лишний адрес проверки и тайм-аут, которого быть не
+    /// должно, проще просто убери адрес и таймаут и две кнопки выше оставь». Адрес проверки
+    /// (<c>SpeedTestItem.SpeedPingTestUrl</c>) и тайм-аут (<c>SpeedTestItem.SpeedTestTimeout</c>)
+    /// больше НЕ РЕДАКТИРУЮТСЯ из приложения: они остаются в конфиге со своими значениями и
+    /// продолжают работать, у них просто нет редактора. Это решение, а не потеря по недосмотру, и
+    /// оно записано в отчёте — так же, как записано отсутствие переименования подписки.
+    /// Переносить их на страницу нельзя: страницу «Пинг» он удалил намеренно.
+    /// </summary>
     private void ShowPingChoice()
     {
         if (Vm is not { } vm)
         {
             return;
         }
-
-        var url = new TextBox
-        {
-            Text = vm.PingTestUrl,
-            VerticalContentAlignment = Avalonia.Layout.VerticalAlignment.Center,
-            PlaceholderText = "https://www.gstatic.com/generate_204",
-        };
-        var timeout = new TextBox
-        {
-            Text = vm.PingTimeout > 0 ? vm.PingTimeout.ToString() : string.Empty,
-            MaxLength = 3,
-            VerticalContentAlignment = Avalonia.Layout.VerticalAlignment.Center,
-            PlaceholderText = "5",
-        };
-
-        var footer = new StackPanel { Spacing = 6 };
-        footer.Children.Add(Caption(L.T("Ping_TestAddress")));
-        footer.Children.Add(url);
-        footer.Children.Add(Caption(L.T("Ping_Timeout"), topGap: true));
-        footer.Children.Add(timeout);
 
         ChoiceFlyout.Show(
             RowPingMethod,
@@ -181,9 +169,43 @@ public partial class SettingsView : UserControl
                     () => _ = vm.SetPingMethodAsync(SettingsViewModel.PingMethodReal)),
                 new ChoiceItem("TCP", L.T("Ping_TcpHint"), vm.PingMethod == SettingsViewModel.PingMethodTcp,
                     () => _ = vm.SetPingMethodAsync(SettingsViewModel.PingMethodTcp)),
-            ],
-            footer,
-            () => _ = vm.SetPingParamsAsync(url.Text, timeout.Text));
+            ]);
+    }
+
+    /// <summary>
+    /// «DNS»: провайдер резолвера, и больше на этой поверхности ничего. Прежде это была суб-страница
+    /// с чипами, полем своего DoH-адреса и тумблером FakeIP; владелец: «у днс также сделай».
+    ///
+    /// ЧТО УШЛО И КУДА. FakeIP получил СВОЮ строку-тумблер прямо над этой — он булев, он меняет
+    /// разрешение имён в туннеле, и установка с ним включённым обязана иметь способ его выключить.
+    /// Поле СВОЕГО DoH-адреса редактора не имеет: НОВЫЙ произвольный адрес ввести больше нельзя.
+    /// Но уже сохранённый не теряется и не затирается — он показан отдельным вариантом (подпись
+    /// «Свой», под ней сам адрес), выбран, и к нему можно вернуться, попробовав пресет. Рабочая
+    /// настройка не ломается; исчезает только возможность завести новую.
+    /// </summary>
+    private void ShowDnsChoice()
+    {
+        if (Vm is not { } vm)
+        {
+            return;
+        }
+        var cur = vm.RemoteDns;
+        var items = new List<ChoiceItem>
+        {
+            new(L.T("Common_Default"), L.T("Settings_DnsDefaultHint"), cur.IsNullOrEmpty(),
+                () => _ = vm.SetRemoteDnsAsync(string.Empty)),
+            new("Cloudflare", null, cur == SettingsViewModel.DnsCloudflare,
+                () => _ = vm.SetRemoteDnsAsync(SettingsViewModel.DnsCloudflare)),
+            new("Google", null, cur == SettingsViewModel.DnsGoogle,
+                () => _ = vm.SetRemoteDnsAsync(SettingsViewModel.DnsGoogle)),
+            new("AdGuard", null, cur == SettingsViewModel.DnsAdGuard,
+                () => _ = vm.SetRemoteDnsAsync(SettingsViewModel.DnsAdGuard)),
+        };
+        if (vm.HasCustomDns)
+        {
+            items.Add(new ChoiceItem(L.T("Common_Custom"), cur, true, () => _ = vm.SetRemoteDnsAsync(cur)));
+        }
+        ChoiceFlyout.Show(RowDns, items);
     }
 
     /// <summary>«Число соединений Mux»: реальный набор значений движка.</summary>
@@ -247,18 +269,6 @@ public partial class SettingsView : UserControl
             RowUiScale,
             [.. SettingsViewModel.UiScaleOptions.Select(s =>
                 new ChoiceItem(SettingsViewModel.FormatUiScale(s), null, Math.Abs(s - cur) < 0.001, () => vm.SetUiScale(s)))]);
-    }
-
-    /// <summary>Подпись поля в подвале списка выбора (Subtitle, с отступом сверху у второго и далее).</summary>
-    private static TextBlock Caption(string text, bool topGap = false)
-    {
-        var block = new TextBlock { Text = text };
-        block.Classes.Add("Subtitle");
-        if (topGap)
-        {
-            block.Margin = new Thickness(0, 6, 0, 0);
-        }
-        return block;
     }
 
     // ===================== Инлайн-сегменты (Режим / Оформление) =====================

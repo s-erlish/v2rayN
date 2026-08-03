@@ -38,6 +38,10 @@ public partial class PerAppProxyPage : UserControl, ISubPage
     //    трогал — владелец: «баг при нажатии прокси по приложениям впн перезапускается, хотя этого
     //    быть не должно, так как я даже процессы никакие не выбрал». Снимок делает разницу
     //    вычислимой: нет разницы — нет записи и нет перезапуска.
+    // Фильтр «показать состав набора»: null — фильтра нет. Живёт рядом с текстовым поиском и гасится
+    // им, чтобы список никогда не был пуст по двум причинам сразу.
+    private IReadOnlyList<string>? _presetFilter;
+
     private readonly bool _initialEnabled;
     private readonly bool _initialBypass;
     private readonly List<string> _initialSelection;
@@ -59,7 +63,23 @@ public partial class PerAppProxyPage : UserControl, ISubPage
         btnBack.Click += async (_, _) => await SaveAndBackAsync();
         btnRefresh.Click += (_, _) => LoadProcesses();
         btnAddExe.Click += async (_, _) => await AddExeAsync();
-        txtFilter.GetObservable(TextBox.TextProperty).Subscribe(_ => ApplyFilter());
+        txtFilter.GetObservable(TextBox.TextProperty).Subscribe(_ =>
+        {
+            // Печать в поиске снимает фильтр набора: два фильтра одновременно — это список, который
+            // не объясняет, почему он пуст.
+            _presetFilter = null;
+            ApplyFilter();
+        });
+
+        // Готовые наборы. Тумблеры отражают ЗАПИСАННОЕ владение (AppPresets.Owned), а не «все ли
+        // процессы набора отмечены»: набор, чьи процессы человек отметил вручную, не должен
+        // показываться применённым, иначе выключение отберёт его собственный выбор.
+        switchPresetGames.IsChecked = AppPresets.IsApplied(AppPresets.Games);
+        switchPresetLaunchers.IsChecked = AppPresets.IsApplied(AppPresets.Launchers);
+        switchPresetGames.IsCheckedChanged += (_, _) => TogglePreset(AppPresets.Games, switchPresetGames.IsChecked == true);
+        switchPresetLaunchers.IsCheckedChanged += (_, _) => TogglePreset(AppPresets.Launchers, switchPresetLaunchers.IsChecked == true);
+        btnShowGames.Click += (_, _) => ShowPreset(AppPresets.Games);
+        btnShowLaunchers.Click += (_, _) => ShowPreset(AppPresets.Launchers);
 
         switchEnabled.IsChecked = _config.UiItem.PerAppProxyEnabled;
         rbBypass.IsChecked = _config.UiItem.PerAppProxyBypass;
@@ -124,16 +144,89 @@ public partial class PerAppProxyPage : UserControl, ISubPage
 
     private void ApplyFilter()
     {
-        var q = txtFilter.Text?.Trim();
-        if (q.IsNullOrEmpty())
+        IEnumerable<AppItem> source = _all;
+        if (_presetFilter is { Count: > 0 })
         {
-            listApps.ItemsSource = _all.ToList();
-            return;
+            var set = new HashSet<string>(_presetFilter, StringComparer.OrdinalIgnoreCase);
+            source = source.Where(x => x.Identifier is not null && set.Contains(x.Identifier));
         }
-        listApps.ItemsSource = _all
-            .Where(x => (x.Display?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false)
-                     || (x.Identifier?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false))
-            .ToList();
+
+        var q = txtFilter.Text?.Trim();
+        if (q.IsNotEmpty())
+        {
+            source = source.Where(x => (x.Display?.Contains(q!, StringComparison.OrdinalIgnoreCase) ?? false)
+                                    || (x.Identifier?.Contains(q!, StringComparison.OrdinalIgnoreCase) ?? false));
+        }
+
+        listApps.ItemsSource = source.ToList();
+    }
+
+    /// <summary>
+    /// Показать состав набора: список фильтруется до его процессов, с их реальными галочками. Именно
+    /// это делает набор набором, а не скрытым списком — содержимое видно и правится поштучно, и
+    /// снятая вручную галочка переживёт всё, кроме выключения самого набора.
+    /// </summary>
+    private void ShowPreset(AppPreset preset)
+    {
+        EnsureRows(preset);
+        // Второе нажатие на ТОТ ЖЕ набор снимает фильтр; нажатие на другой — переключает на него,
+        // а не выключает (иначе «Показать» у второго набора выглядело бы сломанным).
+        _presetFilter = ReferenceEquals(_presetFilter, preset.Processes) ? null : preset.Processes;
+        txtFilter.Text = string.Empty;
+        ApplyFilter();
+    }
+
+    /// <summary>
+    /// Включение/выключение набора — ТОЛЬКО в памяти страницы. Ни одной записи в конфиг, ни одного
+    /// перезапуска ядра здесь нет: решает общий путь выхода (<see cref="SaveAndBackAsync"/>), который
+    /// сравнивает итог со снимком на входе. Включить набор и тут же выключить = ноль записей.
+    ///
+    /// Добавляется только то, чего в выборе ещё НЕТ, и запоминается именно добавленное
+    /// (<see cref="AppPresets.Apply"/>); выключение возвращает ровно его. Процесс, отмеченный
+    /// человеком до применения набора, набору не принадлежит и остаётся отмеченным.
+    /// </summary>
+    private void TogglePreset(AppPreset preset, bool on)
+    {
+        EnsureRows(preset);
+        if (on)
+        {
+            var current = new HashSet<string>(
+                _all.Where(x => x.IsChecked && x.Identifier.IsNotEmpty()).Select(x => x.Identifier!),
+                StringComparer.OrdinalIgnoreCase);
+            var added = new HashSet<string>(AppPresets.Apply(preset, current), StringComparer.OrdinalIgnoreCase);
+            foreach (var item in _all.Where(x => x.Identifier is not null && added.Contains(x.Identifier)))
+            {
+                item.IsChecked = true;
+            }
+        }
+        else
+        {
+            var owned = new HashSet<string>(AppPresets.Release(preset), StringComparer.OrdinalIgnoreCase);
+            foreach (var item in _all.Where(x => x.Identifier is not null && owned.Contains(x.Identifier)))
+            {
+                item.IsChecked = false;
+            }
+        }
+        ApplyFilter();
+    }
+
+    /// <summary>
+    /// Гарантирует строку в списке для каждого процесса набора. Игры при настройке НЕ ЗАПУЩЕНЫ — а
+    /// список собирается из запущенных процессов, — поэтому без этого набор «применялся» бы к пустоте
+    /// и не показывал бы ничего. Строки добавляются невыбранными; выбор ставит вызывающий.
+    /// </summary>
+    private void EnsureRows(AppPreset preset)
+    {
+        var known = new HashSet<string>(
+            _all.Where(x => x.Identifier.IsNotEmpty()).Select(x => x.Identifier!),
+            StringComparer.OrdinalIgnoreCase);
+        foreach (var process in preset.Processes)
+        {
+            if (known.Add(process))
+            {
+                _all.Add(new AppItem { Identifier = process, Display = process });
+            }
+        }
     }
 
     private async Task AddExeAsync()

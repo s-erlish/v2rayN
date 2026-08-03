@@ -25,6 +25,18 @@ public class Global
     /// </summary>
     public static Func<string?>? SubscriptionHwidProvider;
 
+    /// <summary>
+    /// The value of the Remnawave <c>x-device-os</c> header — what this build tells the panel it is
+    /// running on, and therefore how the row reads in the user's devices list. DETECTED, never assumed:
+    /// the literal here used to be «Windows» unconditionally, so a Linux or macOS install registered
+    /// itself as a Windows PC. Lower case, matching the Android client, which sends «android».
+    /// </summary>
+    public static string DevicePlatformName =>
+        OperatingSystem.IsWindows() ? "windows"
+        : OperatingSystem.IsMacOS() ? "macos"
+        : OperatingSystem.IsLinux() ? "linux"
+        : "desktop";
+
     public const string GithubUrl = "https://github.com";
     public const string GithubApiUrl = "https://api.github.com/repos";
     public const string GeoUrl = "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/{0}.dat";

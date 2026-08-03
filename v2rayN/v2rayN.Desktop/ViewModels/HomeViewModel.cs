@@ -884,6 +884,25 @@ public class HomeViewModel : MyReactiveObject, IDisposable
 
     /// <summary>Compute the desired ordered grouping from the live ProfileItems (same rule as before:
     /// group by subscription, pinned subs first). Purely a data projection — it touches no view state.</summary>
+    /// <summary>
+    /// The heading one server row's group carries. A row with no subscription is local — «Мои
+    /// серверы». Otherwise the stored <see cref="SubItem"/> answers through
+    /// <see cref="SubscriptionNaming"/>; the joined <c>SubRemarks</c> is only the fallback, because it
+    /// is a projection of the remark alone and knows nothing of the провайдер's own title.
+    /// </summary>
+    private string GroupNameFor(ProfileItemModel item)
+    {
+        var subId = item.Subid ?? string.Empty;
+        if (subId.IsNullOrEmpty())
+        {
+            return L.T("Home_MyServers");
+        }
+        var sub = Profiles?.SubItems.FirstOrDefault(s => s.Id == subId);
+        return SubscriptionNaming.NameOf(sub)
+            ?? SubscriptionNaming.RealName(item.SubRemarks)
+            ?? L.T("Home_SubUntitled");
+    }
+
     private List<GroupPlan> BuildGroupPlan(IList<ProfileItemModel>? items, out int providers)
     {
         providers = 0;
@@ -893,11 +912,15 @@ public class HomeViewModel : MyReactiveObject, IDisposable
             return plan;
         }
 
+        // ЗАГОЛОВОК ГРУППЫ ИДЁТ ЧЕРЕЗ ОДИН РЕЗОЛВЕР. Здесь стоял сырой SubRemarks — то есть ровно то
+        // поле, в котором апстрим хранил «import_sub», и заголовок группы был первым местом, где
+        // пользователь это читал. SubscriptionNaming знает ранжирование (profile-title → remarks) и
+        // отказывает плейсхолдерам; строка без подписки по-прежнему «Мои серверы».
         var grouped = items
             .GroupBy(i => new
             {
                 Key = i.Subid ?? string.Empty,
-                Name = string.IsNullOrEmpty(i.SubRemarks) ? L.T("Home_MyServers") : i.SubRemarks,
+                Name = GroupNameFor(i),
             })
             .ToList();
 
@@ -1036,7 +1059,9 @@ public class HomeViewModel : MyReactiveObject, IDisposable
             new() { Remarks = "France", ConfigType = EConfigType.Trojan, Network = "tcp", StreamSecurity = "tls", IndexId = "d4" },
             new() { Remarks = "Japan", ConfigType = EConfigType.Shadowsocks, Network = "tcp", StreamSecurity = "", IndexId = "d5" },
         };
-        vm.ServerGroups.Add(new HomeServerGroup("sub|import sub", "import sub", servers, true));
+        // The previewer's group carries a real-looking provider title, not upstream's placeholder —
+        // «import sub» in design data is how a placeholder gets re-legitimised as "what it looks like".
+        vm.ServerGroups.Add(new HomeServerGroup("sub|departament", "🍀 erlish", servers, true));
         vm.HasServers = true;
         vm.IsEmpty = false;
         vm.Subtitle = FormatServersProvidersMeta(5, 1);

@@ -29,9 +29,11 @@ public sealed partial class L
         // (Account_PickPlan). Verbatim, and identical to Android account_empty_title /
         // account_no_subscription.
         Add("Account_FirstSub", "Подписки пока нет", "No subscription yet");
+        // «departament» is lower case in every string on both platforms — owner ruling B2. This line
+        // shipped it capitalised in both languages, on the one screen a new user sees first.
         Add("Account_NoSubHint",
-            "Купите тариф, чтобы подключаться к серверам Departament.",
-            "Buy a plan to connect to Departament servers.");
+            "Купите тариф, чтобы подключаться к серверам departament.",
+            "Buy a plan to connect to departament servers.");
         Add("Account_Devices", "Устройства", "Devices");
         Add("Account_SignOut", "Выйти", "Sign out");
         Add("Account_SignInTitle", "Войдите в departament", "Sign in to departament");
@@ -57,8 +59,6 @@ public sealed partial class L
         Add("Account_ExpiresInDays", "Осталось {0} дн.", "{0} days left");
         Add("Account_ExpiredOn", "Истекла", "Expired");
         Add("Account_Perpetual", "Бессрочно", "No expiry");
-        Add("Account_DevicesUsage", "{0} из {1} устройств", "{0} of {1} devices");
-        Add("Account_DevicesTotal", "{0} устройств", "{0} devices");
         Add("Account_Renew", "Продлить", "Renew");
         Add("Account_PrevSub", "Предыдущая", "Previous");
         Add("Account_NextSub", "Следующая", "Next");
@@ -68,9 +68,20 @@ public sealed partial class L
         Add("Account_SubscriptionN", "Подписка {0}", "Subscription {0}");
         Add("Account_ActiveUntil", "Активна до {0}", "Active until {0}");
         Add("Account_ExpiredOnDate", "Истекла {0}", "Expired {0}");
-        Add("Account_DevicesShort", "{0} / {1} устройств", "{0} / {1} devices");
         Add("Account_DevicesUnlimited", "Безлимит устройств", "Unlimited devices");
+        // The SAME row when the live connected count is not known for this подписка: /client/subscription/all
+        // carries none, and only the ACTIVE подписка has a /client/devices call behind it. The allowance is
+        // real and stays; the usage is not known and is not invented. (Android: account_devices_limit.)
+        Add("Account_DevicesUpTo", "Устройства: до {0}", "Devices: up to {0}");
+
+        // ── The traffic meter's four states (Android: account_meter_traffic*) ──
+        Add("Account_MeterTraffic", "Трафик", "Traffic");
+        Add("Account_MeterTrafficOf", "{0} из {1}", "{0} of {1}");
         Add("Account_TrafficUnlimited", "{0} · безлимит", "{0} · unlimited");
+        Add("Account_MeterTrafficOver", "Лимит исчерпан", "Quota used up");
+        // The подписка carries no traffic payload. The meter STAYS and says so: a card with a hole
+        // where the figure belongs is what reads as unfinished.
+        Add("Account_MeterNoData", "Нет данных", "No data");
         Add("Account_AutoRenew", "Автопродление", "Auto-renew");
         Add("Account_AutoRenewNext", "Продлится {0}, спишем {1}", "Renews {0}, we'll charge {1}");
         Add("Account_AutoRenewOn", "Автопродление включено", "Auto-renew is on");

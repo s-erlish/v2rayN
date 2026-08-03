@@ -23,7 +23,7 @@ public static class SubscriptionHandler
                     continue;
                 }
 
-                var hashCode = $"{item.Remarks}->";
+                var hashCode = LogPrefix(item);
                 if (item.Enabled == false)
                 {
                     await updateFunc?.Invoke(false, $"{hashCode}{ResUI.MsgSkipSubscriptionUpdate}");
@@ -48,7 +48,7 @@ public static class SubscriptionHandler
             }
             catch (Exception ex)
             {
-                var hashCode = $"{item.Remarks}->";
+                var hashCode = LogPrefix(item);
                 Logging.SaveLog("UpdateSubscription", ex);
                 await updateFunc?.Invoke(false, $"{hashCode}{ResUI.MsgFailedImportSubscription}: {ex.Message}");
                 await updateFunc?.Invoke(false, "-------------------------------------------------------");
@@ -56,6 +56,19 @@ public static class SubscriptionHandler
         }
 
         await updateFunc?.Invoke(successCount > 0, $"{ResUI.MsgUpdateSubscriptionEnd}");
+    }
+
+    /// <summary>
+    /// The «name-&gt;» prefix every progress line on this path carries. It went through the RAW remark,
+    /// so a freshly pasted subscription reported its own refresh as «import_sub-&gt;…» in «Журнал» and in
+    /// the status line. The resolver answers instead — and a subscription that genuinely has no name
+    /// yet gets NO prefix rather than a generic noun pretending to be one, because the lines it
+    /// decorates read as sentences without it.
+    /// </summary>
+    private static string LogPrefix(SubItem item)
+    {
+        var name = SubscriptionNaming.NameOf(item);
+        return name.IsNullOrEmpty() ? string.Empty : $"{name}->";
     }
 
     private static bool IsValidSubscription(SubItem item, string subId)
@@ -325,6 +338,21 @@ public static class SubscriptionHandler
             if (profileTitle is not null)
             {
                 item.ProfileTitle = profileTitle;
+            }
+
+            // ADOPT THAT TITLE AS THE SUBSCRIPTION'S STORED NAME while — and only while — the
+            // subscription is still unnamed. A name that identifies THIS subscription must never be
+            // clobbered by a later fetch.
+            //
+            // THIS IS ALSO THE HEALING PATH FOR EVERY INSTALL THAT ALREADY STORED A PLACEHOLDER.
+            // SubscriptionNaming.IsUnnamed treats «import_sub», «Default» and the generic service
+            // label as no name at all, so the first refresh after this build replaces each of them
+            // with what the provider actually calls the subscription. There is no rename UI to fall
+            // back on (OWNER-DECISION-2026-08-02 §5), so this is the only route by which a bad stored
+            // name can ever be corrected — which is why it runs on every refresh and not just once.
+            if (item.ProfileTitle.IsNotEmpty() && SubscriptionNaming.IsUnnamed(item))
+            {
+                item.Remarks = item.ProfileTitle.Trim();
             }
 
             // Stamp the last-update time (epoch seconds, matching TaskManager) so the meta-bar

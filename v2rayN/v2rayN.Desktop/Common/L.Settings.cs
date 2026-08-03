@@ -107,6 +107,20 @@ public sealed partial class L
         Add("PerApp_SplitTunnelHint", "Выберите, какие программы идут через VPN", "Choose which apps go through the VPN");
         Add("PerApp_BypassHint", "Выбранные идут напрямую, минуя VPN", "Selected apps go direct, bypassing the VPN");
         Add("PerApp_OnlyHint", "Только выбранные идут через VPN", "Only selected apps go through the VPN");
+        // ── Готовые наборы «Прокси по приложениям» (AppPresets) ──
+        // Два набора, а не один: задержка и магазин — разные решения, и одно не должно ехать на
+        // тумблере другого. Оба выключены по умолчанию.
+        Add("PerApp_Presets", "Готовые наборы", "Presets");
+        Add("PerApp_PresetShow", "Показать", "Show");
+        Add("PerApp_PresetGames", "Игры", "Games");
+        Add("PerApp_PresetGamesHint",
+            "Соревновательные игры идут мимо VPN — задержка ниже, и античиты спокойнее относятся к обычному подключению.",
+            "Competitive games skip the VPN — lower latency, and anti-cheats are calmer about an ordinary connection.");
+        Add("PerApp_PresetLaunchers", "Игровые лаунчеры", "Game launchers");
+        Add("PerApp_PresetLaunchersHint",
+            "Steam, Battle.net, Epic, EA, Ubisoft. Загрузки станут быстрее, но магазин увидит ваше настоящее подключение — регион и цены будут его.",
+            "Steam, Battle.net, Epic, EA, Ubisoft. Downloads get faster, but the store sees your real connection — region and prices follow it.");
+
         Add("PerApp_Apps", "Приложения", "Apps");
         Add("PerApp_AddExe", "Добавить .exe", "Add .exe");
         Add("PerApp_TunHint", "Работает в режиме TUN (sing-box). Правила применяются при следующем подключении.", "Works in TUN mode (sing-box). Rules apply on the next connection.");
@@ -192,6 +206,12 @@ public sealed partial class L
         Add("Provider_Interval", "Интервал обновления", "Update interval");
         Add("Provider_SecNetwork", "Сеть", "Network");
         Add("Provider_Hwid", "Идентификатор устройства (HWID)", "Device ID (HWID)");
+        // FakeIP получил собственную строку-тумблер, когда DNS стал списком выбора: он булев и
+        // остаётся редактируемым, потому что установка с ним включённым обязана иметь выключатель.
+        Add("Settings_FakeIpHint",
+            "Быстрое разрешение имён внутри туннеля",
+            "Fast name resolution inside the tunnel");
+        Add("Settings_DnsDefaultHint", "Встроенный резолвер", "The built-in resolver");
         Add("Provider_UserAgentHint", "Отправляется ядром на исходящих подключениях", "Sent by the core on outbound connections");
     }
 }

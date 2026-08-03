@@ -134,7 +134,17 @@ public sealed class SubscriptionSyncManager
             item ??= existing.FirstOrDefault(s => s.Url == candidate.Url);
             item ??= new SubItem { Id = string.Empty, Url = candidate.Url };
 
-            item.Remarks = candidate.Remarks;
+            // A NAME IS ONLY WRITTEN WHEN IT IS A NAME. `candidate.Remarks` falls back to the tariff
+            // label, which on this deployment is the SAME string on every подписка — and writing that
+            // is what blocks the provider-title adoption forever, because a stored generic label is
+            // indistinguishable from a stored real name to anything that does not filter it. The
+            // account's own display name still wins when the user set one; otherwise the row keeps
+            // what it has and the next fetch adopts the провайдер's title.
+            var accountName = SubscriptionNaming.RealName(candidate.Remarks);
+            if (accountName is not null)
+            {
+                item.Remarks = accountName;
+            }
             item.Url = candidate.Url;                              // the ACCOUNT subscription URL
             item.Enabled = true;
             // Stamp an explicit v2rayNG-family UA: the departament/Remnawave panel serves its managed
@@ -206,7 +216,9 @@ public sealed class SubscriptionSyncManager
         if (primary?.HasActiveSubscription() == true && primaryUrl.IsNotEmpty() && seenUrls.Add(primaryUrl!))
         {
             var uuid = FirstNonBlank(profile?.RemnawaveUuid, rootFromAll?.RemnawaveUuid, rootFromAll?.Id, primaryUrl);
-            var remarks = FirstNonBlank(rootFromAll?.DisplayName, primary.TariffDisplayName, rootFromAll?.TariffDisplayName, "Departament VPN");
+            // No «Departament VPN» floor: a name that is the same on every подписка identifies none
+            // of them, and storing it is what stopped the провайдер's real title from ever landing.
+            var remarks = FirstNonBlank(rootFromAll?.DisplayName, primary.TariffDisplayName, rootFromAll?.TariffDisplayName);
             result.Add(new Candidate(uuid, primaryUrl!, remarks));
         }
 
@@ -218,7 +230,7 @@ public sealed class SubscriptionSyncManager
                 continue;
             }
             var uuid = FirstNonBlank(info.RemnawaveUuid, info.Id, url);
-            var remarks = FirstNonBlank(info.DisplayName, info.TariffDisplayName, "Departament VPN");
+            var remarks = FirstNonBlank(info.DisplayName, info.TariffDisplayName);
             result.Add(new Candidate(uuid, url!, remarks));
         }
 

@@ -124,9 +124,36 @@
             <Setter Property="Foreground" Value="{DynamicResource Brush.RedText}" />
         </Style>
 
-        <!--  Шкала трафика/устройств: заливка «наезжает» от 0 к цели при первом показе (только не-lite).
-              Обе пилюли (данные · устройства) несут класс UsageFill → один и тот же grow-переход.  -->
-        <Style Selector=":is(Window):not(.lite) Border.UsageFill">
+        <!--  ============ МЕТР (порт view_meter.xml): подпись+значение НАД дорожкой ============
+              Значение НИКОГДА не печатается ПОВЕРХ движущейся заливки: там контраст равен тому, что
+              заливка даёт в эту секунду (замеряли 2.9:1), и он меняется посреди слова, пока полоса
+              ползёт. Значение живёт своей строкой на поверхности карты — Subtitle, ≥4.5:1.
+              Дорожка 6 (meter_height), radius 3, трек SurfaceHighest — те же токены, что на телефоне.  -->
+        <Style Selector="Border.MeterTrack">
+            <Setter Property="Height" Value="6" />
+            <Setter Property="CornerRadius" Value="3" />
+            <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHighest}" />
+            <Setter Property="ClipToBounds" Value="True" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+        </Style>
+        <Style Selector="Border.MeterFill">
+            <Setter Property="Height" Value="6" />
+            <Setter Property="CornerRadius" Value="3" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="Background" Value="{DynamicResource Brush.Accent}" />
+        </Style>
+        <!--  ЛИМИТ ИСЧЕРПАН: краснеет И заливка, И цифра. Полная СИНЯЯ полоса читается как здоровый
+              полный бак — ровно наоборот тому, что произошло. Красный — единственный тон, который
+              переживает монохромный оверлей, и это именно его роль (ошибка/деструктив).  -->
+        <Style Selector="Border.MeterFill.over">
+            <Setter Property="Background" Value="{DynamicResource Brush.Red}" />
+        </Style>
+        <Style Selector="TextBlock.MeterValue.over">
+            <Setter Property="Foreground" Value="{DynamicResource Brush.RedText}" />
+        </Style>
+
+        <!--  Шкала трафика/устройств: заливка «наезжает» от 0 к цели при первом показе (только не-lite).  -->
+        <Style Selector=":is(Window):not(.lite) Border.MeterFill">
             <Setter Property="Transitions">
                 <Transitions>
                     <DoubleTransition Property="Width" Duration="0:0:0.30" Easing="{StaticResource Ease.OutQuint}" />
@@ -134,9 +161,11 @@
             </Setter>
         </Style>
 
-        <!--  Истёкшая карточка: неактивный план «гаснет» — шкалы приглушены до 0.5, чип и Primary
-              «Продлить» остаются в полную яркость и уводят взгляд к продлению.  -->
-        <Style Selector="StackPanel.Meters.dim">
+        <!--  Истёкшая карточка: неактивный план «гаснет» — но гаснут ШКАЛЫ, а не цифры.
+              Приглушение всего блока до 0.5 роняло и значение метра: Subtitle на карте ≈4.6:1
+              превращался в ≈2.3:1 — ровно тот контраст, ради которого значение и вынесли из-под
+              заливки. Дорожки уходят в полутон, чип и «Продлить» остаются в полную яркость.  -->
+        <Style Selector="StackPanel.Meters.dim Border.MeterTrack">
             <Setter Property="Opacity" Value="0.5" />
         </Style>
 
@@ -486,8 +515,8 @@
                     <!-- ============ ЗОНА 2 · Подписка: скелет / карусель / пусто / ошибка ============ -->
 
                     <!--  СКЕЛЕТ: пульсирующие плейсхолдеры первой загрузки (пульс гаснет в lite).
-                          Space.24 отделяет «тебя» (hero) от «того, что у тебя есть» (подписка).  -->
-                    <Panel Margin="0,24,0,0" Classes="subreveal" IsVisible="{Binding ShowSkeleton}">
+                          Space.12 держит «тебя» (hero) и «то, что у тебя есть» (подписка) ОДНИМ блоком.  -->
+                    <Panel Margin="0,12,0,0" Classes="subreveal" IsVisible="{Binding ShowSkeleton}">
                         <Border Classes="Card SkeletonPulse" MinHeight="208">
                             <StackPanel VerticalAlignment="Top" Spacing="12">
                                 <Grid ColumnDefinitions="*,Auto">
@@ -523,7 +552,7 @@
 
                     <!--  АКТИВНАЯ ПОДПИСКА (карусель): все подписки, активная первой. На 1 подписке — одна
                           карточка без точек. Перетаскивание/точки/стрелки/снап — в code-behind.  -->
-                    <Panel Margin="0,24,0,0" Classes="subreveal" IsVisible="{Binding ShowActiveSub}">
+                    <Panel Margin="0,12,0,0" Classes="subreveal" IsVisible="{Binding ShowActiveSub}">
                         <StackPanel>
                             <!--  Лента карточек: горизонтальный ScrollViewer (скролл-бар скрыт).  -->
                             <ScrollViewer
@@ -806,9 +835,12 @@
                                                         </Grid>
 
                                                         <!--  (b) Блок мер: срок · трафик · устройства — читаются одним взглядом (12dp).
-                                                              На «Истекла» блок гаснет до 0.5 (план неактивен).  -->
+                                                              На «Истекла» блок гаснет до 0.5 (план неактивен).
+                                                              12 над блоком, не 16: плотный вертикальный ритм телефона —
+                                                              внутри карты блоки стоят на 12, и это тот же контент на более
+                                                              густой сетке, а не урезанный.  -->
                                                         <StackPanel
-                                                            Margin="0,16,0,0"
+                                                            Margin="0,12,0,0"
                                                             Classes="Meters"
                                                             Classes.dim="{Binding MetersDim}"
                                                             Spacing="12">
@@ -822,70 +854,85 @@
                                                                 TextTrimming="CharacterEllipsis"
                                                                 TextWrapping="NoWrap" />
 
-                                                            <!--  Трафик: та же пилюля, что на Home (градиент-заливка = закодированное значение).  -->
-                                                            <Grid
-                                                                ColumnDefinitions="Auto,*"
-                                                                IsVisible="{Binding ShowTrafficPill}"
-                                                                VerticalAlignment="Center">
-                                                                <Border
-                                                                    Grid.Column="0"
-                                                                    VerticalAlignment="Center"
-                                                                    Classes="TrafficPill"
-                                                                    Width="{StaticResource Size.TrafficPill}">
-                                                                    <Border
-                                                                        Classes="TrafficPill Fill UsageFill"
-                                                                        Background="{Binding TrafficBrush}"
-                                                                        Width="{Binding TrafficFillWidth}" />
-                                                                </Border>
-                                                                <TextBlock
-                                                                    Grid.Column="1"
-                                                                    Margin="12,0,0,0"
-                                                                    VerticalAlignment="Center"
-                                                                    Classes="Caption Numeric"
-                                                                    Text="{Binding TrafficText}"
-                                                                    TextTrimming="CharacterEllipsis" />
-                                                            </Grid>
-
-                                                            <!--  Устройства: честная шкала (used/total) или «Безлимит устройств». ВСЯ строка —
-                                                                  первоклассный аффорданс (шеврон) на экран устройств, а не оторванная синяя ссылка.  -->
-                                                            <Button
-                                                                Classes="MeterRow"
-                                                                Command="{Binding DevicesCmd}"
-                                                                ToolTip.Tip="{loc:T Account_Devices}">
-                                                                <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
-                                                                    <Border
+                                                            <!--  МЕТР ТРАФИКА — четыре состояния, и в КАЖДОМ на карте остаётся цифра:
+                                                                  в пределах квоты  «12,4 из 50 ГБ», полоса на реальной доле;
+                                                                  ЛИМИТ ИСЧЕРПАН    «Лимит исчерпан», полоса полная, и она, и цифра красные;
+                                                                  безлимит          полосы НЕТ (полоса без потолка ничего не кодирует),
+                                                                                    «1,9 ТБ · безлимит»;
+                                                                  НЕТ ДАННЫХ        подпись и «Нет данных», без полосы. Раньше метр исчезал
+                                                                                    целиком — а у ВТОРИЧНОЙ подписки данных нет никогда, и на
+                                                                                    её карте оставалась дыра там, где должна быть цифра.  -->
+                                                            <StackPanel Spacing="8">
+                                                                <Grid ColumnDefinitions="*,Auto">
+                                                                    <TextBlock
                                                                         Grid.Column="0"
                                                                         VerticalAlignment="Center"
-                                                                        Classes="TrafficPill"
-                                                                        IsVisible="{Binding ShowUsageBar}"
-                                                                        Width="{StaticResource Size.TrafficPill}">
-                                                                        <Border
-                                                                            Classes="TrafficPill Fill UsageFill"
-                                                                            Width="{Binding UsageWidth}" />
-                                                                    </Border>
+                                                                        Classes="Subtitle"
+                                                                        Text="{loc:T Account_MeterTraffic}"
+                                                                        TextTrimming="CharacterEllipsis"
+                                                                        TextWrapping="NoWrap" />
                                                                     <TextBlock
                                                                         Grid.Column="1"
-                                                                        Margin="12,0,8,0"
+                                                                        Margin="12,0,0,0"
                                                                         VerticalAlignment="Center"
-                                                                        Classes="Caption Numeric"
-                                                                        Text="{Binding DevicesText}"
-                                                                        TextTrimming="CharacterEllipsis" />
-                                                                    <PathIcon
-                                                                        Grid.Column="2"
-                                                                        Width="16"
-                                                                        Height="16"
-                                                                        VerticalAlignment="Center"
-                                                                        Data="{StaticResource Geo.Acc.Chevron}"
-                                                                        Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+                                                                        Classes="Subtitle Numeric MeterValue"
+                                                                        Classes.over="{Binding TrafficOverQuota}"
+                                                                        FontFamily="{DynamicResource Font.Numeric}"
+                                                                        FontFeatures="tnum,lnum,zero"
+                                                                        Text="{Binding TrafficText}"
+                                                                        TextAlignment="Right"
+                                                                        TextTrimming="CharacterEllipsis"
+                                                                        TextWrapping="NoWrap" />
                                                                 </Grid>
-                                                            </Button>
+                                                                <Border Classes="MeterTrack" IsVisible="{Binding ShowTrafficBar}">
+                                                                    <Border
+                                                                        Classes="MeterFill"
+                                                                        Classes.over="{Binding TrafficOverQuota}"
+                                                                        Width="{Binding TrafficFillWidth}" />
+                                                                </Border>
+                                                            </StackPanel>
+
+                                                            <!--  Устройства: реальная цифра ТОЛЬКО там, где она известна («Устройства: 1 / 3»),
+                                                                  иначе — лимит («Устройства: до 3»), а не чужое число. Живой счёт в продукте
+                                                                  один (GET /client/devices об АКТИВНОЙ подписке), и вторичные карточки печатали
+                                                                  его как свой. ВСЯ строка — аффорданс (шеврон) на экран устройств; полоса под
+                                                                  ней — тот же метр, что у трафика, и появляется только вместе с цифрой.  -->
+                                                            <StackPanel Spacing="8">
+                                                                <Button
+                                                                    Classes="MeterRow"
+                                                                    Command="{Binding DevicesCmd}"
+                                                                    ToolTip.Tip="{loc:T Account_Devices}">
+                                                                    <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
+                                                                        <TextBlock
+                                                                            Grid.Column="0"
+                                                                            Margin="0,0,8,0"
+                                                                            VerticalAlignment="Center"
+                                                                            Classes="Subtitle Numeric"
+                                                                            FontFamily="{DynamicResource Font.Numeric}"
+                                                                            FontFeatures="tnum,lnum,zero"
+                                                                            Text="{Binding DevicesText}"
+                                                                            TextTrimming="CharacterEllipsis"
+                                                                            TextWrapping="NoWrap" />
+                                                                        <PathIcon
+                                                                            Grid.Column="1"
+                                                                            Width="16"
+                                                                            Height="16"
+                                                                            VerticalAlignment="Center"
+                                                                            Data="{StaticResource Geo.Acc.Chevron}"
+                                                                            Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+                                                                    </Grid>
+                                                                </Button>
+                                                                <Border Classes="MeterTrack" IsVisible="{Binding ShowUsageBar}">
+                                                                    <Border Classes="MeterFill" Width="{Binding UsageWidth}" />
+                                                                </Border>
+                                                            </StackPanel>
                                                         </StackPanel>
 
                                                         <!--  (c) Действие: ОДНА акцентная кнопка «Продлить» на всю ширину (единственный
                                                               primary карты). С тарифом → раскрывает выбор оплаты ВНУТРИ карты (баланс /
                                                               карта) — без флайаута-наезда на карту; без тарифа → сразу в «Купить».
                                                               Спиннер-в-слоте на время расчёта/поллинга; под lite статичен.  -->
-                                                        <StackPanel Margin="0,16,0,0" Spacing="12">
+                                                        <StackPanel Margin="0,12,0,0" Spacing="12">
                                                             <Button
                                                                 HorizontalAlignment="Stretch"
                                                                 HorizontalContentAlignment="Center"
@@ -932,9 +979,11 @@
                                                             </StackPanel>
                                                         </StackPanel>
 
-                                                        <!--  Авто-продление: тумблер iOS + строка следующего списания / нудж.  -->
+                                                        <!--  Авто-продление: тумблер iOS + строка следующего списания / нудж.
+                                                              Скрыт, когда действовать не над чем (нет id подписки): контрол,
+                                                              который не может отработать, не предлагают включённым.  -->
                                                         <Grid
-                                                            Margin="0,12,0,0"
+                                                            Margin="0,4,0,0"
                                                             ColumnDefinitions="Auto,*"
                                                             IsVisible="{Binding ShowAutoRenew}"
                                                             VerticalAlignment="Center">
@@ -991,7 +1040,7 @@
 
                     <!--  ПУСТО: нет активной подписки — обучающее состояние, которое ДЕЙСТВУЕТ
                           (иконка + копия + Primary «Выбрать тариф»), а не только описывает.  -->
-                    <Panel Margin="0,24,0,0" Classes="subreveal" IsVisible="{Binding ShowEmpty}">
+                    <Panel Margin="0,12,0,0" Classes="subreveal" IsVisible="{Binding ShowEmpty}">
                         <Border Classes="Card" MinHeight="120">
                             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="16">
                                 <Border Classes="EmptyIcon">
@@ -1021,7 +1070,7 @@
                     </Panel>
 
                     <!--  ОШИБКА: не удалось загрузить + причина + «Повторить».  -->
-                    <Panel Margin="0,24,0,0" Classes="subreveal" IsVisible="{Binding ShowError}">
+                    <Panel Margin="0,12,0,0" Classes="subreveal" IsVisible="{Binding ShowError}">
                         <Border Classes="Card" MinHeight="120">
                             <StackPanel VerticalAlignment="Center" Spacing="12">
                                 <StackPanel Orientation="Horizontal" Spacing="12">
@@ -1051,10 +1100,162 @@
                         </Border>
                     </Panel>
 
-                    <!-- ============ ЗОНА 3 · Способы входа (привязки) ============ -->
+                    <!-- ============ ЗОНА 3 · Управление ============ -->
+                    <TextBlock
+                        Margin="0,16,0,4"
+                        Classes="SectionHeader"
+                        Text="{loc:T Common_Manage}" />
+
+                    <!--  Карта навигации: строки во всю ширину, hover клипается к radius 20. «Купить» —
+                          единственная акцентная строка. Строки прибиты к 56dp, пад 16,0.  -->
+                    <Border Classes="Card" ClipToBounds="True" Padding="0">
+                        <StackPanel>
+
+                            <Border
+                                x:Name="BuyRow"
+                                MinHeight="{StaticResource Size.Row}"
+                                Padding="16,0"
+                                Classes="Row"
+                                CornerRadius="0"
+                                Cursor="Hand">
+                                <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
+                                    <Border Grid.Column="0" VerticalAlignment="Center" Classes="Tile Blue">
+                                        <PathIcon
+                                            Width="22"
+                                            Height="22"
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Center"
+                                            Data="{StaticResource Geo.Acc.Upgrade}"
+                                            Foreground="{DynamicResource Brush.Accent}" />
+                                    </Border>
+                                    <TextBlock
+                                        Grid.Column="1"
+                                        Margin="16,0,8,0"
+                                        VerticalAlignment="Center"
+                                        Classes="Title"
+                                        Foreground="{DynamicResource Brush.Accent}"
+                                        Text="{loc:T Common_BuySubscription}"
+                                        TextTrimming="CharacterEllipsis" />
+                                    <PathIcon
+                                        Grid.Column="2"
+                                        Width="18"
+                                        Height="18"
+                                        Margin="4,0,0,0"
+                                        VerticalAlignment="Center"
+                                        Data="{StaticResource Geo.Acc.Chevron}"
+                                        Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+                                </Grid>
+                            </Border>
+
+                            <Border Height="1" Margin="72,0,0,0" Background="{DynamicResource Brush.OutlineVariant}" />
+
+                            <!--  УСТРОЙСТВА — вторая дверь на экран устройств, и она БЫЛА ПОТЕРЯНА.
+                                  Значение строки («1 / 3») считалось во вьюмодели (DevicesRowValue), но
+                                  строки под него на этом экране не было вовсе: единственным путём на экран
+                                  устройств оставалась мера внутри карточки подписки, которой нет ни в одном
+                                  состоянии, кроме активного. На телефоне обе двери есть, и обе остаются.  -->
+                            <Border
+                                x:Name="DevicesRow"
+                                MinHeight="{StaticResource Size.Row}"
+                                Padding="16,0"
+                                Classes="Row"
+                                CornerRadius="0"
+                                Cursor="Hand">
+                                <Grid ColumnDefinitions="Auto,*,Auto,Auto" VerticalAlignment="Center">
+                                    <Border Grid.Column="0" VerticalAlignment="Center" Classes="Tile">
+                                        <PathIcon
+                                            Width="22"
+                                            Height="22"
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Center"
+                                            Data="{StaticResource Geo.Acc.Devices}"
+                                            Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+                                    </Border>
+                                    <TextBlock
+                                        Grid.Column="1"
+                                        Margin="16,0,8,0"
+                                        VerticalAlignment="Center"
+                                        Classes="Title"
+                                        Text="{loc:T Account_Devices}" />
+                                    <TextBlock
+                                        Grid.Column="2"
+                                        Margin="0,0,8,0"
+                                        MaxWidth="120"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Center"
+                                        Classes="Subtitle"
+                                        FontFamily="{DynamicResource Font.Numeric}"
+                                        FontFeatures="tnum,lnum,zero"
+                                        IsVisible="{Binding HasDevicesRowValue}"
+                                        Text="{Binding DevicesRowValue}"
+                                        TextTrimming="CharacterEllipsis"
+                                        TextWrapping="NoWrap" />
+                                    <PathIcon
+                                        Grid.Column="3"
+                                        Width="18"
+                                        Height="18"
+                                        Margin="4,0,0,0"
+                                        VerticalAlignment="Center"
+                                        Data="{StaticResource Geo.Acc.Chevron}"
+                                        Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+                                </Grid>
+                            </Border>
+
+                            <Border Height="1" Margin="72,0,0,0" Background="{DynamicResource Brush.OutlineVariant}" />
+
+                            <Border
+                                x:Name="HistoryRow"
+                                MinHeight="{StaticResource Size.Row}"
+                                Padding="16,0"
+                                Classes="Row"
+                                CornerRadius="0"
+                                Cursor="Hand">
+                                <Grid ColumnDefinitions="Auto,*,Auto,Auto" VerticalAlignment="Center">
+                                    <Border Grid.Column="0" VerticalAlignment="Center" Classes="Tile">
+                                        <PathIcon
+                                            Width="22"
+                                            Height="22"
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Center"
+                                            Data="{StaticResource Geo.Acc.History}"
+                                            Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+                                    </Border>
+                                    <TextBlock
+                                        Grid.Column="1"
+                                        Margin="16,0,8,0"
+                                        VerticalAlignment="Center"
+                                        Classes="Title"
+                                        Text="{loc:T Common_PaymentHistory}" />
+                                    <TextBlock
+                                        Grid.Column="2"
+                                        Margin="0,0,8,0"
+                                        MaxWidth="120"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Center"
+                                        Classes="Subtitle"
+                                        FontFamily="{DynamicResource Font.Numeric}"
+                                        FontFeatures="tnum,lnum,zero"
+                                        IsVisible="{Binding HasHistoryRowValue}"
+                                        Text="{Binding HistoryRowValue}"
+                                        TextTrimming="CharacterEllipsis"
+                                        TextWrapping="NoWrap" />
+                                    <PathIcon
+                                        Grid.Column="3"
+                                        Width="18"
+                                        Height="18"
+                                        Margin="4,0,0,0"
+                                        VerticalAlignment="Center"
+                                        Data="{StaticResource Geo.Acc.Chevron}"
+                                        Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- ============ ЗОНА 4 · Способы входа (привязки) ============ -->
                     <StackPanel IsVisible="{Binding ShowLinking}">
                         <TextBlock
-                            Margin="0,24,0,8"
+                            Margin="0,16,0,4"
                             Classes="SectionHeader"
                             Text="{loc:T Account_LinkingTitle}" />
                         <Border Classes="Card" ClipToBounds="True" Padding="0">
@@ -1270,106 +1471,10 @@
                         </Border>
                     </StackPanel>
 
-                    <!-- ============ ЗОНА 4 · Управление ============ -->
-                    <TextBlock
-                        Margin="0,24,0,8"
-                        Classes="SectionHeader"
-                        Text="{loc:T Common_Manage}" />
-
-                    <!--  Карта навигации: строки во всю ширину, hover клипается к radius 20. «Купить» —
-                          единственная акцентная строка. Строки прибиты к 56dp, пад 16,0.  -->
-                    <Border Classes="Card" ClipToBounds="True" Padding="0">
-                        <StackPanel>
-
-                            <Border
-                                x:Name="BuyRow"
-                                MinHeight="{StaticResource Size.Row}"
-                                Padding="16,0"
-                                Classes="Row"
-                                CornerRadius="0"
-                                Cursor="Hand">
-                                <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
-                                    <Border Grid.Column="0" VerticalAlignment="Center" Classes="Tile Blue">
-                                        <PathIcon
-                                            Width="22"
-                                            Height="22"
-                                            HorizontalAlignment="Center"
-                                            VerticalAlignment="Center"
-                                            Data="{StaticResource Geo.Acc.Upgrade}"
-                                            Foreground="{DynamicResource Brush.Accent}" />
-                                    </Border>
-                                    <TextBlock
-                                        Grid.Column="1"
-                                        Margin="16,0,8,0"
-                                        VerticalAlignment="Center"
-                                        Classes="Title"
-                                        Foreground="{DynamicResource Brush.Accent}"
-                                        Text="{loc:T Common_BuySubscription}"
-                                        TextTrimming="CharacterEllipsis" />
-                                    <PathIcon
-                                        Grid.Column="2"
-                                        Width="18"
-                                        Height="18"
-                                        Margin="4,0,0,0"
-                                        VerticalAlignment="Center"
-                                        Data="{StaticResource Geo.Acc.Chevron}"
-                                        Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
-                                </Grid>
-                            </Border>
-
-                            <Border Height="1" Margin="72,0,0,0" Background="{DynamicResource Brush.OutlineVariant}" />
-
-                            <Border
-                                x:Name="HistoryRow"
-                                MinHeight="{StaticResource Size.Row}"
-                                Padding="16,0"
-                                Classes="Row"
-                                CornerRadius="0"
-                                Cursor="Hand">
-                                <Grid ColumnDefinitions="Auto,*,Auto,Auto" VerticalAlignment="Center">
-                                    <Border Grid.Column="0" VerticalAlignment="Center" Classes="Tile">
-                                        <PathIcon
-                                            Width="22"
-                                            Height="22"
-                                            HorizontalAlignment="Center"
-                                            VerticalAlignment="Center"
-                                            Data="{StaticResource Geo.Acc.History}"
-                                            Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
-                                    </Border>
-                                    <TextBlock
-                                        Grid.Column="1"
-                                        Margin="16,0,8,0"
-                                        VerticalAlignment="Center"
-                                        Classes="Title"
-                                        Text="{loc:T Common_PaymentHistory}" />
-                                    <TextBlock
-                                        Grid.Column="2"
-                                        Margin="0,0,8,0"
-                                        MaxWidth="120"
-                                        HorizontalAlignment="Right"
-                                        VerticalAlignment="Center"
-                                        Classes="Subtitle"
-                                        FontFamily="{DynamicResource Font.Numeric}"
-                                        FontFeatures="tnum,lnum,zero"
-                                        IsVisible="{Binding HasHistoryRowValue}"
-                                        Text="{Binding HistoryRowValue}"
-                                        TextTrimming="CharacterEllipsis"
-                                        TextWrapping="NoWrap" />
-                                    <PathIcon
-                                        Grid.Column="3"
-                                        Width="18"
-                                        Height="18"
-                                        Margin="4,0,0,0"
-                                        VerticalAlignment="Center"
-                                        Data="{StaticResource Geo.Acc.Chevron}"
-                                        Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
-                                </Grid>
-                            </Border>
-                        </StackPanel>
-                    </Border>
-
-                    <!--  «Выйти» — вынесен ИЗ карты навигации в отдельную тихую строку (24dp-разрыв):
-                          красный ТЕКСТ, без заливки/красной плитки. Виден только вошедшему.  -->
+                    <!--  «Выйти» — вынесен ИЗ карты навигации в отдельную тихую строку (16dp-разрыв,
+                          шаг заголовка секции): красный ТЕКСТ, без заливки/красной плитки. Терминальное
+                          действие не сидит последней строкой «Управления» — там оно ловит промах,
+                          который стоит сессии. Виден только вошедшему.  -->
                     <!--  ДОСТУПНОСТЬ (00-rules 12.2 «ничто не может быть доступно только мышью», 7.1, 14.8):
                           «Выйти» был Border с одним Tapped из code-behind — выход из аккаунта не выполнялся
                           с клавиатуры вообще. Focusable + IsTabStop дают таб-стоп и уже готовое кольцо
@@ -1378,7 +1483,7 @@
                           в разметке, без дублирующего обработчика. Порядок Tab = порядок разметки.  -->
                     <Border
                         x:Name="LogoutRow"
-                        Margin="0,24,0,0"
+                        Margin="0,16,0,0"
                         MinHeight="{StaticResource Size.Row}"
                         Padding="16,0"
                         Classes="Row"

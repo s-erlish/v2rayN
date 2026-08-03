@@ -44,6 +44,11 @@ public sealed partial class L
         // ── Server-list grouping / meta (HomeViewModel) ──
         // Fallback group name for servers with no provider remark.
         Add("Home_MyServers", "Мои серверы", "My servers");
+        // What a подписка is called before its провайдер has told us — the floor of
+        // ServiceLib's SubscriptionNaming ranking, wired in App.OnFrameworkInitializationCompleted.
+        // It exists so that no surface ever prints an empty heading, and so that the placeholder it
+        // replaced («import_sub») has somewhere honest to fall back to.
+        Add("Home_SubUntitled", "Подписка", "Subscription");
         // Composed meta line: {0} = "{n} servers" plural, {1} = "{n} providers" plural.
         // The middle dot is locale-neutral and stays in the template.
         Add("Home_ServersProvidersMeta", "{0} · {1}", "{0} · {1}");

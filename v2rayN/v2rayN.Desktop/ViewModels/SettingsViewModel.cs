@@ -522,6 +522,12 @@ public class SettingsViewModel : MyReactiveObject
     }
 
     /// <summary>Адрес проверки задержки (пусто — значение движка по умолчанию).</summary>
+    /// <remarks>
+    /// БЕЗ РЕДАКТОРА ПО РЕШЕНИЮ ВЛАДЕЛЬЦА: «убери адрес и таймаут». Значение живёт в конфиге и
+    /// продолжает работать; читатели (спидтест) его берут как раньше. Свойство оставлено, чтобы
+    /// было видно, ЧТО именно перестало редактироваться — и чтобы возврат редактора был правкой
+    /// разметки, а не археологией. То же про <see cref="PingTimeout"/> и <see cref="SetPingParamsAsync"/>.
+    /// </remarks>
     public string PingTestUrl => _config.SpeedTestItem?.SpeedPingTestUrl ?? string.Empty;
 
     /// <summary>Тайм-аут проверки в секундах; 0 — не задан.</summary>
@@ -554,6 +560,81 @@ public class SettingsViewModel : MyReactiveObject
         if (changed)
         {
             await ConfigHandler.SaveConfig(_config);
+        }
+    }
+
+    // ── DNS ────────────────────────────────────────────────────────────────────────────────────
+    // The four preset DoH endpoints, mirrored from Global.DomainRemoteDNSAddress / the engine. An
+    // empty RemoteDNS is the built-in resolver.
+
+    public const string DnsCloudflare = "https://cloudflare-dns.com/dns-query";
+    public const string DnsGoogle = "https://dns.google/dns-query";
+    public const string DnsAdGuard = "https://dns.adguard-dns.com/dns-query";
+
+    /// <summary>The stored remote-DNS endpoint («» = the built-in resolver).</summary>
+    public string RemoteDns => _config.SimpleDNSItem?.RemoteDNS?.Trim() ?? string.Empty;
+
+    /// <summary>
+    /// True when the stored endpoint is not one of the presets — i.e. the user configured a custom
+    /// DoH address in a build that still had a field for it. That value is NOT a preset and has no
+    /// editor any more, so the choice list surfaces it as its own option: an existing working setup
+    /// stays visible, stays selected, and can be returned to after trying a preset.
+    /// </summary>
+    public bool HasCustomDns => RemoteDns.IsNotEmpty()
+        && RemoteDns != DnsCloudflare && RemoteDns != DnsGoogle && RemoteDns != DnsAdGuard;
+
+    /// <summary>Sets the remote DoH endpoint. Persist only — the OFF model never starts the core.</summary>
+    public async Task SetRemoteDnsAsync(string endpoint)
+    {
+        if (_designMode)
+        {
+            return;
+        }
+        _config.SimpleDNSItem ??= new SimpleDNSItem();
+        if (_config.SimpleDNSItem.RemoteDNS == endpoint)
+        {
+            return;
+        }
+        _config.SimpleDNSItem.RemoteDNS = endpoint;
+        await ConfigHandler.SaveConfig(_config);
+        DnsText = ResolveDnsText();
+        ApplyIfRunning();
+    }
+
+    /// <summary>
+    /// FakeIP. It keeps an editor — as a switch row of its own — because it is the one thing on the
+    /// old DNS page that a working setup can depend on: it changes how names resolve inside the
+    /// tunnel, and an install with it ON and no way to turn it OFF is a broken install with no
+    /// recourse. It is a boolean, so a switch row is its natural shape and it needs no page.
+    /// </summary>
+    public bool FakeIp
+    {
+        get => _config.SimpleDNSItem?.FakeIP == true;
+        set
+        {
+            if (_designMode || FakeIp == value)
+            {
+                return;
+            }
+            _config.SimpleDNSItem ??= new SimpleDNSItem();
+            _config.SimpleDNSItem.FakeIP = value;
+            this.RaisePropertyChanged();
+            _ = PersistFakeIpAsync();
+        }
+    }
+
+    private async Task PersistFakeIpAsync()
+    {
+        await ConfigHandler.SaveConfig(_config);
+        ApplyIfRunning();
+    }
+
+    /// <summary>Live-applies a DNS change ONLY when the core is already running (consumer-VPN OFF model).</summary>
+    private static void ApplyIfRunning()
+    {
+        if (AppManager.Instance.IsRunningCore(ECoreType.Xray) || AppManager.Instance.IsRunningCore(ECoreType.sing_box))
+        {
+            StatusBarViewModel.Instance.ReloadRequested.Publish();
         }
     }
 
