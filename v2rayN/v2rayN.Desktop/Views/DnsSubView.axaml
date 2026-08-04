@@ -23,7 +23,7 @@
             </Setter>
         </Style>
         <Style Selector="Button.IconButton:pressed">
-            <Setter Property="RenderTransform" Value="scale(0.92)" />
+            <Setter Property="RenderTransform" Value="scale(0.97)" />
         </Style>
 
         <!--  Пресет-чип: SurfaceHigh в покое, синий акцент когда выбран. Press scale 0.96, без ripple.  -->
@@ -32,10 +32,12 @@
             <Setter Property="CornerRadius" Value="{StaticResource Radius.Chip}" />
             <Setter Property="Padding" Value="16,10" />
             <Setter Property="Cursor" Value="Hand" />
+            <!--  Press-scale остаётся; кроссфейд заливки снят — её ведёт :pointerover, и 120мс
+                  перетекания превращали проход вдоль ряда чипов в мигание (F1). Выбор чипа — клик,
+                  ему мгновенность идёт (так же снят фон у сегментов).  -->
             <Setter Property="Transitions">
                 <Transitions>
                     <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" />
-                    <BrushTransition Property="Background" Duration="0:0:0.12" />
                 </Transitions>
             </Setter>
         </Style>
@@ -48,9 +50,10 @@
         <Style Selector="Border.DnsChip.selected:pointerover">
             <Setter Property="Background" Value="{DynamicResource Brush.Accent}" />
         </Style>
+        <!--  Подписи чипов включают русские («По умолчанию», «Свой») → интерфейсная гарнитура.  -->
         <Style Selector="Border.DnsChip TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
-            <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+            <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
             <Setter Property="FontSize" Value="14" />
             <Setter Property="FontWeight" Value="SemiBold" />
         </Style>

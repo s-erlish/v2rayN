@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.Win32;
@@ -24,6 +25,13 @@ public static class AuthTokenStore
     private static byte[]? _key;
     private static string? _machineSeed;
 
+    /// <summary>
+    /// The device id held for THIS PROCESS ONLY. It is what keeps an unwritable fallback out of the
+    /// file: a guess made because the machine would not answer must not outlive the process that
+    /// made it, or the next launch inherits it instead of deriving the real one.
+    /// </summary>
+    private static string? _cachedDeviceId;
+
     private sealed class StoreData
     {
         public string? Token { get; set; }
@@ -36,23 +44,69 @@ public static class AuthTokenStore
     #region public API
 
     /// <summary>
-    /// Stable per-device HWID (32 lowercase hex) that survives reinstall, computed once and reused.
-    /// First run derives it from MD5(MachineGuid) to match the UUID-without-dashes format the backend
-    /// expects, so the panel keeps a single device slot per physical machine. Random uuid fallback.
+    /// Stable per-machine HWID (32 lowercase hex) that SURVIVES UNINSTALL/REINSTALL, computed once and
+    /// reused. Port of the Android fix in <c>auth/AuthTokenStore.kt</c> (<c>1c1d890</c>); read this
+    /// before changing it, because the phone shipped the wrong answer here once and the owner has said
+    /// the same defect applies to this client — «это касается и пк версии».
+    ///
+    /// <para><b>What it is keyed on.</b> A value the OPERATING SYSTEM owns, never one this app mints:
+    /// <c>HKLM\SOFTWARE\Microsoft\Cryptography\MachineGuid</c> on Windows, <c>/etc/machine-id</c>
+    /// (then <c>/var/lib/dbus/machine-id</c>) on Linux, <c>IOPlatformUUID</c> from
+    /// <c>IOPlatformExpertDevice</c> on macOS. None of them lives in the app's own directory, so
+    /// uninstalling — or wiping <c>guiConfigs</c> — does not touch it: a clean reinstall on the same
+    /// machine derives the SAME HWID and the subscription keeps ONE device slot. Each of them dies
+    /// with the OS install, which is correct: a reimaged machine IS a different device.</para>
+    ///
+    /// <para><b>Why the previous one was not stable.</b> The old code fell through to
+    /// <c>Guid.NewGuid()</c> whenever the platform value read back blank AND PERSISTED IT. On macOS
+    /// that was EVERY install — the reader only knew Windows and Linux — so every reinstall of the
+    /// desktop client burned another slot against <c>hwidDeviceLimit</c>, exactly the nine-rows-for-one-
+    /// device failure the owner hit on Android. A fallback is now in-memory only (see
+    /// <see cref="_cachedDeviceId"/>) and is no longer random.</para>
+    ///
+    /// <para><b>Migration.</b> An id already on disk ALWAYS wins, whatever it was keyed on and before
+    /// any derivation runs. An install that upgrades into this build keeps the identity the panel
+    /// already knows and does NOT appear as yet another new device; the derivation below only runs when
+    /// there is nothing to carry forward, i.e. on a genuinely fresh install.</para>
+    ///
+    /// <para><b>No elevation, no new permission.</b> All three sources are world-readable to a normal
+    /// user process.</para>
+    ///
+    /// <para>The desktop legitimately registers as a SEPARATE device from the phone — same account,
+    /// two machines — and the plan's device limit has to account for both. That is not a bug.</para>
     /// </summary>
     public static string DeviceId()
     {
         lock (_lock)
         {
             var data = Data();
+            // MIGRATION FIRST, ALWAYS. Whatever this install has been telling the panel, it keeps
+            // telling it. Re-deriving over a stored id would make every update a new device — the same
+            // defect as a reinstall, just triggered by us instead of by the user.
             if (data.DeviceId.IsNotEmpty())
             {
+                _cachedDeviceId = data.DeviceId;
                 return data.DeviceId!;
             }
-            var generated = ComputeStableDeviceId();
-            data.DeviceId = generated;
-            Persist();
-            return generated;
+            // Held from earlier in this process: either a fallback (never written) or a derived id
+            // whose write failed. Either way the process must not change identity mid-run.
+            if (_cachedDeviceId.IsNotEmpty())
+            {
+                return _cachedDeviceId!;
+            }
+            var (id, derived) = ComputeDeviceId();
+            _cachedDeviceId = id;
+            // ONLY A DERIVED ID IS WRITTEN DOWN. A derived id is a pure function of the machine, so
+            // persisting it is free — the same value comes back next launch anyway. A fallback is a
+            // guess made because the machine would not answer, and persisting THAT is what burns a
+            // device slot forever: one unlucky first launch and the install is pinned to a value no
+            // later launch can correct.
+            if (derived)
+            {
+                data.DeviceId = id;
+                Persist();
+            }
+            return id;
         }
     }
 
@@ -235,21 +289,129 @@ public static class AuthTokenStore
         return Encoding.UTF8.GetString(pt);
     }
 
-    private static string ComputeStableDeviceId()
+    /// <summary>
+    /// Namespaces the two derivations below so they can never collide on one machine, and matches the
+    /// Android salt shape (<c>departament-hwid-v1|&lt;source&gt;|</c>) so both clients mint ids of the
+    /// same 32-lowercase-hex form the panel stores.
+    /// </summary>
+    private const string IdSaltMachine = "departament-hwid-v1|machine_id|";
+
+    private const string IdSaltAttrs = "departament-hwid-v1|attrs|";
+
+    /// <summary>
+    /// The OS-owned machine id first; a digest of stable machine attributes when the OS will not
+    /// answer; a random uuid only when even MD5 is unavailable — and that last one is flagged
+    /// <c>derived: false</c> so it is never written to disk.
+    ///
+    /// The middle tier matters more than it looks. It is not guaranteed unique between two machines,
+    /// but it IS identical across reinstalls of the same machine — and since the panel scopes device
+    /// entries to one subscription, "the same PC keeps one slot" is worth far more than "two machines
+    /// with the same name and user would collide", which additionally requires them to share an
+    /// account. A random GUID has neither property.
+    /// </summary>
+    private static (string Id, bool Derived) ComputeDeviceId()
     {
-        var guid = ReadMachineGuid();
-        if (guid.IsNullOrEmpty())
+        var machineId = ReadPlatformMachineId();
+        if (machineId.IsNotEmpty())
         {
-            return Guid.NewGuid().ToString("N");
+            var hex = Md5Hex(IdSaltMachine + machineId);
+            if (hex != null)
+            {
+                return (hex, true);
+            }
         }
+        var attrs = Md5Hex(IdSaltAttrs + MachineFingerprint());
+        if (attrs != null)
+        {
+            return (attrs, true);
+        }
+        return (Guid.NewGuid().ToString("N"), false);
+    }
+
+    /// <summary>
+    /// The machine's own unchanging description, used only when the OS id is unreadable. Every field
+    /// survives an app reinstall and dies with the OS install — the same lifetime the primary source
+    /// has — and not one of them is random, which is the whole point of this tier.
+    /// </summary>
+    private static string MachineFingerprint() => string.Join("|",
+        Environment.MachineName,
+        Environment.UserName,
+        OperatingSystem.IsWindows() ? "windows" : OperatingSystem.IsMacOS() ? "macos" : OperatingSystem.IsLinux() ? "linux" : "other",
+        RuntimeInformation.OSArchitecture.ToString(),
+        Environment.ProcessorCount.ToString(CultureInfo.InvariantCulture));
+
+    /// <summary>MD5 as 32 lowercase hex chars — the UUID-without-dashes shape the panel stores.</summary>
+    private static string? Md5Hex(string input)
+    {
         try
         {
-            var bytes = MD5.HashData(Encoding.UTF8.GetBytes(guid!));
-            return Convert.ToHexString(bytes).ToLowerInvariant();
+            return Convert.ToHexString(MD5.HashData(Encoding.UTF8.GetBytes(input))).ToLowerInvariant();
         }
         catch
         {
-            return Guid.NewGuid().ToString("N");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The OS-owned machine id: Windows MachineGuid, Linux machine-id, macOS IOPlatformUUID.
+    ///
+    /// Deliberately NOT the same function as <see cref="ReadMachineGuid"/>, which seeds the AES key and
+    /// therefore must keep answering exactly what it answered when a given store was written — teaching
+    /// THAT one about macOS would change the key on every Mac and make every existing store
+    /// undecryptable, taking the stored device id down with it.
+    /// </summary>
+    private static string? ReadPlatformMachineId()
+    {
+        var guid = ReadMachineGuid();
+        if (guid.IsNotEmpty())
+        {
+            return guid;
+        }
+        return OperatingSystem.IsMacOS() ? ReadMacPlatformUuid() : null;
+    }
+
+    /// <summary>
+    /// <c>IOPlatformUUID</c> from the IOKit registry — the Mac's own hardware id, unchanged by an OS
+    /// user wiping the app. Read through <c>ioreg</c> rather than a P/Invoke into IOKit so the call
+    /// costs nothing on the other two platforms and cannot fail the build there.
+    /// </summary>
+    private static string? ReadMacPlatformUuid()
+    {
+        try
+        {
+            using var proc = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "/usr/sbin/ioreg",
+                Arguments = "-rd1 -c IOPlatformExpertDevice",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            });
+            if (proc == null)
+            {
+                return null;
+            }
+            var output = proc.StandardOutput.ReadToEnd();
+            if (!proc.WaitForExit(5000))
+            {
+                return null;
+            }
+            // Line shape: `    "IOPlatformUUID" = "564D…-…"`
+            const string marker = "\"IOPlatformUUID\"";
+            var at = output.IndexOf(marker, StringComparison.Ordinal);
+            if (at < 0)
+            {
+                return null;
+            }
+            var open = output.IndexOf('"', output.IndexOf('=', at + marker.Length) + 1);
+            var close = open < 0 ? -1 : output.IndexOf('"', open + 1);
+            return close > open ? output[(open + 1)..close].Trim() : null;
+        }
+        catch
+        {
+            return null;
         }
     }
 
@@ -264,7 +426,13 @@ public static class AuthTokenStore
         return _machineSeed;
     }
 
-    /// <summary>Raw machine identifier: Windows MachineGuid, then Linux machine-id. Null when unavailable.</summary>
+    /// <summary>
+    /// Raw machine identifier: Windows MachineGuid, then Linux machine-id. Null when unavailable.
+    ///
+    /// FROZEN — this is the AES key seed (<see cref="MachineSeed"/>). Widening it to a platform it did
+    /// not previously cover changes the key on that platform and makes every store already written
+    /// there undecryptable. New sources belong in <see cref="ReadPlatformMachineId"/>.
+    /// </summary>
     private static string? ReadMachineGuid()
     {
         try

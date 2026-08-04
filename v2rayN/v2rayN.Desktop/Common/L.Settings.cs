@@ -5,10 +5,10 @@ namespace v2rayN.Desktop.Common;
 // Keys: Settings_*, Dns_*, Routing_*, PerApp_*, Ping_*, Geo_*, About_*, Backup_*,
 //       UrlSchemes_*, Provider_* (+ Common_* references).
 // Views: SettingsView(.axaml/.cs), SettingsViewModel, DnsSubView, RoutingSubView,
-//        PerAppProxyPage, PingSettingsPage, GeoFilesPage, AboutPage, BackupPage,
+//        PerAppProxyPage, GeoFilesPage, AboutPage, BackupPage,
 //        UrlSchemesPage, ProviderSettingsPage, ThemeSettingViewModel.
 // Inventory: LOCALIZATION_PLAN.md §2.3.
-// NOTE (WP0 already done): the language-switch wiring in SettingsViewModel.CycleLanguageAsync
+// NOTE (WP0 already done): the language-switch wiring in SettingsViewModel.SetLanguageAsync
 //       and ThemeSettingViewModel already calls L.Instance.SetLanguage(...) and the reboot
 //       notice is dropped. WP3 only needs to convert the Resolve*Text() resolvers to
 //       language-aware output. This is the ONLY L file WP3 edits.
@@ -61,8 +61,8 @@ public sealed partial class L
         Add("Settings_AutostartHint", "Открывать departament при входе в систему", "Open departament when you sign in");
 
         Add("Settings_SecSubscription", "Подписка", "Subscription");
-        // Terminology lock 9.3: the URL sources are «провайдеры»; «подписка» is the paid service.
-        Add("Settings_SubAutoUpdate", "Автообновление провайдеров", "Auto-update providers");
+        // ВЛАДЕЛЕЦ B1: «подписка», не «провайдер» — см. L.Common.cs.
+        Add("Settings_SubAutoUpdate", "Автообновление подписок", "Auto-update subscriptions");
         Add("Settings_Routing", "Маршрутизация", "Routing");
         Add("Settings_GeoFiles", "Файлы ресурсов", "Resource files");
 
@@ -107,13 +107,28 @@ public sealed partial class L
         Add("PerApp_SplitTunnelHint", "Выберите, какие программы идут через VPN", "Choose which apps go through the VPN");
         Add("PerApp_BypassHint", "Выбранные идут напрямую, минуя VPN", "Selected apps go direct, bypassing the VPN");
         Add("PerApp_OnlyHint", "Только выбранные идут через VPN", "Only selected apps go through the VPN");
+        // ── Готовые наборы «Прокси по приложениям» (AppPresets) ──
+        // Два набора, а не один: задержка и магазин — разные решения, и одно не должно ехать на
+        // тумблере другого. Оба выключены по умолчанию.
+        //
+        // ОДНА СТРОКА ПОДПИСИ, И ОНА ГОВОРИТ, ЧТО ДЕЛАЕТ ТУМБЛЕР. Здесь стояли два абзаца
+        // объяснений — про задержку, античиты, регион магазина и цены, — и они занимали больше
+        // места, чем сам набор: строка набора переставала читаться как строка. Владелец попросил
+        // ровно обратное («убери текст возле них, просто оставь игры и все, там просто подпиши
+        // отключение впн для игр»). Обе подписи теперь одной формы, одной длины и об одном.
+        Add("PerApp_Presets", "Готовые наборы", "Presets");
+        Add("PerApp_PresetShow", "Показать", "Show");
+        Add("PerApp_PresetGames", "Игры", "Games");
+        Add("PerApp_PresetGamesHint", "VPN отключён для игр", "VPN is off for games");
+        Add("PerApp_PresetLaunchers", "Игровые лаунчеры", "Game launchers");
+        Add("PerApp_PresetLaunchersHint", "VPN отключён для лаунчеров", "VPN is off for launchers");
+
         Add("PerApp_Apps", "Приложения", "Apps");
         Add("PerApp_AddExe", "Добавить .exe", "Add .exe");
         Add("PerApp_TunHint", "Работает в режиме TUN (sing-box). Правила применяются при следующем подключении.", "Works in TUN mode (sing-box). Rules apply on the next connection.");
         Add("PerApp_ProgramFileType", "Программа", "Program");
 
-        // ── PingSettingsPage (only Real / TCP rows) ──
-        Add("Ping_Intro", "Как измерять задержку серверов. Ниже задаются адрес и тайм-аут проверки.", "How to measure server latency. The test address and timeout are set below.");
+        // ── Пинг: список выбора у строки настроек (SettingsView.ShowPingChoice) — only Real / TCP ──
         Add("Ping_RealTitle", "Реальная задержка", "Real latency");
         Add("Ping_RealHint", "Через ядро, как при подключении", "Through the core, as when connected");
         Add("Ping_TcpHint", "TCP-подключение к серверу", "TCP connection to the server");
@@ -146,7 +161,7 @@ public sealed partial class L
         Add("About_SystemInfo", "ОС: {0}\nАрхитектура: {1}\n.NET: {2}", "OS: {0}\nArchitecture: {1}\n.NET: {2}");
 
         // ── BackupPage ──
-        Add("Backup_Intro", "Сохраните все настройки, провайдеров и серверы в один .zip-файл или восстановите их из ранее сохранённой копии.", "Save all settings, providers, and servers to a single .zip file, or restore them from a previous backup.");
+        Add("Backup_Intro", "Сохраните все настройки, подписки и серверы в один .zip-файл или восстановите их из ранее сохранённой копии.", "Save all settings, subscriptions, and servers to a single .zip file, or restore them from a previous backup.");
         Add("Backup_Export", "Экспорт", "Export");
         Add("Backup_ExportHint", "Сохранить копию в файл", "Save a backup to a file");
         Add("Backup_Save", "Сохранить…", "Save…");
@@ -186,13 +201,19 @@ public sealed partial class L
         Add("UrlSchemes_RemoveFailed", "Не удалось убрать схему. Запустите departament от имени администратора и повторите. ", "Couldn't remove the scheme. Run departament as administrator and try again. ");
 
         // ── ProviderSettingsPage ──
-        Add("Provider_Title", "Настройки провайдеров", "Provider settings");
+        Add("Provider_Title", "Настройки подписок", "Subscription settings");
         Add("Provider_SecUpdates", "Обновление", "Updates");
         Add("Provider_AutoUpdate", "Автообновление", "Auto-update");
-        Add("Provider_AutoUpdateHint", "Автоматически обновлять серверы провайдеров", "Refresh provider servers automatically");
+        Add("Provider_AutoUpdateHint", "Автоматически обновлять серверы подписок", "Refresh subscription servers automatically");
         Add("Provider_Interval", "Интервал обновления", "Update interval");
         Add("Provider_SecNetwork", "Сеть", "Network");
         Add("Provider_Hwid", "Идентификатор устройства (HWID)", "Device ID (HWID)");
+        // FakeIP получил собственную строку-тумблер, когда DNS стал списком выбора: он булев и
+        // остаётся редактируемым, потому что установка с ним включённым обязана иметь выключатель.
+        Add("Settings_FakeIpHint",
+            "Быстрое разрешение имён внутри туннеля",
+            "Fast name resolution inside the tunnel");
+        Add("Settings_DnsDefaultHint", "Встроенный резолвер", "The built-in resolver");
         Add("Provider_UserAgentHint", "Отправляется ядром на исходящих подключениях", "Sent by the core on outbound connections");
     }
 }

@@ -77,6 +77,11 @@ public partial class LoginView : UserControl
         // Browser→app SSO handoff: a one-time code is being redeemed (departamentvpn://auth callback or a
         // pasted code). Transient, self-resolving — no resend/back actions; the ring spins while it redeems.
         Handoff,
+
+        // «Войти через сайт»: браузер открыт, ждём, пока человек закончит вход на сайте. Ничего не
+        // опрашиваем — сайт возвращается сам по departamentvpn://auth. Отсюда есть ровно два выхода:
+        // «Открыть сайт снова» (если вкладка потерялась) и «Другой способ входа».
+        Site,
     }
 
     // Ключ ошибки ИМЕННО логин-потока (LoginState.Error → auth_err_*); имеет приоритет над общим
@@ -352,6 +357,16 @@ public partial class LoginView : UserControl
                 SetLoginError(string.Empty);
                 break;
 
+            case LoginState.AwaitingSite:
+                // «Войти через сайт» — и только сайт: браузер уже открыт, показываем шаг ожидания сайта
+                // вместо общего блока выбора способа (сегмент «Вход | Регистрация» + форма email/пароля).
+                SetSiteBusy(false);
+                SetRegisterBusy(false);
+                SetLoginError(string.Empty);
+                ConfigureEmailPending(PendingKind.Site, string.Empty);
+                ShowBlock(ViewBlock.EmailPending);
+                break;
+
             case LoginState.SiteHandoffLoading:
                 // Browser→app handoff code is being redeemed: focused «завершаем вход через сайт…» step
                 // (reuses the pending block with the handoff kind — spinner, no resend/back), then Success
@@ -367,10 +382,10 @@ public partial class LoginView : UserControl
                 SetLoginError(string.Empty);
                 if (_viewBlock == ViewBlock.EmailPending)
                 {
-                    // «Отправить снова» с экрана verify-email — остаёмся на месте, крутим кольцо.
-                    var spin = !IsReducedMotion();
-                    SetSpinning(PendingSpinner, spin);
-                    PendingSpinner.Opacity = spin ? 1 : 0;
+                    // «Отправить снова» с экрана verify-email — остаёмся на месте, кольцо показываем
+                    // всегда (под lite оно статичное и полное), вращаем — только при движении.
+                    SetSpinning(PendingSpinner, !IsReducedMotion());
+                    PendingSpinner.IsVisible = true;
                 }
                 else
                 {
@@ -579,21 +594,20 @@ public partial class LoginView : UserControl
         var onSite = busy && !_twoFaVisible;
         var on2Fa = busy && _twoFaVisible;
 
-        // Under reduced-motion/lite the inline arc can't rotate (its keyframe is gated off by
-        // :is(Window):not(.lite)), so a hidden label + a frozen dashed ring reads as broken. Keep the
-        // label and skip the spinner entirely — the button is already disabled (dimmed) via the gates
-        // below, which conveys "busy" without any motion.
+        // Под lite дуга не крутится — но теперь она под lite и НЕ дуга: штрих-пунктир задан стилем
+        // с гейтом :not(.lite), поэтому там же рисуется полное статичное кольцо (GlobalStyles).
+        // Раньше здесь приходилось прятать спиннер целиком, чтобы не показывать замёрзший обрывок;
+        // из-за этого «идёт вход» под lite не было видно ничем, кроме притушенной кнопки. Индикатор
+        // теперь показывается в обоих режимах; вращается — только когда движение включено.
         var lite = IsReducedMotion();
-        var showSiteSpin = onSite && !lite;
-        var show2FaSpin = on2Fa && !lite;
 
-        SiteSpinner.IsVisible = showSiteSpin;
-        SetSpinning(SiteSpinner, showSiteSpin);
-        SiteButtonLabel.IsVisible = !showSiteSpin;
+        SiteSpinner.IsVisible = onSite;
+        SetSpinning(SiteSpinner, onSite && !lite);
+        SiteButtonLabel.IsVisible = !onSite;
 
-        ConfirmSpinner.IsVisible = show2FaSpin;
-        SetSpinning(ConfirmSpinner, show2FaSpin);
-        ConfirmButtonLabel.IsVisible = !show2FaSpin;
+        ConfirmSpinner.IsVisible = on2Fa;
+        SetSpinning(ConfirmSpinner, on2Fa && !lite);
+        ConfirmButtonLabel.IsVisible = !on2Fa;
 
         UpdateSiteGate();
         Update2FaGate();
@@ -603,12 +617,11 @@ public partial class LoginView : UserControl
     private void SetRegisterBusy(bool busy)
     {
         _registerBusy = busy;
-        // Как и site-спиннер: под reduced-motion/lite дугу не крутим (её keyframe выключен селектором),
-        // просто держим лейбл и заблокированную (притушенную) кнопку.
-        var showSpin = busy && !IsReducedMotion();
-        RegisterSpinner.IsVisible = showSpin;
-        SetSpinning(RegisterSpinner, showSpin);
-        RegisterButtonLabel.IsVisible = !showSpin;
+        // Как и site-спиннер: индикатор виден в обоих режимах, вращается только при включённом
+        // движении; под lite это полное статичное кольцо, а не обрывок дуги.
+        RegisterSpinner.IsVisible = busy;
+        SetSpinning(RegisterSpinner, busy && !IsReducedMotion());
+        RegisterButtonLabel.IsVisible = !busy;
         UpdateRegisterGate();
     }
 
@@ -678,23 +691,40 @@ public partial class LoginView : UserControl
             PendingKind.Magic => ("Login_MagicSentTitle", "Login_MagicSentHint"),
             PendingKind.Reset => ("Login_ResetSentTitle", "Login_ResetSentHint"),
             PendingKind.Handoff => ("Login_SiteHandoff", string.Empty),
+            PendingKind.Site => ("Login_SiteWaitingTitle", "Login_SiteWaitingHint"),
             _ => ("Login_VerifyTitle", "Login_VerifyHint"),
         };
         PendingTitle.Text = L.T(titleKey);
-        PendingHint.Text = hintKey.IsNotEmpty() ? L.F(hintKey, email) : string.Empty;
+        // Подсказка сайта не подставляет адрес — L.T, а не L.F (иначе «{0}» осталось бы в строке).
+        PendingHint.Text = hintKey.IsNotEmpty()
+            ? (kind == PendingKind.Site ? L.T(hintKey) : L.F(hintKey, email))
+            : string.Empty;
         PendingHint.IsVisible = hintKey.IsNotEmpty();
+
+        // Глиф шага: у путей через сайт — глобус (тот же, что на кнопке «Войти через сайт»), у почтовых
+        // — конверт. Иначе экран «идёт вход через сайт» иллюстрировался бы письмом, которого нет.
+        var viaSite = kind is PendingKind.Site or PendingKind.Handoff;
+        PendingGlobeGlyph.IsVisible = viaSite;
+        PendingMailGlyph.IsVisible = !viaSite;
 
         // The handoff step is transient + self-resolving — its resend/back actions would be meaningless
         // (there's nothing to re-send and the redeem finishes on its own), so hide them for that kind only.
         var transient = kind == PendingKind.Handoff;
         ResendButton.IsVisible = !transient;
         BackToSignInButton.IsVisible = !transient;
+        // Подписи двух выходов зависят от вида шага: у ожидания сайта повторять нечего — там «Открыть
+        // сайт снова» (вкладку закрыли/потеряли) и «Другой способ входа» (вернуться к выбору).
+        ResendButton.Content = L.T(kind == PendingKind.Site ? "Login_OpenSiteAgain" : "Login_Resend");
+        BackToSignInButton.Content = L.T(kind == PendingKind.Site ? "Login_ChooseAnother" : "Login_BackToSignIn");
 
-        // verify-email polls login and the handoff redeems a code → spin the ring; magic/reset are a calm
-        // static «отправлено» (arc hidden, track + envelope remain). Under lite the arc is not shown at all.
-        var spin = (kind == PendingKind.Verify || kind == PendingKind.Handoff) && !IsReducedMotion();
-        SetSpinning(PendingSpinner, spin);
-        PendingSpinner.Opacity = spin ? 1 : 0;
+        // verify-email polls login, the handoff redeems a code, the site step waits on a browser
+        // round-trip → у всех трёх кольцо ЕСТЬ; magic/reset — спокойное «отправлено» (кольца нет,
+        // остаются трек и конверт). Под lite кольцо остаётся на месте, просто не вращается: это
+        // полная статичная фигура (GlobalStyles, Ellipse.Spinner.Arc64), а не обрывок дуги, поэтому
+        // прятать его больше не нужно — раньше именно это и делал «Opacity = spin ? 1 : 0».
+        var busy = kind is PendingKind.Verify or PendingKind.Handoff or PendingKind.Site;
+        SetSpinning(PendingSpinner, busy && !IsReducedMotion());
+        PendingSpinner.IsVisible = busy;
     }
 
     /// <summary>Показывает/прячет блок 2FA по tempToken (паритет onTwoFactor) с reveal + автофокусом.</summary>
@@ -1067,7 +1097,7 @@ public partial class LoginView : UserControl
         _vm?.CancelLogin();
     }
 
-    /// <summary>«Отправить снова» на пред-экране — повторяет запрос ПО ВИДУ состояния (verify/magic/reset).</summary>
+    /// <summary>Первое действие пред-экрана — повторяет шаг ПО ВИДУ состояния (verify/magic/reset/сайт).</summary>
     private void OnResendClick(object? sender, RoutedEventArgs e)
     {
         switch (_pendingKind)
@@ -1078,6 +1108,10 @@ public partial class LoginView : UserControl
             case PendingKind.Reset:
                 Execute(_vm?.PasswordResetCmd);
                 break;
+            case PendingKind.Site:
+                // «Открыть сайт снова»: вкладку закрыли или потеряли — открываем /app-login заново.
+                Execute(_vm?.LoginBrowserCmd);
+                break;
             default:
                 // Verify-email: повторная регистрация переотправляет письмо и перезапускает поллинг.
                 Execute(_vm?.RegisterCmd);
@@ -1085,7 +1119,9 @@ public partial class LoginView : UserControl
         }
     }
 
-    /// <summary>«Вернуться ко входу»: отменяет поллинг/запрос и возвращает к форме (Idle → кроссфейд к MethodBlock).</summary>
+    /// <summary>Второе действие пред-экрана: отменяет поллинг/запрос и возвращает к выбору способа
+    /// (Idle → кроссфейд к MethodBlock). Для почтовых шагов подписано «Вернуться ко входу», для
+    /// ожидания сайта — «Другой способ входа»; поведение одно.</summary>
     private void OnBackToSignInClick(object? sender, RoutedEventArgs e)
     {
         SetLoginError(string.Empty);

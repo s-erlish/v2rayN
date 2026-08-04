@@ -85,7 +85,10 @@ internal sealed class HomeHeroPresenter
         //  paints the Error shield on BOTH hero instances (each has its own presenter over the
         //  shared VM). The VM auto-clears ConnectFailed on the next attempt/success/disconnect,
         //  so ApplyConnectState just reads it — no manual reset here.
-        vm.WhenAnyValue(x => x.IsConnected, x => x.IsConnecting, x => x.HasServers, x => x.ConnectFailed)
+        //  ConnectFailReason rides along: the Error shield's single hint line carries the engine's own
+        //  explanation when there is one, so a failure is never reported without its reason.
+        vm.WhenAnyValue(x => x.IsConnected, x => x.IsConnecting, x => x.HasServers, x => x.ConnectFailed,
+                x => x.ConnectFailReason)
             .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ => ApplyConnectState())
             .DisposeWith(d);
@@ -145,6 +148,9 @@ internal sealed class HomeHeroPresenter
                       && state == ConnectHeroView.ConnectVisualState.Connected
                       && _lastState != ConnectHeroView.ConnectVisualState.Connected;
 
+        // Set the reason BEFORE the state: SetConnectState is what makes the hint line visible, and it
+        // must already know whether to show the engine's message or the plain retry hint.
+        _hero.SetFailureReason(state == ConnectHeroView.ConnectVisualState.Error ? vm.ConnectFailReason : null);
         _hero.SetConnectState(state, hasServer: vm.HasServers, animate: animate);
         _lastState = state;
         _firstApply = false;

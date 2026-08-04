@@ -2,7 +2,18 @@ namespace ServiceLib.Handler;
 
 public static class SubscriptionHandler
 {
-    public static async Task UpdateProcess(Config config, string subId, bool blProxy, Func<bool, string, Task> updateFunc)
+    /// <summary>
+    /// Fetches and imports subscriptions — all of them when <paramref name="subId"/> is empty, one
+    /// when it names a row.
+    /// </summary>
+    /// <returns>
+    /// How many SERVERS were imported across the subscriptions this call processed. Callers that only
+    /// schedule the work ignore it; the ones that have to TELL the user what happened need it, because
+    /// "the subscription row was written" and "the user now has servers" are different facts and only
+    /// the second one is worth reporting as success. Nothing else about the method changed — every
+    /// existing caller simply awaits it as before.
+    /// </returns>
+    public static async Task<int> UpdateProcess(Config config, string subId, bool blProxy, Func<bool, string, Task> updateFunc)
     {
         await updateFunc?.Invoke(false, ResUI.MsgUpdateSubscriptionStart);
         var subItem = await AppManager.Instance.SubItems();
@@ -10,10 +21,11 @@ public static class SubscriptionHandler
         if (subItem is not { Count: > 0 })
         {
             await updateFunc?.Invoke(false, ResUI.MsgNoValidSubscription);
-            return;
+            return 0;
         }
 
         var successCount = 0;
+        var serverCount = 0;
         foreach (var item in subItem)
         {
             try
@@ -23,7 +35,7 @@ public static class SubscriptionHandler
                     continue;
                 }
 
-                var hashCode = $"{item.Remarks}->";
+                var hashCode = LogPrefix(item);
                 if (item.Enabled == false)
                 {
                     await updateFunc?.Invoke(false, $"{hashCode}{ResUI.MsgSkipSubscriptionUpdate}");
@@ -39,16 +51,18 @@ public static class SubscriptionHandler
                 var result = await DownloadAllSubscriptions(config, item, blProxy, downloadHandle);
 
                 // Process download result (import servers + persist userinfo/directives to the SubItem)
-                if (await ProcessDownloadResult(config, item, result, hashCode, updateFunc))
+                var imported = await ProcessDownloadResult(config, item, result, hashCode, updateFunc);
+                if (imported > 0)
                 {
                     successCount++;
+                    serverCount += imported;
                 }
 
                 await updateFunc?.Invoke(false, "-------------------------------------------------------");
             }
             catch (Exception ex)
             {
-                var hashCode = $"{item.Remarks}->";
+                var hashCode = LogPrefix(item);
                 Logging.SaveLog("UpdateSubscription", ex);
                 await updateFunc?.Invoke(false, $"{hashCode}{ResUI.MsgFailedImportSubscription}: {ex.Message}");
                 await updateFunc?.Invoke(false, "-------------------------------------------------------");
@@ -56,6 +70,20 @@ public static class SubscriptionHandler
         }
 
         await updateFunc?.Invoke(successCount > 0, $"{ResUI.MsgUpdateSubscriptionEnd}");
+        return serverCount;
+    }
+
+    /// <summary>
+    /// The «name-&gt;» prefix every progress line on this path carries. It went through the RAW remark,
+    /// so a freshly pasted subscription reported its own refresh as «import_sub-&gt;…» in «Журнал» and in
+    /// the status line. The resolver answers instead — and a subscription that genuinely has no name
+    /// yet gets NO prefix rather than a generic noun pretending to be one, because the lines it
+    /// decorates read as sentences without it.
+    /// </summary>
+    private static string LogPrefix(SubItem item)
+    {
+        var name = SubscriptionNaming.NameOf(item);
+        return name.IsNullOrEmpty() ? string.Empty : $"{name}->";
     }
 
     private static bool IsValidSubscription(SubItem item, string subId)
@@ -236,13 +264,15 @@ public static class SubscriptionHandler
         return result;
     }
 
-    private static async Task<bool> ProcessDownloadResult(Config config, SubItem subItem, SubContentResult result, string hashCode, Func<bool, string, Task> updateFunc)
+    /// <summary>Imports one fetched subscription body. Returns how many servers it produced (0 = the
+    /// fetch brought nothing usable), so the caller can distinguish a stored row from a working one.</summary>
+    private static async Task<int> ProcessDownloadResult(Config config, SubItem subItem, SubContentResult result, string hashCode, Func<bool, string, Task> updateFunc)
     {
         var body = result.Body ?? string.Empty;
         if (body.IsNullOrEmpty())
         {
             await updateFunc?.Invoke(false, $"{hashCode}{ResUI.MsgSubscriptionDecodingFailed}");
-            return false;
+            return 0;
         }
 
         await updateFunc?.Invoke(false, $"{hashCode}{ResUI.MsgGetSubscriptionSuccessfully}");
@@ -274,7 +304,7 @@ public static class SubscriptionHandler
                 ? $"{hashCode}{ResUI.MsgUpdateSubscriptionEnd}"
                 : $"{hashCode}{ResUI.MsgFailedImportSubscription}");
 
-        return ret > 0;
+        return ret > 0 ? ret : 0;
     }
 
     /// <summary>
@@ -325,6 +355,21 @@ public static class SubscriptionHandler
             if (profileTitle is not null)
             {
                 item.ProfileTitle = profileTitle;
+            }
+
+            // ADOPT THAT TITLE AS THE SUBSCRIPTION'S STORED NAME while — and only while — the
+            // subscription is still unnamed. A name that identifies THIS subscription must never be
+            // clobbered by a later fetch.
+            //
+            // THIS IS ALSO THE HEALING PATH FOR EVERY INSTALL THAT ALREADY STORED A PLACEHOLDER.
+            // SubscriptionNaming.IsUnnamed treats «import_sub», «Default» and the generic service
+            // label as no name at all, so the first refresh after this build replaces each of them
+            // with what the provider actually calls the subscription. There is no rename UI to fall
+            // back on (OWNER-DECISION-2026-08-02 §5), so this is the only route by which a bad stored
+            // name can ever be corrected — which is why it runs on every refresh and not just once.
+            if (item.ProfileTitle.IsNotEmpty() && SubscriptionNaming.IsUnnamed(item))
+            {
+                item.Remarks = item.ProfileTitle.Trim();
             }
 
             // Stamp the last-update time (epoch seconds, matching TaskManager) so the meta-bar

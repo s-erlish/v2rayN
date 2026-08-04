@@ -78,7 +78,7 @@
             <Setter Property="Background" Value="Transparent" />
         </Style>
         <Style Selector="Button.Flat:pressed">
-            <Setter Property="RenderTransform" Value="scale(0.96)" />
+            <Setter Property="RenderTransform" Value="scale(0.97)" />
         </Style>
 
         <!--  Тулбар (Border.SubToolbar) и back-кнопка (Button.BackNav) — глобальные классы
@@ -110,11 +110,9 @@
             <Setter Property="MinHeight" Value="{StaticResource Size.Row}" />
             <Setter Property="Padding" Value="16" />
             <Setter Property="Background" Value="Transparent" />
-            <Setter Property="Transitions">
-                <Transitions>
-                    <BrushTransition Property="Background" Duration="0:0:0.15" />
-                </Transitions>
-            </Setter>
+            <!--  Переход на Background снят (F1): его взводил ТОЛЬКО :pointerover, и пока он тлел,
+                  покинутая шапка ещё светилась, а новая уже разгоралась — курсор вёл за собой две
+                  подсветки. Заливка та же, появляется сразу.  -->
         </Style>
         <Style Selector="Border.TariffHeader:pointerover">
             <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
@@ -187,11 +185,9 @@
             <Setter Property="MinHeight" Value="{StaticResource Size.Row}" />
             <Setter Property="Padding" Value="16,12" />
             <Setter Property="Background" Value="Transparent" />
-            <Setter Property="Transitions">
-                <Transitions>
-                    <BrushTransition Property="Background" Duration="0:0:0.15" />
-                </Transitions>
-            </Setter>
+            <!--  Переход на Background снят (F1): его взводил ТОЛЬКО :pointerover, и пока он
+                  тлел, покинутая поверхность ещё светилась, а новая уже разгоралась —
+                  курсор вёл за собой две подсветки. Заливка та же, появляется сразу.  -->
         </Style>
         <Style Selector="Border.SheetRow:pointerover">
             <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
@@ -579,11 +575,10 @@
                                                 Height="16"
                                                 HorizontalAlignment="Center"
                                                 VerticalAlignment="Center"
-                                                Classes="Spinner"
+                                                Classes="Spinner Arc16"
                                                 Classes.spinning="{Binding IsPaying}"
                                                 IsVisible="{Binding IsPaying}"
                                                 Stroke="{DynamicResource Brush.OnAccent}"
-                                                StrokeDashArray="6.3,18.8"
                                                 StrokeLineCap="Round"
                                                 StrokeThickness="2">
                                                 <Ellipse.RenderTransform>

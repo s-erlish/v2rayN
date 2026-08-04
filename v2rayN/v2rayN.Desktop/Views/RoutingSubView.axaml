@@ -27,7 +27,7 @@
             </Setter>
         </Style>
         <Style Selector="Button.IconButton:pressed">
-            <Setter Property="RenderTransform" Value="scale(0.92)" />
+            <Setter Property="RenderTransform" Value="scale(0.97)" />
         </Style>
 
         <!--  Строка профиля маршрутизации: тап = сделать активным. Press scale, hover-подсветка.  -->
@@ -35,10 +35,10 @@
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="CornerRadius" Value="{StaticResource Radius.Tile}" />
             <Setter Property="Cursor" Value="Hand" />
+            <!--  Кроссфейд заливки снят (F1) — её ведёт ховер. Press-scale остаётся.  -->
             <Setter Property="Transitions">
                 <Transitions>
                     <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" />
-                    <BrushTransition Property="Background" Duration="0:0:0.12" />
                 </Transitions>
             </Setter>
         </Style>

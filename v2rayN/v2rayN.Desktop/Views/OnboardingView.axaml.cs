@@ -11,11 +11,21 @@ namespace v2rayN.Desktop.Views;
 /// <see cref="HomeViewModel.IsEmpty"/> = true, и прячет её (открывая обычный шелл), как только подписка
 /// добавлена. Это буквально первый кадр нового пользователя.
 ///
-/// «Добавить по QR-коду» / «из буфера обмена» бьют в реальный движок через HomeViewModel (тот же путь,
-/// что онбординг-CTA в HomeView). «Войти через Telegram» / «через сайт» СРАЗУ стартуют соответствующую
-/// авторизацию (без промежуточного выбора метода): Telegram открывает deep link и переходит в ожидание,
-/// сайт открывает форму email/пароля. Шелл скрыт, пока пусто, поэтому вход показываем оверлеем; «назад»
-/// возвращает к онбордингу.
+/// ТРИ ДВЕРИ, И КАЖДАЯ ВЕДЁТ ТУДА, ЧТО НА НЕЙ НАПИСАНО (владелец, 2026-08-03). «Добавить по QR-коду»
+/// с первого кадра снят — добавление одно, «из буфера обмена», и оно же единственный залитый акцент;
+/// QR-путь остаётся доступен из углового «+» на «Главной». «Войти через Telegram» / «через сайт» СРАЗУ
+/// стартуют свой способ авторизации, без промежуточного выбора метода и без формы email/пароля:
+/// Telegram открывает deep link и входит в ожидание подтверждения, сайт открывает браузер и показывает
+/// шаг ожидания сайта (<see cref="LoginState.AwaitingSite"/>). Шелл скрыт, пока пусто, поэтому вход
+/// показываем оверлеем; «назад» возвращает к онбордингу.
+///
+/// ДЕЙСТВИЕ В РАБОТЕ ПОКАЗЫВАЕТ ЭТО И НЕ ЗАПУСКАЕТСЯ ДВАЖДЫ (правило владельца). «Добавить из буфера
+/// обмена» — сетевая операция: сохранить подписку и забрать у провайдера список серверов. Пока этого
+/// состояния не было, всё ожидание выглядело в точности как мёртвая кнопка, а каждое повторное нажатие
+/// запускало ещё один параллельный импорт той же подписки. Занятость ведёт
+/// <see cref="HomeViewModel.IsAdding"/>: содержимое CTA уступает место дуге-спиннеру (тот же приём и
+/// тот же класс, что у первичных CTA «Входа»), кнопка отключена, лишние нажатия отбрасываются в самой
+/// вью-модели — то есть и из углового «+», и из Ctrl+V, и из пустого состояния списка.
 ///
 /// Движение (§6/P1 + §3a/§3b P2): один хореографированный entrance при первом показе — 4 АВТОРСКИХ бита
 /// (щит → идентичность → «завести доступ» → «войти»), щит scale 0.90→1 (общий с connect-героем), остальное
@@ -39,14 +49,22 @@ public partial class OnboardingView : UserControl
     // Колонка пред-скрыта в ctor под entrance-стаггер — стаггер ещё не сыгран.
     private bool _entryPending;
 
+    // Подписка на HomeViewModel.IsAdding живёт ровно столько, сколько текущий DataContext.
+    private IDisposable? _addingSub;
+
     public OnboardingView()
     {
         InitializeComponent();
 
-        AddQrButton.Click += OnAddQr;
         AddClipboardButton.Click += OnAddClipboard;
         LoginTelegramButton.Click += OnLoginTelegram;
         LoginSiteButton.Click += OnLoginSite;
+
+        // Занятость добавления: DataContext ставит MainWindow уже ПОСЛЕ конструктора, поэтому
+        // подписываемся на его смену, а не читаем один раз (та же ошибка, что «прочитать
+        // reduced-motion в конструкторе»).
+        DataContextChanged += OnDataContextChanged;
+        SetAdding(false);
 
         // Entrance-стаггер: пред-скрываем детей колонки (opacity 0), чтобы раскрыть их сверху вниз без
         // пред-вспышки (приём LoginView). ТОЛЬКО при включённом движении; под lite/preview/дизайн —
@@ -83,16 +101,47 @@ public partial class OnboardingView : UserControl
         PlayEntryStagger();
     }
 
-    // ── Действия (проводка CTA по DataContext) ──────────────────────────────
+    // ── Состояние «идёт добавление» ─────────────────────────────────────────
 
-    // Добавить по QR-коду → скан экрана (MainWindowViewModel.AddServerViaScanAsync).
-    private void OnAddQr(object? sender, RoutedEventArgs e)
+    private void OnDataContextChanged(object? sender, EventArgs e)
     {
-        if (DataContext is HomeViewModel vm)
+        _addingSub?.Dispose();
+        _addingSub = null;
+        if (DataContext is not HomeViewModel vm)
         {
-            _ = vm.AddViaQr();
+            SetAdding(false);
+            return;
+        }
+        _addingSub = vm.WhenAnyValue(x => x.IsAdding)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .Subscribe(SetAdding);
+    }
+
+    /// <summary>
+    /// Импорт в работе: содержимое CTA уступает место дуге-спиннеру, сама кнопка отключена биндингом
+    /// на <see cref="HomeViewModel.IsAdding"/>. Один в один с первичными CTA «Входа»
+    /// (<c>LoginView.SetSiteBusy</c>), включая lite: под облегчённым режимом дуга не крутится, но
+    /// рисуется полным статичным кольцом (гейт живёт в стиле), поэтому индикатор виден ВСЕГДА —
+    /// прятать его под lite значило бы вернуть немое ожидание, ради устранения которого он и заведён.
+    /// </summary>
+    private void SetAdding(bool adding)
+    {
+        AddClipboardContent.IsVisible = !adding;
+        AddClipboardSpinner.IsVisible = adding;
+        if (adding && !IsReducedMotion())
+        {
+            if (!AddClipboardSpinner.Classes.Contains("spinning"))
+            {
+                AddClipboardSpinner.Classes.Add("spinning");
+            }
+        }
+        else
+        {
+            AddClipboardSpinner.Classes.Remove("spinning");
         }
     }
+
+    // ── Действия (проводка CTA по DataContext) ──────────────────────────────
 
     // Добавить из буфера обмена → импорт из clipboard (MainWindowViewModel.AddServerViaClipboardAsync).
     private void OnAddClipboard(object? sender, RoutedEventArgs e)
@@ -138,14 +187,14 @@ public partial class OnboardingView : UserControl
 
     /// <summary>
     /// Задержка entrance-бита по роли ребёнка колонки (§3a). Порядок XAML: 0 щит; 1–3 идентичность
-    /// (вордмарк + заголовок + подзаголовок); 4–5 «завести доступ» (QR + буфер); 6–8 «войти»
-    /// (разделитель + Telegram + сайт). Члены бита делят его задержку — 4 бита, а не 9-шаговый drip.
+    /// (вордмарк + заголовок + подзаголовок); 4 «завести доступ» (буфер обмена); 5–7 «войти»
+    /// (разделитель + Telegram + сайт). Члены бита делят его задержку — 4 бита, а не 8-шаговый drip.
     /// </summary>
     private static int BeatDelayMs(int childIndex) => childIndex switch
     {
         0 => 0,               // бит 1 · щит-марка
         1 or 2 or 3 => 60,    // бит 2 · идентичность
-        4 or 5 => 140,        // бит 3 · завести доступ
+        4 => 140,             // бит 3 · завести доступ
         _ => 200,             // бит 4 · войти (и любой хвост)
     };
 

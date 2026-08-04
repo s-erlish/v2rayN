@@ -23,7 +23,7 @@
             </Setter>
         </Style>
         <Style Selector="Button.IconButton:pressed">
-            <Setter Property="RenderTransform" Value="scale(0.92)" />
+            <Setter Property="RenderTransform" Value="scale(0.97)" />
         </Style>
     </UserControl.Styles>
 
@@ -102,6 +102,77 @@
                             Content="{loc:T PerApp_OnlyHint}"
                             Foreground="{DynamicResource Brush.OnSurface}"
                             GroupName="perAppMode" />
+                    </StackPanel>
+                </Border>
+
+                <!--  ============ Готовые наборы ============
+                      Именованные, обратимые, выключенные по умолчанию. Тумблер добавляет только то,
+                      чего в выборе ещё нет, и запоминает ИМЕННО ЭТО — обратный ход возвращает ровно
+                      добавленное и не трогает процессы, которые человек отметил сам. «Показать»
+                      фильтрует список ниже до состава набора: содержимое видно и правится поштучно.  -->
+                <TextBlock
+                    Margin="4,10,4,4"
+                    Classes="SectionHeader"
+                    Text="{loc:T PerApp_Presets}" />
+
+                <Border Classes="Card" Padding="16,4">
+                    <StackPanel>
+                        <Grid x:Name="rowPresetGames" ColumnDefinitions="*,Auto,Auto" MinHeight="56">
+                            <StackPanel
+                                Grid.Column="0"
+                                Margin="0,0,8,0"
+                                VerticalAlignment="Center">
+                                <TextBlock Classes="Body" Text="{loc:T PerApp_PresetGames}" />
+                                <!--  ОДНА строка: подпись говорит, что делает тумблер, и на этом
+                                      заканчивается. Перенос снят намеренно — набор обязан держать
+                                      ритм 56, а абзац объяснений его ломал.  -->
+                                <TextBlock
+                                    Margin="0,4,0,0"
+                                    Classes="Subtitle"
+                                    Text="{loc:T PerApp_PresetGamesHint}"
+                                    TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                            <Button
+                                x:Name="btnShowGames"
+                                Grid.Column="1"
+                                Margin="0,0,8,0"
+                                VerticalAlignment="Center"
+                                Classes="LinkAction"
+                                Content="{loc:T PerApp_PresetShow}" />
+                            <ToggleSwitch
+                                x:Name="switchPresetGames"
+                                Grid.Column="2"
+                                VerticalAlignment="Center"
+                                Theme="{DynamicResource ToggleSwitch.iOS}" />
+                        </Grid>
+
+                        <Border Height="1" Background="{DynamicResource Brush.OutlineVariant}" />
+
+                        <Grid x:Name="rowPresetLaunchers" ColumnDefinitions="*,Auto,Auto" MinHeight="56">
+                            <StackPanel
+                                Grid.Column="0"
+                                Margin="0,0,8,0"
+                                VerticalAlignment="Center">
+                                <TextBlock Classes="Body" Text="{loc:T PerApp_PresetLaunchers}" />
+                                <TextBlock
+                                    Margin="0,4,0,0"
+                                    Classes="Subtitle"
+                                    Text="{loc:T PerApp_PresetLaunchersHint}"
+                                    TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                            <Button
+                                x:Name="btnShowLaunchers"
+                                Grid.Column="1"
+                                Margin="0,0,8,0"
+                                VerticalAlignment="Center"
+                                Classes="LinkAction"
+                                Content="{loc:T PerApp_PresetShow}" />
+                            <ToggleSwitch
+                                x:Name="switchPresetLaunchers"
+                                Grid.Column="2"
+                                VerticalAlignment="Center"
+                                Theme="{DynamicResource ToggleSwitch.iOS}" />
+                        </Grid>
                     </StackPanel>
                 </Border>
 

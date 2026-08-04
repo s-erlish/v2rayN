@@ -23,12 +23,14 @@ public sealed partial class L
         Add("Common_Manage", "Управление", "Manage");
 
         // ── Provider / server actions ──
-        // Terminology lock 9.3: a subscription URL that yields servers is a «провайдер».
-        // «Подписка» is reserved for the paid Departament service (Account_*/Buy_*).
-        Add("Common_AddSubscription", "Добавить провайдера", "Add provider");
+        // ВЛАДЕЛЕЦ (2026-07-27, B1): это «подписка», а не «провайдер». Отменяет терминологический
+        // замок 00-rules.md 9.3 и каждую строку, выведенную из него, на ОБЕИХ платформах. Его продукт —
+        // его слово. «Подписка» теперь называет и платную услугу, и источник серверов: пользователь
+        // видит один объект, и двух имён у него быть не должно.
+        Add("Common_AddSubscription", "Добавить подписку", "Add subscription");
         Add("Common_AddFromClipboard", "Добавить из буфера обмена", "Add from clipboard");
         Add("Common_AddViaQr", "Добавить по QR-коду", "Add via QR code");
-        Add("Common_UpdateSubscription", "Обновить провайдера", "Update provider");
+        Add("Common_UpdateSubscription", "Обновить подписку", "Update subscription");
         Add("Common_TestLatency", "Проверить задержку", "Test latency");
 
         // ── Auth / commerce ──
@@ -74,7 +76,7 @@ public sealed partial class L
             new[] { "server", "servers" });
         AddPlural(
             "Common_ProvidersPlural",
-            new[] { "провайдер", "провайдера", "провайдеров" },
-            new[] { "provider", "providers" });
+            new[] { "подписка", "подписки", "подписок" },
+            new[] { "subscription", "subscriptions" });
     }
 }

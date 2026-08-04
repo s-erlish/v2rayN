@@ -13,11 +13,11 @@ namespace v2rayN.Desktop.Views;
 /// Значения/тумблеры биндятся к реальному <see cref="SettingsViewModel"/> (данные читаются из
 /// живого <c>Config</c> и пишутся обратно через <c>ConfigHandler.SaveConfig</c>). КАЖДАЯ строка —
 /// реальная рабочая функция, и КАЖДЫЙ правый affordance ЧЕСТЕН (Round2 Фаза D):
-///   • шеврон = НАВИГАЦИЯ (тап открывает суб-страницу): Прокси по приложениям, DNS, Пинг,
+///   • шеврон = НАВИГАЦИЯ (тап открывает суб-страницу): Прокси по приложениям, DNS,
 ///     Маршрутизация, Файлы ресурсов, О приложении, Резервное копирование, Схемы URL;
 ///   • шеврон-раскрытие (0↔90) = инлайн-панель: Локальный прокси;
-///   • unfold_more = значение ЦИКЛИТСЯ на месте (≥3 значений): Язык, Автообновление, Число Mux,
-///     Масштаб интерфейса;
+///   • unfold_more = СПИСОК ЗНАЧЕНИЙ раскрывается у самой строки (ChoiceFlyout): Пинг, Язык,
+///     Автообновление, Число Mux, Масштаб интерфейса;
 ///   • инлайн-сегмент (2 состояния) = смена на месте: Режим (TUN/Прокси), Оформление (Тёмная/Светлая);
 ///   • тумблер = булево: Обход сети, IPv6, Mux, Фрагментация, Облегчённый режим, Монохром, Запуск.
 ///
@@ -39,24 +39,26 @@ public partial class SettingsView : UserControl
             DataContext = new SettingsViewModel();
         }
 
-        // --- Строки-НАВИГАЦИИ (шеврон): тап кладёт Incy суб-страницу на общий стек оболочки ---
+    // --- Строки-НАВИГАЦИИ (шеврон): тап кладёт Incy суб-страницу на общий стек оболочки ---
         WireRow(RowPerApp, () => OpenPage(new PerAppProxyPage(), refresh: true));
-        WireRow(RowDns, () => OpenPage(new DnsSubView(), refresh: true));
-        WireRow(RowPingMethod, () => OpenPage(new PingSettingsPage(), refresh: true));
         WireRow(RowRouting, () => OpenPage(new RoutingSubView()));
         WireRow(RowAssets, () => OpenPage(new GeoFilesPage()));
         WireRow(RowAbout, () => OpenPage(new AboutPage()));
         WireRow(RowBackup, () => OpenPage(new BackupPage()));
         WireRow(RowUrlScheme, () => OpenPage(new UrlSchemesPage()));
 
-        // --- Строки-ЦИКЛА значения (unfold_more): тап продвигает реальное значение на месте ---
-        WireRow(RowMuxConcurrency, () => _ = Vm?.CycleMuxConcurrencyAsync());
-        WireRow(RowLanguage, () => _ = Vm?.CycleLanguageAsync());
-        WireRow(RowSubAutoUpdate, () => _ = Vm?.CycleAutoUpdateAsync());
-        // Масштаб интерфейса: тап циклит пресеты zoom (те же значения — на Ctrl +/Ctrl −). Оболочка
-        // (MainWindow) применяет фактор мгновенно через общий UiScaleState.
-        WireRow(RowUiScale, () => Vm?.CycleUiScale());
-
+        // --- Строки-ВЫБОРА (unfold_more): тап раскрывает СПИСОК ЗНАЧЕНИЙ у самой строки ---
+        // Владелец: «надо, чтобы просто варианты пинга при нажатии сбоку у кнопки высвечивались, и это
+        // касается многих таких настроек». Здесь сходятся два прежних поведения, и оба были плохи:
+        // «Пинг» занимал целую суб-страницу ради выбора из двух, а Язык / Автообновление / Число Mux /
+        // Масштаб перещёлкивали значение вслепую — набор значений человек не видел вовсе. Теперь у всех
+        // одна форма: нажал строку — увидел все значения рядом, выбрал — список закрылся.
+        WireRow(RowPingMethod, ShowPingChoice);
+        WireRow(RowDns, ShowDnsChoice);
+        WireRow(RowMuxConcurrency, ShowMuxConcurrencyChoice);
+        WireRow(RowLanguage, ShowLanguageChoice);
+        WireRow(RowSubAutoUpdate, ShowAutoUpdateChoice);
+        WireRow(RowUiScale, ShowUiScaleChoice);
         // --- Локальный прокси — раскрытие инлайн-панели (анимированный шеврон 0↔90 + слайд панели) ---
         WireRow(RowLocalProxy, ToggleLocalProxy);
         ProxyPortBox.LostFocus += OnProxyFieldCommit;
@@ -66,6 +68,7 @@ public partial class SettingsView : UserControl
         // --- Тумблер-строки: тап по всей строке (56dp) + Enter/Space переключают тумблер ---
         WireToggleRow(RowBypassLan, SwitchBypassLan);
         WireToggleRow(RowIpv6, SwitchIpv6);
+        WireToggleRow(RowFakeIp, SwitchFakeIp);
         WireToggleRow(RowMux, SwitchMux);
         WireToggleRow(RowFragment, SwitchFragment);
         WireToggleRow(RowLiteMode, SwitchLiteMode);
@@ -136,6 +139,135 @@ public partial class SettingsView : UserControl
                 e.Handled = true;
             }
         };
+    }
+
+    // ===================== Строки-выбора: список значений у строки =====================
+
+    /// <summary>
+    /// «Пинг»: ДВА варианта метода измерения задержки, и больше на этой поверхности ничего.
+    ///
+    /// Владелец: «у пинга оно огромное, там лишний адрес проверки и тайм-аут, которого быть не
+    /// должно, проще просто убери адрес и таймаут и две кнопки выше оставь». Адрес проверки
+    /// (<c>SpeedTestItem.SpeedPingTestUrl</c>) и тайм-аут (<c>SpeedTestItem.SpeedTestTimeout</c>)
+    /// больше НЕ РЕДАКТИРУЮТСЯ из приложения: они остаются в конфиге со своими значениями и
+    /// продолжают работать, у них просто нет редактора. Это решение, а не потеря по недосмотру, и
+    /// оно записано в отчёте — так же, как записано отсутствие переименования подписки.
+    /// Переносить их на страницу нельзя: страницу «Пинг» он удалил намеренно.
+    /// </summary>
+    private void ShowPingChoice()
+    {
+        if (Vm is not { } vm)
+        {
+            return;
+        }
+
+        ChoiceFlyout.Show(
+            RowPingMethod,
+            [
+                new ChoiceItem(L.T("Ping_RealTitle"), L.T("Ping_RealHint"), vm.PingMethod == SettingsViewModel.PingMethodReal,
+                    () => _ = vm.SetPingMethodAsync(SettingsViewModel.PingMethodReal)),
+                new ChoiceItem("TCP", L.T("Ping_TcpHint"), vm.PingMethod == SettingsViewModel.PingMethodTcp,
+                    () => _ = vm.SetPingMethodAsync(SettingsViewModel.PingMethodTcp)),
+            ]);
+    }
+
+    /// <summary>
+    /// «DNS»: провайдер резолвера, и больше на этой поверхности ничего. Прежде это была суб-страница
+    /// с чипами, полем своего DoH-адреса и тумблером FakeIP; владелец: «у днс также сделай».
+    ///
+    /// ЧТО УШЛО И КУДА. FakeIP получил СВОЮ строку-тумблер прямо над этой — он булев, он меняет
+    /// разрешение имён в туннеле, и установка с ним включённым обязана иметь способ его выключить.
+    /// Поле СВОЕГО DoH-адреса редактора не имеет: НОВЫЙ произвольный адрес ввести больше нельзя.
+    /// Но уже сохранённый не теряется и не затирается — он показан отдельным вариантом (подпись
+    /// «Свой», под ней сам адрес), выбран, и к нему можно вернуться, попробовав пресет. Рабочая
+    /// настройка не ломается; исчезает только возможность завести новую.
+    /// </summary>
+    private void ShowDnsChoice()
+    {
+        if (Vm is not { } vm)
+        {
+            return;
+        }
+        var cur = vm.RemoteDns;
+        var items = new List<ChoiceItem>
+        {
+            new(L.T("Common_Default"), L.T("Settings_DnsDefaultHint"), cur.IsNullOrEmpty(),
+                () => _ = vm.SetRemoteDnsAsync(string.Empty)),
+            new("Cloudflare", null, cur == SettingsViewModel.DnsCloudflare,
+                () => _ = vm.SetRemoteDnsAsync(SettingsViewModel.DnsCloudflare)),
+            new("Google", null, cur == SettingsViewModel.DnsGoogle,
+                () => _ = vm.SetRemoteDnsAsync(SettingsViewModel.DnsGoogle)),
+            new("AdGuard", null, cur == SettingsViewModel.DnsAdGuard,
+                () => _ = vm.SetRemoteDnsAsync(SettingsViewModel.DnsAdGuard)),
+        };
+        if (vm.HasCustomDns)
+        {
+            items.Add(new ChoiceItem(L.T("Common_Custom"), cur, true, () => _ = vm.SetRemoteDnsAsync(cur)));
+        }
+        ChoiceFlyout.Show(RowDns, items);
+    }
+
+    /// <summary>«Число соединений Mux»: реальный набор значений движка.</summary>
+    private void ShowMuxConcurrencyChoice()
+    {
+        if (Vm is not { } vm)
+        {
+            return;
+        }
+        var cur = vm.MuxConcurrency;
+        ChoiceFlyout.Show(
+            RowMuxConcurrency,
+            [.. SettingsViewModel.MuxConcurrencyOptions.Select(n =>
+                new ChoiceItem(n.ToString(), null, n == cur, () => _ = vm.SetMuxConcurrencyAsync(n)))]);
+    }
+
+    /// <summary>«Язык»: переключается вживую, без перезапуска.</summary>
+    private void ShowLanguageChoice()
+    {
+        if (Vm is not { } vm)
+        {
+            return;
+        }
+        var cur = vm.CurrentLanguage;
+        ChoiceFlyout.Show(
+            RowLanguage,
+            [.. SettingsViewModel.LanguageOptions.Select(code =>
+                new ChoiceItem(LanguageLabel(code), null, code == cur, () => _ = vm.SetLanguageAsync(code)))]);
+    }
+
+    /// <summary>Подпись языка — на самом языке (так его узнают, не зная текущего).</summary>
+    private static string LanguageLabel(string code) => code switch
+    {
+        "en" => "English",
+        _ => L.T("Settings_LangRussian"),
+    };
+
+    /// <summary>«Автообновление подписок»: интервалы в часах (значение хранится в минутах).</summary>
+    private void ShowAutoUpdateChoice()
+    {
+        if (Vm is not { } vm)
+        {
+            return;
+        }
+        var cur = vm.AutoUpdateInterval;
+        ChoiceFlyout.Show(
+            RowSubAutoUpdate,
+            [.. SettingsViewModel.AutoUpdateOptions.Select(m =>
+                new ChoiceItem(L.F("Common_HoursShort", m / 60), null, m == cur, () => _ = vm.SetAutoUpdateAsync(m)))]);
+    }
+
+    /// <summary>«Масштаб интерфейса»: пресеты zoom; те же значения дают Ctrl +/Ctrl −/Ctrl 0.</summary>
+    private void ShowUiScaleChoice()
+    {
+        if (Vm is not { } vm)
+        {
+            return;
+        }
+        var cur = vm.UiScale;
+        ChoiceFlyout.Show(
+            RowUiScale,
+            [.. SettingsViewModel.UiScaleOptions.Select(s =>
+                new ChoiceItem(SettingsViewModel.FormatUiScale(s), null, Math.Abs(s - cur) < 0.001, () => vm.SetUiScale(s)))]);
     }
 
     // ===================== Инлайн-сегменты (Режим / Оформление) =====================

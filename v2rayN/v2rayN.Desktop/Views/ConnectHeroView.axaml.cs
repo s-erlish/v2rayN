@@ -430,6 +430,7 @@ public partial class ConnectHeroView : UserControl
         if (state == ConnectVisualState.Error)
         {
             RetryHint.IsVisible = true;
+            ApplyFailureReasonText();
             if (enteringError && !ReducedMotion && !MotionSuppressed)
             {
                 RetryHint.Opacity = 0;
@@ -456,6 +457,25 @@ public partial class ConnectHeroView : UserControl
 
         _visualState = state;
     }
+
+    //  Причина последнего провала подключения — то, что движок УЖЕ сообщил (битый конфиг, ядро не
+    //  стартовало, сервер не выбран). Никакой новой поверхности: показываем её в той же одной строке
+    //  под щитом, которая и так видна только в Error, вместо общей подсказки-ретрая. Пусто → строка
+    //  снова говорит «нажмите, чтобы повторить».
+    private string? _failureReason;
+
+    /// <summary>Set the reason shown in the Error-state hint line. Null/empty restores the retry hint.</summary>
+    public void SetFailureReason(string? reason)
+    {
+        _failureReason = reason;
+        if (_visualState == ConnectVisualState.Error)
+        {
+            ApplyFailureReasonText();
+        }
+    }
+
+    private void ApplyFailureReasonText()
+        => RetryHint.Text = _failureReason.IsNullOrEmpty() ? L.T("Home_RetryHint") : _failureReason;
 
     /// <summary>Обновляет ↑/↓ (строки Utils.HumanFy, напр. «1.2 MB/s»).</summary>
     public void SetSpeeds(string up, string down)

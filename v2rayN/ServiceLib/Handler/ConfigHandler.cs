@@ -1382,7 +1382,9 @@ public static class ConfigHandler
         }
 
         var indexId = Utils.GetGuid(false);
-        var remark = $"{subItem.Remarks} - {ResUI.TbConfigTypePolicyGroup}";
+        // Через резолвер: с пустым Remarks (подписка, чей провайдер ещё не назвался) строка начиналась
+        // бы с висящего « - », а со старым плейсхолдером читалась бы «import_sub - Policy Group».
+        var remark = $"{SubscriptionNaming.TitleOf(subItem)} - {ResUI.TbConfigTypePolicyGroup}";
         var profile = new ProfileItem
         {
             IndexId = indexId,
@@ -1450,7 +1452,7 @@ public static class ConfigHandler
         foreach (var regionFilter in PolicyGroupRegionFilters)
         {
             var indexId = Utils.GetGuid(false);
-            var remark = $"{subItem.Remarks} - {ResUI.TbConfigTypePolicyGroup} - {regionFilter.Key}";
+            var remark = $"{SubscriptionNaming.TitleOf(subItem)} - {ResUI.TbConfigTypePolicyGroup} - {regionFilter.Key}";
             var profile = new ProfileItem
             {
                 IndexId = indexId,
@@ -1589,7 +1591,18 @@ public static class ConfigHandler
 
         var countServers = 0;
         List<ProfileItem> lstAdd = [];
-        var arrData = strData.Split(Environment.NewLine.ToCharArray()).Where(t => !t.IsNullOrEmpty());
+        // EACH LINE IS TRIMMED BEFORE IT IS JUDGED. Two things made that necessary, and both showed
+        // up as "I pasted a link and nothing happened":
+        //  • the subscription test below is StartsWith on the raw line, so ONE leading space in a
+        //    copied link (which is what selecting a link in a chat client usually yields) made the
+        //    whole paste fall through to the share-link parser, fail there too, and come back as
+        //    "nothing recognised" — about a link that was perfectly valid;
+        //  • the split is on Environment.NewLine's characters, which on Linux and macOS is "\n"
+        //    ALONE, so Windows-authored CRLF text leaves a trailing "\r" on every line and the
+        //    subscription URL was stored with it attached.
+        // Leading and trailing whitespace is never significant in a share link or a subscription
+        // URL, so this only widens what is accepted; nothing that parsed before stops parsing.
+        var arrData = strData.Split(Environment.NewLine.ToCharArray()).Select(t => t.TrimEx()).Where(t => t.IsNotEmpty());
         if (isSub)
         {
             arrData = arrData.Distinct();
@@ -1670,7 +1683,9 @@ public static class ConfigHandler
         }
 
         var subItem = await AppManager.Instance.GetSubItem(subid);
-        var subRemarks = subItem?.Remarks;
+        // The name every imported custom node is prefixed with. Resolved, not raw: this is what the
+        // server rows in the list are called, and upstream's placeholder used to name every one of them.
+        var subRemarks = subItem is null ? null : SubscriptionNaming.TitleOf(subItem);
         var preSocksPort = subItem?.PreSocksPort;
 
         // A departament / Remnawave "XRAY_JSON" body is an array of FULL Xray configs (each carrying
@@ -2010,8 +2025,22 @@ public static class ConfigHandler
             //return -1;
         }
 
+        // NAME IT FROM THE LINK IF THE LINK NAMES IT, AND LEAVE IT BLANK OTHERWISE — no placeholder is
+        // stored, because a placeholder that is stored is a placeholder that gets shown. Upstream's
+        // «import_sub» reached the server-list group heading and the subscription-update log, and with
+        // no rename UI to correct it (OWNER-DECISION-2026-08-02 §5) it was permanent. It is also
+        // English, on a Russian surface, for a value the user never typed.
+        //
+        // Blank is not a gap. The real provider title (`profile-title`) arrives on the very first
+        // fetch and SubscriptionHandler adopts it into a still-unnamed subscription; until then every
+        // display path resolves through SubscriptionNaming, which answers «Подписка» rather than
+        // printing an empty string. The link's own `?remarks=` is honoured first, then its #fragment
+        // (what the Android client reads), and both go through the placeholder filter so a link that
+        // literally carries «import sub» cannot smuggle one back in.
         var queryVars = Utils.ParseQueryString(uri.Query);
-        subItem.Remarks = queryVars["remarks"] ?? "import_sub";
+        subItem.Remarks = SubscriptionNaming.RealName(queryVars["remarks"])
+            ?? SubscriptionNaming.RealName(uri.Fragment.TrimStart('#'))
+            ?? string.Empty;
 
         return await AddSubItem(config, subItem);
     }

@@ -290,6 +290,21 @@ public class RulesItem4Ray
     public List<string>? protocol { get; set; }
 
     public List<string>? process { get; set; }
+
+    // The remaining xray rule-narrowing fields. The app never emits them, but a provider template
+    // routinely does, and outbound resolution has to tell a rule that describes a special case
+    // (a source range, a logged-in user, a source port, an attribute match) from the one that carries
+    // ordinary traffic. Without them such a rule deserialises as unconstrained and is mistaken for the
+    // default path. Nullable throughout, so a generated config serialises byte-identically.
+    public List<string>? source { get; set; }
+
+    public List<string>? user { get; set; }
+
+    public string? sourcePort { get; set; }
+
+    // `attrs` is a string in older templates and an object in newer ones; typed as object so neither
+    // shape can fail the whole deserialisation.
+    public object? attrs { get; set; }
 }
 
 public class BalancersItem4Ray
@@ -297,6 +312,9 @@ public class BalancersItem4Ray
     public List<string>? selector { get; set; }
     public BalancersStrategy4Ray? strategy { get; set; }
     public string? tag { get; set; }
+
+    /// <summary>Outbound a balancer falls back to when its selector matches nothing.</summary>
+    public string? fallbackTag { get; set; }
 }
 
 public class BalancersStrategy4Ray

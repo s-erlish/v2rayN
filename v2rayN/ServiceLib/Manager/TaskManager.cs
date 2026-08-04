@@ -102,8 +102,14 @@ public class TaskManager
                     Logging.SaveLog($"Update subscription end. {msg}");
                 }
             });
-            item.UpdateTime = updateTime;
-            await ConfigHandler.AddSubItem(_config, item);
+            // RE-READ BEFORE WRITING BACK. `item` is the row as it was BEFORE the refresh, and
+            // AddSubItem copies its Remarks over the stored one — so writing the captured copy back
+            // would undo the name the refresh just adopted from the provider's `profile-title` and
+            // put the blank (or the old placeholder) straight back. Only the timestamp is ours to
+            // stamp here; everything else belongs to the row the update left behind.
+            var refreshed = await AppManager.Instance.GetSubItem(item.Id) ?? item;
+            refreshed.UpdateTime = updateTime;
+            await ConfigHandler.AddSubItem(_config, refreshed);
             await Task.Delay(1000);
         }
     }

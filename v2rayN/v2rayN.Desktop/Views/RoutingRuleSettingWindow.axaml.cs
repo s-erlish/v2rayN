@@ -53,7 +53,10 @@ public partial class RoutingRuleSettingWindow : WindowBase<RoutingRuleSettingVie
             ViewModel.ShowYesNoInteraction.RegisterHandler(async interaction =>
             {
                 var message = interaction.Input;
-                var result = await UI.ShowYesNo(message);
+                // Этот канал несёт И удаление, И пакетное ДОБАВЛЕНИЕ правил — красным красим
+                // только удаление, иначе красный перестаёт что-либо значить.
+                var isDelete = message == ResUI.RemoveServer;
+                var result = await UI.ShowYesNo(message, isDelete ? L.T("Common_Delete") : null, destructive: isDelete);
                 interaction.SetOutput(result == ButtonResult.Yes);
             }).DisposeWith(disposables);
 

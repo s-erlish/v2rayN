@@ -10,6 +10,19 @@ public static class AppEvents
     public static readonly EventChannel<string> SendSnackMsgRequested = new();
     public static readonly EventChannel<string> SendMsgViewRequested = new();
 
+    /// <summary>
+    /// Raised once per "add servers" attempt (clipboard paste, QR scan, screen scan), from EVERY entry
+    /// point — the corner «+» flyout, Ctrl+V, the onboarding surface and the tray menu all funnel into
+    /// the same method. The payload says what happened and how much of it, and carries no text:
+    /// ServiceLib is shared with upstream's WPF client and may not choose the words. The shell that
+    /// owns the copy table subscribes and tells the user.
+    ///
+    /// Publishing is unconditional, including on failure, because "the app said nothing" and "the add
+    /// failed" are indistinguishable to a user and were being reported as the same defect.
+    /// Fires on whatever thread ran the add — UI subscribers marshal themselves.
+    /// </summary>
+    public static readonly EventChannel<AddServerOutcome> AddServerOutcomeReported = new();
+
     public static readonly EventChannel<Unit> AppExitRequested = new();
     public static readonly EventChannel<bool> ShutdownRequested = new();
 

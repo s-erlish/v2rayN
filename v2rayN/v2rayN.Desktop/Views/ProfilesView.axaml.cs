@@ -86,7 +86,7 @@ public partial class ProfilesView : ReactiveUserControl<ProfilesViewModel>
             ViewModel.ShowYesNoInteraction.RegisterHandler(async interaction =>
             {
                 var message = interaction.Input;
-                var result = await UI.ShowYesNo(message);
+                var result = await UI.ShowYesNo(message, L.T("Common_Delete"), destructive: true);
                 interaction.SetOutput(result == ButtonResult.Yes);
             }).DisposeWith(disposables);
 

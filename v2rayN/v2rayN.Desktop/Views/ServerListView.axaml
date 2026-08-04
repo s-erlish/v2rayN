@@ -54,17 +54,17 @@
             <Setter Property="Background" Value="{DynamicResource Brush.OutlineVariant}" />
         </Style>
 
-        <!--  Пинг-спиннер: гасим ПОЛНОСТЬЮ вне «теста» и под «Облегчённым режимом».
-              Раньше видимость дуги висела на локальном IsVisible-биндинге (DelayTesting), а вращение
-              гасил только глобальный селектор :is(Window):not(.lite) — под lite оставалась ЗАМЁРЗШАЯ
-              половина кольца. Теперь видимость дуги привязана к ТОМУ ЖЕ рычагу, что и вращение: базово
-              скрыта, показывается лишь пока идёт тест И движение включено. Тот же lever, что у
-              ConnectHeroView (класс .lite на окне) → под lite дуга схлопывается (ничего не видно), и
-              реагирует ЖИВО при переключении режима (класс .lite на окне ставится/снимается на лету).  -->
+        <!--  Пинг-спиннер: базово скрыт, виден РОВНО пока идёт тест — видимость на том же рычаге
+              (.spinning), что и вращение, поэтому она не может разойтись с ним.
+              Гейт по lite отсюда СНЯТ. Он появился, когда под lite оставалась замёрзшая половина
+              кольца, и лечил симптом ценой того, что во время теста в строке не оставалось ВООБЩЕ
+              никакого признака работы. Обрывка кольца больше нет: под lite дуга рисуется полным
+              статичным кольцом (GlobalStyles, Ellipse.Spinner.Arc*), то есть законченной фигурой,
+              и прятать её больше незачем.  -->
         <Style Selector="Ellipse.Spinner">
             <Setter Property="IsVisible" Value="False" />
         </Style>
-        <Style Selector=":is(Window):not(.lite) Ellipse.Spinner.spinning">
+        <Style Selector="Ellipse.Spinner.spinning">
             <Setter Property="IsVisible" Value="True" />
         </Style>
     </UserControl.Styles>
@@ -127,7 +127,9 @@
 
                                             <!--  Server row (bg_server_row): default flat, hover SurfaceHigh, pressed
                                                   scale 0.96, selected = blue pill (12% accent fill + 1.5px Accent,
-                                                  radius 16). Tap → SelectServer (default + connect). Right-click → §2.13.
+                                                  radius 16). Тап → ВЫБОР: пока соединения нет — выбор и подключение,
+                                                  при живом туннеле — только выбор, а перенос предлагается отдельным
+                                                  действием «Переподключиться» (G1). Правый клик → §2.13.
                                                   ONE grid: 56 rhythm, 40 tile, single inset divider, no vertical margin.  -->
                                             <!--  Loaded → одноразовый reveal-стаггер первой заливки списка
                                                   (первые ≤8 строк всплывают 12→0 + fade, задержка i×40мс,
@@ -159,6 +161,7 @@
                                                 Loaded="OnServerRowLoaded"
                                                 PointerCaptureLost="OnRowPointerCaptureLost"
                                                 PointerExited="OnRowPointerExited"
+                                                KeyDown="OnRowKeyDown"
                                                 PointerPressed="OnRowPointerPressed"
                                                 PointerReleased="OnRowPointerReleased">
                                                 <Border.ContextMenu>
@@ -246,10 +249,9 @@
                                                             Height="15"
                                                             HorizontalAlignment="Right"
                                                             VerticalAlignment="Center"
-                                                            Classes="Spinner"
+                                                            Classes="Spinner Arc15"
                                                             Classes.spinning="{Binding DelayVal, Converter={StaticResource DelayTesting}}"
                                                             Stroke="{DynamicResource Brush.Accent}"
-                                                            StrokeDashArray="5.9,17.7"
                                                             StrokeLineCap="Round"
                                                             StrokeThickness="2">
                                                             <!--  Явный центр вращения (половина 15px = 7.5): глобальный
@@ -300,8 +302,11 @@
             </StackPanel>
         </ScrollViewer>
 
-        <!--  Empty state (layout_servers_empty): hero icon 64 + «Список пуст». The full onboarding
-              CTAs live in the connect-hero (right panel of Home), so this stays quiet.  -->
+        <!--  Пустое состояние (layout_servers_empty): иконка 64 + «Список пуст» + строка + ОДНО
+              действие. Действие добавлено по формуле 9.5 «заголовок · строка · действие»: строка уже
+              говорила «добавьте подписку», но нажать было нечего — совет без кнопки заставляет искать
+              её глазами по всему экрану. Кнопка ровно одна и делает ровно то, что советует строка;
+              QR остаётся на connect-герое, чтобы пустой список не превращался во второй онбординг.  -->
         <StackPanel
             Margin="24,0"
             HorizontalAlignment="Center"
@@ -323,6 +328,12 @@
                 Text="{loc:T Servers_EmptyHint}"
                 TextAlignment="Center"
                 TextWrapping="Wrap" />
+            <Button
+                Margin="0,2,0,0"
+                HorizontalAlignment="Center"
+                Classes="Tonal"
+                Command="{Binding AddViaClipboardCmd}"
+                Content="{loc:T Common_AddFromClipboard}" />
         </StackPanel>
     </Grid>
 </UserControl>

@@ -36,9 +36,9 @@
             <Setter Property="CornerRadius" Value="{DynamicResource Radius.Card}" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="RenderTransformOrigin" Value="50%,50%" />
+            <!--  Кроссфейд фона снят (F1): его взводил только ховер. Press-scale — на месте.  -->
             <Setter Property="Transitions">
                 <Transitions>
-                    <BrushTransition Property="Background" Duration="0:0:0.15" />
                     <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" />
                 </Transitions>
             </Setter>
@@ -83,7 +83,7 @@
                         x:Name="AccountInitial"
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
-                        FontFamily="{DynamicResource Font.Grotesk}"
+                        FontFamily="{DynamicResource Font.Ui}"
                         FontSize="18"
                         FontWeight="Bold"
                         Foreground="{DynamicResource Brush.Accent}"

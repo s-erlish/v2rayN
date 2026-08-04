@@ -59,44 +59,50 @@
             <Setter Property="Background" Value="Transparent" />
         </Style>
         <Style Selector="Button.BottomNavItem:pressed">
-            <Setter Property="RenderTransform" Value="scale(0.92)" />
+            <Setter Property="RenderTransform" Value="scale(0.97)" />
         </Style>
 
-        <!--  Глиф/подпись — неактивные (серый), плавный переход цвета.  -->
+        <!--  Глиф/подпись — неактивные (серый). БЕЗ перехода на базовом селекторе: он ловил и
+              ховер, поэтому при проведении вдоль бара соседние пункты 200мс горели вдвоём.
+              Кроссфейд смены вкладки не потерян — он объявлен на .sel ниже, куда ховер не достаёт.  -->
         <Style Selector="Button.BottomNavItem PathIcon">
             <Setter Property="Width" Value="24" />
             <Setter Property="Height" Value="24" />
             <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
-            <!--  Тон серый↔accent = Ease.Standard 200мс (двусторонняя смена, как рейл/Android nav).  -->
-            <Setter Property="Transitions">
-                <Transitions>
-                    <BrushTransition Property="Foreground" Duration="0:0:0.2" Easing="{StaticResource Ease.Standard}" />
-                </Transitions>
-            </Setter>
         </Style>
+        <!--  Подписи навигации — РУССКИЕ («Главная»/«Аккаунт»/«Настройки»), поэтому интерфейсная
+              гарнитура. В Space Grotesk нет ни одного кириллического глифа: эти три слова рисовались
+              необъявленным фолбэком ОС — своей гарнитурой на каждой системе (D-1/D-2).  -->
         <Style Selector="Button.BottomNavItem TextBlock.NavLabel">
-            <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+            <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
             <Setter Property="FontSize" Value="11" />
             <Setter Property="FontWeight" Value="Medium" />
             <Setter Property="HorizontalAlignment" Value="Center" />
             <Setter Property="Margin" Value="0,3,0,0" />
             <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
-            <Setter Property="Transitions">
-                <Transitions>
-                    <BrushTransition Property="Foreground" Duration="0:0:0.2" Easing="{StaticResource Ease.Standard}" />
-                </Transitions>
-            </Setter>
         </Style>
         <!--  Активная пилюля БОЛЬШЕ НЕ per-item: три независимых пилюли заменены ОДНИМ общим
               «путешествующим» индикатором (Border x:Name="BottomIndicator" в разметке), который
               физически СКОЛЬЗИТ по X к центру активной трети. Позицию/скольжение ведёт code-behind
               (PositionIndicator: центры из ЖИВЫХ ширин колонок, Motion.Dur.State 220 OutQuint).  -->
 
-        <!--  Выбранный пункт (класс .sel): глиф+подпись accent, подпись 500→700 (тинт 200мс Standard).  -->
+        <!--  Выбранный пункт (класс .sel): глиф+подпись accent, подпись 500→700. Тинт 200мс
+              Standard объявлен ЗДЕСЬ — .sel ставит code-behind при смене вкладки, ховер его не
+              взводит, поэтому анимация та же, а наведение мгновенно.  -->
         <Style Selector="Button.BottomNavItem.sel PathIcon">
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Foreground" Duration="0:0:0.2" Easing="{StaticResource Ease.Standard}" />
+                </Transitions>
+            </Setter>
             <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
         </Style>
         <Style Selector="Button.BottomNavItem.sel TextBlock.NavLabel">
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Foreground" Duration="0:0:0.2" Easing="{StaticResource Ease.Standard}" />
+                </Transitions>
+            </Setter>
             <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
             <Setter Property="FontWeight" Value="Bold" />
         </Style>

@@ -71,4 +71,38 @@ public static class ProfileDisplay
 
     /// <summary>"N providers" / «N провайдеров» in the current UI language.</summary>
     public static string Providers(int n) => L.Plural("Common_ProvidersPlural", n);
+
+    // ── Server name inside a sentence ───────────────────────────────────────
+    // Port of Android FlagUtil.stripLeadingFlag. A remark usually arrives as «🇩🇪 Germany»; the flag
+    // belongs to the ROW (which draws it as its own glyph), not to a sentence like «Выбран Germany.
+    // Переподключиться к нему?» — an emoji mid-sentence reads as decoration and 00-rules bans it as
+    // UI chrome. Everything before/after the flag is kept and the separators around it collapse to a
+    // single space; a name that is ONLY a flag is returned unchanged rather than emptied.
+
+    /// <summary>Regional-indicator pairs (🇦..🇿) plus the separators that usually trail them.</summary>
+    private static readonly char[] _flagSeparators = [' ', ' ', '-', '–', '—', '|', '·', ',', ':'];
+
+    /// <summary>The remark with any leading flag emoji removed, for use inside a sentence.</summary>
+    public static string StripLeadingFlag(string? remark)
+    {
+        var s = remark?.Trim();
+        if (s.IsNullOrEmpty())
+        {
+            return string.Empty;
+        }
+
+        var sb = new StringBuilder(s!.Length);
+        foreach (var rune in s.EnumerateRunes())
+        {
+            // U+1F1E6..U+1F1FF — regional indicator symbols; a pair of them is one flag.
+            if (rune.Value is >= 0x1F1E6 and <= 0x1F1FF)
+            {
+                continue;
+            }
+            sb.Append(rune.ToString());
+        }
+
+        var stripped = sb.ToString().Trim(_flagSeparators).Trim();
+        return stripped.IsNullOrEmpty() ? s : stripped;
+    }
 }

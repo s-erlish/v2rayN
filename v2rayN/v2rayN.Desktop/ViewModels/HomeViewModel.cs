@@ -48,6 +48,13 @@ public class HomeViewModel : MyReactiveObject, IDisposable
     private readonly IDisposable? _coreStateSub;
     private readonly IDisposable? _switchSettledSub;
     private readonly IDisposable? _statsSub;
+    private readonly IDisposable? _noticeSub;
+
+    // Last message the engine published while THIS connect attempt was in flight, and when it landed.
+    // Only a message from the current attempt may be shown as its reason (see ConnectFailReason).
+    private string? _lastNotice;
+    private DateTime _lastNoticeAt = DateTime.MinValue;
+    private DateTime? _attemptStartedAt;
     // Per-item live-sync: latency/speed results are reported by MUTATING the ProfileItems instances in
     // place (ProfilesViewModel.SetSpeedTestResult sets Delay/DelayVal/SpeedVal/IpInfo) — a per-ITEM
     // property change that raises NO CollectionChanged, so the CollectionChanged-driven reconcile never
@@ -64,6 +71,19 @@ public class HomeViewModel : MyReactiveObject, IDisposable
     // the still-running OLD core can't snap the shield straight back to Connected before the switch
     // actually re-establishes. Cleared on the stop event, on the deadline, or on an aborted pick.
     private bool _awaitingCoreCycle;
+
+    /// <summary>
+    /// Сервер, на котором ЖИВЁТ поднятый туннель, — а это не то же самое, что основной сервер, и всё
+    /// предложение «Переподключиться» существует именно потому, что это не одно и то же.
+    ///
+    /// Выбор при живом туннеле только запоминает сервер и не трогает соединение (G1). Значит, стоит
+    /// пользователю отказаться от переноса — основной уходит ВПЕРЁД туннеля и там и остаётся. Без
+    /// этого поля единственным ориентиром был <c>_config.IndexId</c>, то есть сам выбор: повторное
+    /// нажатие по уже выбранной строке давало <c>changed == false</c>, предложение не поднималось, и
+    /// вернуться к нему было нечем. Пишется только по фактам ядра — см. SyncState и OnCoreSwitchSettled.
+    /// </summary>
+    private string? _runningIndexId;
+
     private ServerSpeedItem? _lastSpeed;
 
     // Launch-time snapshot of "does the local store hold any server?", read synchronously by the shell
@@ -88,6 +108,19 @@ public class HomeViewModel : MyReactiveObject, IDisposable
     /// </summary>
     [Reactive] public bool ConnectFailed { get; set; }
 
+    /// <summary>
+    /// Why the last attempt failed, in the engine's own words, or null when there is nothing to add.
+    ///
+    /// The engine already explains every connect failure — a bad config, a core that would not start,
+    /// a routing rule pointing at a missing node — through <c>NoticeManager</c>. On this client those
+    /// messages reach no surface at all: the bottom toast was deliberately removed and its handler
+    /// re-routes into the inline message panel, which the Incy shell never places, so the whole channel
+    /// ends nowhere. That is why a failed connect said «Не удалось подключиться» and nothing else, and
+    /// why the owner's report is «не знаю в чем причина». Captured here per attempt and shown in the
+    /// hero's existing Error-state hint line, in place of the generic retry hint.
+    /// </summary>
+    [Reactive] public string? ConnectFailReason { get; set; }
+
     [Reactive] public bool HasServers { get; set; }
 
     /// <summary>
@@ -105,6 +138,18 @@ public class HomeViewModel : MyReactiveObject, IDisposable
     [Reactive] public string DownSpeed { get; set; } = "0 KB/s";
 
     [Reactive] public string Uptime { get; set; } = "00:00:00";
+
+    /// <summary>
+    /// An import (clipboard or QR) is in flight.
+    ///
+    /// Adding a подписка is not instant — it stores the row, then fetches the provider's server list
+    /// over the network — and until this existed the whole of that wait looked identical to a dead
+    /// button: no spinner, no disabled state, nothing. It is also the fire-twice guard: every entry
+    /// point routes through <see cref="AddViaClipboard"/> / <see cref="AddViaQr"/>, so a second press
+    /// while the first is running is dropped here rather than starting a second import that races the
+    /// first through the same subscription rows.
+    /// </summary>
+    [Reactive] public bool IsAdding { get; set; }
 
     #endregion Reactive state
 
@@ -129,8 +174,12 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         Profiles = main.ProfilesViewModel;
         StatusBar = main.StatusBarViewModel;
 
-        AddViaClipboardCmd = ReactiveCommand.CreateFromTask(AddViaClipboard);
-        AddViaQrCmd = ReactiveCommand.CreateFromTask(AddViaQr);
+        // Тот же гейт, что у первого кадра, но для командных поверхностей (пустое состояние списка
+        // серверов, меню углового «+»): пока импорт идёт, кнопка ОТКЛЮЧЕНА, а не просто игнорирует
+        // нажатие. Метод всё равно проверяет флаг сам — canExecute отвечает за вид, метод за факт.
+        var canAdd = this.WhenAnyValue(x => x.IsAdding, adding => !adding);
+        AddViaClipboardCmd = ReactiveCommand.CreateFromTask(AddViaClipboard, canAdd);
+        AddViaQrCmd = ReactiveCommand.CreateFromTask(AddViaQr, canAdd);
         RefreshSubscriptionCmd = ReactiveCommand.CreateFromTask(RefreshSubscription);
 
         // Reconcile grouped list + counters whenever the real server collection changes. The
@@ -167,6 +216,25 @@ public class HomeViewModel : MyReactiveObject, IDisposable
             .AsObservable()
             .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ => OnCoreSwitchSettled());
+
+        // The engine's notify channel — everything CoreManager reports with notify:true, which is
+        // exactly the set of connect outcomes (bad config, core would not start, no server selected,
+        // routing rule pointing at a missing node). Remembered so a failed attempt can say WHY.
+        _noticeSub = AppEvents.SendSnackMsgRequested
+            .AsObservable()
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .Subscribe(msg =>
+            {
+                // «Визитка» узла («[Custom] [Xray]ғı Finland») — отладочная подпись апстрима, а не
+                // причина. Подписать ею щит значило бы объяснить отказ строкой, которую человек не
+                // читает; отказы (FailedToRunCore, ошибки сборки конфига) проходят как проходили.
+                if (msg.IsNullOrEmpty() || NoticePolicy.IsNodeSummary(msg))
+                {
+                    return;
+                }
+                _lastNotice = msg;
+                _lastNoticeAt = DateTime.Now;
+            });
 
         // Reflect whatever the core is doing right now (it may already be running when this VM builds).
         SyncState();
@@ -223,6 +291,23 @@ public class HomeViewModel : MyReactiveObject, IDisposable
             return;
         }
         BeginConnecting();
+        // A connect that carries nothing is not a connect. When this session will not tunnel (no
+        // elevation / no sudo, or the user picked proxy mode) the OS has to reach the app through its
+        // local proxy, and a fresh config ships the system proxy set to "force clear" — so the core
+        // came up, everything said «Подключено», and not a byte went through it, with nothing on
+        // screen to say why. See StatusBarViewModel.EnsureTrafficPathAsync.
+        if (StatusBar != null)
+        {
+            try
+            {
+                await StatusBar.EnsureTrafficPathAsync();
+            }
+            catch (Exception ex)
+            {
+                // Never let the routing-path guard block the connect itself.
+                Logging.SaveLog("HomeConnect", ex);
+            }
+        }
         // Reload builds the config and starts the core with the current default server. Its return
         // value tells us whether it actually RAN the attempt or merely deferred to a reload already in
         // flight (semaphore contended — e.g. a rapid second tap, or a background reload).
@@ -238,7 +323,7 @@ public class HomeViewModel : MyReactiveObject, IDisposable
             Logging.SaveLog("HomeConnect", ex);
             IsConnecting = false;
             _connectingUntil = null;
-            ConnectFailed = true;
+            FailConnect();
             SyncState();
             return;
         }
@@ -256,8 +341,9 @@ public class HomeViewModel : MyReactiveObject, IDisposable
             _connectingUntil = null;
             // A4: surface a distinct FAILURE state instead of collapsing silently to Idle. Sticky
             // until the next attempt / a successful connect; drives the hero's Error shield — which is
-            // the ONLY surface for connect state now (no bottom snack: the owner doesn't want it).
-            ConnectFailed = true;
+            // the ONLY surface for connect state now (no bottom snack: the owner doesn't want it), so
+            // it also has to carry the reason the engine reported.
+            FailConnect();
         }
         SyncState();
     }
@@ -296,8 +382,21 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         }
     }
 
-    /// <summary>Server-row click: make it the default server, then connect per the W1d contract.</summary>
-    public async Task SelectServer(string? indexId)
+    /// <summary>
+    /// Клик по строке сервера: сделать его основным и подключиться по контракту W1d.
+    ///
+    /// ВЫБОР ≠ ПЕРЕКЛЮЧЕНИЕ ЖИВОГО ТУННЕЛЯ (владелец G1, порт с Android
+    /// <c>MainActivity.setSelectServer</c> / <c>promptApplySelectedServer</c>). Пока соединения НЕТ,
+    /// выбор подключает — как и раньше, это то поведение, которое на телефоне как раз считается
+    /// недоделанным. Но когда туннель УЖЕ поднят, выбор его больше не роняет: он только запоминает
+    /// сервер, а оболочка предлагает «Переподключиться», называя выбранный сервер. Отказ оставляет
+    /// соединение ровно таким, каким оно было.
+    /// </summary>
+    /// <param name="applyToRunningTunnel">
+    /// True — пользователь уже согласился перенести живое соединение (нажал «Переподключиться»).
+    /// False (по умолчанию) — просто выбор; поднятый туннель не трогаем.
+    /// </param>
+    public async Task SelectServer(string? indexId, bool applyToRunningTunnel = false)
     {
         if (Profiles == null || indexId.IsNullOrEmpty())
         {
@@ -319,9 +418,34 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         // and restarts it — a genuine reconnect, even from a live connection), and ANY pick while
         // disconnected (it connects). The ONLY tap that spins nothing is re-selecting the already-
         // active server WHILE CONNECTED: it reloads nothing, so the shield stays Connected.
-        var willConnect = changed || !wasConnected;
+        // ...с ОДНОЙ поправкой (G1): смена основного сервера ПРИ ЖИВОМ туннеле больше не крутит
+        // спиннер и ничего не перезапускает, пока пользователь не подтвердил это явно. Иначе выбор
+        // и переключение — одно действие, а разорвать работающее соединение он не просил.
+        var switchingLive = changed && wasConnected;
+        // ПРЕДЛОЖЕНИЕ РЕШАЕТСЯ ПО РАБОТАЮЩЕМУ СЕРВЕРУ, А НЕ ПО ВЫБРАННОМУ. Раньше здесь стоял тот же
+        // `switchingLive`, то есть «выбор изменился», — и после ПЕРВОГО же отказа выбор совпадал с
+        // тем, что под курсором, `changed` становился false, а нажатие по этой строке не делало
+        // ровно ничего: ни переноса, ни предложения его сделать. Вопрос всегда был один — туннель
+        // уже на этом сервере или ещё нет.
+        var alreadyApplied = _runningIndexId is not null && _runningIndexId == indexId;
+        var offerReconnect = wasConnected && !alreadyApplied;
+        var willConnect = !wasConnected || (changed && applyToRunningTunnel);
         if (willConnect)
         {
+            // Same guarantee the shield tap makes: a pick that starts the core must leave the OS with
+            // a route into it. SetDefaultServer's own Reload connects without passing through
+            // Connect(), so the check has to happen here too.
+            if (StatusBar != null)
+            {
+                try
+                {
+                    await StatusBar.EnsureTrafficPathAsync();
+                }
+                catch (Exception ex)
+                {
+                    Logging.SaveLog("HomeSelectServer", ex);
+                }
+            }
             BeginConnecting();
             if (wasConnected)
             {
@@ -335,7 +459,7 @@ public class HomeViewModel : MyReactiveObject, IDisposable
             }
         }
 
-        if (!await Profiles.SetDefaultServer(indexId))
+        if (!await Profiles.SetDefaultServer(indexId, applyToRunningCore: !switchingLive || applyToRunningTunnel))
         {
             // Invalid / failed pick — abort the spinner, do not connect.
             IsConnecting = false;
@@ -356,6 +480,71 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         {
             SyncState();
         }
+
+        // Соединение живо, сервер выбран, но не применён — предлагаем перенести, называя сервер.
+        // Ровно как Android: Snackbar с действием «Переподключиться» рядом со списком; отказ ничего
+        // не делает, выбор остаётся на следующее подключение.
+        if (offerReconnect && !applyToRunningTunnel)
+        {
+            await OfferReconnect(indexId);
+        }
+    }
+
+    /// <summary>
+    /// Предложение «Переподключиться» к только что выбранному серверу при живом туннеле.
+    /// Порт <c>promptApplySelectedServer</c>: та же формулировка, то же место (транзиентная
+    /// поверхность внизу, рядом со списком), тот же исход при отказе — ничего.
+    /// </summary>
+    private async Task OfferReconnect(string indexId)
+    {
+        var name = string.Empty;
+        try
+        {
+            var item = await AppManager.Instance.GetProfileItem(indexId);
+            name = ProfileDisplay.StripLeadingFlag(item?.Remarks);
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog("HomeOfferReconnect", ex);
+        }
+
+        var msg = name.IsNotEmpty()
+            ? L.F("Home_ServerSelectedReconnect", name)
+            : L.T("Home_ServerSelectedReconnectGeneric");
+
+        Notify.Show(msg, L.T("Home_ReconnectAction"), () => _ = ApplySelectionToRunningTunnel());
+    }
+
+    /// <summary>
+    /// Переносит РАБОТАЮЩИЙ туннель на выбранный сервер. Порт
+    /// <c>HomeFragment.applySelectionToRunningTunnel</c>: щит уходит в «Подключение…», дальше всё
+    /// идёт через обычную машину состояний, поэтому застрявший перезапуск отчитается как любой
+    /// другой неудавшийся старт, а не оставит герой на прежнем сервере.
+    /// </summary>
+    public async Task ApplySelectionToRunningTunnel()
+    {
+        if (Profiles == null || !IsConnected)
+        {
+            return;
+        }
+
+        if (StatusBar != null)
+        {
+            try
+            {
+                await StatusBar.EnsureTrafficPathAsync();
+            }
+            catch (Exception ex)
+            {
+                Logging.SaveLog("HomeApplySelection", ex);
+            }
+        }
+
+        BeginConnecting();
+        IsConnected = false;
+        _awaitingCoreCycle = true;
+        Profiles.ApplySelectedServerToRunningCore();
+        SyncState();
     }
 
     private void BeginConnecting()
@@ -363,11 +552,30 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         IsConnecting = true;
         // A new attempt clears the previous failure (A4): the hero leaves Error for Connecting.
         ConnectFailed = false;
+        ConnectFailReason = null;
+        _attemptStartedAt = DateTime.Now;
         // Safety deadline so a failed connect can't leave the shield spinning forever.
         _connectingUntil = DateTime.Now.AddSeconds(12);
         // Run the transient tick while pending so the deadline is actually evaluated even when the
         // connect came from a fire-and-forget Reload (server switch) that raises no failure event.
         UpdateStateTick();
+    }
+
+    /// <summary>
+    /// Paint the truthful failure state AND carry the engine's own explanation with it. Every failure
+    /// path goes through here so the hero can never show «Не удалось подключиться» while the reason the
+    /// engine already produced is sitting unread.
+    /// </summary>
+    private void FailConnect()
+    {
+        // Only a message published during THIS attempt explains it — anything older belongs to an
+        // earlier action (a subscription update, a previous connect) and would be a misleading caption.
+        ConnectFailReason = _attemptStartedAt is { } started
+            && _lastNoticeAt >= started
+            && _lastNotice.IsNotEmpty()
+                ? _lastNotice
+                : null;
+        ConnectFailed = true;
     }
 
     private static bool IsCoreRunning() =>
@@ -395,6 +603,11 @@ public class HomeViewModel : MyReactiveObject, IDisposable
 
         if (running)
         {
+            // Сервер, на котором туннель ФАКТИЧЕСКИ поднят. Берётся в момент, когда ядро только что
+            // стало запущенным: до этого его подняли ровно на текущем основном сервере. Дальше
+            // основной может уйти вперёд (выбор ≠ переключение), и тогда это поле — единственное,
+            // что помнит, откуда предлагать переподключение. См. SelectServer.
+            _runningIndexId ??= _config?.IndexId;
             _connectedSince ??= DateTime.Now;
             IsConnected = true;
             IsConnecting = false;
@@ -415,6 +628,7 @@ public class HomeViewModel : MyReactiveObject, IDisposable
             // Core is down — any mid-switch hold is over (the old core stopped). Belt-and-suspenders
             // to the stop-event clear, so a hold can never outlive an observed not-running state.
             _awaitingCoreCycle = false;
+            _runningIndexId = null;
             _connectedSince = null;
             IsConnected = false;
             Uptime = "00:00:00";
@@ -430,7 +644,7 @@ public class HomeViewModel : MyReactiveObject, IDisposable
                 // via the deadline.
                 IsConnecting = false;
                 _connectingUntil = null;
-                ConnectFailed = true;
+                FailConnect();
             }
         }
     }
@@ -463,6 +677,11 @@ public class HomeViewModel : MyReactiveObject, IDisposable
     /// </summary>
     private void OnCoreSwitchSettled()
     {
+        // Бесшовное переключение не роняет ядро, значит SyncState не проходит через ветку «не
+        // запущено» и _runningIndexId не обнулится сам. Поднимаем его здесь, иначе после переноса
+        // туннеля поле осталось бы указывать на ПРЕДЫДУЩИЙ сервер и предложение вернулось бы к
+        // тому, на котором уже всё работает.
+        _runningIndexId = _config?.IndexId;
         _awaitingCoreCycle = false;
         _connectingUntil = null;
         IsConnecting = false;
@@ -516,19 +735,44 @@ public class HomeViewModel : MyReactiveObject, IDisposable
 
     #region Import / refresh (wraps MainWindowViewModel)
 
+    /// <summary>
+    /// Import from the clipboard. Guarded by <see cref="IsAdding"/>, which is BOTH the in-flight
+    /// signal the surfaces render and the "cannot be fired twice" gate — the onboarding CTA is
+    /// fire-and-forget (<c>_ = vm.AddViaClipboard()</c>), so nothing upstream of here would stop a
+    /// second press. The flag is cleared in a finally: an import that throws must not leave every
+    /// add affordance in the app disabled for the rest of the session.
+    /// </summary>
     public async Task AddViaClipboard()
     {
-        if (_main != null)
+        if (_main == null || IsAdding)
+        {
+            return;
+        }
+        IsAdding = true;
+        try
         {
             await _main.AddServerViaClipboardAsync(null);
+        }
+        finally
+        {
+            IsAdding = false;
         }
     }
 
     public async Task AddViaQr()
     {
-        if (_main != null)
+        if (_main == null || IsAdding)
+        {
+            return;
+        }
+        IsAdding = true;
+        try
         {
             await _main.AddServerViaScanAsync();
+        }
+        finally
+        {
+            IsAdding = false;
         }
     }
 
@@ -694,13 +938,14 @@ public class HomeViewModel : MyReactiveObject, IDisposable
     /// <summary>The desired shape of one group for a reconcile pass (no view objects allocated yet).</summary>
     private readonly struct GroupPlan
     {
-        public GroupPlan(string key, string name, bool pinned, bool expanded, List<ProfileItemModel> servers)
+        public GroupPlan(string key, string name, bool pinned, bool expanded, List<ProfileItemModel> servers, SubItem? sub)
         {
             Key = key;
             Name = name;
             Pinned = pinned;
             Expanded = expanded;
             Servers = servers;
+            Sub = sub;
         }
 
         public string Key { get; }
@@ -708,10 +953,33 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         public bool Pinned { get; }
         public bool Expanded { get; }
         public List<ProfileItemModel> Servers { get; }
+
+        /// <summary>The subscription row behind this group (null for the local «Мои серверы» group).
+        /// Carried on the plan so the meta-bar is DATA-DRIVEN: see <see cref="HomeServerGroup.Sub"/>.</summary>
+        public SubItem? Sub { get; }
     }
 
     /// <summary>Compute the desired ordered grouping from the live ProfileItems (same rule as before:
     /// group by subscription, pinned subs first). Purely a data projection — it touches no view state.</summary>
+    /// <summary>
+    /// The heading one server row's group carries. A row with no subscription is local — «Мои
+    /// серверы». Otherwise the stored <see cref="SubItem"/> answers through
+    /// <see cref="SubscriptionNaming"/>; the joined <c>SubRemarks</c> is only the fallback, because it
+    /// is a projection of the remark alone and knows nothing of the провайдер's own title.
+    /// </summary>
+    private string GroupNameFor(ProfileItemModel item)
+    {
+        var subId = item.Subid ?? string.Empty;
+        if (subId.IsNullOrEmpty())
+        {
+            return L.T("Home_MyServers");
+        }
+        var sub = Profiles?.SubItems.FirstOrDefault(s => s.Id == subId);
+        return SubscriptionNaming.NameOf(sub)
+            ?? SubscriptionNaming.RealName(item.SubRemarks)
+            ?? L.T("Home_SubUntitled");
+    }
+
     private List<GroupPlan> BuildGroupPlan(IList<ProfileItemModel>? items, out int providers)
     {
         providers = 0;
@@ -721,11 +989,15 @@ public class HomeViewModel : MyReactiveObject, IDisposable
             return plan;
         }
 
+        // ЗАГОЛОВОК ГРУППЫ ИДЁТ ЧЕРЕЗ ОДИН РЕЗОЛВЕР. Здесь стоял сырой SubRemarks — то есть ровно то
+        // поле, в котором апстрим хранил «import_sub», и заголовок группы был первым местом, где
+        // пользователь это читал. SubscriptionNaming знает ранжирование (profile-title → remarks) и
+        // отказывает плейсхолдерам; строка без подписки по-прежнему «Мои серверы».
         var grouped = items
             .GroupBy(i => new
             {
                 Key = i.Subid ?? string.Empty,
-                Name = string.IsNullOrEmpty(i.SubRemarks) ? L.T("Home_MyServers") : i.SubRemarks,
+                Name = GroupNameFor(i),
             })
             .ToList();
 
@@ -752,7 +1024,10 @@ public class HomeViewModel : MyReactiveObject, IDisposable
             var g = x.Group;
             var key = $"{g.Key.Key}|{g.Key.Name}";
             var expanded = !_groupExpanded.TryGetValue(key, out var ex) || ex;
-            plan.Add(new GroupPlan(key, g.Key.Name, x.Pinned, expanded, g.ToList()));
+            // The subscription row travels WITH the plan. Without it the meta-bar had to resolve the
+            // row itself, once, off DataContextChanged — and a group matched in place never raises one.
+            var sub = g.Key.Key.IsNullOrEmpty() ? null : Profiles?.SubItems.FirstOrDefault(s => s.Id == g.Key.Key);
+            plan.Add(new GroupPlan(key, g.Key.Name, x.Pinned, expanded, g.ToList(), sub));
         }
 
         return plan;
@@ -785,7 +1060,7 @@ public class HomeViewModel : MyReactiveObject, IDisposable
             if (existingIndex < 0)
             {
                 // A genuinely new subscription group — only this one container is created.
-                ServerGroups.Insert(i, new HomeServerGroup(p.Key, p.Name, p.Servers, p.Expanded, p.Pinned, OnGroupExpandedChanged));
+                ServerGroups.Insert(i, new HomeServerGroup(p.Key, p.Name, p.Servers, p.Expanded, p.Pinned, OnGroupExpandedChanged, p.Sub));
                 continue;
             }
             if (existingIndex != i)
@@ -793,7 +1068,7 @@ public class HomeViewModel : MyReactiveObject, IDisposable
                 ServerGroups.Move(existingIndex, i);
             }
             var group = ServerGroups[i];
-            group.UpdateHeader(p.Name, p.Pinned);
+            group.UpdateHeader(p.Name, p.Pinned, p.Sub);
             group.ReconcileServers(p.Servers);
         }
     }
@@ -845,6 +1120,7 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         _coreStateSub?.Dispose();
         _switchSettledSub?.Dispose();
         _statsSub?.Dispose();
+        _noticeSub?.Dispose();
     }
 
     #endregion Teardown
@@ -863,7 +1139,9 @@ public class HomeViewModel : MyReactiveObject, IDisposable
             new() { Remarks = "France", ConfigType = EConfigType.Trojan, Network = "tcp", StreamSecurity = "tls", IndexId = "d4" },
             new() { Remarks = "Japan", ConfigType = EConfigType.Shadowsocks, Network = "tcp", StreamSecurity = "", IndexId = "d5" },
         };
-        vm.ServerGroups.Add(new HomeServerGroup("sub|import sub", "import sub", servers, true));
+        // The previewer's group carries a real-looking provider title, not upstream's placeholder —
+        // «import sub» in design data is how a placeholder gets re-legitimised as "what it looks like".
+        vm.ServerGroups.Add(new HomeServerGroup("sub|departament", "🍀 erlish", servers, true));
         vm.HasServers = true;
         vm.IsEmpty = false;
         vm.Subtitle = FormatServersProvidersMeta(5, 1);
@@ -883,8 +1161,9 @@ public sealed class HomeServerGroup : INotifyPropertyChanged
     private bool _isExpanded;
     private string _name;
     private bool _pinned;
+    private SubItem? _sub;
 
-    public HomeServerGroup(string key, string name, IEnumerable<ProfileItemModel> servers, bool isExpanded, bool pinned = false, Action<string, bool>? onExpandedChanged = null)
+    public HomeServerGroup(string key, string name, IEnumerable<ProfileItemModel> servers, bool isExpanded, bool pinned = false, Action<string, bool>? onExpandedChanged = null, SubItem? sub = null)
     {
         Key = key;
         _name = name;
@@ -892,9 +1171,38 @@ public sealed class HomeServerGroup : INotifyPropertyChanged
         _isExpanded = isExpanded;
         _pinned = pinned;
         _onExpandedChanged = onExpandedChanged;
+        _sub = sub;
     }
 
     public string Key { get; }
+
+    /// <summary>
+    /// The subscription row this group belongs to — traffic, expiry, announce, support/Telegram URLs
+    /// and the провайдер's own title — or null for the local «Мои серверы» group.
+    ///
+    /// IT IS A LIVE PROPERTY, AND THAT IS THE POINT. The meta-bar used to resolve the row itself, once,
+    /// from <c>DataContextChanged</c>; but a group whose key ({subid}|{name}) is unchanged is matched
+    /// and updated IN PLACE by the reconcile, so no DataContextChanged is ever raised and the card kept
+    /// whatever it read the first time. Every later fetch — a re-paste of a подписка that already
+    /// exists, the scheduled auto-update, the account import — persisted new traffic/announce/title that
+    /// the card simply never showed, which is why the only way to see them was the card's own refresh
+    /// button (the one place that re-read the row by hand). Raising a change here repaints it instead.
+    /// Set from the plan on every reconcile; the raise is by REFERENCE, because the row is re-read from
+    /// SQLite on each <c>RefreshSubscriptions</c> and a fresh instance IS the new state.
+    /// </summary>
+    public SubItem? Sub
+    {
+        get => _sub;
+        private set
+        {
+            if (ReferenceEquals(_sub, value))
+            {
+                return;
+            }
+            _sub = value;
+            OnPropertyChanged();
+        }
+    }
 
     public string Name
     {
@@ -937,11 +1245,14 @@ public sealed class HomeServerGroup : INotifyPropertyChanged
 
     /// <summary>Update header fields that can shift WITHOUT changing the group's identity (Key), so a
     /// pin toggle / re-projection keeps this exact group instance (its expand state, its hooked
-    /// meta-bar and reveal container) rather than replacing it.</summary>
-    internal void UpdateHeader(string name, bool pinned)
+    /// meta-bar and reveal container) rather than replacing it. <paramref name="sub"/> carries the
+    /// freshly re-read subscription row, which is what lets the meta-bar repaint on an in-place
+    /// update instead of only when a new container is built.</summary>
+    internal void UpdateHeader(string name, bool pinned, SubItem? sub = null)
     {
         Name = name;
         Pinned = pinned;
+        Sub = sub;
     }
 
     /// <summary>

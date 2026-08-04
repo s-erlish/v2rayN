@@ -248,7 +248,7 @@ public class DownloadService
         if (hwid.IsNotEmpty())
         {
             client.DefaultRequestHeaders.TryAddWithoutValidation("x-hwid", hwid);
-            client.DefaultRequestHeaders.TryAddWithoutValidation("x-device-os", "Windows");
+            client.DefaultRequestHeaders.TryAddWithoutValidation("x-device-os", Global.DevicePlatformName);
             client.DefaultRequestHeaders.TryAddWithoutValidation("x-ver-os", Environment.OSVersion.Version.ToString());
             client.DefaultRequestHeaders.TryAddWithoutValidation("x-device-model", Environment.MachineName);
         }

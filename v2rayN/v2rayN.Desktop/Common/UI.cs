@@ -8,10 +8,15 @@ internal class UI
 {
     private static readonly string caption = Global.AppName;
 
-    public static async Task<ButtonResult> ShowYesNo(string msg)
+    /// <summary>
+    /// Вопрос «да/нет». <paramref name="destructive"/> красит подтверждающую кнопку в красный и
+    /// требует ГЛАГОЛА в <paramref name="confirmLabel"/> («Удалить»), а не «Подтвердить»:
+    /// деструктивное действие обязано называть, что оно сделает, и быть главным действием диалога.
+    /// </summary>
+    public static async Task<ButtonResult> ShowYesNo(string msg, string? confirmLabel = null, bool destructive = false)
     {
         var owner = WindowDialog.TryGetOwnerWindow();
-        var box = new MessageBoxDialog(caption, msg);
+        var box = new MessageBoxDialog(caption, msg, confirmLabel, destructive);
         var result = await box.ShowDialog<ButtonResult>(owner);
         return result == ButtonResult.Yes ? ButtonResult.Yes : ButtonResult.No;
     }

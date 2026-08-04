@@ -184,6 +184,10 @@ public class AccountViewModel : MyReactiveObject
 
     [Reactive] public string ErrorText { get; set; } = string.Empty;
 
+    /// <summary>Есть ли что сказать об отказе. Нужен слоту ошибки, который держит своё место
+    /// ВСЕГДА: без зарезервированной высоты появление сообщения сдвигало бы кнопки под курсором.</summary>
+    [Reactive] public bool HasError { get; set; }
+
     // The four mutually-exclusive hero states (skeleton / active / empty / error).
     [Reactive] public bool ShowSkeleton { get; set; }
     [Reactive] public bool ShowActiveSub { get; set; }
@@ -332,7 +336,8 @@ public class AccountViewModel : MyReactiveObject
             Profile = AuthTokenStore.GetUser();
         }
 
-        RefreshProfileCmd = ReactiveCommand.CreateFromTask(RefreshProfile);
+        // Команда отдаёт Unit: свежий профиль нужен только пуллеру привязки, который зовёт метод напрямую.
+        RefreshProfileCmd = ReactiveCommand.CreateFromTask(async () => { await RefreshProfile(); });
         LoadSubscriptionsCmd = ReactiveCommand.CreateFromTask(LoadSubscriptions);
         LoadTariffsCmd = ReactiveCommand.CreateFromTask(LoadTariffs);
         LoadPaymentsCmd = ReactiveCommand.CreateFromTask(LoadPayments);
@@ -517,11 +522,21 @@ public class AccountViewModel : MyReactiveObject
                 DisplayName = "departament vpn",
                 TariffDisplayName = "Base",
                 ExpireAtIso = "2099-06-04T00:00:00Z",
-                TotalDevices = 0,
-                Subscription = new SubResponseWrapper { Response = new RawSubDto { HwidDeviceLimit = 0 } },
+                TotalDevices = 3,
+                // A real quota in the previewer, so the meter is exercised as the four-state control it
+                // is rather than as its unlimited special case (which draws no bar at all).
+                Subscription = new SubResponseWrapper
+                {
+                    Response = new RawSubDto
+                    {
+                        HwidDeviceLimit = 3,
+                        TrafficLimitBytes = 50L * 1024 * 1024 * 1024,
+                        TrafficUsed = 12L * 1024 * 1024 * 1024,
+                    },
+                },
             },
         };
-        DeviceCount = 23;
+        DeviceCount = 2;
         Payments = new List<PaymentDto> { new() { CreatedAt = "2026-07-10T12:00:00Z" } };
         _pendingFirstLoad = false;
         Recompute();
@@ -564,7 +579,14 @@ public class AccountViewModel : MyReactiveObject
         await LoadPayments();
     }
 
-    private async Task RefreshProfile()
+    /// <summary>
+    /// Перечитывает профиль и обновляет вью-модель. ВОЗВРАЩАЕТ свежий профиль (или <c>null</c> при
+    /// отказе), потому что применение идёт через <see cref="RunOnUi"/>, а он с фонового потока
+    /// ПОСТИТ — то есть после <c>await RefreshProfile()</c> поле <see cref="Profile"/> ещё старое.
+    /// Опрос привязки Telegram читал именно его и отставал на целую итерацию, а подтверждение,
+    /// пришедшее в последнем окне опроса, терял совсем. Пуллеры обязаны читать возвращённое значение.
+    /// </summary>
+    private async Task<UserProfileDto?> RefreshProfile()
     {
         var result = await _repo.RefreshProfile();
         RunOnUi(() =>
@@ -582,6 +604,7 @@ public class AccountViewModel : MyReactiveObject
                 .OnFailure(Report);
             Recompute();
         });
+        return result.GetOrNull();
     }
 
     private async Task LoadSubscriptions()
@@ -598,9 +621,11 @@ public class AccountViewModel : MyReactiveObject
     {
         var allResult = await _repo.LoadSubscriptions();
         var primaryResult = await _repo.LoadPrimarySubscription();
+        var local = await SnapshotLocalSubscriptions();
 
         RunOnUi(() =>
         {
+            _localSubs = local;
             var all = allResult.GetOrNull()?.Items ?? new List<SubInfoDto>();
             var primary = primaryResult.GetOrNull();
             var merged = MergeSubscriptions(primary, all, Profile);
@@ -632,6 +657,58 @@ public class AccountViewModel : MyReactiveObject
             }
             Recompute();
         });
+    }
+
+    /// <summary>
+    /// The locally imported подписки, by their local guid — the traffic fallback for a card whose
+    /// account payload carries none.
+    ///
+    /// <c>/client/subscription/all</c> returns NO connect payload for a SECONDARY подписка, so its
+    /// <c>raw</c> is null and its meter had nothing to draw at all. The <c>subscription-userinfo</c>
+    /// header, by contrast, arrives on every fetch of every подписка and is already persisted on the
+    /// local <see cref="SubItem"/> — the same numbers Главная meters from. Reading it here is what stops
+    /// one подписка reporting its allowance on Главная and «Нет данных» one tab over.
+    /// </summary>
+    private Dictionary<string, SubItem> _localSubs = new();
+
+    /// <summary>Reads the local подписка rows off the DB thread so <see cref="Recompute"/> stays synchronous.</summary>
+    private static async Task<Dictionary<string, SubItem>> SnapshotLocalSubscriptions()
+    {
+        try
+        {
+            var items = await AppManager.Instance.SubItems() ?? new List<SubItem>();
+            return items.Where(s => s.Id.IsNotEmpty()).ToDictionary(s => s.Id, s => s);
+        }
+        catch
+        {
+            // A DB hiccup costs the meter its fallback figure, never the screen.
+            return new Dictionary<string, SubItem>();
+        }
+    }
+
+    /// <summary>
+    /// The local подписка this account record was imported as, or null when it has not been imported
+    /// (or the map cannot be read). Keyed the way <see cref="SubscriptionSyncManager"/> writes the map —
+    /// remnawave uuid, then id — so a mismatch is silently a null rather than another подписка's figures.
+    /// </summary>
+    private SubItem? LocalSubFor(SubInfoDto sub)
+    {
+        var identity = FirstNonBlank(sub.RemnawaveUuid, sub.Id);
+        if (identity.IsNullOrEmpty())
+        {
+            return null;
+        }
+        try
+        {
+            return AuthTokenStore.GetManagedGuids().TryGetValue(identity, out var guid) && guid.IsNotEmpty()
+                && _localSubs.TryGetValue(guid, out var item)
+                ? item
+                : null;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     /// <summary>
@@ -947,12 +1024,16 @@ public class AccountViewModel : MyReactiveObject
     /// </summary>
     private void OpenSiteLoginBrowser()
     {
+        // Входим в ожидание сайта СИНХРОННО и ДО запуска браузера — ровно как StartTelegramLogin входит
+        // в своё ожидание. Владелец: «через сайт только через сайт, без дополнительных окон». Раньше эта
+        // команда состояние не трогала, поэтому «Войти через сайт» с первого кадра открывала браузер И
+        // оставляла на экране общий блок выбора способа — сегмент «Вход | Регистрация», форму
+        // email/пароля, чужие провайдеры. LoginView наблюдает CurrentLoginState инлайн на UI-потоке,
+        // так что это состояние успевает до первой раскладки суб-страницы: сайт ведёт только на сайт.
         RunOnUi(() =>
         {
-            if (CurrentLoginState is LoginState.Error)
-            {
-                CurrentLoginState = new LoginState.Idle();
-            }
+            TwoFaTempToken = null;
+            CurrentLoginState = new LoginState.AwaitingSite();
         });
         var url = $"{SiteLoginUrl}?return={AppScheme}://auth";
         try
@@ -961,7 +1042,12 @@ public class AccountViewModel : MyReactiveObject
         }
         catch
         {
-            RunOnUi(() => AppEvents.SendSnackMsgRequested.Publish(L.T("Common_SomethingWrong")));
+            // Браузер не открылся — ждать нечего: возвращаем выбор способа и говорим об этом.
+            RunOnUi(() =>
+            {
+                CurrentLoginState = new LoginState.Idle();
+                AppEvents.SendSnackMsgRequested.Publish(L.T("Common_SomethingWrong"));
+            });
         }
     }
 
@@ -1276,6 +1362,12 @@ public class AccountViewModel : MyReactiveObject
                 if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop
                     && desktop.MainWindow is IViewFor<MainWindowViewModel> { ViewModel: { } main })
                 {
+                    // The subscription ROWS first: the import creates/updates SubItems and persists the
+                    // провайдер's title + traffic onto them, and Home reads both the group heading and
+                    // the subscription card from this cache. Refreshing only the servers left the cache
+                    // without the newly imported подписка at all, so its group was headed by the row's
+                    // own joined remark and its card had nothing to show.
+                    await main.ProfilesViewModel.RefreshSubscriptions();
                     await main.ProfilesViewModel.RefreshServers();
                 }
             }
@@ -1851,8 +1943,12 @@ public class AccountViewModel : MyReactiveObject
                     TelegramCanLink = false;
                     OpenLinkBot();
                     ScheduleLinkPoll();
+                    // Пользователю сказали, ЧТО делать. Раньше открывался чат с ботом, а код лежал в
+                    // пилюле рядом с кнопкой на другом экране — связи между двумя фактами не было ни
+                    // одной, и «привязка не работает» означало «я не понял, что от меня хотят».
+                    Notify.Show(L.F("Account_TgLinkSend", dto.Code));
                 })
-                .OnFailure(err => AppEvents.SendSnackMsgRequested.Publish(MessageFor(err)));
+                .OnFailure(err => Notify.Show(MessageFor(err), L.T("Common_Retry"), () => _ = StartLinkTelegram()));
         });
     }
 
@@ -1872,6 +1968,17 @@ public class AccountViewModel : MyReactiveObject
         }
     }
 
+    /// <summary>
+    /// Ждёт подтверждения привязки в Telegram. Такт и потолок — те же, что у входа
+    /// (<c>AuthManager.BeginTelegramLogin</c>: опрос раз в ~2 с, потолок ~3 мин), чтобы два
+    /// одинаковых на вид ожидания не вели себя по-разному.
+    ///
+    /// ЗАВЕРШАЕТСЯ ВСЕГДА, и это главное здесь. Раньше цикл, не дождавшись, просто заканчивался:
+    /// <see cref="TelegramLinkPending"/> оставался <c>true</c> НАВСЕГДА, а
+    /// <see cref="TelegramCanLink"/> вычисляется как <c>!TelegramLinked &amp;&amp; !TelegramLinkPending</c> —
+    /// значит кнопка «Привязать» не возвращалась до перезапуска приложения. Одна неудачная попытка
+    /// делала привязку невозможной — ровно то, о чём владелец сообщил как «не подвязывается».
+    /// </summary>
     private void ScheduleLinkPoll()
     {
         _linkPollCts?.Cancel();
@@ -1881,24 +1988,41 @@ public class AccountViewModel : MyReactiveObject
         {
             try
             {
-                for (var attempt = 0; attempt < 40 && !cts.IsCancellationRequested; attempt++)
+                var deadline = DateTime.UtcNow.AddMinutes(3);
+                while (DateTime.UtcNow < deadline && !cts.IsCancellationRequested)
                 {
-                    await Task.Delay(TimeSpan.FromSeconds(3), cts.Token);
-                    await RefreshProfile();
-                    if (Profile?.TelegramLinked == true)
+                    await Task.Delay(TimeSpan.FromSeconds(2), cts.Token);
+                    // Читаем ВОЗВРАЩЁННЫЙ профиль, а не поле: применение идёт через Dispatcher.Post,
+                    // поэтому поле здесь ещё старое (см. RefreshProfile).
+                    var fresh = await RefreshProfile();
+                    if (fresh?.TelegramLinked == true)
                     {
                         RunOnUi(() =>
                         {
                             TelegramLinkPending = false;
-                            AppEvents.SendSnackMsgRequested.Publish(L.T("Account_LinkDone"));
+                            TelegramLinkCodeText = string.Empty;
+                            Notify.Show(L.T("Account_LinkDone"));
                         });
                         return;
                     }
                 }
+
+                if (!cts.IsCancellationRequested)
+                {
+                    // Истекло. Возвращаем кнопку и говорим, почему — молчащее ожидание без выхода
+                    // неотличимо от сломанной функции.
+                    RunOnUi(() =>
+                    {
+                        TelegramLinkPending = false;
+                        TelegramLinkCodeText = string.Empty;
+                        TelegramCanLink = !TelegramLinked;
+                        Notify.Show(L.T("Account_LinkExpired"), L.T("Common_Retry"), () => _ = StartLinkTelegram());
+                    });
+                }
             }
             catch (OperationCanceledException)
             {
-                // Cancelled by logout or a newer link attempt.
+                // Отменено выходом из аккаунта или более свежей попыткой — состояние ставит она.
             }
         });
     }
@@ -2098,12 +2222,25 @@ public class AccountViewModel : MyReactiveObject
                 SubExpiry = HasSubExpiry ? L.F("Account_ValidUntil", FormatIsoDate(sub.ExpireAtIso)) : string.Empty;
             }
 
+            // «Устройства» row value. THE SLOT STAYS EMPTY UNTIL THE COUNT IS REAL. `DeviceCount ?? 0`
+            // is not a placeholder — it is «0 / 3» on a machine that is plainly connected, i.e. wrong,
+            // and wrong in the most alarming direction on a row about a device allowance.
+            // GET /client/devices lands a second or two after the tab opens, so that is what the row
+            // said for the first second of every visit; Recompute re-runs when the count arrives.
             var unlimited = sub.Subscription?.Raw()?.IsUnlimitedDevices() == true;
-            var totalStr = unlimited ? "∞" : sub.TotalDevices.ToString();
-            var used = DeviceCount ?? 0;
-            SubDevicesText = L.F("Account_DevicesCount", used, totalStr);
-            DevicesRowValue = $"{used} / {totalStr}";
-            HasDevicesRowValue = true;
+            var totalStr = unlimited ? "∞" : sub.TotalDevices.ToString(CultureInfo.InvariantCulture);
+            if (DeviceCount is { } known)
+            {
+                SubDevicesText = L.F("Account_DevicesCount", known, totalStr);
+                DevicesRowValue = $"{known} / {totalStr}";
+                HasDevicesRowValue = true;
+            }
+            else
+            {
+                SubDevicesText = L.F("Account_DevicesUpTo", totalStr);
+                DevicesRowValue = string.Empty;
+                HasDevicesRowValue = false;
+            }
         }
 
         // Identity-line tariff signal: the tariff name when known, else the trial marker, else nothing.
@@ -2151,6 +2288,7 @@ public class AccountViewModel : MyReactiveObject
 
         // Error text
         ErrorText = Error != null ? MessageFor(Error) : string.Empty;
+        HasError = ErrorText.IsNotEmpty();
 
         // Logged-out: the profile card shows the Telegram login gate and the whole subscription hero is
         // hidden. Guarding here (not just on Profile == null) is what stops a signed-out user from
@@ -2226,47 +2364,73 @@ public class AccountViewModel : MyReactiveObject
 
         var raw = sub.Subscription?.Raw();
 
-        // Traffic meter (NEW — reuses Home's renderer): used vs limit; unlimited → empty track + label.
-        var showTrafficPill = raw != null;
-        var trafficUnlimited = raw?.IsUnlimitedTraffic() != false;
-        long trafficUsed = raw?.TrafficUsed ?? raw?.UserTraffic?.UsedTrafficBytes ?? 0;
-        var trafficLimit = raw?.TrafficLimitBytes ?? 0;
+        // ── THE TRAFFIC METER, ALL FOUR STATES (port of SubscriptionPagerAdapter.bindTrafficMeter) ──
+        // The component described four states and bound two, and the owner read the result as
+        // unfinished. Every state now leaves a FIGURE on the card:
+        //   • under quota  bar at the real fraction, «12,4 из 50 ГБ», the accent fill;
+        //   • OVER quota   bar full, «Лимит исчерпан», AND THE FILL AND THE FIGURE GO RED — a full
+        //                  accent bar reads as a healthy tank, which is the opposite of the truth;
+        //   • unlimited    NO bar (a bar with no ceiling is a lie) and «1,9 ТБ · безлимит»;
+        //   • no data      the label and «Нет данных», no bar. It used to hide the whole meter, which
+        //                  on a SECONDARY подписка was every card — a hole where the figure belongs.
+        // Backend record first (the account's own answer), the local subscription-userinfo header as
+        // the fallback, so a подписка can no longer report its allowance on Главная and «Нет данных»
+        // here.
+        var localSub = LocalSubFor(sub);
+        var trafficUsed = raw?.TrafficUsed
+            ?? (raw != null ? raw.UserTraffic?.UsedTrafficBytes : null)
+            ?? (localSub != null ? localSub.UploadUsed + localSub.DownloadUsed : 0L);
+        long? trafficLimit = raw?.TrafficLimitBytes ?? (localSub?.TotalTraffic > 0 ? localSub.TotalTraffic : null);
+
         string trafficText;
-        double trafficWidth = 0;
-        if (trafficUnlimited)
+        var showTrafficBar = false;
+        var trafficOverQuota = false;
+        double trafficFraction = 0;
+        if (trafficUsed <= 0 && trafficLimit is null)
+        {
+            trafficText = L.T("Account_MeterNoData");
+        }
+        else if (trafficLimit is null or <= 0)
         {
             trafficText = L.F("Account_TrafficUnlimited", FormatBytes(trafficUsed));
         }
         else
         {
-            trafficText = $"{FormatBytes(trafficUsed)} / {FormatBytes(trafficLimit)}";
-            // Guard a non-null limit of 0 (backend normally uses null for unlimited): avoids 0/0 = NaN
-            // width (an unfilled, but harmless, bar) and keeps the fill honest.
-            trafficWidth = trafficLimit > 0
-                ? TrafficPillWidth * Math.Clamp((double)trafficUsed / trafficLimit, 0.0, 1.0)
-                : 0.0;
+            showTrafficBar = true;
+            trafficFraction = Math.Clamp((double)trafficUsed / trafficLimit.Value, 0.0, 1.0);
+            trafficOverQuota = trafficUsed >= trafficLimit.Value;
+            trafficText = trafficOverQuota
+                ? L.T("Account_MeterTrafficOver")
+                : L.F("Account_MeterTrafficOf", FormatBytes(trafficUsed), FormatBytes(trafficLimit.Value));
         }
 
-        // Device meter (kept, honestly labelled — no more "0 из ∞"). Only the active/root card knows the
-        // live connected count; secondaries advertise their total device slots.
+        // ── DEVICES: the real number only where the payload carries one ──────────────────────────
+        // There is ONE live connected count in the product, because there is one GET /client/devices and
+        // it is about the ACTIVE подписка; /client/subscription/all reports 0 for every item. A card with
+        // no live count states its ALLOWANCE — «Устройства: до 3» — instead of borrowing the root's
+        // figure, which is what every secondary card printed as its own. A count that has not landed yet
+        // is equally unknown: «0 / 3» on a machine that is plainly connected is a wrong number, not a
+        // pending one.
         var unlimitedDevices = raw?.IsUnlimitedDevices() == true || sub.TotalDevices <= 0;
         var total = sub.TotalDevices;
-        var usedDevices = index == 0 ? (DeviceCount ?? 0) : 0;
-        var showDeviceBar = index == 0 && !unlimitedDevices;
+        int? usedDevices = index == 0 ? DeviceCount : null;
+        var totalText = unlimitedDevices ? "∞" : total.ToString(CultureInfo.InvariantCulture);
+        var showDeviceBar = usedDevices is not null && !unlimitedDevices && total > 0;
         string devicesText;
-        double deviceWidth = 0;
-        if (unlimitedDevices)
+        double deviceFraction = 0;
+        if (usedDevices is null)
         {
-            devicesText = L.T("Account_DevicesUnlimited");
-        }
-        else if (index == 0)
-        {
-            devicesText = L.F("Account_DevicesShort", usedDevices, total);
-            deviceWidth = TrafficPillWidth * Math.Clamp((double)usedDevices / total, 0.0, 1.0);
+            devicesText = unlimitedDevices
+                ? L.T("Account_DevicesUnlimited")
+                : L.F("Account_DevicesUpTo", totalText);
         }
         else
         {
-            devicesText = L.F("Account_DevicesTotal", total);
+            devicesText = L.F("Account_DevicesCount", usedDevices.Value, totalText);
+            if (showDeviceBar)
+            {
+                deviceFraction = Math.Clamp((double)usedDevices.Value / total, 0.0, 1.0);
+            }
         }
 
         // Scoped renewal target. scope "root"|"secondary"; subscriptionId = client (account) id for root,
@@ -2337,16 +2501,22 @@ public class AccountViewModel : MyReactiveObject
             ExpiryExpired = health == SubHealth.Expired,
             MetersDim = health == SubHealth.Expired,
 
-            ShowTrafficPill = showTrafficPill,
             TrafficText = trafficText,
-            TrafficBrush = TrafficFillBrush,
-            TrafficFillWidth = trafficWidth,
+            ShowTrafficBar = showTrafficBar,
+            TrafficOverQuota = trafficOverQuota,
+            TrafficFraction = trafficFraction,
 
             DevicesText = devicesText,
             ShowUsageBar = showDeviceBar,
-            UsageWidth = deviceWidth,
+            UsageFraction = deviceFraction,
 
-            RenewPrimary = health != SubHealth.Active,
+            // «Продлить» is the card's ONE primary and it is offered on EVERY подписка, perpetual
+            // included — «она должна быть и при бессрочной подписке». It used to demote to Tonal on a
+            // healthy card, which left the active state with no filled action at all: a card that only
+            // reports and never offers is the dead end the rework exists to end. (The demotion that
+            // still happens is RenewTopPrimary's, and only while the inline pay choice is open, so two
+            // filled primaries are never stacked.)
+            RenewPrimary = true,
             CanRenew = canRenew,
             BalanceMethodLabel = balanceLabel,
             TariffId = tariffId,
@@ -2430,37 +2600,12 @@ public class AccountViewModel : MyReactiveObject
         return Math.Max(0, price);
     }
 
-    /// <summary>The traffic-pill track width (px), mirrored from <c>Size.TrafficPill</c>, used to size the usage-bar fill.</summary>
-    private const double TrafficPillWidth = 160.0;
-
-    /// <summary>
-    /// The light→accent traffic-fill gradient (the ONE sanctioned gradient — it encodes a value), built
-    /// once and shared by every card. Tuned for the pure-dark Incy surface (start ≈ near-white), matching
-    /// Home's <c>SubscriptionMetaView.BuildTrafficBrush</c> so the two surfaces never drift.
-    /// </summary>
-    private static readonly IBrush TrafficFillBrush = BuildTrafficFillBrush();
-
-    private static IBrush BuildTrafficFillBrush()
-    {
-        var accent = Color.Parse("#4C8DFF");
-        var start = BlendToWhite(accent, 0.82);
-        return new LinearGradientBrush
-        {
-            StartPoint = new RelativePoint(0d, 0.5d, RelativeUnit.Relative),
-            EndPoint = new RelativePoint(1d, 0.5d, RelativeUnit.Relative),
-            GradientStops =
-            {
-                new GradientStop(start, 0d),
-                new GradientStop(accent, 1d),
-            },
-        };
-    }
-
-    private static Color BlendToWhite(Color a, double t)
-    {
-        byte Mix(byte x) => (byte)Math.Round(x + (255 - x) * t);
-        return Color.FromArgb(0xFF, Mix(a.R), Mix(a.G), Mix(a.B));
-    }
+    // The card's meter fills are painted by class selector («Border.MeterFill» / «.over») against
+    // {DynamicResource Brush.Accent} and {DynamicResource Brush.Red}, not by a brush handed down from
+    // here. That is what lets the over-quota state exist at all — a Background set inline from the view
+    // model beats any style setter, so the red state could never have been reached from markup — and it
+    // is also what keeps the fill correct across a live theme switch and under the mono overlay, which
+    // a colour frozen into a static brush never was.
 
     /// <summary>
     /// True when an ISO expiry is a far-future "forever" sentinel — a concrete backend date of
@@ -2678,18 +2823,39 @@ public sealed class AccountSubCard : ReactiveObject
     /// <summary>Expired ⇒ dim the (inactive) meters to 0.5 so the eye goes to «Продлить».</summary>
     public bool MetersDim { get; init; }
 
-    // Traffic meter (NEW — reuses Home's fill gradient + byte formatter).
-    public bool ShowTrafficPill { get; init; }
-    public string TrafficText { get; init; } = string.Empty;
-    public IBrush? TrafficBrush { get; init; }
-    public double TrafficFillWidth { get; init; }
+    // ── The meter: a label/value line ABOVE a full-width track, never a label printed on the fill ──
+    // The value is the figure the card is about, so it reads at body contrast on the card surface
+    // rather than at whatever contrast the moving fill happens to give it that second.
 
-    // Device meter (kept, honestly labelled).
+    /// <summary>«12,4 из 50 ГБ» / «1,9 ТБ · безлимит» / «Лимит исчерпан» / «Нет данных» — always set.</summary>
+    public string TrafficText { get; init; } = string.Empty;
+
+    /// <summary>False on the unlimited and no-data states: a bar with no ceiling encodes nothing.</summary>
+    public bool ShowTrafficBar { get; init; }
+
+    /// <summary>Used ≥ limit — the fill AND the figure go red. An exhausted allowance must look exhausted.</summary>
+    public bool TrafficOverQuota { get; init; }
+
+    /// <summary>0..1 of the quota consumed; 0 whenever <see cref="ShowTrafficBar"/> is false.</summary>
+    public double TrafficFraction { get; init; }
+
+    // Device meter — desktop surplus over Android's plain text row, kept and given the same meter shape.
     public string DevicesText { get; init; } = string.Empty;
     public bool ShowUsageBar { get; init; }
-    public double UsageWidth { get; init; }
+    public double UsageFraction { get; init; }
 
-    /// <summary>Expiring/expired ⇒ the «Продлить» CTA is promoted to Primary; active ⇒ it stays quiet (Tonal).</summary>
+    /// <summary>
+    /// The meter track's width in px: the card's own width less its 16dp padding and 1px stroke on each
+    /// side. Derived rather than fixed because the carousel sizes cards from its viewport, so a
+    /// hard-coded track would sit short of the card's edge at every width but one.
+    /// </summary>
+    public double MeterTrackWidth => Math.Max(0, CardWidth - 34);
+
+    public double TrafficFillWidth => MeterTrackWidth * TrafficFraction;
+
+    public double UsageWidth => MeterTrackWidth * UsageFraction;
+
+    /// <summary>«Продлить» is the card's one primary, in every health state and on a perpetual plan.</summary>
     public bool RenewPrimary { get; init; }
 
     /// <summary>True when the sub carries a tariff id to re-buy; false ⇒ the CTA falls back to the Buy screen.</summary>
@@ -2825,6 +2991,16 @@ public sealed class AccountSubCard : ReactiveObject
             {
                 _ = owner.SetAutoRenew(this, v);
             }
+        });
+
+        // The meter tracks are sized from the card, and the carousel resizes cards on every window
+        // change — so the derived widths have to announce themselves or the fills freeze at the width
+        // the card was born with.
+        this.WhenAnyValue(x => x.CardWidth).Subscribe(_ =>
+        {
+            this.RaisePropertyChanged(nameof(MeterTrackWidth));
+            this.RaisePropertyChanged(nameof(TrafficFillWidth));
+            this.RaisePropertyChanged(nameof(UsageWidth));
         });
 
         // Safety net: a stray card-action exception surfaces as a snack instead of crashing the app.

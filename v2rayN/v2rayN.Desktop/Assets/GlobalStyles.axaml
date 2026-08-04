@@ -91,6 +91,18 @@
             </Setter>
         </ControlTheme>
 
+        <!--  Тот же флайаут, но для СПИСКА ВАРИАНТОВ (ChoiceFlyout: масштаб, DNS,     -->
+        <!--  пинг, язык, интервал). Отличие ровно одно — паддинг 8 вместо 16.         -->
+        <!--  «Выбери одно из N» — это меню, а не карточка: на 16 по кругу список из   -->
+        <!--  двух коротких значений («100 %») читался плитой шире и выше самой строки,-->
+        <!--  из которой он выпал. Поверхность, тень, радиус и рамка — общие, чтобы    -->
+        <!--  меню осталось той же поверхностью, только по своему размеру.             -->
+        <ControlTheme x:Key="IncyChoiceFlyoutTheme"
+                      BasedOn="{StaticResource IncyFlyoutTheme}"
+                      TargetType="FlyoutPresenter">
+            <Setter Property="Padding" Value="8" />
+        </ControlTheme>
+
         <!-- ==================================================================== -->
         <!--  Incy-скроллбар (замена уродливого дефолта Semi). АВТО-СКРЫТИЕ оверлей: -->
         <!--  в покое ползунок НЕВИДИМ (opacity 0). При наведении курсора на область -->
@@ -130,10 +142,14 @@
                             CornerRadius="{TemplateBinding CornerRadius}" />
                 </ControlTemplate>
             </Setter>
+            <!--  Width/Height БОЛЬШЕ НЕ АНИМИРУЮТСЯ. Ползунок толстеет 6→8 на :pointerover — это
+                  единственный ховер в продукте, который меняет РАЗМЕР, то есть заставляет
+                  перемерять раскладку; анимировать перемер под курсором — 150мс дрожащей
+                  геометрии на краю каждой прокручиваемой страницы. Толщина меняется мгновенно
+                  (полоса-лейн 12px неподвижна, поэтому ничего не дребезжит), а проявление
+                  ползунка по-прежнему плавное — Opacity в переходе остался.  -->
             <Setter Property="Transitions">
                 <Transitions>
-                    <DoubleTransition Property="Width" Duration="0:0:0.15" Easing="{StaticResource Ease.Standard}" />
-                    <DoubleTransition Property="Height" Duration="0:0:0.15" Easing="{StaticResource Ease.Standard}" />
                     <DoubleTransition Property="Opacity" Duration="0:0:0.15" Easing="{StaticResource Ease.Standard}" />
                     <BrushTransition Property="Background" Duration="0:0:0.15" />
                 </Transitions>
@@ -334,12 +350,34 @@
     <!--     пиксели по кеглю роли (Body 14·0.01 = 0.14 и т.д.).                    -->
     <!-- ==================================================================== -->
 
+    <!-- ==================================================================== -->
+    <!--  ВЕДУЩАЯ (LineHeight) ЗАДАНА ОТ РЕАЛЬНОЙ МЕТРИКИ ГАРНИТУРЫ (F4, «у серверов  -->
+    <!--  везде кривой текст»). Замерено по СОБСТВЕННЫМ бинарям в Assets/Fonts,        -->
+    <!--  unitsPerEm 1000, hhea asc+|desc|+lineGap:                                     -->
+    <!--    • Golos Text (Regular/Medium/Bold) — 1.200 em                               -->
+    <!--    • Space Grotesk — 1.276 em (а по usWin — 1.442 em)                           -->
+    <!--    • системный фолбэк Windows (Segoe UI), который приходит на ЛЮБОЙ глиф,       -->
+    <!--      отсутствующий в текущей гарнитуре, — ~1.33 em                              -->
+    <!--                                                                                 -->
+    <!--  Avalonia раздаёт разницу (LineHeight − натуральная высота) как ПОЛУ-ЛИДИНГ:     -->
+    <!--  половина сверху, половина снизу. Когда разница ОТРИЦАТЕЛЬНА, половина           -->
+    <!--  срезается СВЕРХУ — то есть у прописных отрезает верхушки. Ровно это владелец     -->
+    <!--  и снял на скриншоте: «Germany», «Latvia», «LTE Белый интернет 1». Это МЕТРИКА,   -->
+    <!--  а не отступ, поэтому лечится числом ведущей, а не Margin.                        -->
+    <!--                                                                                   -->
+    <!--  Пол для каждой роли = кегль × 1.33 (чтобы строка пережила ЛЮБОЙ фолбэк, а не      -->
+    <!--  только свою гарнитуру), округлённый вверх по шкале:                                -->
+    <!--    Display 34→46 · Headline 24→32 · Title/TitleMedium/SectionHeader 16→22 ·          -->
+    <!--    Wordmark 20→28 · Chip 11→16. Body 14/20, Subtitle 13/18, Caption 12/16 уже        -->
+    <!--    выше своего пола и не тронуты.                                                    -->
+    <!-- ==================================================================== -->
+
     <!--  Display 34/700 — крупная цифра (баланс, счётчик). Брендовая гарнитура.  -->
     <Style Selector="TextBlock.Display">
         <Setter Property="FontFamily" Value="{DynamicResource Font.Brand}" />
         <Setter Property="FontWeight" Value="Bold" />
         <Setter Property="FontSize" Value="34" />
-        <Setter Property="LineHeight" Value="40" />
+        <Setter Property="LineHeight" Value="46" />
         <Setter Property="LetterSpacing" Value="-0.7" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
     </Style>
@@ -348,7 +386,7 @@
         <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
         <Setter Property="FontWeight" Value="Bold" />
         <Setter Property="FontSize" Value="24" />
-        <Setter Property="LineHeight" Value="28" />
+        <Setter Property="LineHeight" Value="32" />
         <Setter Property="LetterSpacing" Value="-0.24" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
     </Style>
@@ -357,7 +395,7 @@
         <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
         <Setter Property="FontWeight" Value="Bold" />
         <Setter Property="FontSize" Value="16" />
-        <Setter Property="LineHeight" Value="20" />
+        <Setter Property="LineHeight" Value="22" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
     </Style>
     <!--  Title medium 16/500 — тот же кегль тише: вторичная/третичная кнопка,
@@ -367,7 +405,7 @@
         <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
         <Setter Property="FontWeight" Value="Medium" />
         <Setter Property="FontSize" Value="16" />
-        <Setter Property="LineHeight" Value="20" />
+        <Setter Property="LineHeight" Value="22" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
     </Style>
     <Style Selector="TextBlock.Body">
@@ -397,7 +435,7 @@
         <Setter Property="FontFamily" Value="{DynamicResource Font.Brand}" />
         <Setter Property="FontWeight" Value="Medium" />
         <Setter Property="FontSize" Value="11" />
-        <Setter Property="LineHeight" Value="14" />
+        <Setter Property="LineHeight" Value="16" />
         <Setter Property="LetterSpacing" Value="0.44" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
     </Style>
@@ -421,7 +459,7 @@
         <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
         <Setter Property="FontWeight" Value="Bold" />
         <Setter Property="FontSize" Value="16" />
-        <Setter Property="LineHeight" Value="20" />
+        <Setter Property="LineHeight" Value="22" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
     </Style>
     <!--  Wordmark 20/700 — ЕДИНСТВЕННОЕ место, где брендовая гарнитура несёт
@@ -431,7 +469,7 @@
         <Setter Property="FontFamily" Value="{DynamicResource Font.Brand}" />
         <Setter Property="FontWeight" Value="Bold" />
         <Setter Property="FontSize" Value="20" />
-        <Setter Property="LineHeight" Value="24" />
+        <Setter Property="LineHeight" Value="28" />
         <Setter Property="LetterSpacing" Value="-0.2" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
     </Style>
@@ -634,26 +672,66 @@
           «Пополнить» (TopUpButton), теперь ГЛОБАЛЬНО. Покой (Brush.Accent) и текст
           (Brush.OnAccent) не трогаем; press-scale 0.97 остаётся выше. Едино в dark/
           light/mono (значения — прямой затемнённый акцент, не тема-зависимы).  -->
-    <!--  Ховер-тинт CTA: плавный кроссфейд фона 150мс Ease.Standard (был жёсткий флип #4C8DFF→#3D7EF0).
-          Только цвет PART_ContentPresenter — press-затемнение (#3877E0) читается поверх. Аттачится
-          ТОЛЬКО не под .lite (селектор :not(.lite), приём скроллбара/спиннера): под lite ховер
-          мгновенный (0 движения), не полагаясь на Button-level гашение, которое до template-части не
-          достаёт. Едино dark/light/mono (значения — прямой затемнённый акцент).  -->
-    <Style Selector=":is(Window):not(.lite) Button.Primary /template/ ContentPresenter#PART_ContentPresenter">
-        <Setter Property="Transitions">
-            <Transitions>
-                <BrushTransition Property="Background" Duration="0:0:0.15" Easing="{StaticResource Ease.Standard}" />
-            </Transitions>
-        </Setter>
+    <!-- ==================================================================== -->
+    <!--  «ПРИ НАВЕДЕНИИ МОРГАЮТ» — ОБЩАЯ ПРИЧИНА И ОБЩЕЕ ЛЕЧЕНИЕ (F1).           -->
+    <!--                                                                          -->
+    <!--  Слой, который ПОДСВЕЧИВАЕТСЯ на ховере (PART_ContentPresenter), — это и   -->
+    <!--  есть слой, который ХИТ-ТЕСТИТСЯ: у Button собственной отрисовки нет,      -->
+    <!--  курсор попадает в презентер. А press-scale масштабирует кнопку целиком,   -->
+    <!--  и Avalonia считает :pointerover по ОТРИСОВАННОЙ (т.е. трансформированной)  -->
+    <!--  геометрии. Значит граница ховера ездит вместе с анимацией, и у края        -->
+    <!--  курсор то внутри, то снаружи.                                              -->
+    <!--                                                                            -->
+    <!--  Само по себе это было бы незаметно — переключение на один кадр. Заметным   -->
+    <!--  его делал ЭТОТ 150-миллисекундный BrushTransition: каждое пересечение      -->
+    <!--  границы запускало плавный уход тинта, который тут же разворачивался        -->
+    <!--  обратно. Не «переключение», а «моргание», и на всех кнопках сразу.         -->
+    <!--                                                                            -->
+    <!--  Лечение — ровно то, что в этом же проекте уже сработало ТРИЖДЫ и каждый    -->
+    <!--  раз по той же причине: Border.ServerRow («BUG 1», ниже), Border.SettingRow  -->
+    <!--  и caption-кнопки Button.WinBtn («Bug3», MainWindow.axaml). Везде вывод был   -->
+    <!--  один: ХОВЕР МГНОВЕННЫЙ, без кроссфейда фона. Архетипы кнопок — единственное  -->
+    <!--  место, где переход остался, и именно на них висит 44 Primary + 17 Tonal.     -->
+    <!--  Press-scale и его асимметрия 90/160 НЕ ТРОГАЮТСЯ — исчезает только          -->
+    <!--  осцилляция, анимация нажатия остаётся вся.                                   -->
+    <!--                                                                              -->
+    <!--  ВТОРАЯ ПОЛОВИНА — РАМКА. Тема Semi красит на :pointerover/:pressed НЕ ТОЛЬКО  -->
+    <!--  фон презентера, но и его BorderBrush, а BackgroundSizing=OuterBorderEdge       -->
+    <!--  заставляет заливку поджиматься под рамку. Наши стили перекрывали только фон,    -->
+    <!--  поэтому край кнопки на ховере ещё и подрагивал на пиксель. Прибиваем рамку в    -->
+    <!--  КАЖДОМ состоянии. (Button.OutlinedAccent это уже делал — там рамка часть роли;  -->
+    <!--  у остальных архетипов это было просто упущено.)                                 -->
+    <!--                                                                                  -->
+    <!--  ПОКОЙ переобъявлять НЕ НАДО, и это проверено по исходнику Semi.Avalonia 12.1:    -->
+    <!--  базовая ControlTheme держит «^ /template/ PART_ContentPresenter → Background =    -->
+    <!--  {TemplateBinding Background}», то есть покой презентера всегда равен фону кнопки. -->
+    <!--  Регистровое утверждение «у Primary нет покоя, поэтому он падает в токен Semi»      -->
+    <!--  не подтвердилось; настоящая причина «моргания» — переход выше, а «выключенного»    -->
+    <!--  вида деструктивного подтверждения — то, что оно вообще было Primary (см. M-55).    -->
+    <!-- ==================================================================== -->
+    <!--  ПОКОЙ НЕ ПЕРЕОБЪЯВЛЯЕМ. Проверено по исходнику Semi.Avalonia 12.1
+          (Themes/Shared/Button.axaml): базовая ControlTheme уже держит
+          «^ /template/ PART_ContentPresenter → Background = {TemplateBinding Background}»,
+          то есть покой презентера ВСЕГДА равен фону кнопки, а его задают архетипы выше.
+          Жёсткий токен здесь сломал бы разметку, которая ЗАДАЁТ кнопке свой фон (так живёт
+          «Поддержка» в мета-баре подписки), а {TemplateBinding} в файле Styles невозможен —
+          у него нет области ControlTemplate. Прибиваем только то, чего у покоя нет: рамку.  -->
+    <Style Selector="Button.Primary /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="BorderBrush" Value="Transparent" />
     </Style>
     <!--  Сырой хекс #3D7EF0/#3877E0 заменён токенами Brush.AccentHover /
           Brush.AccentPressed: инлайн-хекс вне словаря токенов запрещён (00-rules.md 1),
-          и он же замораживал тёмное значение при переключении темы.  -->
+          и он же замораживал тёмное значение при переключении темы.
+          BorderBrush прибит в КАЖДОМ состоянии: тема Semi красит его своим токеном на
+          :pointerover/:pressed, а BackgroundSizing=OuterBorderEdge заставляет заливку
+          поджиматься под появившуюся рамку — ещё одно движение края под курсором.  -->
     <Style Selector="Button.Primary:pointerover /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource Brush.AccentHover}" />
+        <Setter Property="BorderBrush" Value="Transparent" />
     </Style>
     <Style Selector="Button.Primary:pressed /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource Brush.AccentPressed}" />
+        <Setter Property="BorderBrush" Value="Transparent" />
     </Style>
 
     <!--  Первичная высокая (CTA форм: Оплатить · Войти · Подтвердить). 52 —
@@ -687,12 +765,15 @@
     </Style>
     <Style Selector="Button.PrimaryCompact /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource Brush.Accent}" />
+        <Setter Property="BorderBrush" Value="Transparent" />
     </Style>
     <Style Selector="Button.PrimaryCompact:pointerover /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource Brush.AccentHover}" />
+        <Setter Property="BorderBrush" Value="Transparent" />
     </Style>
     <Style Selector="Button.PrimaryCompact:pressed /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource Brush.AccentPressed}" />
+        <Setter Property="BorderBrush" Value="Transparent" />
     </Style>
     <Style Selector="Button.PrimaryCompact:pressed">
         <Setter Property="RenderTransform" Value="scale(0.97)" />
@@ -724,7 +805,12 @@
     <!-- ==================================================================== -->
     <Style Selector="Button.Tonal, Button.Secondary">
         <Setter Property="RenderTransformOrigin" Value="50%,50%" />
-        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHighest}" />
+        <!--  Brush.ControlFill, а не Brush.SurfaceHighest: у КНОПКИ и у поверхности разные
+              обязанности. Значение в тёмной/светлой темах то же самое, что было, но в монохроме
+              плашка кнопки поднимается до 3:1 к своей поверхности (WCAG 1.4.11), а чипы и метры
+              остаются тихой ступенью поверхности. Без этого mono снимал тон — и вторичная кнопка
+              переставала быть фигурой: 1.19:1 на тёмной, 1.23:1 на светлой.  -->
+        <Setter Property="Background" Value="{DynamicResource Brush.ControlFill}" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
         <Setter Property="CornerRadius" Value="{DynamicResource Radius.Button}" />
         <Setter Property="MinHeight" Value="{DynamicResource Size.Btn}" />
@@ -754,14 +840,11 @@
         <Setter Property="Opacity" Value="0.38" />
         <Setter Property="Cursor" Value="Arrow" />
     </Style>
-    <!--  Ховер-тинт тонали: тот же 150мс Ease.Standard кроссфейд Brush.Hover (был жёсткий флип).
-          Аттачится только не под .lite (см. Primary выше); press-тинт тот же Brush.Hover поверх.  -->
-    <Style Selector=":is(Window):not(.lite) Button.Tonal /template/ ContentPresenter#PART_ContentPresenter, :is(Window):not(.lite) Button.Secondary /template/ ContentPresenter#PART_ContentPresenter">
-        <Setter Property="Transitions">
-            <Transitions>
-                <BrushTransition Property="Background" Duration="0:0:0.15" Easing="{StaticResource Ease.Standard}" />
-            </Transitions>
-        </Setter>
+    <!--  Ховер тонали — МГНОВЕННЫЙ, по той же причине, что у Primary выше (F1): кроссфейд фона
+          превращал каждое пересечение подвижной границы ховера в моргание. Покой объявлен явно,
+          BorderBrush прибит во всех состояниях — тема Semi до них больше не дотягивается.  -->
+    <Style Selector="Button.Tonal /template/ ContentPresenter#PART_ContentPresenter, Button.Secondary /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="BorderBrush" Value="Transparent" />
     </Style>
     <!--  Тот же фикс: без переопределения :pointerover тема Semi подменяла бы фон
           тонали своим токеном (СВЕТЛЕЕ / уход в акцент). Затемняем СУБТИЛЬНО тем же
@@ -770,9 +853,11 @@
           не акцент-флип. Текст (OnSurface) и press-scale 0.97 не трогаем.  -->
     <Style Selector="Button.Tonal:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.Secondary:pointerover /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
+        <Setter Property="BorderBrush" Value="Transparent" />
     </Style>
     <Style Selector="Button.Tonal:pressed /template/ ContentPresenter#PART_ContentPresenter, Button.Secondary:pressed /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
+        <Setter Property="BorderBrush" Value="Transparent" />
     </Style>
 
     <!--  Контурная (акцент): прозрачный фон + 1px рамка Accent, текст Accent,
@@ -1102,47 +1187,64 @@
     </Style>
     <!--  Ховер-фидбек = затемнение ГЛИФА (и подписи) на шаг, БЕЗ фона. Только для НЕактивных
           пунктов (:not(.active)) — у активного глиф остаётся Accent (синий) и не темнеет.
-          Плавно через уже заданный BrushTransition Foreground (200мс Ease.Standard).  -->
+          МГНОВЕННО: 200мс-кроссфейд ушёл отсюда на селектор .active (см. ниже) — ховер обязан
+          успевать за курсором, иначе на рейле одновременно подсвечены два пункта.  -->
     <Style Selector="Button.NavRailItem:pointerover:not(.active) PathIcon">
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariantHover}" />
     </Style>
     <Style Selector="Button.NavRailItem:pointerover:not(.active) TextBlock">
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariantHover}" />
     </Style>
+    <!--  Пресс 0.92 → 0.97 (D-11: ОДИН масштаб на продукт). Дело не только в единообразии:
+          scale отодвигает ОТРИСОВАННЫЙ край, а :pointerover Avalonia считает по нему, поэтому
+          0.92 на пункте 76×64 уводил границу ховера на 3 px — а рейл это то, над чем курсор
+          находится чаще всего. 0.97 оставляет жест и убирает дребезг у края (F1).  -->
     <Style Selector="Button.NavRailItem:pressed">
-        <Setter Property="RenderTransform" Value="scale(0.92)" />
+        <Setter Property="RenderTransform" Value="scale(0.97)" />
     </Style>
-    <!--  Глиф/подпись: неактивные  -->
+    <!--  Глиф/подпись: неактивные.
+          ЗДЕСЬ БОЛЬШЕ НЕТ ПЕРЕХОДА, И ЭТО ФИКС F1. Переход на Foreground стоял на БАЗОВОМ
+          селекторе, то есть срабатывал на ЛЮБУЮ смену цвета — включая ховер. А ховер должен
+          успевать за курсором: пока уходящий пункт 200мс гаснет, а входящий 200мс проявляется,
+          подсвечены ОБА, и глаз читает это как мигание. Тот же вывод репозиторий делал уже трижды
+          (строки серверов, caption-кнопки, Primary/Tonal) — здесь он доводится до навигации.
+          Тинт-кроссфейд НЕ УДАЛЁН: он переехал на селектор .active ниже, который ховером не
+          взводится, поэтому смена вкладки по-прежнему перетекает в акцент за 200мс параллельно
+          скольжению индикатора, а наведение — мгновенно.  -->
     <Style Selector="Button.NavRailItem PathIcon">
         <Setter Property="Width" Value="24" />
         <Setter Property="Height" Value="24" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
-        <!--  Тон серый↔accent = Ease.Standard 200мс (двусторонняя смена состояния, Android nav 200).  -->
-        <Setter Property="Transitions">
-            <Transitions>
-                <BrushTransition Property="Foreground" Duration="0:0:0.2" Easing="{StaticResource Ease.Standard}" />
-            </Transitions>
-        </Setter>
     </Style>
     <Style Selector="Button.NavRailItem TextBlock">
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
         <Setter Property="FontWeight" Value="Medium" />
-        <Setter Property="Transitions">
-            <Transitions>
-                <BrushTransition Property="Foreground" Duration="0:0:0.2" Easing="{StaticResource Ease.Standard}" />
-            </Transitions>
-        </Setter>
     </Style>
     <!--  Активная левая пилюля БОЛЬШЕ НЕ per-item: три независимых пилюли заменены ОДНИМ общим
           «путешествующим» индикатором (Border x:Name="railIndicator" в MainWindow.axaml), который
           физически СКОЛЬЗИТ между слотами по Y (M3 nav-rail idiom). Его позицию/скольжение ведёт
           code-behind (MoveRailIndicator, Motion.Dur.State 220 OutQuint). Здесь остаётся только
           тинт активного пункта (глиф+подпись Accent) — он идёт параллельно скольжению индикатора.  -->
-    <!--  Активный пункт: глиф+подпись Accent, вес 500→700 (тинт-кроссфейд 200мс Standard задан выше).  -->
+    <!--  Активный пункт: глиф+подпись Accent, вес 500→700. Переход объявлен ЗДЕСЬ, на .active:
+          класс вешает code-behind при смене вкладки, а ховер его тронуть не может — значит
+          кроссфейд серый→акцент остаётся ровно тем, чем был (200мс Ease.Standard, в такт
+          скольжению индикатора), и при этом не может выстрелить на наведение.
+          Порядок сеттеров внутри стиля значим: переход ставится ДО цвета, поэтому цвет
+          приезжает уже с ним.  -->
     <Style Selector="Button.NavRailItem.active PathIcon">
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Foreground" Duration="0:0:0.2" Easing="{StaticResource Ease.Standard}" />
+            </Transitions>
+        </Setter>
         <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
     </Style>
     <Style Selector="Button.NavRailItem.active TextBlock">
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Foreground" Duration="0:0:0.2" Easing="{StaticResource Ease.Standard}" />
+            </Transitions>
+        </Setter>
         <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
         <Setter Property="FontWeight" Value="Bold" />
     </Style>
@@ -1315,7 +1417,12 @@
         <Setter Property="RenderTransformOrigin" Value="50%,50%" />
         <Setter Property="Padding" Value="12,0" />
         <Setter Property="CornerRadius" Value="{DynamicResource Radius.Button}" />
-        <Setter Property="Background" Value="Transparent" />
+        <!--  Brush.ActionFill = Transparent в тёмной и светлой (как и было). В монохроме подпись
+              текст-действия становится ТЕМ ЖЕ цветом, что проза вокруг (1.1:1 на тёмной, 1.0:1 на
+              светлой — то есть совсем ничем), потому что единственное, чем она отличалась, был
+              синий. Тон вернуть нельзя — mono про это; поэтому в mono токен даёт действию тихую
+              подложку: у него появляется тело, и оно снова читается как действие, а не как текст.  -->
+        <Setter Property="Background" Value="{DynamicResource Brush.ActionFill}" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
         <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
         <Setter Property="FontWeight" Value="Medium" />
@@ -1346,7 +1453,7 @@
         <Setter Property="FontSize" Value="14" />
     </Style>
     <Style Selector="Button.LinkAction /template/ ContentPresenter#PART_ContentPresenter, Button.Tertiary /template/ ContentPresenter#PART_ContentPresenter, Button.TextAction /template/ ContentPresenter#PART_ContentPresenter">
-        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Background" Value="{DynamicResource Brush.ActionFill}" />
         <Setter Property="CornerRadius" Value="{DynamicResource Radius.Button}" />
     </Style>
     <!--  Ховер третичной: заливки в покое нет, поэтому ховер несёт САМ фон
@@ -1453,14 +1560,17 @@
     <Style Selector="Button.Destructive /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource Brush.Red}" />
         <Setter Property="Foreground" Value="White" />
+        <Setter Property="BorderBrush" Value="Transparent" />
     </Style>
     <Style Selector="Button.Destructive:pointerover /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource Brush.RedPressed}" />
         <Setter Property="Foreground" Value="White" />
+        <Setter Property="BorderBrush" Value="Transparent" />
     </Style>
     <Style Selector="Button.Destructive:pressed /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource Brush.RedPressed}" />
         <Setter Property="Foreground" Value="White" />
+        <Setter Property="BorderBrush" Value="Transparent" />
     </Style>
     <Style Selector="Button.Destructive:pressed">
         <Setter Property="RenderTransform" Value="scale(0.97)" />
@@ -1688,9 +1798,11 @@
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineVariant}" />
         <Setter Property="BorderThickness" Value="1.5" />
         <Setter Property="Cursor" Value="Hand" />
+        <!--  Переход остаётся ТОЛЬКО на рамке: её меняет выбор, а это настоящая смена
+              состояния. Background снят — его меняет :pointerover, и кроссфейд заливки под
+              курсором даёт ровно то мигание, о котором речь (F1).  -->
         <Setter Property="Transitions">
             <Transitions>
-                <BrushTransition Property="Background" Duration="0:0:0.15" />
                 <BrushTransition Property="BorderBrush" Duration="0:0:0.15" />
             </Transitions>
         </Setter>
@@ -1941,6 +2053,45 @@
     </Style>
 
     <!-- ==================================================================== -->
+    <!--  ОБЛЕГЧЁННЫЙ РЕЖИМ У СПИННЕРА — то, чего ему не дали, когда давали      -->
+    <!--  SkeletonPulse (владелец: «в лёгком режиме везде появляется кусочек      -->
+    <!--  кружка и он статический, не крутится»).                                -->
+    <!--                                                                          -->
+    <!--  Вращение под lite не аттачится — это правильно. Но индикатор здесь НЕ    -->
+    <!--  кольцо, а ДУГА: сегмент задаётся штрих-пунктиром. Остановить дугу        -->
+    <!--  значит показать обрывок окружности, и это читается не как «идёт          -->
+    <!--  работа», а как поломанная отрисовка.                                     -->
+    <!--                                                                          -->
+    <!--  Два ограничения, записанные выше в этом же файле, задают решение:        -->
+    <!--   1) конкурирующий стиль не отменяет запущенную анимацию → гасим          -->
+    <!--      селектором (уже сделано);                                            -->
+    <!--   2) ЛОКАЛЬНОЕ значение на экземпляре стилем не перебить → значит         -->
+    <!--      StrokeDashArray НЕЛЬЗЯ оставлять в разметке потребителя.             -->
+    <!--  Поэтому геометрия дуги переехала СЮДА, под тот же гейт :not(.lite):      -->
+    <!--  под lite штрих-пунктир просто не назначается, и та же самая фигура       -->
+    <!--  рисуется ПОЛНЫМ кольцом — законченная статичная форма вместо обрывка.    -->
+    <!--  Класс выбирается по диаметру спиннера (числа — прежние, из разметки).    -->
+    <!--                                                                          -->
+    <!--  Непрозрачность 0.7 — ровно как у lite-двойника SkeletonPulse: статично,  -->
+    <!--  но по-прежнему читается как «идёт работа», а не как погасший элемент.    -->
+    <!-- ==================================================================== -->
+    <Style Selector=":is(Window):not(.lite) Ellipse.Spinner.Arc15">
+        <Setter Property="StrokeDashArray" Value="5.9,17.7" />
+    </Style>
+    <Style Selector=":is(Window):not(.lite) Ellipse.Spinner.Arc16">
+        <Setter Property="StrokeDashArray" Value="6.3,18.8" />
+    </Style>
+    <Style Selector=":is(Window):not(.lite) Ellipse.Spinner.Arc22">
+        <Setter Property="StrokeDashArray" Value="6.9,20.8" />
+    </Style>
+    <Style Selector=":is(Window):not(.lite) Ellipse.Spinner.Arc64">
+        <Setter Property="StrokeDashArray" Value="16.75,50.25" />
+    </Style>
+    <Style Selector=":is(Window).lite Ellipse.Spinner">
+        <Setter Property="Opacity" Value="0.7" />
+    </Style>
+
+    <!-- ==================================================================== -->
     <!--  Навигационный рейл — корректная поверхность (REVIEW_BACKLOG P1 3,        -->
     <!--  DESIGN_PLAN Часть 3). Фон Bg (сливается с окном), БЕЗ правой границы.    -->
     <!--  Аддитивный класс: контейнер рейла в MainWindow переходит на него в       -->
@@ -2029,15 +2180,14 @@
     </Style>
     <!--  Глиф 22 (плиточный размер): у иконочной кнопки нет подписи, поэтому
           глиф крупнее строчных 20 и мельче навигационных 24.  -->
+    <!--  Глиф иконочной кнопки. БЕЗ перехода на Foreground: менял его только :pointerover
+          (плюс .Accent/.Danger в ховере), то есть переход был чисто ховерным — и пока он 150мс
+          тлел, глиф покинутой кнопки ещё горел, а глиф новой уже разгорался. Тинт остался,
+          тление убрано.  -->
     <Style Selector="Button.Icon PathIcon">
         <Setter Property="Width" Value="{DynamicResource Size.Glyph}" />
         <Setter Property="Height" Value="{DynamicResource Size.Glyph}" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
-        <Setter Property="Transitions">
-            <Transitions>
-                <BrushTransition Property="Foreground" Duration="0:0:0.15" Easing="{StaticResource Ease.Standard}" />
-            </Transitions>
-        </Setter>
     </Style>
     <Style Selector="Button.Icon:pointerover PathIcon">
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
@@ -2051,6 +2201,18 @@
           степперов и того действия тулбара, которое обязано находиться сразу.  -->
     <Style Selector="Button.Icon.Filled /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHighest}" />
+    </Style>
+    <!--  …И ЕЁ СОБСТВЕННЫЕ ХОВЕР/НАЖАТИЕ, ЯВНО. Без них состояние решал порядок объявления:
+          «Button.Icon:pointerover …PART_ContentPresenter» и «Button.Icon.Filled …» пишут ОДНО И ТО
+          ЖЕ свойство одного и того же элемента, и Avalonia отдаёт победу объявленному ПОЗЖЕ — то
+          есть .Filled выигрывал в ОБОИХ состояниях, и залитая иконочная кнопка не имела ховера
+          вообще. Состояние не может зависеть от порядка строк в файле; здесь оно названо.
+          Заливка та же ступень поверхности, ховер/нажатие кладут поверх неё общий Brush.Hover.  -->
+    <Style Selector="Button.Icon.Filled:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
+    </Style>
+    <Style Selector="Button.Icon.Filled:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
     </Style>
     <Style Selector="Button.Icon.Accent PathIcon">
         <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
@@ -2292,15 +2454,13 @@
     <Style Selector="Button.NavItem:pressed /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="Transparent" />
     </Style>
+    <!--  Без перехода на базовом селекторе — тот же фикс, что у рейла: переход на Foreground
+          здесь ловил и ХОВЕР, из-за чего под курсором два соседних пункта 220мс были подсвечены
+          одновременно. Кроссфейд смены вкладки переехал на .active ниже.  -->
     <Style Selector="Button.NavItem PathIcon">
         <Setter Property="Width" Value="24" />
         <Setter Property="Height" Value="24" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
-        <Setter Property="Transitions">
-            <Transitions>
-                <BrushTransition Property="Foreground" Duration="0:0:0.22" Easing="{StaticResource Ease.Standard}" />
-            </Transitions>
-        </Setter>
     </Style>
     <Style Selector="Button.NavItem TextBlock">
         <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
@@ -2308,11 +2468,6 @@
         <Setter Property="LineHeight" Value="14" />
         <Setter Property="FontWeight" Value="Medium" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
-        <Setter Property="Transitions">
-            <Transitions>
-                <BrushTransition Property="Foreground" Duration="0:0:0.22" Easing="{StaticResource Ease.Standard}" />
-            </Transitions>
-        </Setter>
     </Style>
     <!--  Ховер трогает только НЕактивный пункт: активный уже акцентный.  -->
     <Style Selector="Button.NavItem:pointerover:not(.active) PathIcon">
@@ -2321,10 +2476,22 @@
     <Style Selector="Button.NavItem:pointerover:not(.active) TextBlock">
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariantHover}" />
     </Style>
+    <!--  Кроссфейд серый→акцент живёт на .active: класс ставит оболочка при смене вкладки,
+          ховер до него не дотягивается. Анимация сохранена, мигание — нет.  -->
     <Style Selector="Button.NavItem.active PathIcon">
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Foreground" Duration="0:0:0.22" Easing="{StaticResource Ease.Standard}" />
+            </Transitions>
+        </Setter>
         <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
     </Style>
     <Style Selector="Button.NavItem.active TextBlock">
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Foreground" Duration="0:0:0.22" Easing="{StaticResource Ease.Standard}" />
+            </Transitions>
+        </Setter>
         <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
         <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
         <Setter Property="FontWeight" Value="Bold" />
@@ -2460,12 +2627,23 @@
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineVariant}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="Cursor" Value="Hand" />
+        <!--  Только рамка: её ведёт ВЫБОР. Заливку ведёт ховер, и её кроссфейд оставлял
+              подсвеченными сразу две строки списка (F1).  -->
         <Setter Property="Transitions">
             <Transitions>
-                <BrushTransition Property="Background" Duration="0:0:0.22" Easing="{StaticResource Ease.Standard}" />
                 <BrushTransition Property="BorderBrush" Duration="0:0:0.22" Easing="{StaticResource Ease.Standard}" />
             </Transitions>
         </Setter>
+    </Style>
+    <!--  КОМПАКТНЫЙ вариант той же строки выбора — для списка, раскрывающегося у строки
+          настройки (ChoiceFlyout). Владелец: «там слишком как-то широко и огромно
+          выглядит, надо просто кнопки поменьше». Меняются РОВНО две величины: высота
+          56 → 48 (Size.Btn, всё ещё ≥48 по 12.2) и паддинг 16,12 → 12,8. Радиус,
+          толщина рамки, слот галочки и все состояния — общие с обычной строкой, поэтому
+          компактный список остаётся тем же компонентом, а не вторым.  -->
+    <Style Selector="Border.Selectable.compact">
+        <Setter Property="MinHeight" Value="{DynamicResource Size.Btn}" />
+        <Setter Property="Padding" Value="12,8" />
     </Style>
     <Style Selector="Border.Selectable:not(.selected):pointerover">
         <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />

@@ -85,11 +85,14 @@
             <Setter Property="HorizontalAlignment" Value="Stretch" />
             <Setter Property="HorizontalContentAlignment" Value="Center" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
-            <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+            <!--  «Вход»/«Регистрация» — русские подписи, значит интерфейсная гарнитура.  -->
+            <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
             <Setter Property="FontSize" Value="14" />
+            <!--  Фон снят из перехода: его меняет :pointerover, и кроссфейд держал подсвеченными
+                  оба сегмента при переходе курсора между ними (F1). Подпись (Foreground) меняет
+                  только .segActive — настоящая смена состояния, её перетекание сохранено.  -->
             <Setter Property="Transitions">
                 <Transitions>
-                    <BrushTransition Property="Background" Duration="0:0:0.15" />
                     <BrushTransition Property="Foreground" Duration="0:0:0.15" />
                 </Transitions>
             </Setter>
@@ -450,11 +453,10 @@
                                 Height="22"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
-                                Classes="Spinner"
+                                Classes="Spinner Arc22"
                                 IsVisible="False"
                                 RenderTransformOrigin="50%,50%"
                                 Stroke="{DynamicResource Brush.OnAccent}"
-                                StrokeDashArray="6.9,20.8"
                                 StrokeLineCap="Round"
                                 StrokeThickness="2.5" />
                         </Panel>
@@ -481,11 +483,10 @@
                                 Height="22"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
-                                Classes="Spinner"
+                                Classes="Spinner Arc22"
                                 IsVisible="False"
                                 RenderTransformOrigin="50%,50%"
                                 Stroke="{DynamicResource Brush.OnAccent}"
-                                StrokeDashArray="6.9,20.8"
                                 StrokeLineCap="Round"
                                 StrokeThickness="2.5" />
                         </Panel>
@@ -717,11 +718,10 @@
                                     Height="22"
                                     HorizontalAlignment="Center"
                                     VerticalAlignment="Center"
-                                    Classes="Spinner"
+                                    Classes="Spinner Arc22"
                                     IsVisible="False"
                                     RenderTransformOrigin="50%,50%"
                                     Stroke="{DynamicResource Brush.OnAccent}"
-                                    StrokeDashArray="6.9,20.8"
                                     StrokeLineCap="Round"
                                     StrokeThickness="2.5" />
                             </Panel>
@@ -773,10 +773,9 @@
                                 x:Name="AwaitingSpinner"
                                 Width="64"
                                 Height="64"
-                                Classes="Spinner"
+                                Classes="Spinner Arc64"
                                 RenderTransformOrigin="50%,50%"
                                 Stroke="{DynamicResource Brush.Accent}"
-                                StrokeDashArray="16.75,50.25"
                                 StrokeLineCap="Round"
                                 StrokeThickness="3" />
                             <PathIcon
@@ -882,19 +881,31 @@
                                 x:Name="PendingSpinner"
                                 Width="64"
                                 Height="64"
-                                Classes="Spinner"
+                                Classes="Spinner Arc64"
                                 RenderTransformOrigin="50%,50%"
                                 Stroke="{DynamicResource Brush.Accent}"
-                                StrokeDashArray="16.75,50.25"
                                 StrokeLineCap="Round"
                                 StrokeThickness="3" />
+                            <!--  Глиф шага: конверт у почтовых состояний, глобус у путей через сайт
+                                  (ожидание сайта / обмен handoff-кода). ConfigureEmailPending включает
+                                  ровно один — экран не должен иллюстрировать вход через сайт письмом.  -->
                             <PathIcon
+                                x:Name="PendingMailGlyph"
                                 Width="26"
                                 Height="26"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
                                 Data="{StaticResource Geo.Login.Mail}"
                                 Foreground="{DynamicResource Brush.Accent}" />
+                            <PathIcon
+                                x:Name="PendingGlobeGlyph"
+                                Width="26"
+                                Height="26"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Data="{StaticResource Geo.Login.Globe}"
+                                Foreground="{DynamicResource Brush.Accent}"
+                                IsVisible="False" />
                         </Panel>
                         <TextBlock
                             x:Name="PendingTitle"
@@ -911,18 +922,21 @@
                             Foreground="{DynamicResource Brush.OnSurfaceVariant}"
                             TextAlignment="Center"
                             TextWrapping="Wrap" />
+                        <!--  Подписи обоих выходов ставит ConfigureEmailPending — они зависят от вида
+                              шага: у почтовых это «Отправить снова» / «Вернуться ко входу», у ожидания
+                              сайта — «Открыть сайт снова» / «Другой способ входа». Поэтому здесь НЕТ
+                              {loc:T}: живой перевод пришёл бы поверх императивной подписи; язык
+                              пере-применяется через ApplyLanguage → ConfigureEmailPending.  -->
                         <Button
                             x:Name="ResendButton"
                             Margin="0,24,0,0"
                             HorizontalAlignment="Center"
-                            Classes="LinkAction"
-                            Content="{loc:T Login_Resend}" />
+                            Classes="LinkAction" />
                         <Button
                             x:Name="BackToSignInButton"
                             Margin="0,4,0,0"
                             HorizontalAlignment="Center"
                             Classes="LinkAction"
-                            Content="{loc:T Login_BackToSignIn}"
                             Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
                     </StackPanel>
 

@@ -5,11 +5,13 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:resx="clr-namespace:ServiceLib.Resx;assembly=ServiceLib"
-    Background="{DynamicResource Brush.Bg}"
+    Background="Transparent"
     CanResize="False"
-    FontFamily="{DynamicResource Font.Grotesk}"
+    FontFamily="{DynamicResource Font.Ui}"
     ShowInTaskbar="False"
     SizeToContent="WidthAndHeight"
+    TransparencyBackgroundFallback="{DynamicResource Brush.Surface}"
+    TransparencyLevelHint="Transparent"
     WindowDecorations="None"
     WindowStartupLocation="CenterOwner"
     mc:Ignorable="d">
@@ -18,14 +20,22 @@
         Incy-подтверждение (замена стокового OS/v2rayN-диалога). ОБЩИЙ для всех yes/no
         (удаление сервера/подписки/правил и пр.), поэтому оформлен глобально-и-безопасно
         токенами Incy. Хрома OS-заголовка нет (WindowDecorations=None), поэтому «v2rayN» из
-        заголовка исчезает — сам вопрос ЕСТЬ заголовок. Фон окна = Brush.Bg (Incy-подложка,
-        надёжно во всех темах и без зависимости от прозрачности композитора), поверх — карточка
-        Surface: radius_card 20, 1px OutlineVariant, мягкая тень (читается плавающей на подложке).
-        Утвердительная — акцентная Primary (годится и для не-деструктивных подтверждений),
-        «Отмена» — тональная. Тема (тёмная/светлая/mono) соблюдается через DynamicResource.
+        заголовка исчезает — сам вопрос ЕСТЬ заголовок. Карточка Surface: radius_card 20,
+        1px OutlineVariant. Утвердительная — акцентная Primary (годится и для не-деструктивных
+        подтверждений), «Отмена» — тональная. Тема соблюдается через DynamicResource.
+
+        ЧЁРНАЯ ОБВОДКА (владелец: «вокруг всплывающего окна там чёрная обводка»). Фоном окна был
+        Brush.Bg — в тёмной теме #0A0B0D. Карточка отступала от края на Margin 16, и эти 16 px
+        подложки шли по периметру ЖЁСТКИМ чёрным прямоугольником вокруг скруглённого диалога:
+        не тень и не рамка, а неоформленный фон окна, видимый насквозь. Подложки больше нет —
+        окно прозрачно попиксельно, диалог = карточка. Там, где композитор прозрачности не даёт,
+        TransparencyBackgroundFallback красит окно тем же Brush.Surface, что и карточку, поэтому
+        периметр не проявляется НИ В КАКОМ случае; отступ и тень в этом режиме снимает code-behind
+        (им негде читаться), см. MessageBoxDialog.axaml.cs.
     -->
 
     <Border
+        x:Name="dialogCard"
         Margin="16"
         Padding="24"
         Background="{DynamicResource Brush.Surface}"
@@ -49,7 +59,14 @@
                     TextWrapping="Wrap" />
             </ScrollViewer>
 
-            <!--  Действия: «Отмена» (тональная) слева · «Подтвердить» (акцентная) справа.  -->
+            <!--  Действия: «Отмена» (тональная) слева · подтверждение (сплошная заливка) справа.
+                  Класс подтверждающей и её подпись ставит code-behind: у ДЕСТРУКТИВНОГО вопроса это
+                  Button.Destructive и глагол «Удалить», у обычного — Button.Primary и «Подтвердить».
+                  Раньше подтверждающая всегда была Primary, чей фон объявлялся на КНОПКЕ и никогда на
+                  презентере, который его рисует, — поэтому в покое она брала нейтральный тон темы
+                  Semi и рядом со сплошной «Отменой» читалась ВЫКЛЮЧЕННОЙ (D3). Покой презентера
+                  теперь объявлен у всех архетипов (GlobalStyles), а деструктивное действие вдобавок
+                  окрашено красным: оно обязано читаться как главное, а не как погашенное.  -->
             <StackPanel
                 HorizontalAlignment="Right"
                 Orientation="Horizontal"

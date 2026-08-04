@@ -200,6 +200,15 @@ git_try_checkout() {
     git rev-parse "refs/tags/${want}" >/dev/null 2>&1 && ref="$want"
 
     if [[ -n "$ref" ]]; then
+      # "git checkout -f" DISCARDS uncommitted work and moves HEAD off whatever branch the
+      # packager was invoked from. Worse, the tags it resolves come from UPSTREAM
+      # (2dust/v2rayN), so any channel other than 'keep' packages upstream's code rather
+      # than this fork — the .deb/.rpm would install v2rayN wearing our name. Refuse to
+      # destroy anything, and say what is about to be built.
+      if [[ -n "$(git status --porcelain)" ]]; then
+        die "Refusing to check out '${ref}': the working tree has uncommitted changes. Commit or stash them, or choose the 'keep' channel."
+      fi
+      echo "[!] '${ref}' is an UPSTREAM tag. This packages upstream v2rayN, not departament." >&2
       echo "[OK] Found ref '${ref}', checking out..."
       git checkout -f "$ref"
       sync_submodules
@@ -503,17 +512,19 @@ set -euo pipefail
 DIR="/opt/v2rayN"
 cd "$DIR"
 
-if [[ -x "$DIR/v2rayN" ]]; then
-  exec "$DIR/v2rayN" "$@"
-fi
+for exe in departament v2rayN; do
+  if [[ -x "$DIR/$exe" ]]; then
+    exec "$DIR/$exe" "$@"
+  fi
+done
 
-for dll in v2rayN.Desktop.dll v2rayN.dll; do
+for dll in departament.dll v2rayN.Desktop.dll v2rayN.dll; do
   if [[ -f "$DIR/$dll" ]]; then
     exec /usr/bin/dotnet "$DIR/$dll" "$@"
   fi
 done
 
-echo "v2rayN launcher: no executable found in $DIR" >&2
+echo "departament launcher: no executable found in $DIR" >&2
 ls -l "$DIR" >&2 || true
 exit 1
 EOF
@@ -525,8 +536,8 @@ write_desktop_file() {
   install -m 644 /dev/stdin "$stage/usr/share/applications/v2rayn.desktop" <<'EOF'
 [Desktop Entry]
 Type=Application
-Name=v2rayN
-Comment=v2rayN for Debian GNU Linux
+Name=departament
+Comment=departament VPN for Debian GNU Linux
 Exec=v2rayn
 Icon=v2rayn
 Terminal=false
