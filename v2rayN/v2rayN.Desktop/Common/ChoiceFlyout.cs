@@ -50,16 +50,28 @@ public static class ChoiceFlyout
     // Галочка выбранного варианта (ic_check_24dp) — тот же путь, что у строк выбора в разметке.
     private static readonly Geometry _check = Geometry.Parse("M9,16.17L4.83,12l-1.42,1.41L9,19 21,7l-1.41,-1.41z");
 
-    /// <summary>Ширина списка: помещает и «Реальная задержка», и «Каждые 24 часа», не растягиваясь в плиту.</summary>
-    private const double Width = 264d;
+    /// <summary>
+    /// Ширину задаёт САМЫЙ ДЛИННЫЙ ВАРИАНТ, а не константа. Здесь стояла фиксированная 264: список
+    /// масштаба («100 %», «125 %») выходил втрое шире своего содержимого и читался плитой, а не меню —
+    /// «слишком как-то широко и огромно выглядит». Теперь колонка меряется по контенту и лишь
+    /// зажимается: <see cref="MinWidth"/>, чтобы двухсимвольное значение не давало обрубок, и
+    /// <see cref="MaxWidth"/>, чтобы вариант с пояснением переносился, а не растил меню в панель.
+    /// Обе величины на шкале 8.
+    /// </summary>
+    private const double MinWidth = 176d;
+
+    private const double MaxWidth = 300d;
 
     /// <summary>
-    /// Потолок высоты списка. Пять вариантов помещаются целиком; всё, что длиннее, прокручивается
-    /// ВНУТРИ списка, а не растит его до высоты окна. Это и есть то, что делает запрет переворота
-    /// безопасным: низкому списку почти всегда хватает места под строкой, и правило «открывается
-    /// вниз» перестаёт зависеть от того, где именно на экране оказалась строка.
+    /// Потолок высоты списка. Пять компактных вариантов помещаются целиком; всё, что длиннее,
+    /// прокручивается ВНУТРИ списка, а не растит его до высоты окна. Это и есть то, что делает запрет
+    /// переворота безопасным: низкому списку почти всегда хватает места под строкой, и правило
+    /// «открывается вниз» перестаёт зависеть от того, где именно на экране оказалась строка.
     /// </summary>
-    private const double MaxHeight = 320d;
+    private const double MaxHeight = 280d;
+
+    /// <summary>Зазор между вариантами. 4 по единой шкале: список — меню, а не набор карточек.</summary>
+    private const double Gap = 4d;
 
     /// <summary>
     /// Раскрывает список вариантов у <paramref name="anchor"/>. Флайаут собирается на КАЖДЫЙ показ:
@@ -75,7 +87,7 @@ public static class ChoiceFlyout
             return;
         }
 
-        var column = new StackPanel { Width = Width, Spacing = 8 };
+        var column = new StackPanel { MinWidth = MinWidth, MaxWidth = MaxWidth, Spacing = Gap };
         var flyout = new Flyout
         {
             Placement = PlacementMode.BottomEdgeAlignedRight,
@@ -83,7 +95,7 @@ public static class ChoiceFlyout
             // строкой. SlideX/SlideY держат его в пределах экрана у правого и нижнего края.
             PlacementConstraintAdjustment = PopupPositionerConstraintAdjustment.SlideX
                 | PopupPositionerConstraintAdjustment.SlideY,
-            FlyoutPresenterTheme = anchor.FindResource("IncyFlyoutTheme") as ControlTheme,
+            FlyoutPresenterTheme = anchor.FindResource("IncyChoiceFlyoutTheme") as ControlTheme,
             Content = new ScrollViewer
             {
                 MaxHeight = MaxHeight,
@@ -138,6 +150,9 @@ public static class ChoiceFlyout
             IsTabStop = true,
         };
         option.Classes.Add("Selectable");
+        // Компактная мера той же строки выбора (48 вместо 56, паддинг 12,8): меню обязано быть
+        // низким, иначе запрет переворота вверх нечем обеспечить у нижнего края экрана.
+        option.Classes.Add("compact");
         if (item.Selected)
         {
             option.Classes.Add("selected");

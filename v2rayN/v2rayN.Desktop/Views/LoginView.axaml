@@ -88,9 +88,11 @@
             <!--  «Вход»/«Регистрация» — русские подписи, значит интерфейсная гарнитура.  -->
             <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
             <Setter Property="FontSize" Value="14" />
+            <!--  Фон снят из перехода: его меняет :pointerover, и кроссфейд держал подсвеченными
+                  оба сегмента при переходе курсора между ними (F1). Подпись (Foreground) меняет
+                  только .segActive — настоящая смена состояния, её перетекание сохранено.  -->
             <Setter Property="Transitions">
                 <Transitions>
-                    <BrushTransition Property="Background" Duration="0:0:0.15" />
                     <BrushTransition Property="Foreground" Duration="0:0:0.15" />
                 </Transitions>
             </Setter>

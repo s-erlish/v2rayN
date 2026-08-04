@@ -87,11 +87,10 @@
                         BorderBrush="{TemplateBinding BorderBrush}"
                         BorderThickness="{TemplateBinding BorderThickness}"
                         CornerRadius="{TemplateBinding CornerRadius}">
-                        <Border.Transitions>
-                            <Transitions>
-                                <BrushTransition Property="BorderBrush" Duration="0:0:0.15" />
-                            </Transitions>
-                        </Border.Transitions>
+                        <!--  БЕЗ перехода на BorderBrush (F1). Рамку поля меняют ТРИ вещи, и первая из них —
+                        :pointerover: 150мс перетекания превращали проход курсора над формой в
+                        цепочку тлеющих контуров, а поле — в такую же «мигающую кнопку», как всё
+                        остальное. Фокус-кольцу мгновенность идёт только на пользу (12.2).  -->
                         <Grid Margin="{TemplateBinding Padding}" ColumnDefinitions="*,Auto">
                             <Panel Grid.Column="0" VerticalAlignment="{TemplateBinding VerticalContentAlignment}">
                                 <TextBlock

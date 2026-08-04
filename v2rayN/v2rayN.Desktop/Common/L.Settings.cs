@@ -110,16 +110,18 @@ public sealed partial class L
         // ── Готовые наборы «Прокси по приложениям» (AppPresets) ──
         // Два набора, а не один: задержка и магазин — разные решения, и одно не должно ехать на
         // тумблере другого. Оба выключены по умолчанию.
+        //
+        // ОДНА СТРОКА ПОДПИСИ, И ОНА ГОВОРИТ, ЧТО ДЕЛАЕТ ТУМБЛЕР. Здесь стояли два абзаца
+        // объяснений — про задержку, античиты, регион магазина и цены, — и они занимали больше
+        // места, чем сам набор: строка набора переставала читаться как строка. Владелец попросил
+        // ровно обратное («убери текст возле них, просто оставь игры и все, там просто подпиши
+        // отключение впн для игр»). Обе подписи теперь одной формы, одной длины и об одном.
         Add("PerApp_Presets", "Готовые наборы", "Presets");
         Add("PerApp_PresetShow", "Показать", "Show");
         Add("PerApp_PresetGames", "Игры", "Games");
-        Add("PerApp_PresetGamesHint",
-            "Соревновательные игры идут мимо VPN — задержка ниже, и античиты спокойнее относятся к обычному подключению.",
-            "Competitive games skip the VPN — lower latency, and anti-cheats are calmer about an ordinary connection.");
+        Add("PerApp_PresetGamesHint", "VPN отключён для игр", "VPN is off for games");
         Add("PerApp_PresetLaunchers", "Игровые лаунчеры", "Game launchers");
-        Add("PerApp_PresetLaunchersHint",
-            "Steam, Battle.net, Epic, EA, Ubisoft. Загрузки станут быстрее, но магазин увидит ваше настоящее подключение — регион и цены будут его.",
-            "Steam, Battle.net, Epic, EA, Ubisoft. Downloads get faster, but the store sees your real connection — region and prices follow it.");
+        Add("PerApp_PresetLaunchersHint", "VPN отключён для лаунчеров", "VPN is off for launchers");
 
         Add("PerApp_Apps", "Приложения", "Apps");
         Add("PerApp_AddExe", "Добавить .exe", "Add .exe");

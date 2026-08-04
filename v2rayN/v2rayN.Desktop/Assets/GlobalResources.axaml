@@ -65,9 +65,19 @@
         <!--  ТЁМНАЯ (Incy, res/values-night)  -->
         <ResourceDictionary x:Key="Dark">
             <!--  Акцент (R11). Тёмная = бренд-синий #4C8DFF: 6.15:1 на фоне, 5.66:1 на карточке.
-                  On-accent #00183A на акценте = 5.51:1 (метка Primary-кнопки).  -->
+
+                  ON-ACCENT МЕРЯЕТСЯ ВО ВСЕХ ТРЁХ СОСТОЯНИЯХ ЗАЛИВКИ, А НЕ ТОЛЬКО В ПОКОЕ. Здесь
+                  стоял #00183A, и в покое он честен — 5.51:1. Но шаги взаимодействия акцента идут
+                  ТЕМНЕЕ (см. ниже), а метка тоже тёмная, поэтому контраст падает вместе с ними:
+                  4.57:1 под курсором и 4.10:1 под нажатием, то есть НИЖЕ 4.5 ровно в тот кадр, в
+                  который человек и смотрит, когда жмёт. Владелец увидел это на кнопке Telegram —
+                  «само слово сливается с фоном»: у неё залитая акцентная плашка и тёмно-синяя
+                  подпись, разделённые одной лишь светлотой внутри одного тона.
+                  #00091A держит 6.23 / 5.16 / 4.63 — покой / ховер / нажатие. Тон сохранён (это
+                  по-прежнему чернила, выведенные из акцента, а не нейтральная чернота); белая
+                  метка тут невозможна в принципе — на #4C8DFF она даёт 3.24:1.  -->
             <SolidColorBrush x:Key="Brush.Accent" Color="#4C8DFF" />
-            <SolidColorBrush x:Key="Brush.OnAccent" Color="#00183A" />
+            <SolidColorBrush x:Key="Brush.OnAccent" Color="#00091A" />
             <!--  Шаги взаимодействия акцента (только PC: у Android press = ripple + масштаб,
                   а не подмена фона; 10-design-system §5.5). Всегда на шаг ТЕМНЕЕ акцента,
                   никогда светлее и никогда со сменой тона: blue_56 → blue_54.  -->
@@ -583,11 +593,10 @@
                     BorderBrush="{TemplateBinding BorderBrush}"
                     BorderThickness="{TemplateBinding BorderThickness}"
                     CornerRadius="{TemplateBinding CornerRadius}">
-                    <Border.Transitions>
-                        <Transitions>
-                            <BrushTransition Property="BorderBrush" Duration="0:0:0.15" />
-                        </Transitions>
-                    </Border.Transitions>
+                    <!--  БЕЗ перехода на BorderBrush (F1). Рамку поля меняют ТРИ вещи, и первая из них —
+                    :pointerover: 150мс перетекания превращали проход курсора над формой в
+                    цепочку тлеющих контуров, а поле — в такую же «мигающую кнопку», как всё
+                    остальное. Фокус-кольцу мгновенность идёт только на пользу (12.2).  -->
                     <Grid ColumnDefinitions="*,Auto" Margin="{TemplateBinding Padding}">
                         <Panel Grid.Column="0" VerticalAlignment="{TemplateBinding VerticalContentAlignment}">
                             <TextBlock
@@ -670,11 +679,10 @@
                     BorderBrush="{TemplateBinding BorderBrush}"
                     BorderThickness="{TemplateBinding BorderThickness}"
                     CornerRadius="{TemplateBinding CornerRadius}">
-                    <Border.Transitions>
-                        <Transitions>
-                            <BrushTransition Property="BorderBrush" Duration="0:0:0.15" />
-                        </Transitions>
-                    </Border.Transitions>
+                    <!--  БЕЗ перехода на BorderBrush (F1). Рамку поля меняют ТРИ вещи, и первая из них —
+                    :pointerover: 150мс перетекания превращали проход курсора над формой в
+                    цепочку тлеющих контуров, а поле — в такую же «мигающую кнопку», как всё
+                    остальное. Фокус-кольцу мгновенность идёт только на пользу (12.2).  -->
                     <Grid Margin="{TemplateBinding Padding}" ColumnDefinitions="*,Auto">
                         <Panel Grid.Column="0" VerticalAlignment="{TemplateBinding VerticalContentAlignment}">
                             <TextBlock

@@ -59,14 +59,14 @@
             <Setter Property="HorizontalAlignment" Value="Left" />
         </Style>
 
-        <!--  «Пополнить»: покой = Accent, ховер чуть ТЕМНЕЕ (#3D7EF0), press #3877E0. Фон закреплён
-              на ContentPresenter, иначе тема Semi подменяет hover-цвет своим светлым синим.  -->
-        <Style Selector="Button#TopUpButton:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="#3D7EF0" />
-        </Style>
-        <Style Selector="Button#TopUpButton:pressed /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="#3877E0" />
-        </Style>
+        <!--  «Пополнить» — ОБЫЧНАЯ Button.Primary, и ничего своего ей не нужно. Здесь стояли два
+              локальных правила с ЛИТЕРАЛЬНЫМИ #3D7EF0 / #3877E0. В тёмной теме это ровно значения
+              Brush.AccentHover / Brush.AccentPressed, поэтому правила выглядели безобидными; но
+              литерал не знает про темы. На светлой кнопка под курсором прыгала на тёмно-синий вместо
+              своего #1A54B4, а в чёрно-белом режиме СИНЕЛА посреди монохрома — и её метка
+              (Brush.OnAccent) оказывалась белой на синем: 3.95:1, ниже порога. Base-класс уже
+              прибивает оба состояния токенами на том же ContentPresenter, так что тема Semi сюда не
+              дотягивается и без локальной копии.  -->
 
         <!--  Строки «Управление» + кнопка копирования: hover = тихое ЗАТЕМНЕНИЕ (Brush.Hover), а не
               светло-синий Semi-ховер. Синими остаются только «Пополнить» и ПОКОЙНЫЕ детали BuyRow.  -->

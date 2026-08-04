@@ -1362,6 +1362,12 @@ public class AccountViewModel : MyReactiveObject
                 if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop
                     && desktop.MainWindow is IViewFor<MainWindowViewModel> { ViewModel: { } main })
                 {
+                    // The subscription ROWS first: the import creates/updates SubItems and persists the
+                    // провайдер's title + traffic onto them, and Home reads both the group heading and
+                    // the subscription card from this cache. Refreshing only the servers left the cache
+                    // without the newly imported подписка at all, so its group was headed by the row's
+                    // own joined remark and its card had nothing to show.
+                    await main.ProfilesViewModel.RefreshSubscriptions();
                     await main.ProfilesViewModel.RefreshServers();
                 }
             }

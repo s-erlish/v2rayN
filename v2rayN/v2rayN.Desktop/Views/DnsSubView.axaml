@@ -32,10 +32,12 @@
             <Setter Property="CornerRadius" Value="{StaticResource Radius.Chip}" />
             <Setter Property="Padding" Value="16,10" />
             <Setter Property="Cursor" Value="Hand" />
+            <!--  Press-scale остаётся; кроссфейд заливки снят — её ведёт :pointerover, и 120мс
+                  перетекания превращали проход вдоль ряда чипов в мигание (F1). Выбор чипа — клик,
+                  ему мгновенность идёт (так же снят фон у сегментов).  -->
             <Setter Property="Transitions">
                 <Transitions>
                     <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" />
-                    <BrushTransition Property="Background" Duration="0:0:0.12" />
                 </Transitions>
             </Setter>
         </Style>

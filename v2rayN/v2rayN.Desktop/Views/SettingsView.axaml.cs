@@ -39,7 +39,7 @@ public partial class SettingsView : UserControl
             DataContext = new SettingsViewModel();
         }
 
-        // --- Строки-НАВИГАЦИИ (шеврон): тап кладёт Incy суб-страницу на общий стек оболочки ---
+    // --- Строки-НАВИГАЦИИ (шеврон): тап кладёт Incy суб-страницу на общий стек оболочки ---
         WireRow(RowPerApp, () => OpenPage(new PerAppProxyPage(), refresh: true));
         WireRow(RowRouting, () => OpenPage(new RoutingSubView()));
         WireRow(RowAssets, () => OpenPage(new GeoFilesPage()));
@@ -59,7 +59,6 @@ public partial class SettingsView : UserControl
         WireRow(RowLanguage, ShowLanguageChoice);
         WireRow(RowSubAutoUpdate, ShowAutoUpdateChoice);
         WireRow(RowUiScale, ShowUiScaleChoice);
-
         // --- Локальный прокси — раскрытие инлайн-панели (анимированный шеврон 0↔90 + слайд панели) ---
         WireRow(RowLocalProxy, ToggleLocalProxy);
         ProxyPortBox.LostFocus += OnProxyFieldCommit;

@@ -91,6 +91,18 @@
             </Setter>
         </ControlTheme>
 
+        <!--  Тот же флайаут, но для СПИСКА ВАРИАНТОВ (ChoiceFlyout: масштаб, DNS,     -->
+        <!--  пинг, язык, интервал). Отличие ровно одно — паддинг 8 вместо 16.         -->
+        <!--  «Выбери одно из N» — это меню, а не карточка: на 16 по кругу список из   -->
+        <!--  двух коротких значений («100 %») читался плитой шире и выше самой строки,-->
+        <!--  из которой он выпал. Поверхность, тень, радиус и рамка — общие, чтобы    -->
+        <!--  меню осталось той же поверхностью, только по своему размеру.             -->
+        <ControlTheme x:Key="IncyChoiceFlyoutTheme"
+                      BasedOn="{StaticResource IncyFlyoutTheme}"
+                      TargetType="FlyoutPresenter">
+            <Setter Property="Padding" Value="8" />
+        </ControlTheme>
+
         <!-- ==================================================================== -->
         <!--  Incy-скроллбар (замена уродливого дефолта Semi). АВТО-СКРЫТИЕ оверлей: -->
         <!--  в покое ползунок НЕВИДИМ (opacity 0). При наведении курсора на область -->
@@ -130,10 +142,14 @@
                             CornerRadius="{TemplateBinding CornerRadius}" />
                 </ControlTemplate>
             </Setter>
+            <!--  Width/Height БОЛЬШЕ НЕ АНИМИРУЮТСЯ. Ползунок толстеет 6→8 на :pointerover — это
+                  единственный ховер в продукте, который меняет РАЗМЕР, то есть заставляет
+                  перемерять раскладку; анимировать перемер под курсором — 150мс дрожащей
+                  геометрии на краю каждой прокручиваемой страницы. Толщина меняется мгновенно
+                  (полоса-лейн 12px неподвижна, поэтому ничего не дребезжит), а проявление
+                  ползунка по-прежнему плавное — Opacity в переходе остался.  -->
             <Setter Property="Transitions">
                 <Transitions>
-                    <DoubleTransition Property="Width" Duration="0:0:0.15" Easing="{StaticResource Ease.Standard}" />
-                    <DoubleTransition Property="Height" Duration="0:0:0.15" Easing="{StaticResource Ease.Standard}" />
                     <DoubleTransition Property="Opacity" Duration="0:0:0.15" Easing="{StaticResource Ease.Standard}" />
                     <BrushTransition Property="Background" Duration="0:0:0.15" />
                 </Transitions>
@@ -1171,7 +1187,8 @@
     </Style>
     <!--  Ховер-фидбек = затемнение ГЛИФА (и подписи) на шаг, БЕЗ фона. Только для НЕактивных
           пунктов (:not(.active)) — у активного глиф остаётся Accent (синий) и не темнеет.
-          Плавно через уже заданный BrushTransition Foreground (200мс Ease.Standard).  -->
+          МГНОВЕННО: 200мс-кроссфейд ушёл отсюда на селектор .active (см. ниже) — ховер обязан
+          успевать за курсором, иначе на рейле одновременно подсвечены два пункта.  -->
     <Style Selector="Button.NavRailItem:pointerover:not(.active) PathIcon">
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariantHover}" />
     </Style>
@@ -1185,37 +1202,49 @@
     <Style Selector="Button.NavRailItem:pressed">
         <Setter Property="RenderTransform" Value="scale(0.97)" />
     </Style>
-    <!--  Глиф/подпись: неактивные  -->
+    <!--  Глиф/подпись: неактивные.
+          ЗДЕСЬ БОЛЬШЕ НЕТ ПЕРЕХОДА, И ЭТО ФИКС F1. Переход на Foreground стоял на БАЗОВОМ
+          селекторе, то есть срабатывал на ЛЮБУЮ смену цвета — включая ховер. А ховер должен
+          успевать за курсором: пока уходящий пункт 200мс гаснет, а входящий 200мс проявляется,
+          подсвечены ОБА, и глаз читает это как мигание. Тот же вывод репозиторий делал уже трижды
+          (строки серверов, caption-кнопки, Primary/Tonal) — здесь он доводится до навигации.
+          Тинт-кроссфейд НЕ УДАЛЁН: он переехал на селектор .active ниже, который ховером не
+          взводится, поэтому смена вкладки по-прежнему перетекает в акцент за 200мс параллельно
+          скольжению индикатора, а наведение — мгновенно.  -->
     <Style Selector="Button.NavRailItem PathIcon">
         <Setter Property="Width" Value="24" />
         <Setter Property="Height" Value="24" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
-        <!--  Тон серый↔accent = Ease.Standard 200мс (двусторонняя смена состояния, Android nav 200).  -->
-        <Setter Property="Transitions">
-            <Transitions>
-                <BrushTransition Property="Foreground" Duration="0:0:0.2" Easing="{StaticResource Ease.Standard}" />
-            </Transitions>
-        </Setter>
     </Style>
     <Style Selector="Button.NavRailItem TextBlock">
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
         <Setter Property="FontWeight" Value="Medium" />
-        <Setter Property="Transitions">
-            <Transitions>
-                <BrushTransition Property="Foreground" Duration="0:0:0.2" Easing="{StaticResource Ease.Standard}" />
-            </Transitions>
-        </Setter>
     </Style>
     <!--  Активная левая пилюля БОЛЬШЕ НЕ per-item: три независимых пилюли заменены ОДНИМ общим
           «путешествующим» индикатором (Border x:Name="railIndicator" в MainWindow.axaml), который
           физически СКОЛЬЗИТ между слотами по Y (M3 nav-rail idiom). Его позицию/скольжение ведёт
           code-behind (MoveRailIndicator, Motion.Dur.State 220 OutQuint). Здесь остаётся только
           тинт активного пункта (глиф+подпись Accent) — он идёт параллельно скольжению индикатора.  -->
-    <!--  Активный пункт: глиф+подпись Accent, вес 500→700 (тинт-кроссфейд 200мс Standard задан выше).  -->
+    <!--  Активный пункт: глиф+подпись Accent, вес 500→700. Переход объявлен ЗДЕСЬ, на .active:
+          класс вешает code-behind при смене вкладки, а ховер его тронуть не может — значит
+          кроссфейд серый→акцент остаётся ровно тем, чем был (200мс Ease.Standard, в такт
+          скольжению индикатора), и при этом не может выстрелить на наведение.
+          Порядок сеттеров внутри стиля значим: переход ставится ДО цвета, поэтому цвет
+          приезжает уже с ним.  -->
     <Style Selector="Button.NavRailItem.active PathIcon">
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Foreground" Duration="0:0:0.2" Easing="{StaticResource Ease.Standard}" />
+            </Transitions>
+        </Setter>
         <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
     </Style>
     <Style Selector="Button.NavRailItem.active TextBlock">
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Foreground" Duration="0:0:0.2" Easing="{StaticResource Ease.Standard}" />
+            </Transitions>
+        </Setter>
         <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
         <Setter Property="FontWeight" Value="Bold" />
     </Style>
@@ -1769,9 +1798,11 @@
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineVariant}" />
         <Setter Property="BorderThickness" Value="1.5" />
         <Setter Property="Cursor" Value="Hand" />
+        <!--  Переход остаётся ТОЛЬКО на рамке: её меняет выбор, а это настоящая смена
+              состояния. Background снят — его меняет :pointerover, и кроссфейд заливки под
+              курсором даёт ровно то мигание, о котором речь (F1).  -->
         <Setter Property="Transitions">
             <Transitions>
-                <BrushTransition Property="Background" Duration="0:0:0.15" />
                 <BrushTransition Property="BorderBrush" Duration="0:0:0.15" />
             </Transitions>
         </Setter>
@@ -2149,15 +2180,14 @@
     </Style>
     <!--  Глиф 22 (плиточный размер): у иконочной кнопки нет подписи, поэтому
           глиф крупнее строчных 20 и мельче навигационных 24.  -->
+    <!--  Глиф иконочной кнопки. БЕЗ перехода на Foreground: менял его только :pointerover
+          (плюс .Accent/.Danger в ховере), то есть переход был чисто ховерным — и пока он 150мс
+          тлел, глиф покинутой кнопки ещё горел, а глиф новой уже разгорался. Тинт остался,
+          тление убрано.  -->
     <Style Selector="Button.Icon PathIcon">
         <Setter Property="Width" Value="{DynamicResource Size.Glyph}" />
         <Setter Property="Height" Value="{DynamicResource Size.Glyph}" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
-        <Setter Property="Transitions">
-            <Transitions>
-                <BrushTransition Property="Foreground" Duration="0:0:0.15" Easing="{StaticResource Ease.Standard}" />
-            </Transitions>
-        </Setter>
     </Style>
     <Style Selector="Button.Icon:pointerover PathIcon">
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
@@ -2171,6 +2201,18 @@
           степперов и того действия тулбара, которое обязано находиться сразу.  -->
     <Style Selector="Button.Icon.Filled /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHighest}" />
+    </Style>
+    <!--  …И ЕЁ СОБСТВЕННЫЕ ХОВЕР/НАЖАТИЕ, ЯВНО. Без них состояние решал порядок объявления:
+          «Button.Icon:pointerover …PART_ContentPresenter» и «Button.Icon.Filled …» пишут ОДНО И ТО
+          ЖЕ свойство одного и того же элемента, и Avalonia отдаёт победу объявленному ПОЗЖЕ — то
+          есть .Filled выигрывал в ОБОИХ состояниях, и залитая иконочная кнопка не имела ховера
+          вообще. Состояние не может зависеть от порядка строк в файле; здесь оно названо.
+          Заливка та же ступень поверхности, ховер/нажатие кладут поверх неё общий Brush.Hover.  -->
+    <Style Selector="Button.Icon.Filled:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
+    </Style>
+    <Style Selector="Button.Icon.Filled:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
     </Style>
     <Style Selector="Button.Icon.Accent PathIcon">
         <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
@@ -2412,15 +2454,13 @@
     <Style Selector="Button.NavItem:pressed /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="Transparent" />
     </Style>
+    <!--  Без перехода на базовом селекторе — тот же фикс, что у рейла: переход на Foreground
+          здесь ловил и ХОВЕР, из-за чего под курсором два соседних пункта 220мс были подсвечены
+          одновременно. Кроссфейд смены вкладки переехал на .active ниже.  -->
     <Style Selector="Button.NavItem PathIcon">
         <Setter Property="Width" Value="24" />
         <Setter Property="Height" Value="24" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
-        <Setter Property="Transitions">
-            <Transitions>
-                <BrushTransition Property="Foreground" Duration="0:0:0.22" Easing="{StaticResource Ease.Standard}" />
-            </Transitions>
-        </Setter>
     </Style>
     <Style Selector="Button.NavItem TextBlock">
         <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
@@ -2428,11 +2468,6 @@
         <Setter Property="LineHeight" Value="14" />
         <Setter Property="FontWeight" Value="Medium" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
-        <Setter Property="Transitions">
-            <Transitions>
-                <BrushTransition Property="Foreground" Duration="0:0:0.22" Easing="{StaticResource Ease.Standard}" />
-            </Transitions>
-        </Setter>
     </Style>
     <!--  Ховер трогает только НЕактивный пункт: активный уже акцентный.  -->
     <Style Selector="Button.NavItem:pointerover:not(.active) PathIcon">
@@ -2441,10 +2476,22 @@
     <Style Selector="Button.NavItem:pointerover:not(.active) TextBlock">
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariantHover}" />
     </Style>
+    <!--  Кроссфейд серый→акцент живёт на .active: класс ставит оболочка при смене вкладки,
+          ховер до него не дотягивается. Анимация сохранена, мигание — нет.  -->
     <Style Selector="Button.NavItem.active PathIcon">
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Foreground" Duration="0:0:0.22" Easing="{StaticResource Ease.Standard}" />
+            </Transitions>
+        </Setter>
         <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
     </Style>
     <Style Selector="Button.NavItem.active TextBlock">
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Foreground" Duration="0:0:0.22" Easing="{StaticResource Ease.Standard}" />
+            </Transitions>
+        </Setter>
         <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
         <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
         <Setter Property="FontWeight" Value="Bold" />
@@ -2580,12 +2627,23 @@
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineVariant}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="Cursor" Value="Hand" />
+        <!--  Только рамка: её ведёт ВЫБОР. Заливку ведёт ховер, и её кроссфейд оставлял
+              подсвеченными сразу две строки списка (F1).  -->
         <Setter Property="Transitions">
             <Transitions>
-                <BrushTransition Property="Background" Duration="0:0:0.22" Easing="{StaticResource Ease.Standard}" />
                 <BrushTransition Property="BorderBrush" Duration="0:0:0.22" Easing="{StaticResource Ease.Standard}" />
             </Transitions>
         </Setter>
+    </Style>
+    <!--  КОМПАКТНЫЙ вариант той же строки выбора — для списка, раскрывающегося у строки
+          настройки (ChoiceFlyout). Владелец: «там слишком как-то широко и огромно
+          выглядит, надо просто кнопки поменьше». Меняются РОВНО две величины: высота
+          56 → 48 (Size.Btn, всё ещё ≥48 по 12.2) и паддинг 16,12 → 12,8. Радиус,
+          толщина рамки, слот галочки и все состояния — общие с обычной строкой, поэтому
+          компактный список остаётся тем же компонентом, а не вторым.  -->
+    <Style Selector="Border.Selectable.compact">
+        <Setter Property="MinHeight" Value="{DynamicResource Size.Btn}" />
+        <Setter Property="Padding" Value="12,8" />
     </Style>
     <Style Selector="Border.Selectable:not(.selected):pointerover">
         <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />

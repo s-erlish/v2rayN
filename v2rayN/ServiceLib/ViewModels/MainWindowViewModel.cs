@@ -397,6 +397,14 @@ public class MainWindowViewModel : MyReactiveObject
         if (success)
         {
             var indexIdOld = _config.IndexId;
+            // THE SUBSCRIPTION ROWS FIRST, THEN THE SERVERS. A completed update is exactly when
+            // SubscriptionHandler has persisted the provider's title and its subscription-userinfo onto
+            // the SubItem, and this cache is what the shells read that from — the Home group heading and
+            // the subscription card both resolve through it. Refreshing only the server list left the
+            // cache holding the row as it was BEFORE the fetch, so a subscription that had just been
+            // named still headed its group with the generic noun and its traffic/expiry/announce stayed
+            // at the previous values until the app was restarted.
+            await RefreshSubscriptions();
             await RefreshServersDispatcherAsync();
 
             // OFF-model guard (A2): a subscription refresh/update must NEVER auto-connect the VPN.

@@ -938,13 +938,14 @@ public class HomeViewModel : MyReactiveObject, IDisposable
     /// <summary>The desired shape of one group for a reconcile pass (no view objects allocated yet).</summary>
     private readonly struct GroupPlan
     {
-        public GroupPlan(string key, string name, bool pinned, bool expanded, List<ProfileItemModel> servers)
+        public GroupPlan(string key, string name, bool pinned, bool expanded, List<ProfileItemModel> servers, SubItem? sub)
         {
             Key = key;
             Name = name;
             Pinned = pinned;
             Expanded = expanded;
             Servers = servers;
+            Sub = sub;
         }
 
         public string Key { get; }
@@ -952,6 +953,10 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         public bool Pinned { get; }
         public bool Expanded { get; }
         public List<ProfileItemModel> Servers { get; }
+
+        /// <summary>The subscription row behind this group (null for the local «Мои серверы» group).
+        /// Carried on the plan so the meta-bar is DATA-DRIVEN: see <see cref="HomeServerGroup.Sub"/>.</summary>
+        public SubItem? Sub { get; }
     }
 
     /// <summary>Compute the desired ordered grouping from the live ProfileItems (same rule as before:
@@ -1019,7 +1024,10 @@ public class HomeViewModel : MyReactiveObject, IDisposable
             var g = x.Group;
             var key = $"{g.Key.Key}|{g.Key.Name}";
             var expanded = !_groupExpanded.TryGetValue(key, out var ex) || ex;
-            plan.Add(new GroupPlan(key, g.Key.Name, x.Pinned, expanded, g.ToList()));
+            // The subscription row travels WITH the plan. Without it the meta-bar had to resolve the
+            // row itself, once, off DataContextChanged — and a group matched in place never raises one.
+            var sub = g.Key.Key.IsNullOrEmpty() ? null : Profiles?.SubItems.FirstOrDefault(s => s.Id == g.Key.Key);
+            plan.Add(new GroupPlan(key, g.Key.Name, x.Pinned, expanded, g.ToList(), sub));
         }
 
         return plan;
@@ -1052,7 +1060,7 @@ public class HomeViewModel : MyReactiveObject, IDisposable
             if (existingIndex < 0)
             {
                 // A genuinely new subscription group — only this one container is created.
-                ServerGroups.Insert(i, new HomeServerGroup(p.Key, p.Name, p.Servers, p.Expanded, p.Pinned, OnGroupExpandedChanged));
+                ServerGroups.Insert(i, new HomeServerGroup(p.Key, p.Name, p.Servers, p.Expanded, p.Pinned, OnGroupExpandedChanged, p.Sub));
                 continue;
             }
             if (existingIndex != i)
@@ -1060,7 +1068,7 @@ public class HomeViewModel : MyReactiveObject, IDisposable
                 ServerGroups.Move(existingIndex, i);
             }
             var group = ServerGroups[i];
-            group.UpdateHeader(p.Name, p.Pinned);
+            group.UpdateHeader(p.Name, p.Pinned, p.Sub);
             group.ReconcileServers(p.Servers);
         }
     }
@@ -1153,8 +1161,9 @@ public sealed class HomeServerGroup : INotifyPropertyChanged
     private bool _isExpanded;
     private string _name;
     private bool _pinned;
+    private SubItem? _sub;
 
-    public HomeServerGroup(string key, string name, IEnumerable<ProfileItemModel> servers, bool isExpanded, bool pinned = false, Action<string, bool>? onExpandedChanged = null)
+    public HomeServerGroup(string key, string name, IEnumerable<ProfileItemModel> servers, bool isExpanded, bool pinned = false, Action<string, bool>? onExpandedChanged = null, SubItem? sub = null)
     {
         Key = key;
         _name = name;
@@ -1162,9 +1171,38 @@ public sealed class HomeServerGroup : INotifyPropertyChanged
         _isExpanded = isExpanded;
         _pinned = pinned;
         _onExpandedChanged = onExpandedChanged;
+        _sub = sub;
     }
 
     public string Key { get; }
+
+    /// <summary>
+    /// The subscription row this group belongs to — traffic, expiry, announce, support/Telegram URLs
+    /// and the провайдер's own title — or null for the local «Мои серверы» group.
+    ///
+    /// IT IS A LIVE PROPERTY, AND THAT IS THE POINT. The meta-bar used to resolve the row itself, once,
+    /// from <c>DataContextChanged</c>; but a group whose key ({subid}|{name}) is unchanged is matched
+    /// and updated IN PLACE by the reconcile, so no DataContextChanged is ever raised and the card kept
+    /// whatever it read the first time. Every later fetch — a re-paste of a подписка that already
+    /// exists, the scheduled auto-update, the account import — persisted new traffic/announce/title that
+    /// the card simply never showed, which is why the only way to see them was the card's own refresh
+    /// button (the one place that re-read the row by hand). Raising a change here repaints it instead.
+    /// Set from the plan on every reconcile; the raise is by REFERENCE, because the row is re-read from
+    /// SQLite on each <c>RefreshSubscriptions</c> and a fresh instance IS the new state.
+    /// </summary>
+    public SubItem? Sub
+    {
+        get => _sub;
+        private set
+        {
+            if (ReferenceEquals(_sub, value))
+            {
+                return;
+            }
+            _sub = value;
+            OnPropertyChanged();
+        }
+    }
 
     public string Name
     {
@@ -1207,11 +1245,14 @@ public sealed class HomeServerGroup : INotifyPropertyChanged
 
     /// <summary>Update header fields that can shift WITHOUT changing the group's identity (Key), so a
     /// pin toggle / re-projection keeps this exact group instance (its expand state, its hooked
-    /// meta-bar and reveal container) rather than replacing it.</summary>
-    internal void UpdateHeader(string name, bool pinned)
+    /// meta-bar and reveal container) rather than replacing it. <paramref name="sub"/> carries the
+    /// freshly re-read subscription row, which is what lets the meta-bar repaint on an in-place
+    /// update instead of only when a new container is built.</summary>
+    internal void UpdateHeader(string name, bool pinned, SubItem? sub = null)
     {
         Name = name;
         Pinned = pinned;
+        Sub = sub;
     }
 
     /// <summary>

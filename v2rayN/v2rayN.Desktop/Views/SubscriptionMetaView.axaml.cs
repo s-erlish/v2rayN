@@ -309,6 +309,23 @@ public partial class SubscriptionMetaView : UserControl
         if (e.PropertyName == nameof(HomeServerGroup.IsExpanded))
         {
             SyncCollapsed();
+            return;
+        }
+
+        // THE SUBSCRIPTION ROW CHANGED — REPAINT. This card used to read the row exactly once, from
+        // Rebind (DataContextChanged), and the list reconciles groups IN PLACE whenever the key
+        // ({subid}|{name}) is unchanged — so no DataContextChanged is raised and nothing re-read it.
+        // Everything the engine had just persisted (the провайдер's title, the traffic figures, the
+        // expiry, the announce, the support/Telegram links) stayed invisible until the app was
+        // restarted or THIS view's own refresh button was pressed, which is the one place that re-read
+        // the row by hand. That is «приходится дополнительно нажать обновить».
+        if (e.PropertyName == nameof(HomeServerGroup.Sub))
+        {
+            var sub = _group?.Sub;
+            if (sub is not null)
+            {
+                BindSub(sub);
+            }
         }
     }
 
@@ -323,6 +340,15 @@ public partial class SubscriptionMetaView : UserControl
     // The group's Subid → real SubItem. Data-driven: null when the group has no real subscription.
     private async Task ResolveAndBindSub()
     {
+        // The group already carries the row the list projected it from (re-read from SQLite on every
+        // RefreshSubscriptions), so bind it AT ONCE — no await, no empty first frame. The lookup below
+        // stays as the fallback for a group whose subscription is not in the list's cache yet.
+        if (_group?.Sub is { } carried && carried.Id.IsNotEmpty())
+        {
+            BindSub(carried);
+            return;
+        }
+
         var subid = _group?.Servers.FirstOrDefault(s => s is not null && s.Subid.IsNotEmpty())?.Subid;
         if (subid.IsNullOrEmpty())
         {
