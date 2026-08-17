@@ -24,14 +24,14 @@ public sealed partial class L
         // ── SettingsView — section headers + rows ──
         Add("Settings_SecConnection", "Подключение", "Connection");
         Add("Settings_Mode", "Режим", "Mode");
-        Add("Settings_ModeProxy", "Прокси", "Proxy");
+        Add("Settings_ModeProxy", "Только прокси", "Proxy only");
         Add("Settings_PerApp", "Прокси по приложениям", "Per-app proxy");
         Add("Settings_BypassLan", "Обход локальной сети", "Bypass local network");
         Add("Settings_BypassLanHint", "Прямой доступ к устройствам в локальной сети", "Direct access to devices on the local network");
         Add("Settings_Ipv6Hint", "Включить IPv6-адресацию в туннеле", "Enable IPv6 addressing in the tunnel");
         Add("Settings_Ping", "Пинг", "Ping");
         Add("Settings_LocalProxy", "Локальный прокси", "Local proxy");
-        Add("Settings_LocalProxyHint", "Порт, логин и пароль SOCKS5-подключения", "Port, username and password for the SOCKS5 connection");
+        Add("Settings_LocalProxyHint", "Порт и SOCKS5-авторизация", "Port and SOCKS5 authentication");
         Add("Settings_Port", "Порт", "Port");
         Add("Settings_Socks5Auth", "SOCKS5-авторизация", "SOCKS5 authentication");
         Add("Settings_Username", "Логин", "Username");
@@ -47,23 +47,28 @@ public sealed partial class L
 
         Add("Settings_SecPerformance", "Производительность", "Performance");
         Add("Settings_LiteMode", "Облегчённый режим", "Lite mode");
-        Add("Settings_LiteModeHint", "Отключает анимации, снижает нагрузку", "Disables animations, reduces load");
+        Add("Settings_LiteModeHint", "Отключает анимации и тени", "Disables animations and shadows");
 
         Add("Settings_SecInterface", "Интерфейс", "Interface");
         Add("Settings_Appearance", "Оформление", "Appearance");
-        Add("Settings_Monochrome", "Монохром", "Monochrome");
-        Add("Settings_MonochromeHint", "Монохромный режим поверх тёмной или светлой темы", "Monochrome mode over the dark or light theme");
         Add("Settings_Language", "Язык", "Language");
-        Add("Settings_Autostart", "Запуск при загрузке", "Launch at startup");
-        Add("Settings_AutostartHint", "Открывать departament при входе в систему", "Open departament when you sign in");
+        Add("Settings_UiScale", "Масштаб интерфейса", "Interface scale");
+        Add("Settings_Autostart", "Запуск с системой", "Launch with the system");
+        Add("Settings_AutostartHint", "Открывать при входе в систему", "Open when you sign in");
 
         Add("Settings_SecSubscription", "Подписка", "Subscription");
         Add("Settings_SubAutoUpdate", "Автообновление подписки", "Auto-update subscription");
         Add("Settings_Routing", "Маршрутизация", "Routing");
+        Add("Settings_RoutingHint", "Правила proxy, direct и block", "proxy, direct and block rules");
         Add("Settings_GeoFiles", "Файлы ресурсов", "Resource files");
+        Add("Settings_GeoFilesHint", "Geo-базы для маршрутизации", "Geo databases for routing");
 
         Add("Settings_About", "О приложении", "About");
+        Add("Settings_Log", "Журнал", "Log");
+        Add("Settings_LogHint", "Лог ядра за текущий сеанс", "Core log for the current session");
+        Add("Settings_CheckUpdate", "Проверить обновления", "Check for updates");
         Add("Settings_Backup", "Резервное копирование", "Backup");
+        Add("Settings_BackupHint", "Сохранить и восстановить настройки", "Save and restore settings");
         Add("Settings_UrlSchemes", "Схемы URL-адресов", "URL schemes");
         Add("Settings_UrlSchemesHint", "Быстрые команды depv://", "Quick depv:// commands");
 
@@ -72,10 +77,14 @@ public sealed partial class L
         Add("Settings_PerAppOnly", "только", "only");
         Add("Settings_ThemeLight", "Светлая", "Light");
         Add("Settings_ThemeDark", "Тёмная", "Dark");
+        // Четыре РАВНЫХ пункта «Оформления» (screens.md). Чёрно-белая больше не надстройка над базой.
+        Add("Settings_ThemeMono", "Чёрно-белая", "Monochrome");
+        Add("Settings_ThemeSystem", "Как в системе", "Match system");
         Add("Settings_LangRussian", "Русский", "Russian");
+        Add("Settings_LangSystem", "Системный", "System");
 
         // ── DnsSubView ──
-        Add("Dns_Intro", "DNS-сервер, через который приложение разрешает домены при подключении. По умолчанию используется встроенный резолвер.", "The DNS server the app uses to resolve domains when connecting. The built-in resolver is used by default.");
+        Add("Dns_Intro", "Через какой сервер приложение разрешает имена", "Which server the app uses to resolve names");
         Add("Dns_Provider", "Провайдер", "Provider");
         Add("Dns_CustomAddress", "Свой DNS-адрес", "Custom DNS address");
         Add("Dns_CustomHint", "DoH-адрес (https://…/dns-query), DoT или обычный IP: 1.1.1.1", "DoH address (https://…/dns-query), DoT, or a plain IP: 1.1.1.1");
@@ -83,7 +92,7 @@ public sealed partial class L
         Add("Dns_AdvancedHint", "Ускоряет соединение, отвечая на DNS-запросы локально (sing-box)", "Speeds up connections by answering DNS queries locally (sing-box)");
 
         // ── RoutingSubView ──
-        Add("Routing_Intro", "Наборы правил определяют, какой трафик идёт через VPN, а какой — напрямую. Выберите активный набор.", "Rule sets decide which traffic goes through the VPN and which goes direct. Pick the active set.");
+        Add("Routing_Intro", "Правила proxy, direct и block", "The proxy, direct, and block rules");
         Add("Routing_RuleSets", "Наборы правил", "Rule sets");
         Add("Routing_RulesCount", "{0} правил", "{0} rules");
         Add("Routing_Active", "Активен", "Active");
@@ -109,17 +118,17 @@ public sealed partial class L
         Add("PerApp_ProgramFileType", "Программа", "Program");
 
         // ── PingSettingsPage (only Real / TCP rows) ──
-        Add("Ping_Intro", "Как измерять задержку серверов. Ниже — адрес и тайм-аут проверки.", "How to measure server latency. The test address and timeout are below.");
+        Add("Ping_Intro", "Как измеряется задержка до серверов", "How latency to servers is measured");
         Add("Ping_RealTitle", "Реальная задержка", "Real latency");
-        Add("Ping_RealHint", "Через ядро, как при подключении", "Through the core, as when connected");
-        Add("Ping_TcpHint", "TCP-подключение к серверу", "TCP connection to the server");
+        Add("Ping_RealHint", "Замер через туннель — точнее, но медленнее", "Measured through the tunnel — more accurate, but slower");
+        Add("Ping_TcpHint", "tcping до адреса сервера", "tcping to the server address");
         Add("Ping_TestAddress", "Адрес проверки задержки", "Latency test address");
         Add("Ping_Timeout", "Тайм-аут проверки, сек", "Test timeout, sec");
         // Short row label used by SettingsViewModel.ResolvePingMethodText («Реальная»); TCP/HTTP/ICMP stay as tokens.
         Add("Ping_Real", "Реальная", "Real");
 
         // ── GeoFilesPage ──
-        Add("Geo_Intro", "Базы geoip и geosite нужны для маршрутизации по странам и доменам. Обновляются с GitHub.", "The geoip and geosite databases are used for routing by country and domain. Updated from GitHub.");
+        Add("Geo_Intro", "Geo-базы для маршрутизации", "Geo databases for routing");
         Add("Geo_UpdateNow", "Обновить сейчас", "Update now");
         Add("Geo_NotDownloaded", "Не загружен", "Not downloaded");
         Add("Geo_SizeUpdated", "{0} МБ · обновлён {1}", "{0} MB · updated {1}");
@@ -139,7 +148,7 @@ public sealed partial class L
         Add("About_SystemInfo", "ОС: {0}\nАрхитектура: {1}\n.NET: {2}", "OS: {0}\nArchitecture: {1}\n.NET: {2}");
 
         // ── BackupPage ──
-        Add("Backup_Intro", "Сохраните все настройки, подписки и серверы в один .zip-файл или восстановите их из ранее сохранённой копии.", "Save all settings, subscriptions, and servers to a single .zip file, or restore them from a previous backup.");
+        Add("Backup_Intro", "Файл с серверами и настройками", "A file with your servers and settings");
         Add("Backup_Export", "Экспорт", "Export");
         Add("Backup_ExportHint", "Сохранить копию в файл", "Save a backup to a file");
         Add("Backup_Save", "Сохранить…", "Save…");
@@ -181,5 +190,109 @@ public sealed partial class L
         Add("Provider_SecNetwork", "Сеть", "Network");
         Add("Provider_Hwid", "Идентификатор устройства (HWID)", "Device ID (HWID)");
         Add("Provider_UserAgentHint", "Отправляется ядром на исходящих соединениях.", "Sent by the core on outbound connections.");
+
+        // ═════════════════════════════════════════════════════════════════════════════════════════
+        // Подэкраны настроек по единому лекалу (screens.md «Подэкраны»). Строки — как в спецификации.
+        // ═════════════════════════════════════════════════════════════════════════════════════════
+
+        // ── DNS ──
+        Add("Dns_Presets", "Пресеты", "Presets");
+        Add("Dns_Custom", "Свой сервер", "Custom server");
+        Add("Dns_CustomSub", "Указать вручную", "Enter manually");
+
+        // ── Пинг ──
+        Add("Ping_TcpTitle", "TCP-соединение", "TCP connection");
+        Add("Ping_Params", "Параметры проверки", "Test parameters");
+        Add("Ping_Unsupported", "HTTP-запрос и ICMP ядром не измеряются — доступны реальная задержка и TCP.", "HTTP request and ICMP aren't measured by the core — real latency and TCP are available.");
+
+        // ── Прокси по приложениям ──
+        Add("PerApp_Mode", "Режим", "Mode");
+        Add("PerApp_ModeExcept", "Кроме выбранных", "Except selected");
+        Add("PerApp_ModeOnly", "Только выбранные", "Only selected");
+        Add("PerApp_Search", "Поиск по приложениям", "Search apps");
+        Add("PerApp_Programs", "Программы", "Programs");
+        Add("PerApp_EmptyTitle", "Программы не найдены", "No programs found");
+        Add("PerApp_EmptyText", "Измените запрос или добавьте .exe вручную.", "Change the query or add an .exe manually.");
+        Add("PerApp_Chosen", "Выбрано {0}", "{0} selected");
+
+        // ── Локальный прокси ──
+        Add("LocalProxy_Intro", "Доступ для программ на этом компьютере", "Access for programs on this computer");
+        Add("LocalProxy_Params", "Параметры", "Parameters");
+        Add("LocalProxy_Address", "Адрес", "Address");
+        Add("LocalProxy_PortSocks", "Порт SOCKS5", "SOCKS5 port");
+        Add("LocalProxy_PortHttp", "Порт HTTP", "HTTP port");
+        Add("LocalProxy_PortHttpSame", "Тот же вход принимает и HTTP", "The same inbound also accepts HTTP");
+        Add("LocalProxy_Access", "Доступ", "Access");
+        Add("LocalProxy_AuthHint", "Логин и пароль при подключении", "Username and password when connecting");
+        Add("LocalProxy_Login", "Логин", "Username");
+        Add("LocalProxy_Password", "Пароль", "Password");
+        Add("LocalProxy_BlockUdp", "Блокировать UDP", "Block UDP");
+        Add("LocalProxy_BlockUdpHint", "Запретить UDP через прокси", "Disallow UDP through the proxy");
+        Add("LocalProxy_Foot", "Порты меняются только при отключённом туннеле.", "Ports can only be changed while the tunnel is off.");
+        Add("LocalProxy_FootLive", "Туннель включён — порт менять нельзя. Отключитесь, чтобы изменить его.", "The tunnel is on — the port can't be changed. Disconnect to change it.");
+
+        // ── Маршрутизация ──
+        Add("Routing_Rules", "Правила", "Rules");
+        Add("Routing_AddRule", "Добавить правило", "Add a rule");
+        Add("Routing_NoRules", "Правил пока нет", "No rules yet");
+
+        // ── Файлы ресурсов ──
+        Add("Geo_Source", "Источник Geo-файлов", "Geo file source");
+        Add("Geo_SourceRow", "Источник", "Source");
+        Add("Geo_Files", "Файлы", "Files");
+        Add("Geo_Update", "Обновить", "Update");
+
+        // ── Журнал ──
+        Add("Log_Title", "Журнал", "Log");
+        Add("Log_Intro", "Лог ядра за текущий сеанс", "The core log for the current session");
+        Add("Log_Search", "Поиск по журналу", "Search the log");
+        Add("Log_EmptyTitle", "Записей пока нет", "No entries yet");
+        Add("Log_EmptyText", "Журнал заполнится при следующем подключении.", "The log will fill up on the next connection.");
+        Add("Log_NoMatchTitle", "Ничего не найдено", "Nothing found");
+        Add("Log_NoMatchText", "По этому запросу записей нет. Попробуйте другой.", "No entries match this query. Try another one.");
+        Add("Log_Copy", "Копировать", "Copy");
+        Add("Log_Clear", "Очистить", "Clear");
+        Add("Log_Copied", "Журнал скопирован", "Log copied");
+        Add("Log_Lines", "{0} строк", "{0} lines");
+
+        // ── Проверить обновление ──
+        Add("Update_Title", "Проверить обновление", "Check for updates");
+        Add("Update_PreRelease", "Искать предварительный выпуск", "Look for pre-releases");
+        Add("Update_PreReleaseHint", "Ранние сборки с новыми функциями", "Early builds with new features");
+        Add("Update_Check", "Проверить обновление", "Check for updates");
+        Add("Update_Checking", "Проверяем…", "Checking…");
+        Add("Update_Components", "Компоненты", "Components");
+
+        // ── Резервное копирование ──
+        Add("Backup_SecData", "Данные", "Data");
+        Add("Backup_SaveCopy", "Сохранить копию", "Save a backup");
+        Add("Backup_SaveCopyHint", "Все серверы и настройки в один файл", "All servers and settings in one file");
+        Add("Backup_RestoreFile", "Восстановить из файла", "Restore from a file");
+        Add("Backup_RestoreFileHint", "Заменит текущие серверы", "Replaces the current servers");
+        Add("Backup_SecCloud", "Облако", "Cloud");
+        Add("Backup_WebDav", "Настройки WebDAV", "WebDAV settings");
+        Add("Backup_WebDavNotSet", "Не настроено", "Not configured");
+        Add("Backup_WebDavUrl", "Адрес сервера", "Server address");
+
+        // ── Схемы URL-адресов ──
+        Add("UrlSchemes_Intro", "Быстрые команды для запуска из браузера и ярлыков", "Quick commands to launch from the browser and shortcuts");
+        Add("UrlSchemes_ConnectHint", "Подключиться к текущему серверу", "Connect to the current server");
+        Add("UrlSchemes_DisconnectHint", "Отключиться", "Disconnect");
+        Add("UrlSchemes_SubHint", "Добавить подписку по ссылке", "Add a subscription by link");
+        Add("UrlSchemes_Copied", "Схема скопирована", "Scheme copied");
+        Add("UrlSchemes_Commands", "Команды", "Commands");
+
+        // ── О приложении ──
+        Add("About_SecApp", "Приложение", "Application");
+        Add("About_VersionRow", "Версия", "Version");
+        Add("About_Identifier", "Идентификатор", "Identifier");
+        Add("About_SecLinks", "Ссылки и документы", "Links and documents");
+        Add("About_SourceCode", "Исходный код", "Source code");
+        Add("About_Licenses", "Лицензии открытого ПО", "Open-source licenses");
+        Add("About_Feedback", "Обратная связь", "Feedback");
+        Add("About_TelegramChannel", "Канал в Telegram", "Telegram channel");
+        Add("About_Privacy", "Политика конфиденциальности", "Privacy policy");
+        Add("About_CheckUpdates", "Проверить обновления", "Check for updates");
+        Add("About_Copied", "Скопировано", "Copied");
     }
 }
