@@ -6,67 +6,120 @@ using v2rayN.Desktop.ViewModels;
 namespace v2rayN.Desktop.Views;
 
 /// <summary>
-/// Первый запуск (нет подписок): экран заведения доступа на всю ширину окна под chrome — без рейла, без
-/// списка серверов, без connect-щита. MainWindow показывает эту вью, пока
-/// <see cref="HomeViewModel.IsEmpty"/> = true, и прячет её (открывая обычный шелл), как только подписка
-/// добавлена. Это буквально первый кадр нового пользователя.
+/// Начальный экран (первый запуск, нет подписок) — screens.md «Начальный экран».
 ///
-/// «Добавить по QR-коду» / «из буфера обмена» бьют в реальный движок через HomeViewModel (тот же путь,
-/// что онбординг-CTA в HomeView). «Войти через Telegram» / «через сайт» СРАЗУ стартуют соответствующую
-/// авторизацию (без промежуточного выбора метода): Telegram открывает deep link и переходит в ожидание,
-/// сайт открывает форму email/пароля. Шелл скрыт, пока пусто, поэтому вход показываем оверлеем; «назад»
-/// возвращает к онбордингу.
+/// Навигация скрыта целиком: MainWindow держит эту вью отдельной поверхностью шелла (3-way гейт
+/// SYNCING &gt; EMPTY &gt; CONTENT), поэтому ни рейла, ни нижней панели в дереве нет, и колонка
+/// центрируется по всему окну.
 ///
-/// Движение (§6/P1 + §3a/§3b P2): один хореографированный entrance при первом показе — 4 АВТОРСКИХ бита
-/// (щит → идентичность → «завести доступ» → «войти»), щит scale 0.90→1 (общий с connect-героем), остальное
-/// rise translateY 8→0 + fade, 300мс OutQuint, ≈500мс всего, затем ПОЛНАЯ статика (product-register: без
-/// ambient-петель; щит остаётся неподвижен — бренд-марка, а не индикатор). Императивно в code-behind, чтобы под reduced-motion
-/// (<see cref="MotionState.IsLite"/>) / preview (PREVIEW_VIEW) / дизайн-режимом сразу отдать
-/// полностью-видимый дефолт (reveal ОБЯЗАН улучшать уже-видимое; headless/preview не должен быть пустым).
-/// Хит-тест НИКОГДА не гейтится анимацией — кнопки кликабельны всё время (только opacity/transform).
+/// Ведёт code-behind:
+///   • ПОЯВЛЕНИЕ (motion.md «Появление начального экрана») — щит 620 мс из 0.82×, заголовок
+///     460 мс/80 мс, подзаголовок 140 мс, блок кнопок 200 мс. Один раз, затем полная статика.
+///   • КАРТОЧКУ НАЙДЕННОЙ ССЫЛКИ — реальная проверка буфера обмена (при показе экрана и при
+///     возврате фокуса окну), раскрытие/схлопывание по высоте 340/240 мс.
+///   • «ДРУГИЕ СПОСОБЫ» — раскрытие 320/220 мс + поворот каретки.
+///   • ДЕЙСТВИЯ — четыре пути добавления доступа, см. <see cref="FlowRequested"/>.
+///
+/// Всё движение гасится «Облегчённым режимом» (<see cref="MotionState.IsLite"/>): под ним экран
+/// сразу отдаётся полностью видимым, раскрытия переключаются мгновенно (переходы обнулены стилями
+/// по классу .lite на окне).
 /// </summary>
 public partial class OnboardingView : UserControl
 {
-    // Моушен-трансформы: TransformOperations композируются чисто с анимацией RenderTransform (приём
-    // LoginView). Масштаб щита центрируется по RenderTransformOrigin="50%,50%" плитки.
-    private static readonly ITransform _rise8 = TransformOperations.Parse("translateY(8px)");
-    private static readonly ITransform _rise0 = TransformOperations.Parse("translateY(0px)");
-    // Щит въезжает scale 0.90→1 — единый scale-in-словарь с connect-героем (§3b): одна и та же марка,
-    // одно и то же семейство появления, но здесь БЕЗ последующего «дыхания» (бренд-марка, не индикатор).
-    private static readonly ITransform _scale090 = TransformOperations.Parse("scale(0.9)");
+    // ── Моушен-трансформы появления ──────────────────────────────────────────
+    // TransformOperations композируются чисто с анимацией RenderTransform (в отличие от
+    // разложения матрицы), поэтому масштаб щита и подъём остальных блоков живут именно так.
+    private static readonly ITransform _lift16 = TransformOperations.Parse("translateY(16px)");
+    private static readonly ITransform _lift0 = TransformOperations.Parse("translateY(0px)");
+    private static readonly ITransform _scale082 = TransformOperations.Parse("scale(0.82)");
     private static readonly ITransform _scale1 = TransformOperations.Parse("scale(1)");
 
-    // Колонка пред-скрыта в ctor под entrance-стаггер — стаггер ещё не сыгран.
+    // Длительности/задержки — 1:1 из motion.md «Появление начального экрана».
+    private static readonly TimeSpan _bloomDuration = TimeSpan.FromMilliseconds(620);
+    private static readonly TimeSpan _liftDuration = TimeSpan.FromMilliseconds(460);
+
+    // Отступ блока кнопок: 26 без карточки, 14 с карточкой (карточка приносит свои 24 сверху,
+    // иначе разрыв сложился бы в 50 и блок кнопок «отвалился» бы от подзаголовка).
+    private static readonly Thickness _actionsGapPlain = new(0, 26, 0, 0);
+    private static readonly Thickness _actionsGapWithCard = new(0, 14, 0, 0);
+
     private bool _entryPending;
+    private bool _moreOpen;
+    private bool _clipCardShown;
+    private bool _clipboardProbeRunning;
+
+    /// <summary>Поток добавления подписки, который выбрал пользователь на начальном экране.</summary>
+    public enum StartFlow
+    {
+        /// <summary>«Войти через Telegram» — подписка приезжает вместе с аккаунтом.</summary>
+        Telegram,
+
+        /// <summary>«Добавить из буфера обмена» (в том числе тапом по карточке найденной ссылки).</summary>
+        Clipboard,
+    }
+
+    /// <summary>
+    /// Запрос на запуск экрана прогрузки. Поднимается ДО того, как реальная работа началась, и несёт
+    /// её задачу: <see cref="AccountSyncView.RunFlow"/> ждёт эту задачу как сигнал «работа сделана» и
+    /// доводит хореографию до конца (см. <see cref="AccountSyncView"/>).
+    ///
+    /// Проводку делает MainWindow (эта вью не может показать оверлей — видимостью поверхностей шелла
+    /// владеет он):
+    /// <code>
+    /// onboardingView.FlowRequested += (_, e) =&gt; { accountSyncView.RunFlow(e.Kind, e.Work); ApplyShellVisibility(); };
+    /// </code>
+    /// </summary>
+    public event EventHandler<StartFlowRequest>? FlowRequested;
+
+    /// <summary>Полезная нагрузка <see cref="FlowRequested"/>: какой поток и какая реальная работа под ним.</summary>
+    /// <param name="Kind">Набор текстов экрана прогрузки (Telegram / из буфера).</param>
+    /// <param name="Work">
+    /// Задача реальной работы. <c>null</c> — работа не наша (вход через Telegram доводит
+    /// AccountViewModel), тогда экран прогрузки ждёт сигналов VM.
+    /// </param>
+    public sealed record StartFlowRequest(StartFlow Kind, Task? Work);
 
     public OnboardingView()
     {
         InitializeComponent();
 
-        AddQrButton.Click += OnAddQr;
-        AddClipboardButton.Click += OnAddClipboard;
-        LoginTelegramButton.Click += OnLoginTelegram;
-        LoginSiteButton.Click += OnLoginSite;
+        TelegramButton.Click += OnTelegram;
+        ClipboardButton.Click += OnClipboard;
+        MoreButton.Click += OnToggleMore;
+        ClipCardButton.Click += OnClipboard;
+        QrRow.PointerReleased += (_, _) => OnQr();
+        SiteRow.PointerReleased += (_, _) => OnSite();
 
-        // Entrance-стаггер: пред-скрываем детей колонки (opacity 0), чтобы раскрыть их сверху вниз без
-        // пред-вспышки (приём LoginView). ТОЛЬКО при включённом движении; под lite/preview/дизайн —
-        // не трогаем (остаются видимыми), стаггер не запускаем: reveal улучшает уже-видимый дефолт.
+        ClipRevealHost.SizeChanged += OnRevealHostSizeChanged;
+        MoreRevealHost.SizeChanged += OnRevealHostSizeChanged;
+
+        ActionsBlock.Margin = _actionsGapPlain;
+
+        // Пред-скрываем анимируемые блоки, чтобы появление не «вспыхивало» из готового кадра.
+        // ТОЛЬКО при включённом движении: под lite/preview/дизайном экран обязан быть виден сразу —
+        // появление УЛУЧШАЕТ уже видимый дефолт, а не создаёт его.
         if (!IsReducedMotion())
         {
-            foreach (var child in Column.Children)
-            {
-                child.Opacity = 0;
-            }
+            ShieldRing.Opacity = 0;
+            TitleText.Opacity = 0;
+            SubtitleText.Opacity = 0;
+            ActionsBlock.Opacity = 0;
             _entryPending = true;
         }
 
         Loaded += OnFirstLoaded;
     }
 
-    // ── Первая раскладка: entrance-стаггер (один раз) ────────────────────────
+    // ==================== Появление (motion.md) ====================
+
     private void OnFirstLoaded(object? sender, RoutedEventArgs e)
     {
         Loaded -= OnFirstLoaded;
+
+        // Экран может быть показан и повторно (выход из аккаунта → снова пусто): буфер проверяем
+        // всегда, появление играем один раз.
+        ProbeClipboard();
+        HookWindowActivation();
 
         if (!_entryPending)
         {
@@ -74,93 +127,34 @@ public partial class OnboardingView : UserControl
         }
         _entryPending = false;
 
-        // Движение выключили между ctor и первым кадром (живой lite-тумблер) — просто возвращаем видимость.
+        // Движение выключили между ctor и первым кадром (живой тумблер «Облегчённый режим»).
         if (IsReducedMotion())
         {
-            RestoreChildren();
+            RestoreAll();
             return;
         }
-        PlayEntryStagger();
-    }
 
-    // ── Действия (проводка CTA по DataContext) ──────────────────────────────
-
-    // Добавить по QR-коду → скан экрана (MainWindowViewModel.AddServerViaScanAsync).
-    private void OnAddQr(object? sender, RoutedEventArgs e)
-    {
-        if (DataContext is HomeViewModel vm)
-        {
-            _ = vm.AddViaQr();
-        }
-    }
-
-    // Добавить из буфера обмена → импорт из clipboard (MainWindowViewModel.AddServerViaClipboardAsync).
-    private void OnAddClipboard(object? sender, RoutedEventArgs e)
-    {
-        if (DataContext is HomeViewModel vm)
-        {
-            _ = vm.AddViaClipboard();
-        }
-    }
-
-    // Войти через Telegram → сразу стартуем Telegram-авторизацию (открывает Telegram), LoginView
-    // показывает состояние ожидания подтверждения — без повторного выбора метода.
-    private void OnLoginTelegram(object? sender, RoutedEventArgs e)
-    {
-        (TopLevel.GetTopLevel(this) as MainWindow)?.OpenLoginTelegram();
-    }
-
-    // Войти через сайт → открываем LoginView прямо на форме входа по email/паролю.
-    private void OnLoginSite(object? sender, RoutedEventArgs e)
-    {
-        (TopLevel.GetTopLevel(this) as MainWindow)?.OpenLoginSite();
-    }
-
-    // ── Entrance-стаггер (§6) ────────────────────────────────────────────────
-
-    /// <summary>
-    /// Раскрывает колонку 4 АВТОРСКИМИ битами (не равномерный 40мс-drip): щит → идентичность →
-    /// «завести доступ» → «войти». Щит (бит 1) — scale 0.90→1; остальное — rise translateY 8→0; оба +
-    /// fade, 300мс OutQuint. Члены одного бита делят задержку бита (групповое появление читается как
-    /// смысловая единица). Итог ≈500мс (200 + 300), затем ПОЛНАЯ статика — без ambient-петель.
-    /// </summary>
-    private void PlayEntryStagger()
-    {
-        var children = Column.Children;
-        for (var i = 0; i < children.Count; i++)
-        {
-            var delay = BeatDelayMs(i);
-            var from = i == 0 ? _scale090 : _rise8;
-            var to = i == 0 ? _scale1 : _rise0;
-            _ = PlayReveal((Control)children[i], delay, from, to);
-        }
+        // Щит — bloom: 620 мс из 0.82×, кривая появления (0.22,1,0.36,1) = Ease.OutQuint.
+        _ = PlayReveal(ShieldRing, TimeSpan.Zero, _bloomDuration, _scale082, _scale1);
+        // Остальное — подъём translateY 16→0 + проявление, 460 мс, со сдвигом по смыслу.
+        _ = PlayReveal(TitleText, TimeSpan.FromMilliseconds(80), _liftDuration, _lift16, _lift0);
+        _ = PlayReveal(SubtitleText, TimeSpan.FromMilliseconds(140), _liftDuration, _lift16, _lift0);
+        _ = PlayReveal(ActionsBlock, TimeSpan.FromMilliseconds(200), _liftDuration, _lift16, _lift0);
     }
 
     /// <summary>
-    /// Задержка entrance-бита по роли ребёнка колонки (§3a). Порядок XAML: 0 щит; 1–3 идентичность
-    /// (вордмарк + заголовок + подзаголовок); 4–5 «завести доступ» (QR + буфер); 6–8 «войти»
-    /// (разделитель + Telegram + сайт). Члены бита делят его задержку — 4 бита, а не 9-шаговый drip.
+    /// Появление одного блока: opacity 0→1 + RenderTransform from→to. FillMode.None + сброс базы в
+    /// finally — иначе анимация «залипла» бы поверх :pressed-прогиба кнопок (у них тот же
+    /// RenderTransform). Предохранитель возвращает полную видимость, если анимацию оборвал
+    /// отсоединением от дерева.
     /// </summary>
-    private static int BeatDelayMs(int childIndex) => childIndex switch
-    {
-        0 => 0,               // бит 1 · щит-марка
-        1 or 2 or 3 => 60,    // бит 2 · идентичность
-        4 or 5 => 140,        // бит 3 · завести доступ
-        _ => 200,             // бит 4 · войти (и любой хвост)
-    };
-
-    /// <summary>
-    /// Раскрывает элемент: opacity 0→1 + RenderTransform from→to, 300мс OutQuint, с задержкой стаггера.
-    /// FillMode.None + восстановление базы — чтобы не затенять :pressed-scale кнопок. Предохранитель
-    /// (таймер) гарантированно возвращает полную видимость, если анимация прервана отсоединением.
-    /// </summary>
-    private static async Task PlayReveal(Control el, int delayMs, ITransform from, ITransform to)
+    private static async Task PlayReveal(Control el, TimeSpan delay, TimeSpan duration, ITransform from, ITransform to)
     {
         el.Opacity = 0;
         var anim = new Animation
         {
-            Duration = Motion.Dur.Reveal,
-            Delay = TimeSpan.FromMilliseconds(delayMs),
+            Duration = duration,
+            Delay = delay,
             Easing = Motion.Ease.OutQuint,
             FillMode = FillMode.None,
             Children =
@@ -178,7 +172,7 @@ public partial class OnboardingView : UserControl
                 el.Opacity = 1;
                 el.RenderTransform = null;
             },
-            TimeSpan.FromMilliseconds(delayMs + Motion.Dur.Reveal.TotalMilliseconds + 250));
+            delay + duration + TimeSpan.FromMilliseconds(250));
         try
         {
             await anim.RunAsync(el, cts.Token);
@@ -195,17 +189,214 @@ public partial class OnboardingView : UserControl
         }
     }
 
-    /// <summary>Возвращает колонку полностью видимой (когда стаггер пропущен: lite/preview).</summary>
-    private void RestoreChildren()
+    private void RestoreAll()
     {
-        foreach (var child in Column.Children)
+        foreach (var el in new Control[] { ShieldRing, TitleText, SubtitleText, ActionsBlock })
         {
-            child.Opacity = 1;
-            child.RenderTransform = null;
+            el.Opacity = 1;
+            el.RenderTransform = null;
         }
     }
 
-    /// <summary>reduced-motion: превью-хук (PREVIEW_VIEW), дизайн-режим ИЛИ live lite (MotionState).</summary>
+    // ==================== Карточка найденной ссылки ====================
+
+    // Экран живёт в дереве постоянно (MainWindow только переключает IsVisible), поэтому буфер
+    // перечитываем на КАЖДЫЙ показ, а не один раз в ctor: пользователь мог скопировать ссылку,
+    // пока экран был скрыт.
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        if (change.Property == IsVisibleProperty && IsVisible)
+        {
+            ProbeClipboard();
+        }
+    }
+
+    // Возврат фокуса окну — второй момент, когда ссылка могла появиться (пользователь сходил в
+    // браузер/Telegram и скопировал её). Подписка одна на время жизни вью.
+    private void HookWindowActivation()
+    {
+        if (TopLevel.GetTopLevel(this) is Window w)
+        {
+            w.Activated += (_, _) =>
+            {
+                if (IsVisible)
+                {
+                    ProbeClipboard();
+                }
+            };
+        }
+    }
+
+    /// <summary>
+    /// Читает буфер обмена и показывает/прячет карточку. Проверка КОНСЕРВАТИВНА: карточка обещает
+    /// «ссылка в буфере обмена», поэтому показывается только для того, что реально может быть
+    /// подпиской — схема протокола (vless/vmess/ss/trojan/…) или http(s)-ссылка. Ошибка чтения
+    /// буфера (нет доступа, пустой clipboard) — просто нет карточки, без всякого шума.
+    /// </summary>
+    private async void ProbeClipboard()
+    {
+        if (_clipboardProbeRunning || Design.IsDesignMode)
+        {
+            return;
+        }
+        _clipboardProbeRunning = true;
+        try
+        {
+            // Через AvaUtils, а не напрямую через IClipboard: чтение буфера в проекте уже один раз
+            // написано (и один раз обёрнуто в try), второй копии этой детали платформы не нужно.
+            var text = TopLevel.GetTopLevel(this) is Window w ? await AvaUtils.GetClipboardData(w) : null;
+            SetClipCard(LooksLikeSubscriptionLink(text));
+        }
+        catch
+        {
+            SetClipCard(false);
+        }
+        finally
+        {
+            _clipboardProbeRunning = false;
+        }
+    }
+
+    private static bool LooksLikeSubscriptionLink(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+        var s = text.Trim();
+        // Отсекаем «портянки» и многострочный мусор до разбора схемы: карточка про ОДНУ ссылку.
+        if (s.Length > 8192 || s.Contains('\n') || s.Contains(' '))
+        {
+            return false;
+        }
+        var scheme = s.IndexOf("://", StringComparison.Ordinal);
+        if (scheme <= 0)
+        {
+            return false;
+        }
+        return s[..scheme].ToLowerInvariant() switch
+        {
+            "http" or "https" or "vless" or "vmess" or "ss" or "ssr" or "trojan" or "socks" or "hysteria" or "hysteria2" or "hy2" or "tuic" or "wireguard" or "anytls" => true,
+            _ => false,
+        };
+    }
+
+    private void SetClipCard(bool show)
+    {
+        if (show == _clipCardShown)
+        {
+            return;
+        }
+        _clipCardShown = show;
+        ActionsBlock.Margin = show ? _actionsGapWithCard : _actionsGapPlain;
+        SetReveal(ClipRevealHost, ClipCardButton, show);
+    }
+
+    // ==================== «Другие способы» ====================
+
+    private void OnToggleMore(object? sender, RoutedEventArgs e)
+    {
+        _moreOpen = !_moreOpen;
+        if (_moreOpen)
+        {
+            MoreCaret.Classes.Add("open");
+        }
+        else
+        {
+            MoreCaret.Classes.Remove("open");
+        }
+        SetReveal(MoreRevealHost, (Control)MoreRevealHost.Child!, _moreOpen);
+    }
+
+    /// <summary>
+    /// Раскрытие/схлопывание по ВЫСОТЕ (motion.md «Раскрытия»). Темп и кривая живут в стилях
+    /// (Border.StartReveal), здесь — только целевая высота.
+    ///
+    /// Почему высота считается вручную: у схлопнутого хоста Height=0, поэтому обычный проход
+    /// раскладки зажимает DesiredSize ребёнка в ноль — натуральную высоту нужно спросить отдельным
+    /// Measure с бесконечной высотой. Зовётся из обработчика (вне прохода раскладки), поэтому
+    /// повторный Measure безопасен: следующий проход всё равно перемерит по реальному ограничению.
+    ///
+    /// Ширина для замера — живая ширина хоста, с откатом на ширину колонки: пока экран скрыт,
+    /// раскладки ещё не было и Bounds пуст, а мерить по бесконечной ширине нельзя — перенос строк
+    /// не сработал бы и высота вышла бы заниженной (текст обрезался бы при раскрытии).
+    /// </summary>
+    private void SetReveal(Border host, Control content, bool open)
+    {
+        if (!open)
+        {
+            host.Height = 0;
+            host.Opacity = 0;
+            host.IsHitTestVisible = false;
+            return;
+        }
+
+        var width = host.Bounds.Width > 0
+            ? host.Bounds.Width
+            : (Column.Bounds.Width > 0 ? Column.Bounds.Width : Column.Width);
+        content.Measure(new Size(width, double.PositiveInfinity));
+        host.Height = content.DesiredSize.Height;
+        host.Opacity = 1;
+        host.IsHitTestVisible = true;
+    }
+
+    // Ширина изменилась (масштаб интерфейса, смена языка) — перемеряем раскрытый хост, иначе
+    // «выросший» на перенос строк текст остался бы обрезанным зафиксированной высотой.
+    private void OnRevealHostSizeChanged(object? sender, SizeChangedEventArgs e)
+    {
+        if (!e.WidthChanged || sender is not Border host || host.Height <= 0)
+        {
+            return;
+        }
+        if (host.Child is Control content)
+        {
+            SetReveal(host, content, true);
+        }
+    }
+
+    // ==================== Действия ====================
+
+    // «Войти через Telegram». Реальную авторизацию доводит AccountViewModel через LoginView
+    // (подтверждение в приложении, повтор, «другой способ» — оверлей прогрузки этих ветвей не
+    // несёт), поэтому здесь Work=null: экран прогрузки ждёт сигналов VM, а не нашей задачи.
+    private void OnTelegram(object? sender, RoutedEventArgs e)
+    {
+        FlowRequested?.Invoke(this, new StartFlowRequest(StartFlow.Telegram, null));
+        (TopLevel.GetTopLevel(this) as MainWindow)?.OpenLoginTelegram();
+    }
+
+    // «Добавить из буфера обмена» (и тап по карточке найденной ссылки). Задачу импорта отдаём
+    // экрану прогрузки: он держит хореографию до её завершения, а не до истечения таймера.
+    private void OnClipboard(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not HomeViewModel vm)
+        {
+            return;
+        }
+        FlowRequested?.Invoke(this, new StartFlowRequest(StartFlow.Clipboard, vm.AddViaClipboard()));
+    }
+
+    // «Добавить по QR-коду» — скан экрана, БЕЗ экрана прогрузки. Две причины, обе по делу:
+    // screens.md знает ровно два набора текстов (Telegram и «из буфера»), и «Читаем буфер обмена»
+    // над сканом QR было бы враньём; а сам скан прячет окно (ScanScreenInteraction), так что
+    // полноэкранному оверлею во время него всё равно негде жить. Добавление идёт напрямую.
+    private void OnQr()
+    {
+        if (DataContext is HomeViewModel vm)
+        {
+            _ = vm.AddViaQr();
+        }
+    }
+
+    // «Войти через сайт» — браузер-хэндофф; дальше тот же терминальный путь, что у Telegram.
+    private void OnSite()
+    {
+        FlowRequested?.Invoke(this, new StartFlowRequest(StartFlow.Telegram, null));
+        (TopLevel.GetTopLevel(this) as MainWindow)?.OpenLoginSite();
+    }
+
+    /// <summary>reduced-motion: дизайн-режим, превью-хук (PREVIEW_VIEW) ИЛИ живой «Облегчённый режим».</summary>
     private static bool IsReducedMotion()
         => Design.IsDesignMode
            || Environment.GetEnvironmentVariable("PREVIEW_VIEW") is not null

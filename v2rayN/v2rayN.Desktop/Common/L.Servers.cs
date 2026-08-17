@@ -21,6 +21,12 @@ public sealed partial class L
         Add("Servers_EmptyHint", "Добавьте подписку, чтобы увидеть серверы", "Add a subscription to see your servers");
         Add("Servers_SearchPlaceholder", "Поиск серверов…", "Search servers…");
 
+        // ── Пинг в строке сервера (screens.md «Список серверов») ──
+        //  Единица замера отдельным ключом: «133 мс» / «133 ms». Недоступный узел — «n/a»
+        //  (одинаково в обеих локалях, ключ нужен ради единой точки правки).
+        Add("Servers_Ms", "мс", "ms");
+        Add("Servers_PingNa", "n/a", "n/a");
+
         // ── Subscription meta-bar (SubscriptionMetaView) ──
         Add("Sub_CollapseServers", "Свернуть серверы", "Collapse servers");
         Add("Sub_Pin", "Закрепить", "Pin");
@@ -31,5 +37,9 @@ public sealed partial class L
         Add("Sub_Expired", "Просрочено", "Expired");
         Add("Sub_Until", "до {0:dd.MM.yyyy}", "until {0:dd.MM.yyyy}");
         Add("Sub_AutoUpdate", "Автообновление — {0}", "Auto-update — {0}");
+
+        // ── Подтверждения пинга и обновления подписки (motion.md «Пинг и обновление подписки») ──
+        Add("Sub_ToastPinged", "Задержка обновлена", "Latency updated");
+        Add("Sub_ToastRefreshed", "Подписка обновлена · {0}", "Subscription updated · {0}");
     }
 }

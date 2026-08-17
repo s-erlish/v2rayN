@@ -25,6 +25,11 @@
     -->
 
     <UserControl.Resources>
+        <!--  Скругление карточки подписки = 16 (tokens.md). Локальный токен, а не число в атрибуте:
+              один источник правды на этот вид, пока владелец GlobalResources не поднимет его в
+              общую шкалу.  -->
+        <CornerRadius x:Key="Radius.SubCard">16</CornerRadius>
+
         <!--  Глифы-иконки, портированные 1:1 из Android res/drawable (viewport 24×24).  -->
         <!--  ic_arrow_drop_down/шеврон группы — тонкий caret «⌄» (expand_more).  -->
         <StreamGeometry x:Key="Meta.Chevron">M7.41,8.59L12,13.17l4.59,-4.58L18,10l-6,6 -6,-6z</StreamGeometry>
@@ -56,12 +61,12 @@
               вида (переопределяют глобальный Button.IconButton40), масштаб карточки — компактный, но
               цель касания 34 остаётся комфортной для мыши десктопа. Всё видимо, ничего не переполняет.  -->
         <Style Selector="Button.MetaIcon">
-            <Setter Property="Width" Value="34" />
-            <Setter Property="Height" Value="34" />
+            <Setter Property="Width" Value="30" />
+            <Setter Property="Height" Value="30" />
         </Style>
         <Style Selector="Button.MetaIcon PathIcon">
-            <Setter Property="Width" Value="20" />
-            <Setter Property="Height" Value="20" />
+            <Setter Property="Width" Value="18" />
+            <Setter Property="Height" Value="18" />
         </Style>
         <!--  «Удалить подписку» — деструктив, но ТИХИЙ: глиф нейтральный (Brush.OnSurfaceVariant от
               IconButton40) в покое и лишь ЗАТЕМНЯЕТСЯ на шаг (Brush.OnSurfaceVariantHover) при
@@ -81,19 +86,18 @@
         <Style Selector="Button.MetaDanger:pressed /template/ ContentPresenter#PART_ContentPresenter">
             <Setter Property="Background" Value="Transparent" />
         </Style>
-        <!--  Компактная трафик-пилюля: трек/заливка 14 (плотнее базовых 16) под узкую карту.  -->
-        <Style Selector="Border.TrafficPill">
-            <Setter Property="Height" Value="14" />
-        </Style>
     </UserControl.Styles>
 
-    <!--  Карточка мета-бара (bg_server_card): Surface, radius 20, 1px OutlineVariant.
-          Паддинг 16/12/12/12 как в Android. Без вложенных карточек.
-          Всегда видна для группы; тело — только у реальной подписки с userinfo.  -->
+    <!--  Карточка подписки: Surface, 1px OutlineVariant, СКРУГЛЕНИЕ 16 (tokens.md «Скругления»:
+          карточка 16). Глобальный Radius.Card = 20 достался ветке от прежней шкалы и им пользуются
+          чужие экраны — поэтому здесь локальный именованный токен, а не магическое число в атрибуте;
+          в GlobalResources его должен поднять владелец токенов (см. отчёт). Паддинг 12/14/14/14
+          как в прототипе. Без вложенных карточек.  -->
     <Border
         x:Name="MetaCard"
         Classes="Card"
-        Padding="14,10,10,10">
+        CornerRadius="{StaticResource Radius.SubCard}"
+        Padding="14,12,14,14">
         <StackPanel>
 
             <!--  ============ Строка 1: шеврон + заголовок/подзаголовок + действия ============  -->
@@ -123,14 +127,16 @@
                     <TextBlock
                         x:Name="TitleText"
                         Classes="Title"
+                        FontSize="15"
                         Text=""
                         TextTrimming="CharacterEllipsis" />
                     <!--  Подзаголовок несёт дату/время последнего обновления — цифрам даём
                           Font.Numeric + tnum (табличные, слэш-ноль), буквы не затрагиваются.  -->
                     <TextBlock
                         x:Name="SubtitleText"
-                        Margin="0,2,0,0"
+                        Margin="0,3,0,0"
                         Classes="Caption"
+                        FontSize="11"
                         FontFamily="{DynamicResource Font.Numeric}"
                         FontFeatures="tnum,lnum,zero"
                         Text=""
@@ -142,14 +148,41 @@
                     Grid.Column="2"
                     VerticalAlignment="Center"
                     Orientation="Horizontal">
+                    <!--  Пинг: на время замера глиф В ТОМ ЖЕ слоте сменяется вращающимся кругом
+                          (motion.md «Пинг и обновление подписки»), поэтому вокруг ничего не двигается.  -->
                     <Button
                         x:Name="PingButton"
                         Classes="IconButton40 Row Accent MetaIcon"
                         ToolTip.Tip="{loc:T Common_TestLatency}">
-                        <PathIcon
-                            HorizontalAlignment="Center"
-                            VerticalAlignment="Center"
-                            Data="{StaticResource Meta.Ping}" />
+                        <Panel>
+                            <PathIcon
+                                x:Name="PingIcon"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Data="{StaticResource Meta.Ping}" />
+                            <Ellipse
+                                x:Name="PingSpinner"
+                                Width="16"
+                                Height="16"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Classes="Spinner"
+                                IsVisible="False"
+                                Stroke="{DynamicResource Brush.Accent}"
+                                StrokeDashArray="6.3,18.8"
+                                StrokeLineCap="Round"
+                                StrokeThickness="2">
+                                <!--  Явный центр вращения (половина 16 = 8): глобальный
+                                      Ellipse.Spinner.spinning крутит RotateTransform.Angle, а origin
+                                      к этому пути не применяется — без CenterX/CenterY дуга «облетала».  -->
+                                <Ellipse.RenderTransform>
+                                    <RotateTransform
+                                        Angle="0"
+                                        CenterX="8"
+                                        CenterY="8" />
+                                </Ellipse.RenderTransform>
+                            </Ellipse>
+                        </Panel>
                     </Button>
                     <!--  Обновить: во время обновления глиф В ТОМ ЖЕ слоте заменяется компактным
                           спиннером-дугой (никакого растущего прогресс-бара, ничего вокруг не сдвигается).  -->
@@ -223,51 +256,66 @@
                       ОДНУ линию справа от пилюли в широком макете, а в КОМПАКТЕ (~372) уводит
                       его на свою строку под пилюлю — так дата и пилюля НИКОГДА не налезают друг
                       на друга и обе читаются целиком. Резервируем место сеткой (нет сдвига CLS).  -->
+                <!--  Пилюля трафика (screens.md): значение слева 12/500, срок справа, под ними
+                      линия 2 с заливкой по доле. Не «текст внутри залитой капсулы», а строка данных
+                      с тонким индикатором — цифры читаются на фоне карточки, а не на градиенте.
+                      Линия лежит В СВОЁМ ряду (не абсолютом поверх текста), поэтому ничего не
+                      наезжает друг на друга ни в какой ширине.  -->
                 <Grid
                     x:Name="TrafficRow"
-                    Margin="0,8,0,0"
+                    Margin="0,12,0,0"
                     RowDefinitions="Auto,Auto">
-                    <!--  Слим-пилюля 160×14: трек SurfaceVariant, radius 8. Заливка — ПЛАВНЫЙ
-                          градиент светлое→акцент (бело→синий на тёмной), строится в code-behind
-                          из живого Brush.Accent, поэтому корректна во всех 3 темах: тёмная
-                          (near-white→синий), светлая (старт светлее трека, не «растворяется»),
-                          mono (акцент = серо-белый ⇒ серый перелив, без синевы).  -->
-                    <Panel
-                        Grid.Row="0"
-                        Width="{StaticResource Size.TrafficPill}"
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center">
-                        <Border Classes="TrafficPill" VerticalAlignment="Center">
-                            <!--  Заливка: Width = 160 * trafficFraction. Безлимит (∞) ⇒ 0 (пустой трек).
-                                  Background (градиент) назначает code-behind — тема-зависимо.  -->
-                            <Border
-                                x:Name="TrafficFill"
-                                Width="0"
-                                Classes="TrafficPill Fill" />
-                        </Border>
+                    <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto">
                         <TextBlock
                             x:Name="TrafficText"
-                            HorizontalAlignment="Center"
+                            Grid.Column="0"
                             VerticalAlignment="Center"
                             Classes="Numeric"
                             FontFamily="{DynamicResource Font.Numeric}"
                             FontFeatures="tnum,lnum,zero"
-                            FontSize="11"
+                            FontSize="12"
                             FontWeight="Medium"
                             Text="" />
-                    </Panel>
-                    <!--  Expiry: «∞» / «до dd.MM.yyyy» / «Просрочено» (красный) — привязка.
-                          Строку/выравнивание назначает code-behind (широкий → Row 0 справа;
-                          компакт → Row 1 по центру под пилюлей). Цифры — Font.Numeric + tnum.  -->
-                    <TextBlock
-                        x:Name="ExpiryText"
-                        Grid.Row="0"
-                        HorizontalAlignment="Right"
-                        VerticalAlignment="Center"
-                        Classes="Caption"
-                        FontFamily="{DynamicResource Font.Numeric}"
-                        FontFeatures="tnum,lnum,zero"
-                        Text="" />
+                        <!--  Срок: «∞» / «до dd.MM.yyyy» / «Просрочено» (красный) — данные подписки.
+                              Строку/выравнивание назначает code-behind: широкий макет — справа на
+                              одной линии со значением, компакт — своя строка под линией.  -->
+                        <TextBlock
+                            x:Name="ExpiryText"
+                            Grid.Column="2"
+                            VerticalAlignment="Center"
+                            Classes="Caption"
+                            FontFamily="{DynamicResource Font.Numeric}"
+                            FontFeatures="tnum,lnum,zero"
+                            Text="" />
+                    </Grid>
+
+                    <!--  Линия 2: трек во всю ширину + заливка по доле трафика. Ширину заливки
+                          (доля × живая ширина трека) и её кисть назначает code-behind, поэтому
+                          индикатор верен при любой ширине колонки и в любой из трёх тем.  -->
+                    <Border
+                        x:Name="TrafficTrack"
+                        Grid.Row="1"
+                        Height="2"
+                        Margin="0,6,0,0"
+                        Background="{DynamicResource Brush.SurfaceVariant}"
+                        ClipToBounds="True"
+                        CornerRadius="1">
+                        <Border
+                            x:Name="TrafficFill"
+                            Width="0"
+                            HorizontalAlignment="Left"
+                            CornerRadius="1">
+                            <Border.Transitions>
+                                <Transitions>
+                                    <DoubleTransition Property="Width" Duration="0:0:0.5">
+                                        <DoubleTransition.Easing>
+                                            <SplineEasing X1="0.25" Y1="1" X2="0.5" Y2="1" />
+                                        </DoubleTransition.Easing>
+                                    </DoubleTransition>
+                                </Transitions>
+                            </Border.Transitions>
+                        </Border>
+                    </Border>
                 </Grid>
 
                 <!--  Announce-баннер подписки (по центру, приглушённый). Скрыт, если пусто. Переносится и
@@ -278,8 +326,10 @@
                       в любой ширине и в любом состоянии (свёрнуто/развёрнуто).  -->
                 <TextBlock
                     x:Name="AnnounceText"
-                    Margin="0,8,0,0"
+                    Margin="0,10,0,0"
                     Classes="Caption"
+                    FontSize="11.5"
+                    LineHeight="17.8"
                     Text=""
                     TextAlignment="Center"
                     TextTrimming="None"
@@ -295,8 +345,8 @@
                     <Button
                         x:Name="SupportButton"
                         Grid.Column="0"
-                        Height="34"
-                        Padding="10,0,14,0"
+                        Height="30"
+                        Padding="14,0,18,0"
                         VerticalAlignment="Center"
                         Background="{DynamicResource Brush.AccentContainer}"
                         Classes="Tonal"
@@ -317,16 +367,20 @@
                     </Button>
 
                     <!--  Telegram (правый нижний угол): компактная иконка-кнопка, tint Accent.  -->
+                    <!--  Telegram — единственный глиф со своим фирменным цветом: токен Brush.Telegram
+                          (#2AABEE в тёмной и светлой, белый в чёрно-белой). Именно поэтому здесь НЕ
+                          класс Accent — иначе самолётик стал бы синим акцентом приложения.  -->
                     <Button
                         x:Name="TelegramButton"
                         Grid.Column="2"
-                        Classes="IconButton40 Row Accent MetaIcon"
+                        Classes="IconButton40 Row MetaIcon"
                         VerticalAlignment="Center"
                         ToolTip.Tip="Telegram">
                         <PathIcon
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center"
-                            Data="{StaticResource Meta.Telegram}" />
+                            Data="{StaticResource Meta.Telegram}"
+                            Foreground="{DynamicResource Brush.Telegram}" />
                     </Button>
                 </Grid>
             </StackPanel>

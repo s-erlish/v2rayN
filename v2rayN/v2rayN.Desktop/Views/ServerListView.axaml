@@ -44,14 +44,33 @@
     </UserControl.Resources>
 
     <UserControl.Styles>
-        <!--  Row divider (port of custom_divider): 1px, inset to the text-column start
-              (16 gutter + 12 row padding + 40 tile + 12 gap = 80), full-bleed to the 16 gutter
-              on the right. Hidden on the selected row so the blue pill reads cleanly. ONE
-              separator only — a single row gap, no competing margins.  -->
-        <Style Selector="Border.rowDivider">
+        <!--  ==================== РАЗДЕЛИТЕЛЬ БЕЗ МЕСТА В РАСКЛАДКЕ ====================
+              ПРИЁМКА: «список серверов не смещается при выборе».
+
+              Раньше разделитель был ОТДЕЛЬНЫМ Border высотой 1 ПОД строкой, скрытым у выбранной
+              (IsVisible="{Binding !IsActive}"). Скрытие схлопывало этот пиксель, и в момент выбора
+              весь хвост списка подпрыгивал на 1px — ровно то смещение, которое приёмка ловит.
+
+              tokens.md формулирует иначе: «разделитель — ВНУТРЕННЯЯ ТЕНЬ 1 сверху, у первой и у
+              выбранной нет». Внутренняя тень МЕСТА НЕ ЗАНИМАЕТ. Поэтому здесь волосяная линия
+              лежит ВНУТРИ самой строки, приклеенная к её верхней кромке, и переключается
+              прозрачностью, а не видимостью: занимаемое место не меняется НИКОГДА.
+
+              Итого геометрия строки одинакова в обоих состояниях — высота, отступы, поля и рамка
+              1.5 неизменны; при выборе меняются ТОЛЬКО цвета (заливка, цвет рамки, эта линия).  -->
+        <Style Selector="Border.rowHairline">
             <Setter Property="Height" Value="1" />
-            <Setter Property="Margin" Value="80,0,16,0" />
+            <Setter Property="VerticalAlignment" Value="Top" />
+            <Setter Property="Margin" Value="12,0" />
+            <Setter Property="IsHitTestVisible" Value="False" />
             <Setter Property="Background" Value="{DynamicResource Brush.OutlineVariant}" />
+        </Style>
+        <!--  У первой строки группы и у выбранной линии нет — гасим прозрачностью, НЕ видимостью.  -->
+        <Style Selector="Border.ServerRow.selected Border.rowHairline">
+            <Setter Property="Opacity" Value="0" />
+        </Style>
+        <Style Selector="Border.rowHairline.first">
+            <Setter Property="Opacity" Value="0" />
         </Style>
 
         <!--  Пинг-спиннер: гасим ПОЛНОСТЬЮ вне «теста» и под «Облегчённым режимом».
@@ -85,11 +104,13 @@
             <ItemsControl ItemsSource="{Binding ServerGroups}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vms:HomeServerGroup">
-                        <StackPanel Margin="0,0,0,4">
+                        <StackPanel Margin="0,0,0,14">
 
-                            <!--  Subscription meta-bar = the section header (name + traffic pill +
-                                  actions + collapse chevron + delete). Flows directly into its rows.  -->
-                            <local:SubscriptionMetaView Margin="16,16,16,8" />
+                            <!--  Карточка подписки = header секции (имя + трафик + действия + шеврон
+                                  сворачивания + удаление). Бесшовно продолжается в свои серверы.
+                                  Боковых отступов НЕТ: колонку уже отбивает сама «Главная»
+                                  (14/10/14/14), второй gutter здесь дал бы двойной отступ.  -->
+                            <local:SubscriptionMetaView Margin="0,0,0,10" />
 
                             <!--  Group rows reveal (collapse with the group via the meta-bar chevron).
                                   The chevron flips HomeServerGroup.IsExpanded; the code-behind runs a
@@ -133,10 +154,14 @@
                                                   (первые ≤8 строк всплывают 12→0 + fade, задержка i×40мс,
                                                   ~300мс OutQuint). Строки видимы ПО УМОЛЧАНИЮ — анимация лишь
                                                   усиливает уже видимый покой (см. code-behind, §A.4).  -->
+                                            <!--  Геометрия строки — tokens.md «Строка сервера»: высота от 58,
+                                                  паддинг 8×12, скругление 14, рамка 1.5 ВСЕГДА (прозрачная у
+                                                  невыбранных), отступ снизу 2. Ни одно из этих чисел не зависит
+                                                  от выбора — при выборе меняются только цвета.  -->
                                             <Border
-                                                MinHeight="52"
-                                                Margin="16,2"
-                                                Padding="12,6"
+                                                MinHeight="58"
+                                                Margin="0,0,0,2"
+                                                Padding="12,8"
                                                 Classes="ServerRow"
                                                 Classes.selected="{Binding IsActive}"
                                                 ContextRequested="OnRowContextRequested"
@@ -166,34 +191,32 @@
 
                                                 <Grid VerticalAlignment="Center" ColumnDefinitions="Auto,*,Auto">
 
-                                                    <!--  Flag: 40dp CIRCULAR tile (matches Android) — the country flag reads as a
-                                                          clean disc, not a rounded square. The flag PNGs are already circular with
-                                                          transparent corners, so a circular tile (radius = half = 20) removes the
-                                                          square corners that used to poke out behind the disc. A 1.5px inset lets the
-                                                          dark neutral tile show as a subtle ring around the flag (Android treatment).
-                                                          RemarkToFlag resolves the country flag from Remarks; non-country / aggregate
-                                                          rows fall back to the globe disc (xx.png) — a distinct, data-driven emblem.  -->
+                                                    <!--  Флаг: круглая плитка 32 (tokens.md «Строка сервера»). PNG уже круглые
+                                                          с прозрачными углами, поэтому радиус = половина = 16 убирает квадратные
+                                                          углы за диском; нейтральная подложка читается тонким кольцом вокруг флага.
+                                                          RemarkToFlag достаёт страну из Remarks; не-страновые / сводные строки
+                                                          падают на глобус (xx.png) — отдельная, но такая же data-driven эмблема.  -->
                                                     <Border
                                                         Grid.Column="0"
-                                                        Width="40"
-                                                        Height="40"
+                                                        Width="32"
+                                                        Height="32"
                                                         Margin="0,0,12,0"
-                                                        Padding="1.5"
                                                         VerticalAlignment="Center"
                                                         Background="{DynamicResource Brush.Tile.Neutral}"
                                                         ClipToBounds="True"
-                                                        CornerRadius="20">
+                                                        CornerRadius="16">
                                                         <Image Source="{Binding Remarks, Converter={StaticResource RemarkToFlag}}" Stretch="UniformToFill" />
                                                     </Border>
 
-                                                    <!--  Name (bold, ellipsize, flag stripped) + «protocol chip · transport».  -->
+                                                    <!--  Имя 14/700 (флаг-эмодзи снят — он и так в плитке) + «чип протокола · транспорт».  -->
                                                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                                         <TextBlock
                                                             Classes="Title"
+                                                            FontSize="14"
                                                             Text="{Binding Remarks, Converter={StaticResource StripLeadingFlag}}"
                                                             TextTrimming="CharacterEllipsis" />
                                                         <StackPanel
-                                                            Margin="0,2,0,0"
+                                                            Margin="0,5,0,0"
                                                             VerticalAlignment="Center"
                                                             Orientation="Horizontal">
                                                             <Border Classes="ProtocolChip">
@@ -220,7 +243,10 @@
                                                           indeterminate spinner (NO «Testing…» text); when the result lands, show
                                                           the coloured ms value (green good / red bad). The two states are mutually
                                                           exclusive, share this Auto column, and are right-aligned on one vertical.  -->
-                                                    <Panel Grid.Column="2" Margin="8,0,0,0">
+                                                    <Panel
+                                                        Grid.Column="2"
+                                                        Margin="12,0,0,1"
+                                                        VerticalAlignment="Bottom">
                                                         <!--  In-flight: 15px arc spinner (reuses the global Ellipse.Spinner.spinning).  -->
                                                         <!--  Видимость дуги НЕ биндим напрямую: базово скрыта, а класс .spinning
                                                               (по DelayTesting) вместе с :is(Window):not(.lite) в UserControl.Styles
@@ -248,21 +274,32 @@
                                                                     CenterY="7.5" />
                                                             </Ellipse.RenderTransform>
                                                         </Ellipse>
-                                                        <!--  Result: right-aligned, tabular Grotesk digits, coloured by latency.  -->
+                                                        <!--  Значение: 12.5/500, табличные цифры, цвет по задержке —
+                                                              зелёный до 150, жёлтый до 350, дальше красный, серый «n/a»
+                                                              у недоступного (screens.md «Список серверов»).  -->
                                                         <TextBlock
                                                             VerticalAlignment="Center"
                                                             Classes="Numeric"
-                                                            FontWeight="Bold"
+                                                            FontSize="12.5"
+                                                            FontWeight="Medium"
                                                             Foreground="{Binding Delay, Converter={StaticResource DelayInk}}"
                                                             IsVisible="{Binding DelayVal, Converter={StaticResource DelayResult}}"
                                                             Text="{Binding DelayVal, Converter={StaticResource DelayDisplay}}"
                                                             TextAlignment="Right" />
                                                     </Panel>
+
+                                                    <!--  Разделитель ВНУТРИ строки, приклеенный к её верхней кромке
+                                                          (см. Border.rowHairline): не занимает места, поэтому выбор
+                                                          не двигает список. Лежит поверх сетки, но не ловит указатель.  -->
+                                                    <Border
+                                                        Grid.Column="0"
+                                                        Grid.ColumnSpan="3"
+                                                        Margin="0,-8,0,0"
+                                                        Classes="rowHairline"
+                                                        DataContextChanged="OnRowHairlineRebound"
+                                                        Loaded="OnRowHairlineSync" />
                                                 </Grid>
                                             </Border>
-
-                                            <!--  Inter-row divider (single separator; hidden on the selected row).  -->
-                                            <Border Classes="rowDivider" IsVisible="{Binding !IsActive}" />
                                         </StackPanel>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>

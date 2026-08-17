@@ -218,6 +218,39 @@ public partial class ServerListView : UserControl
         _rowPressTarget = null;
     }
 
+    /// <summary>
+    /// Волосяной разделитель есть у каждой строки, КРОМЕ первой в группе (tokens.md «Строка сервера»).
+    /// «Первая» вычисляется здесь, а не биндингом: контейнеры виртуализируются и переиспользуются,
+    /// поэтому позицию надо пересчитывать и на реализации (Loaded), и на смене данных в уже живом
+    /// контейнере (DataContextChanged) — иначе переработанная строка унесла бы чужой признак.
+    ///
+    /// Линия ГАСИТСЯ ПРОЗРАЧНОСТЬЮ, а не видимостью: её высота 1 остаётся в раскладке всегда,
+    /// поэтому ни первая строка, ни выбранная не сдвигают список (приёмка «не смещается при выборе»).
+    /// </summary>
+    //  Loaded даёт EventHandler<RoutedEventArgs>, DataContextChanged — обычный EventHandler:
+    //  две тонкие обёртки над одной логикой, чтобы XAML-компилятор видел точные сигнатуры.
+    private void OnRowHairlineSync(object? sender, RoutedEventArgs e) => SyncHairline(sender);
+
+    private void OnRowHairlineRebound(object? sender, EventArgs e) => SyncHairline(sender);
+
+    private static void SyncHairline(object? sender)
+    {
+        if (sender is not Border hairline)
+        {
+            return;
+        }
+
+        var first = false;
+        if (hairline.DataContext is { } item
+            && hairline.FindAncestorOfType<ItemsControl>()?.ItemsSource is System.Collections.IList list
+            && list.Count > 0)
+        {
+            first = ReferenceEquals(list[0], item);
+        }
+
+        hairline.Classes.Set("first", first);
+    }
+
     #endregion Row selection
 
     #region List-reveal stagger (§A.4 — first-population only; Lite / reduced-motion disables it)
@@ -869,10 +902,10 @@ public sealed class DelayTestingConverter : IValueConverter
 }
 
 /// <summary>
-/// Ping display text (A8): a real reading renders its millisecond number; a failed / timed-out probe
-/// (the core writes «-1») renders an em-dash «—», never the raw «-1». Only reached for numeric results
-/// (visibility is gated by <see cref="DelayResultConverter"/>; a test in flight shows the spinner), so
-/// this converter only decides the failure marker vs. the number. Local to ServerListView.
+/// Текст пинга (screens.md «Список серверов»): реальный замер печатается как «133 мс», недоступный
+/// узел («-1» / 0 от ядра) — как «n/a», НИКОГДА как сырое «-1». Сюда попадают только числовые
+/// результаты (видимость держит <see cref="DelayResultConverter"/>, идущий тест показывает спиннер),
+/// поэтому converter решает лишь «число или n/a». Локален для ServerListView.
 /// </summary>
 public sealed class DelayDisplayConverter : IValueConverter
 {
@@ -881,39 +914,50 @@ public sealed class DelayDisplayConverter : IValueConverter
         var s = value?.ToString();
         if (int.TryParse(s, out var ms) && ms <= 0)
         {
-            return "—"; //  timeout / failure — no number, no latency ink (see DelayInkConverter)
+            //  Недоступен — «n/a» серым (см. DelayInkConverter), не число и не латентность.
+            return L.T("Servers_PingNa");
         }
-        return s;
+        return $"{s} {L.T("Servers_Ms")}";
     }
 
     public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => null;
 }
 
 /// <summary>
-/// Ping value ink (A8): a real reading uses the theme reading-ink (blue on light / white on dark, the
-/// same single tone as the old DelayColorConverter — no green/red good-bad signal); a failed / timed-out
-/// probe (<c>Delay &lt;= 0</c>) renders its em-dash in the MUTED variant tone so it reads as «no result»,
-/// not as a latency. Theme-resolved via the active <see cref="ThemeVariant"/> (honours the mono overlay),
-/// with literal Incy-token fallbacks so the binding never drops. Local to ServerListView.
+/// Чернила пинга (screens.md): «зелёный до 150, жёлтый до 350, дальше красный; недоступный — серый
+/// n/a». Три токена — <c>Brush.Green</c> / <c>Brush.Yellow</c> / <c>Brush.RedText</c> — а не три
+/// литерала: в «Чёрно-белой» mono-оверлей сводит их к белому и серому, поэтому шкала сама
+/// обесцвечивается и «синего (и вообще цвета) не остаётся». Тема резолвится по активному
+/// <see cref="ThemeVariant"/>, литеральные фолбэки нужны лишь чтобы биндинг не оборвался.
 /// </summary>
 public sealed class DelayInkConverter : IValueConverter
 {
     private static readonly IBrush _mutedFallback = new SolidColorBrush(Color.Parse("#9BA1AD")); // Brush.OnSurfaceVariant
-    private static readonly IBrush _blueFallback = new SolidColorBrush(Color.Parse("#4C8DFF"));   // Brush.Accent (Light)
-    private static readonly IBrush _whiteFallback = new SolidColorBrush(Color.Parse("#F2F4F8"));  // Brush.OnSurface (Dark)
+    private static readonly IBrush _greenFallback = new SolidColorBrush(Color.Parse("#22C55E"));  // Brush.Green
+    private static readonly IBrush _yellowFallback = new SolidColorBrush(Color.Parse("#EAB308")); // Brush.Yellow
+    private static readonly IBrush _redFallback = new SolidColorBrush(Color.Parse("#FF6069"));    // Brush.RedText
+
+    //  Пороги screens.md. Держим здесь, а не в разметке: одна шкала на список и на любой будущий
+    //  потребитель замера.
+    private const int GoodMs = 150;
+    private const int FairMs = 350;
 
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
-        // Failed / timeout → muted «no result» ink (not a latency colour).
-        if (value is int ms && ms <= 0)
+        //  Недоступен / таймаут → серый «n/a»: это не задержка, а её отсутствие.
+        if (value is not int ms || ms <= 0)
         {
             return Resolve("Brush.OnSurfaceVariant", _mutedFallback);
         }
-        // Real reading → single theme ink: blue on light, white on dark (mono maps via tokens).
-        var light = Application.Current?.ActualThemeVariant == ThemeVariant.Light;
-        return light
-            ? Resolve("Brush.Accent", _blueFallback)
-            : Resolve("Brush.OnSurface", _whiteFallback);
+
+        if (ms <= GoodMs)
+        {
+            return Resolve("Brush.Green", _greenFallback);
+        }
+
+        return ms <= FairMs
+            ? Resolve("Brush.Yellow", _yellowFallback)
+            : Resolve("Brush.RedText", _redFallback);
     }
 
     private static IBrush Resolve(string key, IBrush fallback)

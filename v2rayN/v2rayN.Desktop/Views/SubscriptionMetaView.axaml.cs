@@ -31,9 +31,6 @@ public partial class SubscriptionMetaView : UserControl
     private static readonly IBrush _muted = new SolidColorBrush(Color.Parse("#9BA1AD"));        // Brush.OnSurfaceVariant
     private static readonly IBrush _red = new SolidColorBrush(Color.Parse("#F04452"));          // Brush.Red (destructive)
 
-    //  Ширина трек-пилюли = @dimen Size.TrafficPill (160): заливка = 160 * used/total.
-    private const double TrafficPillWidth = 160d;
-
     //  Порог одной строки для трафик-ряда: ниже этой ширины пилюля-по-центру и правая дата
     //  (обе фиксированной ширины) начали бы налезать при ~372 — поэтому дату уводим на свою
     //  строку под пилюлю. Держим запас: центрированные 160 + правая дата требуют ~380–400.
@@ -43,11 +40,15 @@ public partial class SubscriptionMetaView : UserControl
     //  Живая ширина вида → раскладка трафик-ряда (одна строка ↔ две). Живёт, пока во дереве.
     private IDisposable? _boundsSub;
 
+    //  Живая ширина трека линии трафика → пиксели заливки из доли.
+    private IDisposable? _trackBoundsSub;
+
     private HomeServerGroup? _group;
     private string _supportUrl = string.Empty;
     private string _webPageUrl = string.Empty;
     private string _currentSubId = string.Empty;
     private bool _refreshing;
+    private bool _pinging;
 
     //  Last subscription projected onto the meta-bar. Kept so a live language switch can re-render the
     //  imperative fields (expiry / subtitle / traffic units) without re-fetching from the engine.
@@ -110,6 +111,9 @@ public partial class SubscriptionMetaView : UserControl
         //  Reactive width: the traffic row switches one-line ↔ stacked so the pill and expiry
         //  never collide in compact (~372) yet stay on one line when there is room.
         _boundsSub = this.GetObservable(BoundsProperty).Subscribe(b => ApplyTrafficLayout(b.Width));
+        //  Ширина самого трека меняется независимо от ширины вида (паддинги карточки, скролл-бар),
+        //  поэтому долю пересчитываем и по его собственным границам.
+        _trackBoundsSub = TrafficTrack.GetObservable(BoundsProperty).Subscribe(_ => ApplyTrafficFill());
         ApplyMotionMode();
     }
 
@@ -120,6 +124,8 @@ public partial class SubscriptionMetaView : UserControl
         ActualThemeVariantChanged -= OnThemeVariantChanged;
         _boundsSub?.Dispose();
         _boundsSub = null;
+        _trackBoundsSub?.Dispose();
+        _trackBoundsSub = null;
         Unhook();
     }
 
@@ -132,15 +138,20 @@ public partial class SubscriptionMetaView : UserControl
         }
     }
 
-    //  Раскладка трафик-ряда по фактической ширине: широкий → дата на строке пилюли справа;
-    //  компакт → дата на своей строке по центру под пилюлей. Место зарезервировано сеткой
-    //  (RowDefinitions Auto,Auto), поэтому переключение не двигает соседей рывком.
+    //  Раскладка трафик-ряда по фактической ширине: широкий → срок справа на строке значения;
+    //  компакт → срок на своей строке под линией. Место зарезервировано сеткой (Auto,Auto),
+    //  поэтому переключение не двигает соседей рывком.
+    //
+    //  Здесь же пересчитывается ширина заливки: линия тянется во всю ширину карточки, значит
+    //  доля должна пересчитываться при КАЖДОМ изменении ширины, а не один раз при привязке.
     private void ApplyTrafficLayout(double width)
     {
         if (width <= 0)
         {
             return;
         }
+
+        ApplyTrafficFill();
 
         var oneRow = width >= TrafficOneRowMinWidth;
         if (oneRow == _trafficOneRow && ExpiryText.IsInitialized)
@@ -152,20 +163,36 @@ public partial class SubscriptionMetaView : UserControl
         if (oneRow)
         {
             Grid.SetRow(ExpiryText, 0);
+            Grid.SetColumn(ExpiryText, 2);
             ExpiryText.HorizontalAlignment = HorizontalAlignment.Right;
-            ExpiryText.VerticalAlignment = VerticalAlignment.Center;
             ExpiryText.TextAlignment = TextAlignment.Right;
-            ExpiryText.Margin = new Thickness(0);
+            ExpiryText.Margin = new Thickness(8, 0, 0, 0);
         }
         else
         {
+            //  Компакт: срок уезжает под линию (в TrafficRow, ряд 2 — второй ряд сетки).
             Grid.SetRow(ExpiryText, 1);
-            ExpiryText.HorizontalAlignment = HorizontalAlignment.Center;
-            ExpiryText.VerticalAlignment = VerticalAlignment.Center;
-            ExpiryText.TextAlignment = TextAlignment.Center;
-            //  4dp по единой шкале между пилюлей и датой в компактном стеке.
-            ExpiryText.Margin = new Thickness(0, 4, 0, 0);
+            Grid.SetColumn(ExpiryText, 0);
+            ExpiryText.HorizontalAlignment = HorizontalAlignment.Right;
+            ExpiryText.TextAlignment = TextAlignment.Right;
+            ExpiryText.Margin = new Thickness(0, 6, 0, 0);
         }
+    }
+
+    //  Заливка линии трафика = доля × живая ширина трека. Доля хранится отдельно (а не как
+    //  готовая ширина), потому что трек резиновый: та же подписка на 440 и на 340 обязана дать
+    //  одинаковую ДОЛЮ, а не одинаковые пиксели.
+    private double _trafficFraction;
+
+    private void ApplyTrafficFill()
+    {
+        var track = TrafficTrack.Bounds.Width;
+        if (track <= 0)
+        {
+            return;
+        }
+
+        TrafficFill.Width = Math.Clamp(_trafficFraction, 0d, 1d) * track;
     }
 
     //  Re-project the current subscription so the localized imperative fields follow the new language.
@@ -358,9 +385,11 @@ public partial class SubscriptionMetaView : UserControl
         TrafficText.Text = unlimited
             ? $"{FormatBytes(used)} / ∞"
             : $"{FormatBytes(used)} / {FormatBytes(total)}";
-        // Fill width = 160 * used/total; unlimited => empty track (0), like the reference.
-        TrafficFill.Width = unlimited ? 0d : TrafficPillWidth * Math.Clamp((double)used / total, 0d, 1d);
-        // Polished light→accent gradient fill (per-theme, mono-safe) — built from the live accent.
+        // Доля заливки; безлимит (∞) ⇒ пустой трек, как в референсе. Пиксели считает
+        // ApplyTrafficFill по живой ширине трека — линия резиновая.
+        _trafficFraction = unlimited ? 0d : Math.Clamp((double)used / total, 0d, 1d);
+        ApplyTrafficFill();
+        // Полированный градиент светлое→акцент (тема-зависимый, mono-безопасный) из живого акцента.
         TrafficFill.Background = BuildTrafficBrush();
 
         // Expiry: "∞" / "до dd.MM.yyyy" / "Просрочено" (red) — localized.
@@ -517,10 +546,47 @@ public partial class SubscriptionMetaView : UserControl
         }
     }
 
+    //  Пинг (motion.md «Пинг и обновление подписки»): иконка сменяется вращающимся кругом В ТОМ ЖЕ
+    //  слоте, в строках серверов вместо значений — такие же круги (их ставит сам движок, выписывая
+    //  в DelayVal нечисловой плейсхолдер, см. DelayTestingConverter), а по завершении всплывает
+    //  тост «Задержка обновлена».
+    //
+    //  Замер идёт по ВСЕМ показанным серверам одной командой движка, поэтому «завершение» ловим по
+    //  завершению самой команды — никаких таймеров на 1400 мс: у живого замера время своё.
     private void OnPingClick(object? sender, RoutedEventArgs e)
     {
-        // Real-delay test of the shown servers (per-row delays update live).
-        Profiles?.FastRealPingCmd.Execute().Subscribe(_ => { }, _ => { });
+        if (_pinging)
+        {
+            return;
+        }
+
+        var profiles = Profiles;
+        if (profiles is null)
+        {
+            return;
+        }
+
+        _pinging = true;
+        PingIcon.IsVisible = false;
+        PingSpinner.IsVisible = true;
+        PingSpinner.Classes.Add("spinning");
+
+        void Done(bool ok)
+        {
+            PingSpinner.Classes.Remove("spinning");
+            PingSpinner.IsVisible = false;
+            PingIcon.IsVisible = true;
+            _pinging = false;
+            if (ok)
+            {
+                HomeToast.Show(L.T("Sub_ToastPinged"));
+            }
+        }
+
+        profiles.FastRealPingCmd.Execute().Subscribe(
+            _ => { },
+            _ => Dispatcher.UIThread.Post(() => Done(false)),
+            () => Dispatcher.UIThread.Post(() => Done(true)));
     }
 
     private async void OnRefreshClick(object? sender, RoutedEventArgs e)
@@ -571,6 +637,11 @@ public partial class SubscriptionMetaView : UserControl
             if (fresh is not null && fresh.Id == _currentSubId)
             {
                 BindSub(fresh);
+
+                //  Подтверждение обновления с реальным числом серверов подписки (motion.md:
+                //  «Подписка обновлена · N серверов»). Число берём из живой группы, не из выдумки.
+                var count = _group?.Servers.Count ?? 0;
+                HomeToast.Show(L.F("Sub_ToastRefreshed", L.Plural("Common_ServersPlural", count)));
             }
         }
         catch (Exception ex)
@@ -673,7 +744,8 @@ public partial class SubscriptionMetaView : UserControl
         MetaBody.IsVisible = true;
         //  Ограниченный образец, чтобы превьюер показал сам градиент-заливку и не-налезающую дату.
         TrafficText.Text = "1,7 ТБ / 3 ТБ";
-        TrafficFill.Width = TrafficPillWidth * 0.57d;
+        _trafficFraction = 0.57d;
+        ApplyTrafficFill();
         TrafficFill.Background = BuildTrafficBrush();
         ExpiryText.Text = "до 24.07.2026";
         ExpiryText.Foreground = _muted;

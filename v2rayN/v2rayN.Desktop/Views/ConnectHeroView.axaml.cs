@@ -67,9 +67,23 @@ public partial class ConnectHeroView : UserControl
     //  Connected shield/status accent → mono maps Brush.Accent to grey/white (contrast kept).
     private IBrush AccentBrush => ResolveBrush("Brush.Accent", AccentFallback);
 
-    //  Idle shield glyph → Brush.OnSurfaceVariant (dark: grey #9BA1AD, light: #54607A,
-    //  mono-dark: #B0B0B4, mono-light: #5A5A5E) — always contrasts the SurfaceHigh disc.
-    private IBrush ShieldIdleBrush => ResolveBrush("Brush.OnSurfaceVariant", ShieldGrayFallback);
+    //  Idle shield glyph → Brush.ShieldOff (tokens.md «Щит отключён»: #3A4A66 тёмная / #AEB8C8
+    //  светлая / #4A4E57 чёрно-белая) — свой токен именно под отключённый щит, всегда контрастен
+    //  диску Brush.ConnectDisc во всех трёх темах.
+    private IBrush ShieldIdleBrush => ResolveBrush("Brush.ShieldOff", ShieldGrayFallback);
+
+    //  Приглушённый контур/текст пилюли статуса, пока не подключено.
+    private IBrush MutedBrush => ResolveBrush("Brush.OnSurfaceVariant", ShieldGrayFallback);
+
+    //  Контур пилюли статуса в покое (tokens.md «Контур кнопки»).
+    private IBrush OutlineBrush => ResolveBrush("Brush.ButtonOutline", ShieldGrayFallback);
+
+    //  Кольца/комета НЕ следуют за акцентом (владелец: плёнка из #1F6FF5 мутит на тёмной) — они
+    //  живут на своих токенах Brush.Ring.*, которые mono-оверлей уводит в белый. Отсюда же комета
+    //  берёт свой RGB, поэтому «синий в тёмной и светлой, белый в чёрно-белой» получается сам.
+    private IBrush RingDimBrush => ResolveBrush("Brush.Ring.Outer", AccentFallback);
+
+    private IBrush RingLiveBrush => ResolveBrush("Brush.Ring.Inner", AccentFallback);
 
     //  Idle status text → Brush.OnSurface (theme ink), readable on light/mono, not fixed near-white.
     private IBrush OnSurfaceBrush => ResolveBrush("Brush.OnSurface", OnSurfaceFallback);
@@ -178,6 +192,148 @@ public partial class ConnectHeroView : UserControl
     /// <summary>Если true — движение подавлено, состояния прыгают к конечному виду.</summary>
     public bool ReducedMotion { get; set; }
 
+    #region Геометрия кольца — равные зазоры на всех размерах
+
+    /// <summary>Пресет размера кольца подключения (tokens.md «Кольцо подключения»).</summary>
+    public enum HeroSize
+    {
+        /// <summary>Обычный: кадр 230, диск 166, щит 80.</summary>
+        Normal,
+
+        /// <summary>Компактный (900×860): кадр 212, диск 152, щит 72.</summary>
+        Compact,
+
+        /// <summary>Узкий (420×860, «как телефон»): кадр 190, диск 138, щит 64.</summary>
+        Narrow,
+    }
+
+    //  ЕДИНСТВЕННАЯ таблица размеров героя. Ни одного диаметра в разметке — иначе кольца пришлось бы
+    //  править в двух местах, и на нестандартном пресете зазоры «поехали» бы (ровно та приёмка, что
+    //  этот экран проваливал раньше).
+    private static (double frame, double disc, double shield) Preset(HeroSize size) => size switch
+    {
+        HeroSize.Compact => (212, 152, 72),
+        HeroSize.Narrow => (190, 138, 64),
+        _ => (230, 166, 80),
+    };
+
+    private HeroSize _heroSize = HeroSize.Normal;
+
+    /// <summary>Половина диска — центр press-scale (ставится вместе с геометрией).</summary>
+    private double _discHalf = 83;
+
+    /// <summary>
+    /// Задаёт пресет размера кольца. Раскладка-хозяин (широкая / компактная / узкая) вызывает это
+    /// один раз; всё остальное — кадр, три кольца, комета, сонар, ambient, диск и щит — пересчитывается
+    /// отсюда.
+    /// </summary>
+    public void SetHeroSize(HeroSize size)
+    {
+        if (_heroSize == size)
+        {
+            return;
+        }
+
+        _heroSize = size;
+        ApplyHeroGeometry();
+    }
+
+    /// <summary>
+    /// ЗАКОН РАВНЫХ ЗАЗОРОВ. Радиусы четырёх окружностей — внешнее кольцо, среднее, активное и кромка
+    /// диска — образуют арифметическую прогрессию с шагом <c>g = (кадр − диск) / 6</c> (три зазора на
+    /// радиус, отсюда шестёрка). Отступы получаются 0 · g · 2g · 3g, то есть ровно табличные 0 · 11 · 21
+    /// · 32 при кадре 230 и диске 166, 0 · 10 · 20 · 30 при 212/152, 0 · 8.7 · 17.3 · 26 при 190/138.
+    /// Зазоры равны НЕ потому, что подобраны, а потому, что вычислены — сменить пресет и «развалить»
+    /// их невозможно.
+    ///
+    /// Толщины обводок (1.5 / 1.5 / 2.5) от размера НЕ зависят: волосяная линия одинакова на всех
+    /// пресетах, иначе на узком она бы истончилась до невидимости.
+    /// </summary>
+    private void ApplyHeroGeometry()
+    {
+        var (frame, disc, shield) = Preset(_heroSize);
+        var g = (frame - disc) / 6.0;
+
+        HeroFrame.Width = HeroFrame.Height = frame;
+
+        //  Кольца: отступ 0 / g / 2g → диаметры frame / frame−2g / frame−4g.
+        SetCircle(RingOuter, frame);
+        SetCircle(RingHoverGlow, frame);
+        SetCircle(RingMid, frame - (2 * g));
+        SetCircle(RingActive, frame - (4 * g));
+
+        //  Комета лежит РОВНО на активном кольце: тот же диаметр, та же толщина, тот же центр.
+        SetCircle(Comet, frame - (4 * g));
+        Comet.StrokeThickness = RingActive.StrokeThickness;
+        if (Comet.RenderTransform is RotateTransform rot)
+        {
+            //  Дублируем центр вращения явными координатами (origin 0.5,0.5 + center = половина
+            //  элемента): оба указывают в геометрический центр, поэтому орбита невозможна.
+            var half = (frame - (4 * g)) / 2.0;
+            rot.CenterX = half;
+            rot.CenterY = half;
+        }
+
+        //  Сонар расходится ОТ активного кольца — значит стартует на нём же.
+        SetCircle(SonarPulse, frame - (4 * g));
+        SetCircle(SonarPulseEcho, frame - (4 * g));
+
+        //  Ambient: волна стартует от активного кольца, дышащее кольцо — чуть внутри внешнего.
+        SetCircle(AmbientSonar, frame - (4 * g));
+        SetCircle(AmbientRing, frame - g);
+
+        //  Glow-halo заполняет кадр целиком (радиальная кисть сама сходит в ноль по краю).
+        SetCircle(GlowHalo, frame - g);
+
+        //  Диск и щит.
+        ConnectDisc.Width = ConnectDisc.Height = disc;
+        ConnectDisc.CornerRadius = new CornerRadius(disc / 2);
+        _discHalf = disc / 2.0;
+        ShieldViewbox.Width = ShieldViewbox.Height = shield;
+
+        //  Самоцентрирующие TransformGroup диска и глифа держат ПОЛОВИНУ своего размера — после
+        //  смены пресета их надо пересобрать, иначе масштаб нажатия уехал бы из центра.
+        RebuildPressTransforms(shield);
+    }
+
+    private static void SetCircle(Avalonia.Layout.Layoutable el, double d)
+    {
+        el.Width = d;
+        el.Height = d;
+    }
+
+    /// <summary>
+    /// Самоцентрирующие press-трансформы диска и глифа. RenderTransformOrigin в этой сборке НЕ
+    /// применяется к анимируемым render-transform, поэтому центр задаём явным сдвигом
+    /// (−половина → scale → +половина); голый ScaleTransform иначе давил бы от левого-верхнего угла.
+    /// Половины зависят от пресета, поэтому группы пересобираются вместе с геометрией.
+    /// </summary>
+    private void RebuildPressTransforms(double shield)
+    {
+        ConnectDisc.RenderTransform = new TransformGroup
+        {
+            Children =
+            {
+                new TranslateTransform { X = -_discHalf, Y = -_discHalf },
+                _discScale,
+                new TranslateTransform { X = _discHalf, Y = _discHalf },
+            },
+        };
+
+        var glyphHalf = shield / 2.0;
+        ShieldViewbox.RenderTransform = new TransformGroup
+        {
+            Children =
+            {
+                new TranslateTransform { X = -glyphHalf, Y = -glyphHalf },
+                _glyphScale,
+                new TranslateTransform { X = glyphHalf, Y = glyphHalf },
+            },
+        };
+    }
+
+    #endregion Геометрия кольца — равные зазоры на всех размерах
+
     public ConnectHeroView()
     {
         InitializeComponent();
@@ -201,7 +357,7 @@ public partial class ConnectHeroView : UserControl
         //  единственный отклик (без ripple/glow). Перекрываем переходы диска пустыми и ставим ScaleTransform.
         //
         //  ЦЕНТР МАСШТАБА. RenderTransformOrigin НЕ применяется к анимируемым render-transform в этой
-        //  сборке (та же причина, по которой ConnectingArc держит центр через RotateTransform.CenterX/Y,
+        //  сборке (та же причина, по которой комета держит центр через RotateTransform.CenterX/Y,
         //  а не через origin). У ScaleTransform НЕТ CenterX/CenterY, поэтому голый ScaleTransform
         //  масштабировал диск от ЛЕВОГО-ВЕРХНЕГО угла → диск «проваливался» влево-вверх. Оборачиваем в
         //  группу: сдвиг центра диска (88,88) в (0,0) → масштаб → сдвиг обратно = масштаб строго вокруг
@@ -210,35 +366,15 @@ public partial class ConnectHeroView : UserControl
         //  Переход фона диска (hover surface-lift) живёт на самом Border; press-scale — отдельный
         //  вложенный ScaleTransform (ниже), поэтому эти два отклика не мешают друг другу.
         ConnectDisc.Transitions = new Transitions { _discSurface };
-        const double discHalf = 88; // Size.ConnectDisc (176) / 2
-        ConnectDisc.RenderTransform = new TransformGroup
-        {
-            Children =
-            {
-                new TranslateTransform { X = -discHalf, Y = -discHalf },
-                _discScale,
-                new TranslateTransform { X = discHalf, Y = discHalf },
-            },
-        };
-
-        //  Глиф-щит: self-centering ScaleTransform (parallax-dip). Тот же приём, что диск — origin НЕ
-        //  применяется к анимируемым render-transform в этой сборке, поэтому центрируем явным сдвигом
-        //  (−40 → scale → +40, 40 = Size.ShieldGlyph 80 / 2), иначе глиф «уезжал» бы в левый-верх.
         _glyphScale.Transitions = new Transitions { _glyphScaleX, _glyphScaleY };
-        const double glyphHalf = 40; // Size.ShieldGlyph (80) / 2
-        ShieldViewbox.RenderTransform = new TransformGroup
-        {
-            Children =
-            {
-                new TranslateTransform { X = -glyphHalf, Y = -glyphHalf },
-                _glyphScale,
-                new TranslateTransform { X = glyphHalf, Y = glyphHalf },
-            },
-        };
+
+        //  Геометрия кольца (кадр, три кольца, комета, сонар, диск, щит) + самоцентрирующие
+        //  press-трансформы — из ОДНОЙ таблицы пресетов, с равными зазорами по построению.
+        ApplyHeroGeometry();
 
         //  Переходы, которыми управляет код-behind по сайту вызова (длительность/кривая/направление).
         PressScrim.Transitions = new Transitions { _scrimOpacity };
-        ConnectingArc.Transitions = new Transitions { _arcOpacity };
+        Comet.Transitions = new Transitions { _arcOpacity };
         RingHoverGlow.Transitions = new Transitions { _ringHoverOpacity };
         RetryHint.Transitions = new Transitions { _retryHintOpacity };
 
@@ -342,10 +478,9 @@ public partial class ConnectHeroView : UserControl
                 ShieldOutline.Fill = AccentBrush;
                 ShieldOutline.Opacity = 1;
                 ShieldFilled.Opacity = 0;
-                StatusText.Text = L.T("Status_Connecting");
-                StatusText.Foreground = AccentBrush;
+                SetStatusPill(L.T("Status_Connecting"), AccentBrush, AccentBrush);
                 ServerInfo.IsVisible = true;
-                //  Разгон из покоя только на СВЕЖЕМ входе; re-apply уже в connecting → ровный спин.
+                //  Проявление из покоя только на СВЕЖЕМ входе; re-apply уже в connecting → без фейда.
                 SetArc(true, windUp: enteringConnecting);
                 SetGlow(connecting: true, connected: false);
                 HideSonar();
@@ -355,8 +490,7 @@ public partial class ConnectHeroView : UserControl
                 ShieldOutline.Fill = AccentBrush;
                 ShieldOutline.Opacity = 0;
                 ShieldFilled.Opacity = 1;
-                StatusText.Text = L.T("Status_Connected");
-                StatusText.Foreground = AccentBrush;
+                SetStatusPill(L.T("Status_Connected"), AccentBrush, AccentBrush);
                 ServerInfo.IsVisible = true;
                 SetGlow(connecting: false, connected: true);
                 //  Payoff — одноразовый; играется ТОЛЬКО на живом переходе (motion) и на экране: дуга
@@ -384,8 +518,7 @@ public partial class ConnectHeroView : UserControl
                 ShieldOutline.Fill = ErrorBrush;
                 ShieldOutline.Opacity = 1;
                 ShieldFilled.Opacity = 0;
-                StatusText.Text = L.T("Common_CouldntConnect");
-                StatusText.Foreground = ErrorBrush;
+                SetStatusPill(L.T("Common_CouldntConnect"), ErrorBrush, ErrorBrush);
                 ServerInfo.IsVisible = hasServer;
                 SetArc(false);
                 SetGlow(connecting: false, connected: false);
@@ -407,8 +540,7 @@ public partial class ConnectHeroView : UserControl
                 ShieldOutline.Fill = _hovering && hasServer ? OnSurfaceBrush : ShieldIdleBrush;
                 ShieldOutline.Opacity = hasServer ? 1 : 0.38;
                 ShieldFilled.Opacity = 0;
-                StatusText.Text = hasServer ? L.T("Home_NotConnected") : L.T("Home_ChooseServer");
-                StatusText.Foreground = OnSurfaceBrush;
+                SetStatusPill(hasServer ? L.T("Home_NotConnected") : L.T("Home_ChooseServer"), MutedBrush, OutlineBrush);
                 ServerInfo.IsVisible = hasServer;
                 SetArc(false);
                 SetGlow(connecting: false, connected: false);
@@ -418,6 +550,10 @@ public partial class ConnectHeroView : UserControl
                 Uptime.Text = "00:00:00";
                 break;
         }
+
+        //  Кольца по состоянию + приглушение всего, что ниже пилюли статуса.
+        ApplyRingTint(state);
+        ApplyMetaDim(state);
 
         //  Ambient «живой» слой вокруг щита: калм в Idle, чуть ярче/крупнее в Connected (поверх
         //  статичного glow), выключен в Connecting (там уже своё движение) и Error (статичен).
@@ -457,6 +593,47 @@ public partial class ConnectHeroView : UserControl
         _visualState = state;
     }
 
+    /// <summary>
+    /// Пилюля статуса: текст + чернила + контур одним вызовом (tokens.md «Пилюля статуса»).
+    /// Не подключено — приглушённый текст и серый контур; подключаемся/подключено — акцент в обоих.
+    /// </summary>
+    private void SetStatusPill(string text, IBrush ink, IBrush outline)
+    {
+        StatusText.Text = text;
+        StatusText.Foreground = ink;
+        StatusPill.BorderBrush = outline;
+    }
+
+    /// <summary>
+    /// Цвет трёх колец по состоянию (прототип: внешнее всегда тусклое, среднее и активное оживают).
+    /// Кольца сидят на СВОИХ токенах Brush.Ring.*, а не на акценте: плёнка из #1F6FF5 мутит на тёмной,
+    /// а mono-оверлей и так уводит Ring.* в белый — поэтому «в чёрно-белой не остаётся синего»
+    /// выполняется без единой ветки по теме.
+    /// </summary>
+    private void ApplyRingTint(ConnectVisualState state)
+    {
+        var live = state is ConnectVisualState.Connecting or ConnectVisualState.Connected;
+        RingOuter.Stroke = RingDimBrush;
+        RingMid.Stroke = live ? RingLiveBrush : RingDimBrush;
+        RingActive.Stroke = live ? RingLiveBrush : RingDimBrush;
+
+        //  Комета берёт RGB из того же токена активного кольца → синяя в тёмной и светлой, белая
+        //  в чёрно-белой. Альфу задаёт её собственная коническая рампа, поэтому альфа токена здесь
+        //  намеренно игнорируется (иначе хвост стал бы вдвое бледнее).
+        if (RingLiveBrush is ISolidColorBrush solid)
+        {
+            var c = solid.Color;
+            Comet.RingColor = Color.FromRgb(c.R, c.G, c.B);
+        }
+    }
+
+    /// <summary>
+    /// «Когда не подключено, всё под пилюлей приглушено до 45%» (screens.md). Один контейнер —
+    /// скорости и имя сервера гаснут одной волной, а не двумя.
+    /// </summary>
+    private void ApplyMetaDim(ConnectVisualState state) =>
+        HeroMeta.Opacity = state == ConnectVisualState.Connected ? 1 : 0.45;
+
     /// <summary>Обновляет ↑/↓ (строки Utils.HumanFy, напр. «1.2 MB/s»).</summary>
     public void SetSpeeds(string up, string down)
     {
@@ -468,14 +645,14 @@ public partial class ConnectHeroView : UserControl
     public void SetUptime(string uptime) => Uptime.Text = uptime;
 
     /// <summary>
-    /// Обновляет идентичность выбранного/подключённого сервера под щитом. Флаг заполняет
-    /// FlagResolver (мастер-план §5); null-источник оставляет нейтральный чип-плейсхолдер.
+    /// Обновляет идентичность выбранного/подключённого сервера под щитом: флаг + имя акцентом
+    /// (screens.md). Протокол и транспорт ПОКАЗЫВАЕТ строка списка слева — под кольцом они
+    /// дублировались бы, поэтому параметры принимаются (совместимость с презентером), но не
+    /// рисуются. Флаг заполняет FlagResolver; null-источник оставляет нейтральный круг.
     /// </summary>
     public void SetServerInfo(string name, string protocol, string transport, IImage? flag = null)
     {
         ServerName.Text = name;
-        ServerProtocol.Text = protocol;
-        ServerTransport.Text = transport;
         ServerFlagImage.Source = flag;
     }
 
@@ -557,8 +734,7 @@ public partial class ConnectHeroView : UserControl
         {
             //  Тот же teardown, что и при выходе из connecting/connected — снимаем ВСЕ петли.
             _animationsPaused = true;
-            ConnectingArc.Classes.Remove("spinning");
-            ConnectingArc.Classes.Remove("arc-windup");
+            Comet.Classes.Remove("spinning");
             GlowHalo.Classes.Remove("breathing");
             ShieldOutline.Classes.Remove("shieldbreathe");
             HideSonar();
@@ -589,8 +765,7 @@ public partial class ConnectHeroView : UserControl
             return;
         }
         _deactivated = true;
-        ConnectingArc.Classes.Remove("spinning");
-        ConnectingArc.Classes.Remove("arc-windup");
+        Comet.Classes.Remove("spinning");
         GlowHalo.Classes.Remove("breathing");
         ShieldOutline.Classes.Remove("shieldbreathe");
         HideSonar();
@@ -635,8 +810,7 @@ public partial class ConnectHeroView : UserControl
 
         //  Рантайм-переключение: убиваем любую идущую петлю анимаций и прыгаем в текущий конечный вид.
         //  (При выключении lite SetConnectState заново навесит нужные петли, т.к. ReducedMotion=false.)
-        ConnectingArc.Classes.Remove("spinning");
-        ConnectingArc.Classes.Remove("arc-windup");
+        Comet.Classes.Remove("spinning");
         GlowHalo.Classes.Remove("breathing");
         ShieldOutline.Classes.Remove("shieldbreathe");
         HideSonar();
@@ -779,103 +953,62 @@ public partial class ConnectHeroView : UserControl
         }
     }
 
-    // ── Дуга / glow / сонар ───────────────────────────────────────────────────────────
+    // ── Комета / кольца / glow / сонар ────────────────────────────────────────────────
+
+    /// <summary>
+    /// Свет кометы. Она НЕ дуга поверх кольца, а само активное кольцо, окрашенное по углу: тот же
+    /// диаметр, та же толщина, тот же центр (см. <see cref="ApplyHeroGeometry"/> и
+    /// <see cref="CometRing"/>). Поэтому здесь только «зажечь/погасить» — никакой второй геометрии.
+    /// Вращение ровное с первого кадра: motion.md требует «оборот 1500 мс, линейно», а разгон был бы
+    /// разрывом скорости. Из покоя комета ПРОЯВЛЯЕТСЯ по прозрачности (220 мс), а не набегает.
+    /// В lite/reduced-motion кометы нет вовсе — состояние читается пилюлей «Подключаемся…».
+    /// </summary>
     private void SetArc(bool on, bool windUp = false)
     {
-        //  В lite/reduced-motion дуги НЕТ ВООБЩЕ (не статичная, а полностью скрыта): владелец
-        //  не хочет «замёрзшую» синюю дугу в облегчённом режиме. Само состояние connecting всё
-        //  равно читается подписью «Подключение…» — кольцо/дуга существуют только ради движения.
-        //  Реактивно: MotionState.Changed → ApplyLiteMode → SetConnectState → сюда, поэтому живой
-        //  тумблер lite мгновенно прячет/возвращает дугу.
-        ConnectingArc.IsVisible = on && !ReducedMotion;
+        var live = on && !ReducedMotion;
+        Comet.IsVisible = live;
 
-        //  ОДНА чистая центрированная дуга: крутится только пока реально нужно и не под
-        //  ReducedMotion/lite (тогда её вообще нет — см. выше). Второй counter-arc убран —
-        //  он «облетал» шит, т.к. не имел RenderTransformOrigin в центре.
-        if (on && !ReducedMotion && !MotionSuppressed)
+        if (live && !MotionSuppressed)
         {
-            //  Вход в connecting с движения = разгон из покоя (P0-3); re-apply/восстановление уже
-            //  в connecting = сразу ровный спин (без повторного wind-up).
+            //  Свежий вход — проявляем из нуля; re-apply/восстановление — сразу на полной яркости.
+            _arcOpacity.Duration = TimeSpan.FromMilliseconds(windUp ? 220 : 0);
+            _arcOpacity.Easing = EaseStandard;
             if (windUp)
             {
-                StartArcWindup();
+                Comet.Opacity = 0;
             }
-            else
-            {
-                ConnectingArc.Classes.Remove("arc-windup");
-                ConnectingArc.Opacity = 1;
-                ConnectingArc.Classes.Add("spinning");
-            }
+
+            Comet.Classes.Add("spinning");
+            Dispatcher.UIThread.Post(
+                () =>
+                {
+                    if (_visualState == ConnectVisualState.Connecting && Comet.IsVisible)
+                    {
+                        Comet.Opacity = 1;
+                    }
+                },
+                DispatcherPriority.Background);
         }
         else
         {
-            //  Off / suppressed / lite: снимаем обе фазы, сбрасываем Opacity (статик-видимая дуга под
-            //  паузой = полностью непрозрачна; следующий wind-up сам стартует с 0).
-            ConnectingArc.Classes.Remove("spinning");
-            ConnectingArc.Classes.Remove("arc-windup");
-            ConnectingArc.Opacity = 1;
+            Comet.Classes.Remove("spinning");
+            Comet.Opacity = 1;
         }
     }
 
-    //  Wind-up (P0-3): дуга «набегает» из покоя — Opacity 0→1 (200мс OutQuint) + одноразовый разгон
-    //  вращения 0→360° (200мс OutQuint, .arc-windup), затем хэндофф на ровный .spinning. Угол 360°≡0°
-    //  → стык бесшовный. Всё в рамках !ReducedMotion && !MotionSuppressed (гарантировано вызывающим).
-    private void StartArcWindup()
-    {
-        ConnectingArc.Classes.Remove("spinning");
-        ConnectingArc.Classes.Remove("arc-windup");
-        _arcOpacity.Duration = TimeSpan.FromMilliseconds(200);
-        _arcOpacity.Easing = EaseOutQuint;
-        ConnectingArc.Opacity = 0;
-
-        //  Стартуем fade+ramp на следующем цикле (переход ловит 0→1), затем через 200мс хэндофф в спин.
-        //  Стартуем fade+ramp на следующем цикле (переход ловит 0→1). Таймер хэндоффа в спин ставим
-        //  ВНУТРИ этого Post — так его 200мс отсчитываются ОТ старта wind-up-анимации, а не от вызова
-        //  метода. Иначе таймер опережал бы анимацию на ~1 кадр и на стыке был микро-откат угла
-        //  (wind-up ещё ~356°, а spin стартует с 0° → заметный дёрг). Плюс это устраняет гонку очереди:
-        //  RunOnce теперь ставится только ПОСЛЕ того, как Post реально навесил arc-windup.
-        Dispatcher.UIThread.Post(
-            () =>
-            {
-                if (_visualState != ConnectVisualState.Connecting || ReducedMotion || MotionSuppressed || !ConnectingArc.IsVisible)
-                {
-                    return;
-                }
-
-                ConnectingArc.Opacity = 1;
-                ConnectingArc.Classes.Add("arc-windup");
-
-                DispatcherTimer.RunOnce(
-                    () =>
-                    {
-                        ConnectingArc.Classes.Remove("arc-windup");
-                        if (_visualState != ConnectVisualState.Connecting || ReducedMotion || MotionSuppressed || !ConnectingArc.IsVisible)
-                        {
-                            return;
-                        }
-
-                        ConnectingArc.Opacity = 1;
-                        ConnectingArc.Classes.Add("spinning");
-                    },
-                    TimeSpan.FromMilliseconds(200));
-            },
-            DispatcherPriority.Background);
-    }
-
-    //  Arc dissolve (P0-2): на Connecting→Connected НЕ гасим дугу мгновенно (IsVisible=false на кадре
-    //  payoff = моргание), а растворяем Opacity 1→0 (220мс Standard) ОДНОВРЕМЕННО с сонаром — дуга
-    //  «стекает» в glow, продолжая вращаться. IsVisible=false выставляем ПОСЛЕ фейда. Зовётся только на
-    //  живой connect (motion && !MotionSuppressed).
+    //  Comet dissolve (P0-2): на Connecting→Connected НЕ гасим комету мгновенно (IsVisible=false на
+    //  кадре payoff = моргание), а растворяем Opacity 1→0 (220мс Standard) ОДНОВРЕМЕННО с сонаром —
+    //  свет «стекает» в glow, продолжая бежать по кольцу. IsVisible=false выставляем ПОСЛЕ фейда.
     private void DissolveArc()
     {
-        if (!ConnectingArc.IsVisible)
+        if (!Comet.IsVisible)
         {
             return;
         }
 
         _arcOpacity.Duration = TimeSpan.FromMilliseconds(220);
         _arcOpacity.Easing = EaseStandard;
-        ConnectingArc.Opacity = 0; // .spinning/.arc-windup остаётся → растворяется в движении
+        Comet.Opacity = 0; // .spinning остаётся → растворяется в движении
 
         DispatcherTimer.RunOnce(
             () =>
@@ -886,10 +1019,9 @@ public partial class ConnectHeroView : UserControl
                     return;
                 }
 
-                ConnectingArc.Classes.Remove("spinning");
-                ConnectingArc.Classes.Remove("arc-windup");
-                ConnectingArc.IsVisible = false;
-                ConnectingArc.Opacity = 1; // сброс для следующего connect
+                Comet.Classes.Remove("spinning");
+                Comet.IsVisible = false;
+                Comet.Opacity = 1; // сброс для следующего connect
             },
             TimeSpan.FromMilliseconds(220));
     }

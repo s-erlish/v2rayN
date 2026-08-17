@@ -5,6 +5,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:loc="clr-namespace:v2rayN.Desktop.Common"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:views="clr-namespace:v2rayN.Desktop.Views"
     d:DesignHeight="680"
     d:DesignWidth="560"
     mc:Ignorable="d">
@@ -19,40 +20,15 @@
           =================================================================================  -->
 
     <UserControl.Styles>
-        <!--  Connecting-дуга: равномерное (линейное) вращение, только пока класс .spinning.
-              Период 1.2с (был 1.1) — с glow/shield-breathe (850мс) образует спокойное 3:2-подобное
-              соотношение, три connecting-темпа читаются как ОДНА система, а не три биения.  -->
-        <Style Selector="Ellipse.ConnectArc.spinning">
+        <!--  КОМЕТА (motion.md «Кнопка подключения»): один оборот 1500 мс, СТРОГО ЛИНЕЙНО — ни
+              разгона, ни торможения. Комета — не отдельная дуга, а само активное кольцо, окрашенное
+              по углу (см. views:CometRing): вращаем ЕГО, поэтому свет бежит ПО кольцу, а не рядом.  -->
+        <Style Selector="views|CometRing.Comet.spinning">
             <Style.Animations>
                 <Animation
-                    Duration="0:0:1.2"
+                    Duration="0:0:1.5"
                     Easing="LinearEasing"
                     IterationCount="Infinite">
-                    <KeyFrame Cue="0%">
-                        <Setter Property="RotateTransform.Angle" Value="0" />
-                    </KeyFrame>
-                    <KeyFrame Cue="100%">
-                        <Setter Property="RotateTransform.Angle" Value="360" />
-                    </KeyFrame>
-                </Animation>
-            </Style.Animations>
-        </Style>
-
-        <!--  Wind-up дуги (P0-3): ОДНОРАЗОВЫЙ разгон из покоя при входе в connecting — полный оборот
-              0→360° за 200мс ease_out_quint, FillMode=Forward. Затем код-behind снимает .arc-windup и
-              вешает .spinning: угол 360°≡0° совпадает со стартом ровного спина → БЕЗ снапа/скачка. Дуга
-              «набегает» из покоя (в паре с opacity-fade 0→1 и пружиной диска обратно к 1.0), а не
-              вспыхивает на полной скорости. Reduced-motion/lite: дуги нет вообще (см. SetArc).  -->
-        <Style Selector="Ellipse.ConnectArc.arc-windup">
-            <Style.Animations>
-                <Animation
-                    Duration="0:0:0.2"
-                    FillMode="Forward"
-                    IterationCount="1">
-                    <!--  Ease.OutQuint (0.22,1,0.36,1) — инлайн (см. ниже).  -->
-                    <Animation.Easing>
-                        <SplineEasing X1="0.22" Y1="1" X2="0.36" Y2="1" />
-                    </Animation.Easing>
                     <KeyFrame Cue="0%">
                         <Setter Property="RotateTransform.Angle" Value="0" />
                     </KeyFrame>
@@ -324,10 +300,10 @@
                       без собственного центра → он вращается вокруг RenderTransformOrigin. Значит origin
                       обязан быть ОТНОСИТЕЛЬНЫМ центром «50%,50%»; «0.5,0.5» = 0.5px ≈ угол → «сборка»
                       росла бы из левого-верхнего угла.  -->
+                <!--  Размеры кадра / колец / диска / щита ставит ApplyHeroGeometry (одна таблица
+                      пресетов, равные зазоры по построению) — в разметке диаметров нет.  -->
                 <Panel
                     x:Name="HeroFrame"
-                    Width="{StaticResource Size.HeroFrame}"
-                    Height="{StaticResource Size.HeroFrame}"
                     HorizontalAlignment="Center"
                     ClipToBounds="False"
                     RenderTransformOrigin="50%,50%">
@@ -340,8 +316,6 @@
                           код-behind (SetAmbient) — gated по lite/reduced-motion, паузе окна и онбордингу.  -->
                     <Ellipse
                         x:Name="AmbientSonar"
-                        Width="200"
-                        Height="200"
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
                         Classes="AmbientSonar"
@@ -351,12 +325,10 @@
                         RenderTransformOrigin="50%,50%"
                         Stroke="{DynamicResource Brush.Ring.Inner}"
                         StrokeThickness="1.5" />
-                    <!--  База 222 (была 220): пик вдоха (×1.04 ≈ 231) читается как ОДНО расширяющееся
-                          кольцо наружу за статичное 228, а не как биение впритык к нему (де-муар).  -->
+                    <!--  Ambient-кольцо чуть внутри внешнего (кадр − g/2): пик вдоха (×1.04) читается
+                          как ОДНО расходящееся кольцо наружу, а не биение впритык (де-муар).  -->
                     <Ellipse
                         x:Name="AmbientRing"
-                        Width="222"
-                        Height="222"
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
                         Classes="AmbientRing"
@@ -372,8 +344,6 @@
                           origin = относительный центр «50%,50%», иначе пульс рос бы из угла.  -->
                     <Ellipse
                         x:Name="GlowHalo"
-                        Width="220"
-                        Height="220"
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
                         Classes="Glow"
@@ -395,17 +365,19 @@
                         </Ellipse.Transitions>
                     </Ellipse>
 
-                    <!--  (2) Два концентрических ТОНКИХ кольца у кромки рамки (как в android_home.jpg):
-                          внешнее — самое чёткое (Brush.Ring.Inner), внутреннее сразу под ним —
-                          тусклее (Brush.Ring.Outer). ОБА — тема-токены (mono-оверлей схлопывает
-                          синий в серый). Обводки 1.5, зазор 9px, идеально концентричны.  -->
+                    <!--  (2) ТРИ концентрических кольца (tokens.md «Кольцо подключения»): внешнее лежит
+                          по кромке рамки (отступ 0), среднее на отступе g, активное на 2g, диск на 3g.
+                          Все четыре радиуса — ОДНА арифметическая прогрессия с шагом g = (кадр − диск)/6,
+                          поэтому зазоры равны ПО ПОСТРОЕНИЮ и остаются равными на любом пресете размера
+                          (230/166, 212/152, 190/138) — приёмка «кольца дают равные зазоры на всех
+                          размерах». Ширины/высоты назначает ApplyHeroGeometry: единственный источник
+                          правды — таблица пресетов, ни одного магического диаметра в разметке.
+                          Толщины: внешнее и среднее 1.5, активное 2.5.  -->
                     <Ellipse
                         x:Name="RingOuter"
-                        Width="228"
-                        Height="228"
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
-                        Stroke="{DynamicResource Brush.Ring.Inner}"
+                        Stroke="{DynamicResource Brush.Ring.Outer}"
                         StrokeThickness="1.5" />
                     <!--  Hover-brighten (P0-1): накладной дубль внешнего кольца, Opacity 0 в покое →
                           проявляется код-behind при наведении на диск (компоновщик-only fade, БЕЗ scale/
@@ -414,8 +386,6 @@
                           =False — никогда не перехватывает тап по диску; лежит ПОД диском.  -->
                     <Ellipse
                         x:Name="RingHoverGlow"
-                        Width="228"
-                        Height="228"
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
                         IsHitTestVisible="False"
@@ -423,21 +393,45 @@
                         Stroke="{DynamicResource Brush.Ring.Inner}"
                         StrokeThickness="1.5" />
                     <Ellipse
-                        x:Name="RingInner"
-                        Width="210"
-                        Height="210"
+                        x:Name="RingMid"
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
                         Stroke="{DynamicResource Brush.Ring.Outer}"
-                        StrokeThickness="1.5" />
+                        StrokeThickness="1.5">
+                        <Ellipse.Transitions>
+                            <Transitions>
+                                <BrushTransition Property="Stroke" Duration="0:0:0.3">
+                                    <BrushTransition.Easing>
+                                        <SplineEasing X1="0.25" Y1="1" X2="0.5" Y2="1" />
+                                    </BrushTransition.Easing>
+                                </BrushTransition>
+                            </Transitions>
+                        </Ellipse.Transitions>
+                    </Ellipse>
+                    <!--  Активное кольцо — то самое, ПО которому бежит комета (та же окружность, тот же
+                          центр, та же толщина 2.5).  -->
+                    <Ellipse
+                        x:Name="RingActive"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Stroke="{DynamicResource Brush.Ring.Outer}"
+                        StrokeThickness="2.5">
+                        <Ellipse.Transitions>
+                            <Transitions>
+                                <BrushTransition Property="Stroke" Duration="0:0:0.3">
+                                    <BrushTransition.Easing>
+                                        <SplineEasing X1="0.25" Y1="1" X2="0.5" Y2="1" />
+                                    </BrushTransition.Easing>
+                                </BrushTransition>
+                            </Transitions>
+                        </Ellipse.Transitions>
+                    </Ellipse>
 
                     <!--  (3) одноразовый сонар-импульс на подтверждение connect.
                           Sonar.pulsing масштабирует ГОЛЫЙ ScaleTransform 1→1.6 без центра → origin =
                           относительный центр «50%,50%» (иначе кольцо расходилось бы из угла).  -->
                     <Ellipse
                         x:Name="SonarPulse"
-                        Width="200"
-                        Height="200"
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
                         Classes="Sonar"
@@ -451,8 +445,6 @@
                           → origin = относительный центр «50%,50%» (как ведущий сонар).  -->
                     <Ellipse
                         x:Name="SonarPulseEcho"
-                        Width="200"
-                        Height="200"
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
                         Classes="Sonar"
@@ -462,37 +454,28 @@
                         Stroke="{DynamicResource Brush.Ring.Inner}"
                         StrokeThickness="1.5" />
 
-                    <!--  (4) тонкая connecting-дуга Ø190 толщина 3 (акцент): одиночный сегмент
-                          пунктиром, крутится тонким кольцом вплотную к диску (176). Видна только
-                          при connecting. Размер инлайн (190) — тонкое кольцо в ~7px от диска (r95 vs r88).
-                          ЕДИНСТВЕННОЕ вращающееся кольцо (второй counter-arc убран — он «облетал»,
-                          т.к. не имел RenderTransformOrigin).
-                          ГАРАНТИЯ «не улетит»: keyframe-анимация RotateTransform.Angle крутит вокруг
-                          RenderTransformOrigin, поэтому он выставлен в ЦЕНТР (0.5,0.5). Дублируем это
-                          явным RotateTransform.CenterX/CenterY = половина 190 = 95: ВСЕ три центра
-                          (ячейка HAlign/VAlign=Center, origin 0.5,0.5, center 95) совпадают с
-                          геометрическим центром элемента → вращение строго вокруг центра при любом
-                          механизме Avalonia, орбита физически невозможна.  -->
-                    <Ellipse
-                        x:Name="ConnectingArc"
-                        Width="190"
-                        Height="190"
+                    <!--  (4) КОМЕТА. Приёмка: «комета при подключении лежит НА активном кольце, а не
+                          отдельной дугой рядом». Поэтому здесь НЕ дуга поверх кольца, а ТА ЖЕ окружность:
+                          размер и толщина назначаются кода-behind ровно те же, что у RingActive (отступ 2g,
+                          2.5), а свет по ней даёт коническая рампа внутри самого элемента (см. CometRing —
+                          конический градиент разобран на дуги, потому что в Avalonia его нет). Видна только
+                          при connecting; вращение — .spinning (1500 мс линейно).
+                          Центр вращения: origin 0.5,0.5 + RotateTransform.CenterX/Y (половина кадра,
+                          назначается в ApplyHeroGeometry) — оба указывают в геометрический центр, орбита
+                          физически невозможна.  -->
+                    <views:CometRing
+                        x:Name="Comet"
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
-                        Classes="ConnectArc"
+                        Classes="Comet"
+                        IsHitTestVisible="False"
                         IsVisible="False"
                         RenderTransformOrigin="0.5,0.5"
-                        Stroke="{DynamicResource Brush.Accent}"
-                        StrokeDashArray="56,143"
-                        StrokeLineCap="Round"
-                        StrokeThickness="3">
-                        <Ellipse.RenderTransform>
-                            <RotateTransform
-                                Angle="0"
-                                CenterX="95"
-                                CenterY="95" />
-                        </Ellipse.RenderTransform>
-                    </Ellipse>
+                        StrokeThickness="2.5">
+                        <views:CometRing.RenderTransform>
+                            <RotateTransform Angle="0" />
+                        </views:CometRing.RenderTransform>
+                    </views:CometRing>
 
                     <!--  (5) диск-кнопка 176 r88 (Border.ConnectDisc, SurfaceHigh, press-scale 0.94).
                           (6) внутри два щита: контур (idle, серый) + залив (connected, синий).  -->
@@ -532,8 +515,6 @@
                                   код-behind — глиф «вдавливается» в диск чуть глубже самого диска.  -->
                             <Viewbox
                                 x:Name="ShieldViewbox"
-                                Width="{StaticResource Size.ShieldGlyph}"
-                                Height="{StaticResource Size.ShieldGlyph}"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
                                 Stretch="Uniform">
@@ -542,7 +523,7 @@
                             <Path
                                 x:Name="ShieldOutline"
                                 Data="F0 M12,2.2 L19.6,5.2 L19.6,11.4 C19.6,16.1 15.9,19.9 12,21.8 C8.1,19.9 4.4,16.1 4.4,11.4 L4.4,5.2 Z M12,4.7 L17.2,6.8 L17.2,11.4 C17.2,14.9 14.7,17.9 12,19.3 C9.3,17.9 6.8,14.9 6.8,11.4 L6.8,6.8 Z"
-                                Fill="{DynamicResource Brush.OnSurfaceVariant}">
+                                Fill="{DynamicResource Brush.ShieldOff}">
                                 <!--  Crossfade+tint: код-behind перекл. длительность 220↔165 (реверс 75%).
                                       ПОРЯДОК фиксирован: [0]=Opacity, [1]=Fill (см. code-behind).  -->
                                 <Path.Transitions>
@@ -584,27 +565,50 @@
                     </Border>
                 </Panel>
 
-                <!--  Подпись-состояние (Title bold). idle: «Не подключено»/«Выберите сервер»,
-                      connecting: «Подключение…», connected: «Подключено» (цвет → accent).  -->
-                <TextBlock
-                    x:Name="StatusText"
-                    Margin="24,16,24,0"
-                    MaxWidth="320"
+                <!--  Пилюля статуса (tokens.md «Пилюля статуса»): высота 30, скругление 100, отступы 17,
+                      текст 14/500. Контурная: серый контур + приглушённый текст пока не подключено,
+                      акцентный контур + акцентный текст когда подключаемся/подключено. Цвета ведёт
+                      код-behind (SetConnectState), переходы — 300 мс ease-out-quart.  -->
+                <Border
+                    x:Name="StatusPill"
+                    Height="30"
+                    Margin="0,18,0,0"
+                    Padding="17,0"
                     HorizontalAlignment="Center"
-                    Classes="Title"
-                    Text="{loc:T Home_NotConnected}"
-                    TextAlignment="Center"
-                    TextTrimming="CharacterEllipsis">
-                    <TextBlock.Transitions>
+                    BorderBrush="{DynamicResource Brush.ButtonOutline}"
+                    BorderThickness="1"
+                    CornerRadius="{DynamicResource Radius.Pill}">
+                    <Border.Transitions>
                         <Transitions>
-                            <BrushTransition Property="Foreground" Duration="0:0:0.2">
+                            <BrushTransition Property="BorderBrush" Duration="0:0:0.3">
                                 <BrushTransition.Easing>
-                                    <SplineEasing X1="0.2" Y1="0" X2="0" Y2="1" />
+                                    <SplineEasing X1="0.25" Y1="1" X2="0.5" Y2="1" />
                                 </BrushTransition.Easing>
                             </BrushTransition>
                         </Transitions>
-                    </TextBlock.Transitions>
-                </TextBlock>
+                    </Border.Transitions>
+                    <TextBlock
+                        x:Name="StatusText"
+                        MaxWidth="300"
+                        VerticalAlignment="Center"
+                        FontFamily="{DynamicResource Font.Grotesk}"
+                        FontSize="14"
+                        FontWeight="Medium"
+                        Foreground="{DynamicResource Brush.OnSurfaceVariant}"
+                        Text="{loc:T Home_NotConnected}"
+                        TextAlignment="Center"
+                        TextTrimming="CharacterEllipsis">
+                        <TextBlock.Transitions>
+                            <Transitions>
+                                <BrushTransition Property="Foreground" Duration="0:0:0.3">
+                                    <BrushTransition.Easing>
+                                        <SplineEasing X1="0.25" Y1="1" X2="0.5" Y2="1" />
+                                    </BrushTransition.Easing>
+                                </BrushTransition>
+                            </Transitions>
+                        </TextBlock.Transitions>
+                    </TextBlock>
+                </Border>
 
                 <!--  Подсказка-ретрай: видна ТОЛЬКО в состоянии Error (§A4). Тихая аффорданс —
                       сам диск-щит остаётся кнопкой connect, поэтому тап по нему = повторная попытка.
@@ -625,113 +629,104 @@
                     TextAlignment="Center"
                     TextTrimming="CharacterEllipsis" />
 
-                <!--  Стата-строка ПОД щитом, НАД именем сервера: ↑ отдача · аптайм · ↓ приём.
-                      Компактный центрированный ряд (spacing 20) — телеметрия жмётся к щиту, как на
-                      телефоне. Скрывается целиком в «Облегчённом режиме» (code-behind по ReducedMotion:
-                      владелец — «над кнопкой эти показатели скорости должны пропадать»).  -->
-                <StackPanel
-                    x:Name="StatsRow"
-                    Margin="0,16,0,0"
-                    HorizontalAlignment="Center"
-                    Orientation="Horizontal"
-                    Spacing="20">
-                    <StackPanel
-                        VerticalAlignment="Center"
-                        Orientation="Horizontal"
-                        Spacing="4">
-                        <TextBlock
-                            VerticalAlignment="Center"
-                            Classes="Caption"
-                            Foreground="{DynamicResource Brush.Accent}"
-                            Text="↑" />
-                        <TextBlock
-                            x:Name="UpSpeed"
-                            VerticalAlignment="Center"
-                            Classes="Numeric"
-                            FontSize="13"
-                            FontWeight="Bold"
-                            Text="0 KB/s" />
-                    </StackPanel>
-                    <TextBlock
-                        x:Name="Uptime"
-                        VerticalAlignment="Center"
-                        Classes="Numeric"
-                        FontSize="14"
-                        FontWeight="Bold"
-                        Foreground="{DynamicResource Brush.OnSurfaceVariant}"
-                        Text="00:00:00" />
-                    <StackPanel
-                        VerticalAlignment="Center"
-                        Orientation="Horizontal"
-                        Spacing="4">
-                        <TextBlock
-                            VerticalAlignment="Center"
-                            Classes="Caption"
-                            Foreground="{DynamicResource Brush.Accent}"
-                            Text="↓" />
-                        <TextBlock
-                            x:Name="DownSpeed"
-                            VerticalAlignment="Center"
-                            Classes="Numeric"
-                            FontSize="13"
-                            FontWeight="Bold"
-                            Text="0 KB/s" />
-                    </StackPanel>
-                </StackPanel>
+                <!--  Всё, что НИЖЕ пилюли статуса, приглушается до 45%, пока не подключено
+                      (screens.md «Главная» → правая панель). Один общий контейнер вместо двух
+                      независимых Opacity: скорости и имя сервера гаснут/зажигаются ОДНОЙ волной.  -->
+                <StackPanel x:Name="HeroMeta">
+                    <StackPanel.Transitions>
+                        <Transitions>
+                            <DoubleTransition Property="Opacity" Duration="0:0:0.3">
+                                <DoubleTransition.Easing>
+                                    <SplineEasing X1="0.25" Y1="1" X2="0.5" Y2="1" />
+                                </DoubleTransition.Easing>
+                            </DoubleTransition>
+                        </Transitions>
+                    </StackPanel.Transitions>
 
-                <!--  Идентичность сервера: флаг + имя (remark) + бейдж протокола + транспорт.
-                      Видна при выбранном/подключённом сервере. Данные: выбранный ProfileItem
-                      (remark→флаг/имя, EConfigType→протокол, Network+Security→транспорт).  -->
-                <StackPanel
-                    x:Name="ServerInfo"
-                    Margin="0,12,0,0"
-                    HorizontalAlignment="Center"
-                    Spacing="6">
+                    <!--  Стата-строка ПОД пилюлей: ↑ отдача · аптайм · ↓ приём. Скрывается целиком в
+                          «Облегчённом режиме» (владелец: «над кнопкой эти показатели должны пропадать»).  -->
                     <StackPanel
+                        x:Name="StatsRow"
+                        Margin="0,16,0,0"
                         HorizontalAlignment="Center"
                         Orientation="Horizontal"
-                        Spacing="8">
-                        <!--  Флаг-чип: круглый клип; заполняется FlagResolver (§5). Дизайн-плейсхолдер — нейтральный круг.  -->
+                        Spacing="20">
+                        <StackPanel
+                            VerticalAlignment="Center"
+                            Orientation="Horizontal"
+                            Spacing="4">
+                            <TextBlock
+                                VerticalAlignment="Center"
+                                Classes="Caption"
+                                FontSize="11"
+                                Foreground="{DynamicResource Brush.Accent}"
+                                Text="↑" />
+                            <TextBlock
+                                x:Name="UpSpeed"
+                                VerticalAlignment="Center"
+                                Classes="Numeric"
+                                FontSize="12.5"
+                                FontWeight="Bold"
+                                Text="0 KB/s" />
+                        </StackPanel>
+                        <TextBlock
+                            x:Name="Uptime"
+                            VerticalAlignment="Center"
+                            Classes="Numeric"
+                            FontSize="12.5"
+                            FontWeight="Bold"
+                            Foreground="{DynamicResource Brush.OnSurfaceVariant}"
+                            Text="00:00:00" />
+                        <StackPanel
+                            VerticalAlignment="Center"
+                            Orientation="Horizontal"
+                            Spacing="4">
+                            <TextBlock
+                                VerticalAlignment="Center"
+                                Classes="Caption"
+                                FontSize="11"
+                                Foreground="{DynamicResource Brush.Accent}"
+                                Text="↓" />
+                            <TextBlock
+                                x:Name="DownSpeed"
+                                VerticalAlignment="Center"
+                                Classes="Numeric"
+                                FontSize="12.5"
+                                FontWeight="Bold"
+                                Text="0 KB/s" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!--  Идентичность сервера: флаг 24 + имя АКЦЕНТОМ (screens.md: «флаг и имя сервера
+                          акцентом»). Протокол и транспорт живут в строке списка слева — здесь они
+                          дублировались бы, поэтому под кольцом их нет.  -->
+                    <StackPanel
+                        x:Name="ServerInfo"
+                        Margin="0,14,0,0"
+                        HorizontalAlignment="Center"
+                        Orientation="Horizontal"
+                        Spacing="9">
+                        <!--  Флаг-чип: круглый клип; заполняется FlagResolver (§5).  -->
                         <Border
                             x:Name="ServerFlag"
-                            Width="22"
-                            Height="22"
+                            Width="24"
+                            Height="24"
                             VerticalAlignment="Center"
                             Background="{DynamicResource Brush.SurfaceVariant}"
-                            BorderBrush="{DynamicResource Brush.OutlineVariant}"
-                            BorderThickness="1"
                             ClipToBounds="True"
                             CornerRadius="100">
                             <Image x:Name="ServerFlagImage" Stretch="UniformToFill" />
                         </Border>
                         <TextBlock
                             x:Name="ServerName"
-                            MaxWidth="240"
+                            MaxWidth="260"
                             VerticalAlignment="Center"
-                            Classes="TitleMedium"
+                            FontFamily="{DynamicResource Font.Grotesk}"
+                            FontSize="16"
+                            FontWeight="Bold"
+                            Foreground="{DynamicResource Brush.Accent}"
                             Text=""
                             TextTrimming="CharacterEllipsis" />
-                    </StackPanel>
-                    <StackPanel
-                        HorizontalAlignment="Center"
-                        Orientation="Horizontal"
-                        Spacing="8">
-                        <Border Classes="ProtocolChip">
-                            <!--  BUG 2: center the glyph inside the padded chip so «VLESS» shares the
-                                  optical middle of the vertically-centred «· TCP · REALITY» transport
-                                  caption (без этого чип-текст рисовался у верха бокса → разные базовые).  -->
-                            <TextBlock
-                                x:Name="ServerProtocol"
-                                VerticalAlignment="Center"
-                                Classes="Chip"
-                                Foreground="{DynamicResource Brush.Accent}"
-                                Text="" />
-                        </Border>
-                        <TextBlock
-                            x:Name="ServerTransport"
-                            VerticalAlignment="Center"
-                            Classes="Caption"
-                            Text="" />
                     </StackPanel>
                 </StackPanel>
             </StackPanel>

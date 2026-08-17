@@ -23,8 +23,14 @@ public partial class GeoFilesPage : UserControl, ISubPage
         _config = AppManager.Instance.Config;
 
         btnBack.Click += (_, _) => BackRequested?.Invoke(this, EventArgs.Empty);
-        btnUpdate.Click += async (_, _) => await UpdateAsync();
 
+        // Движок качает обе базы одним вызовом UpdateGeoFileAll — раздельного обновления в ветке
+        // нет. Поэтому тап по любой из строк запускает одно и то же, а «Обновление…» загорается
+        // сразу в обеих: обещать построчное обновление там, где его нет, — врать интерфейсом.
+        RowGeosite.Tapped += async (_, _) => await UpdateAsync();
+        RowGeoip.Tapped += async (_, _) => await UpdateAsync();
+
+        txtSource.Text = DescribeSource();
         RefreshFileInfo();
     }
 
@@ -32,6 +38,21 @@ public partial class GeoFilesPage : UserControl, ISubPage
     {
         txtGeoip.Text = DescribeFile("geoip.dat");
         txtGeosite.Text = DescribeFile("geosite.dat");
+    }
+
+    /// <summary>
+    /// Источник показан именем, а не полным адресом: строка узкая, а адрес — шаблон с «{0}».
+    /// По умолчанию это релизы Loyalsoldier (<see cref="Global.GeoUrl"/>); если владелец задал
+    /// свой адрес в конфиге — показываем его хост.
+    /// </summary>
+    private string DescribeSource()
+    {
+        var custom = _config.ConstItem.GeoSourceUrl;
+        if (custom.IsNullOrEmpty())
+        {
+            return "Loyalsoldier";
+        }
+        return Uri.TryCreate(custom, UriKind.Absolute, out var uri) ? uri.Host : custom;
     }
 
     private static string DescribeFile(string name)
@@ -60,8 +81,7 @@ public partial class GeoFilesPage : UserControl, ISubPage
             return;
         }
         _busy = true;
-        btnUpdate.IsEnabled = false;
-        btnUpdate.Content = L.T("Geo_Updating");
+        SetActionText(L.T("Geo_Updating"), busy: true);
         txtStatus.Text = L.T("Geo_Downloading");
 
         try
@@ -91,9 +111,22 @@ public partial class GeoFilesPage : UserControl, ISubPage
         finally
         {
             RefreshFileInfo();
-            btnUpdate.Content = L.T("Geo_UpdateNow");
-            btnUpdate.IsEnabled = true;
+            SetActionText(L.T("Geo_Update"), busy: false);
             _busy = false;
+        }
+    }
+
+    /// <summary>
+    /// Пока идёт загрузка, действие теряет акцент и перестаёт откликаться на тап: акцентный текст
+    /// читается как «нажми», а нажимать уже нечего.
+    /// </summary>
+    private void SetActionText(string text, bool busy)
+    {
+        foreach (var (action, row) in new[] { (txtGeositeAction, RowGeosite), (txtGeoipAction, RowGeoip) })
+        {
+            action.Text = text;
+            action.Classes.Set("accent", !busy);
+            row.Classes.Set("tap", !busy);
         }
     }
 }
