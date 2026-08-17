@@ -1934,6 +1934,43 @@ public static class ConfigHandler
             counter = await AddBatchServers4Custom(config, strData, subid, isSub);
         }
 
+        // Nothing parsed, but the old servers for this subscription were already deleted above ->
+        // restore them instead of leaving the user with an empty list.
+        //
+        // CAUSE: this method deletes BEFORE it has the replacement (RemoveServersViaSubid above), and
+        // no parser here is guaranteed to produce anything. SubscriptionHandler.ProcessDownloadResult
+        // only guards the EMPTY body case (:242) — a body that downloads fine but yields zero servers
+        // sails straight through into this delete-then-fail window. That happens for real:
+        //   • a captive-portal / hotspot login page or a proxy error page (HTML, 200 OK);
+        //   • the panel answering with a JSON error object instead of the node list;
+        //   • a truncated / corrupted base64 body from a dropped connection;
+        //   • an invalid SubItem.Filter regex — Regex.IsMatch throws out of AddBatchServersCommon
+        //     (:1613) AFTER the delete, and UpdateProcess only catches it at :49.
+        // In every one of these the subscription's whole server list vanished for good, which is the
+        // other half of the reported "бывает, что просто сервера исчезают и все".
+        //
+        // Restoring the snapshot is exact, not approximate: IndexId is the ProfileItem primary key
+        // (Models/Entities/ProfileItem.cs:156), so the rows come back with their ORIGINAL ids and
+        // config.IndexId, ProfileExItem and ServerStatItem keep resolving. Only a failed refresh
+        // restores — a successful one still replaces, exactly as before.
+        if (counter < 1 && lstOriSub is { Count: > 0 })
+        {
+            try
+            {
+                var remaining = (await AppManager.Instance.ProfileItemIndexes(subid)) ?? [];
+                var lstRestore = lstOriSub.Where(t => !remaining.Contains(t.IndexId)).ToList();
+                if (lstRestore.Count > 0)
+                {
+                    await SQLiteHelper.Instance.InsertAllAsync(lstRestore);
+                    Logging.SaveLog($"{_tag}: subscription update parsed 0 servers, restored {lstRestore.Count} existing server(s) for subid {subid}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Logging.SaveLog(_tag, ex);
+            }
+        }
+
         //Select active node
         if (activeProfile != null)
         {
