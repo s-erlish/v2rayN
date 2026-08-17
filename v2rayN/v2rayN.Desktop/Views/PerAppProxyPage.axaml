@@ -5,159 +5,239 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:loc="clr-namespace:v2rayN.Desktop.Common"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    d:DesignWidth="560"
-    d:DesignHeight="760"
-    Background="{DynamicResource Brush.Bg}"
+    xmlns:v="clr-namespace:v2rayN.Desktop.Views"
+    d:DesignWidth="800"
+    d:DesignHeight="900"
     mc:Ignorable="d">
 
-    <UserControl.Resources>
-        <StreamGeometry x:Key="Geo.Sub.Back">M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z</StreamGeometry>
-    </UserControl.Resources>
+    <!--  Фон НЕ задан: подэкран прозрачный, шелл под ним погашен (ApplySubPageShellGate).  -->
 
     <UserControl.Styles>
-        <Style Selector="Button.IconButton">
+        <StyleInclude Source="avares://departament/Assets/SubScreenStyles.axaml" />
+
+        <!--  Каретка строки «Режим»: поворот на 180° за 300 мс, пока окошко открыто (motion.md).  -->
+        <Style Selector="PathIcon.ModeCaret">
+            <Setter Property="RenderTransformOrigin" Value="50%,50%" />
             <Setter Property="Transitions">
                 <Transitions>
-                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" />
+                    <TransformOperationsTransition Duration="0:0:0.30" Property="RenderTransform" />
                 </Transitions>
             </Setter>
         </Style>
-        <Style Selector="Button.IconButton:pressed">
-            <Setter Property="RenderTransform" Value="scale(0.92)" />
+        <Style Selector="PathIcon.ModeCaret.open">
+            <Setter Property="RenderTransform" Value="rotate(180deg)" />
+        </Style>
+        <!--  Значение гаснет до приглушённого, пока окошко открыто (motion.md).  -->
+        <Style Selector="TextBlock.ModeValue.open">
+            <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
+            <Setter Property="FontWeight" Value="Normal" />
         </Style>
     </UserControl.Styles>
 
-    <DockPanel MaxWidth="620">
-        <!--  Бесшовный тулбар: «← Прокси по приложениям». Уход со страницы сохраняет и применяет.  -->
-        <Grid
-            DockPanel.Dock="Top"
-            MinHeight="56"
-            Margin="16,8,16,0"
-            ColumnDefinitions="Auto,*">
-            <Button
-                x:Name="btnBack"
-                Grid.Column="0"
-                Width="40"
-                Height="40"
-                Padding="0"
-                VerticalAlignment="Center"
-                Classes="IconButton"
-                ToolTip.Tip="{loc:T Common_Back}">
-                <PathIcon
-                    Width="22"
-                    Height="22"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center"
-                    Data="{StaticResource Geo.Sub.Back}"
-                    Foreground="{DynamicResource Brush.OnSurface}" />
-            </Button>
-            <TextBlock
-                Grid.Column="1"
-                Margin="16,0,0,0"
-                VerticalAlignment="Center"
-                Classes="Headline"
-                Text="{loc:T Settings_PerApp}"
-                TextTrimming="CharacterEllipsis" />
-        </Grid>
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <StackPanel
+            MaxWidth="760"
+            Margin="20,10,20,20"
+            HorizontalAlignment="Center">
 
-        <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-            <StackPanel Margin="16,12,16,24" Spacing="8">
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <Button
+                    x:Name="btnBack"
+                    Classes="SubBack"
+                    ToolTip.Tip="{loc:T Common_Back}">
+                    <PathIcon
+                        Width="22"
+                        Height="22"
+                        Data="{DynamicResource Geo.Sub.Back}"
+                        Foreground="{DynamicResource Brush.OnSurface}" />
+                </Button>
+                <TextBlock Classes="SubTitle" Text="{loc:T Settings_PerApp}" />
+            </StackPanel>
 
-                <!--  Включение + режим  -->
-                <Border Classes="Card" Padding="16,4">
-                    <StackPanel>
-                        <Grid ColumnDefinitions="*,Auto" MinHeight="56">
+            <!--  ==================== Включение + режим ====================
+                  ClipToBounds=False — контракт ValuePopup: карточка не имеет права обрезать
+                  раскрытое окошко нижней кромкой, поэтому маскировать углы перестаёт она и
+                  начинают сами крайние строки (CornerRadius 15 = 16 карточки минус её контур).  -->
+            <Border
+                Classes="SubCard"
+                ClipToBounds="False"
+                Margin="0,14,0,0">
+                <StackPanel>
+                    <Border
+                        x:Name="RowEnabled"
+                        Classes="SubRow tap"
+                        CornerRadius="15,15,0,0">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <Border Grid.Column="0" Classes="SubTile">
+                                <PathIcon Data="{DynamicResource Geo.Sub.Grid}" />
+                            </Border>
                             <StackPanel
-                                Grid.Column="0"
-                                Margin="0,0,8,0"
+                                Grid.Column="1"
+                                Margin="16,0,12,0"
                                 VerticalAlignment="Center">
-                                <TextBlock Classes="Body" Text="{loc:T PerApp_SplitTunnel}" />
+                                <TextBlock Classes="SubName" Text="{loc:T PerApp_SplitTunnel}" />
                                 <TextBlock
-                                    Margin="0,4,0,0"
-                                    Classes="Subtitle"
+                                    Classes="SubSub"
                                     Text="{loc:T PerApp_SplitTunnelHint}"
                                     TextWrapping="Wrap" />
                             </StackPanel>
                             <ToggleSwitch
                                 x:Name="switchEnabled"
-                                Grid.Column="1"
+                                Grid.Column="2"
                                 VerticalAlignment="Center"
                                 Theme="{DynamicResource ToggleSwitch.iOS}" />
                         </Grid>
+                    </Border>
 
-                        <Border
-                            Height="1"
-                            Margin="0,0,0,0"
-                            Background="{DynamicResource Brush.OutlineVariant}" />
+                    <Border Classes="SubDivider" />
 
-                        <RadioButton
-                            x:Name="rbBypass"
-                            MinHeight="56"
-                            Content="{loc:T PerApp_BypassHint}"
-                            Foreground="{DynamicResource Brush.OnSurface}"
-                            GroupName="perAppMode" />
-                        <RadioButton
-                            x:Name="rbInclude"
-                            MinHeight="56"
-                            Content="{loc:T PerApp_OnlyHint}"
-                            Foreground="{DynamicResource Brush.OnSurface}"
-                            GroupName="perAppMode" />
-                    </StackPanel>
-                </Border>
+                    <!--  «Режим» — каретка и окошко у значения, НЕ переключатель по кругу: два
+                          варианта, которые меняются местами по тапу, не дают увидеть набор целиком
+                          и требуют угадывать, что будет дальше. Окошко — ОБЩИЙ компонент ValuePopup.  -->
+                    <Border
+                        x:Name="RowMode"
+                        Classes="SubRow tap"
+                        CornerRadius="0,0,15,15">
+                        <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                            <Border Grid.Column="0" Classes="SubTile">
+                                <PathIcon Data="{DynamicResource Geo.Sub.Globe}" />
+                            </Border>
+                            <TextBlock
+                                Grid.Column="1"
+                                Margin="16,0,12,0"
+                                VerticalAlignment="Center"
+                                Classes="SubName"
+                                Text="{loc:T PerApp_Mode}" />
+                            <TextBlock
+                                x:Name="txtModeValue"
+                                Grid.Column="2"
+                                Classes="SubValue strong ModeValue" />
+                            <PathIcon
+                                x:Name="ModeCaret"
+                                Grid.Column="3"
+                                Classes="SubChevron ModeCaret"
+                                Data="{DynamicResource Geo.Sub.Caret}" />
 
-                <!--  Список приложений  -->
-                <TextBlock
-                    Margin="4,10,4,4"
-                    Classes="SectionHeader"
-                    Text="{loc:T PerApp_Apps}" />
+                            <!--  Компонент занимает 0×0 и не двигает раскладку строки.  -->
+                            <v:ValuePopup
+                                x:Name="ModePopup"
+                                Grid.Column="3"
+                                Anchor="{Binding #RowMode}"
+                                PopupWidth="196"
+                                Trigger="{Binding #RowMode}" />
+                        </Grid>
+                    </Border>
+                </StackPanel>
+            </Border>
 
-                <Grid ColumnDefinitions="*,Auto,Auto">
+            <!--  ==================== Поиск ====================  -->
+            <Border Classes="SubSearch" Margin="0,14,0,0">
+                <Grid ColumnDefinitions="Auto,*">
+                    <PathIcon
+                        Grid.Column="0"
+                        Width="18"
+                        Height="18"
+                        Margin="0,0,10,0"
+                        VerticalAlignment="Center"
+                        Data="{DynamicResource Geo.Sub.Search}"
+                        Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
                     <TextBox
                         x:Name="txtFilter"
-                        Grid.Column="0"
-                        Margin="0,0,8,0"
-                        VerticalContentAlignment="Center"
-                        Watermark="{loc:T Common_SearchPlaceholder}" />
-                    <Button
-                        x:Name="btnRefresh"
                         Grid.Column="1"
-                        Margin="0,0,8,0"
-                        Content="{loc:T Common_Refresh}" />
-                    <Button
-                        x:Name="btnAddExe"
-                        Grid.Column="2"
-                        Content="{loc:T PerApp_AddExe}" />
+                        PlaceholderText="{loc:T PerApp_Search}" />
                 </Grid>
+            </Border>
 
-                <Border Classes="Card" Padding="8,4">
-                    <ItemsControl x:Name="listApps">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:CompileBindings="False">
-                                <CheckBox
-                                    MinHeight="44"
-                                    Padding="8,0,0,0"
-                                    Foreground="{DynamicResource Brush.OnSurface}"
-                                    IsChecked="{Binding IsChecked, Mode=TwoWay}">
-                                    <StackPanel>
-                                        <TextBlock Classes="Body" Text="{Binding Display}" />
-                                        <TextBlock
-                                            Classes="Subtitle"
-                                            Text="{Binding Identifier}"
-                                            TextTrimming="CharacterEllipsis" />
-                                    </StackPanel>
-                                </CheckBox>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </Border>
+            <!--  ==================== Программы ====================
+                  Плитка с инициалом, имя, исполняемый файл, чекбокс. Подпись — имя файла целиком;
+                  если оно не влезло, срезается ОНО, а не заголовок строки.  -->
+            <TextBlock x:Name="txtProgramsLabel" Classes="SubGroupLabel" />
+            <Border Classes="SubCard" x:Name="AppsCard">
+                <ItemsControl x:Name="listApps">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:CompileBindings="False">
+                            <StackPanel>
+                                <Border Classes="SubDivider" IsVisible="{Binding ShowDivider}" />
+                                <Border Classes="SubRow tap" Tapped="OnAppRowTapped">
+                                    <Grid ColumnDefinitions="Auto,*,Auto">
+                                        <Border Grid.Column="0" Classes="SubTile">
+                                            <TextBlock Text="{Binding Letter}" />
+                                        </Border>
+                                        <StackPanel
+                                            Grid.Column="1"
+                                            Margin="16,0,12,0"
+                                            VerticalAlignment="Center">
+                                            <TextBlock Classes="SubName" Text="{Binding Display}" />
+                                            <TextBlock Classes="SubSub" Text="{Binding Identifier}" />
+                                        </StackPanel>
+                                        <Border
+                                            Grid.Column="2"
+                                            Classes="SubCheck"
+                                            Classes.on="{Binding IsChecked}">
+                                            <PathIcon Data="{DynamicResource Geo.Sub.Check}" />
+                                        </Border>
+                                    </Grid>
+                                </Border>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Border>
 
-                <TextBlock
-                    Margin="4,4,4,0"
-                    Classes="Subtitle"
-                    Text="{loc:T PerApp_TunHint}"
-                    TextWrapping="Wrap" />
+            <!--  Пустое состояние списка — вместо пустой карточки, которая читается как поломка.  -->
+            <Border x:Name="AppsEmpty" Classes="SubEmpty" IsVisible="False">
+                <StackPanel VerticalAlignment="Center" Spacing="12">
+                    <Border Classes="SubEmptyTile">
+                        <PathIcon Data="{DynamicResource Geo.Sub.Grid}" />
+                    </Border>
+                    <TextBlock Classes="SubEmptyTitle" Text="{loc:T PerApp_EmptyTitle}" />
+                    <TextBlock Classes="SubEmptyText" Text="{loc:T PerApp_EmptyText}" />
+                </StackPanel>
+            </Border>
 
-            </StackPanel>
-        </ScrollViewer>
-    </DockPanel>
+            <!--  ==================== Действия ====================
+                  Обновить список процессов и добавить .exe вручную — этого нет в прототипе, но на
+                  ПК без них экран нерабочий: список берётся из живых процессов, а закрытую сейчас
+                  программу иначе не выбрать. Отдельной группой, акцентом — как «Копировать»/«Очистить».  -->
+            <Border Classes="SubCard" Margin="0,14,0,0">
+                <StackPanel>
+                    <Border
+                        x:Name="RowRefresh"
+                        Classes="SubRow tap"
+                        CornerRadius="15,15,0,0">
+                        <Grid ColumnDefinitions="Auto,*">
+                            <Border Grid.Column="0" Classes="SubTile">
+                                <PathIcon Data="{DynamicResource Geo.Sub.Refresh}" />
+                            </Border>
+                            <TextBlock
+                                Grid.Column="1"
+                                Margin="16,0,0,0"
+                                VerticalAlignment="Center"
+                                Classes="SubName accent"
+                                Text="{loc:T Common_Refresh}" />
+                        </Grid>
+                    </Border>
+                    <Border Classes="SubDivider" />
+                    <Border
+                        x:Name="RowAddExe"
+                        Classes="SubRow tap"
+                        CornerRadius="0,0,15,15">
+                        <Grid ColumnDefinitions="Auto,*">
+                            <Border Grid.Column="0" Classes="SubTile">
+                                <PathIcon Data="{DynamicResource Geo.Sub.File}" />
+                            </Border>
+                            <TextBlock
+                                Grid.Column="1"
+                                Margin="16,0,0,0"
+                                VerticalAlignment="Center"
+                                Classes="SubName accent"
+                                Text="{loc:T PerApp_AddExe}" />
+                        </Grid>
+                    </Border>
+                </StackPanel>
+            </Border>
+
+            <TextBlock Classes="SubFoot" Text="{loc:T PerApp_TunHint}" />
+        </StackPanel>
+    </ScrollViewer>
 </UserControl>

@@ -1,26 +1,47 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using Avalonia.Platform.Storage;
 using v2rayN.Desktop.Common;
 
 namespace v2rayN.Desktop.Views;
 
 /// <summary>
-/// «Прокси по приложениям» (split-tunnel) — in-app суб-страница (раньше отдельное окно). Real, working:
-/// picks Windows processes (by name) or an explicit .exe path, then persists them AND injects a managed
-/// routing rule into the ACTIVE RoutingItem.RuleSet using the sing-box <c>process_name</c>/<c>process_path</c>
-/// matchers the engine already builds (SingboxRoutingService.GenRoutingUserRule). Two modes:
-///   • bypass  → listed apps go DIRECT (skip the VPN), everything else stays on the tunnel;
-///   • include → only listed apps go through the proxy, everything else goes DIRECT.
-/// OFF-model honored: a settings change never starts the core; it re-applies live only if running.
+/// «Прокси по приложениям» (split-tunnel) — подэкран настроек по единому лекалу. Real, working:
+/// подбирает процессы Windows (по имени) или явный путь к .exe, сохраняет их И вставляет управляемое
+/// правило маршрутизации в АКТИВНЫЙ <c>RoutingItem.RuleSet</c> через матчеры <c>process_name</c> /
+/// <c>process_path</c>, которые движок уже умеет (SingboxRoutingService.GenRoutingUserRule). Два режима:
+///   • «Кроме выбранных» (bypass)  → перечисленные идут НАПРЯМУЮ, остальное остаётся в туннеле;
+///   • «Только выбранные» (include) → через прокси идут только перечисленные, остальное напрямую.
+/// OFF-модель: изменение настройки НЕ поднимает ядро; вживую применяется, только если оно уже запущено.
+///
+/// Две вещи, которым научил тот же экран на Android-стороне продукта:
+///   1. Строка «Режим» НЕ переключается по кругу. Значение, которое меняется местами по тапу, не
+///      показывает набор целиком и заставляет угадывать следующий шаг. Здесь у строки каретка, и она
+///      открывает ОБЩЕЕ «окошко у значения» (<see cref="ValuePopup"/>) — второй реализации выбора
+///      в приложении не заводится.
+///   2. Подпись строки не обрезается на полуслове. Обрезается ЗНАЧЕНИЕ справа (у него свой лимит),
+///      а имя программы и имя файла живут в собственной колонке и переносятся/усекаются по своим
+///      правилам.
+///
+/// Чего на экране НЕТ и почему: в прототипе есть тумблеры «Игры» и «Лаунчеры» (готовые наборы
+/// программ). В ветке такого понятия не существует — ни списка категорий, ни признака у процесса.
+/// Выдумывать их значило бы нарисовать переключатель, который ничего не делает, поэтому строки не
+/// добавлены (вопрос вынесен в отчёт).
+///
 /// Уход со страницы (стрелка «назад») сохраняет и применяет, затем поднимает <see cref="BackRequested"/>.
 /// </summary>
 public partial class PerAppProxyPage : UserControl, ISubPage
 {
-    // Marker on the managed RulesItem so we can find/replace ours without touching the user's own rules.
+    // Маркер на управляемом RulesItem — по нему находим и заменяем СВОИ правила, не трогая пользовательские.
     private const string PerAppMarkerBypass = "__departament_perapp_bypass";
     private const string PerAppMarkerInclude = "__departament_perapp_include";
     private const string PerAppMarkerCatchAll = "__departament_perapp_catchall";
+
+    // Порядок пунктов окошка = порядок этих индексов. 0 — «Кроме выбранных» (bypass).
+    private const int ModeExcept = 0;
+    private const int ModeOnly = 1;
 
     private readonly Config _config;
     private readonly ObservableCollection<AppItem> _all = new();
@@ -35,16 +56,41 @@ public partial class PerAppProxyPage : UserControl, ISubPage
         _config = AppManager.Instance.Config;
 
         btnBack.Click += async (_, _) => await SaveAndBackAsync();
-        btnRefresh.Click += (_, _) => LoadProcesses();
-        btnAddExe.Click += async (_, _) => await AddExeAsync();
+        RowRefresh.Tapped += (_, _) => LoadProcesses();
+        RowAddExe.Tapped += async (_, _) => await AddExeAsync();
         txtFilter.GetObservable(TextBox.TextProperty).Subscribe(_ => ApplyFilter());
 
         switchEnabled.IsChecked = _config.UiItem.PerAppProxyEnabled;
-        rbBypass.IsChecked = _config.UiItem.PerAppProxyBypass;
-        rbInclude.IsChecked = !_config.UiItem.PerAppProxyBypass;
+        RowEnabled.Tapped += (_, e) =>
+        {
+            if (SubPageUtil.OriginatedIn<ToggleSwitch>(e.Source))
+            {
+                return;
+            }
+            switchEnabled.IsChecked = !(switchEnabled.IsChecked ?? false);
+        };
+
+        // ── Режим через общее «окошко у значения» ──
+        ModePopup.Options = new[] { L.T("PerApp_ModeExcept"), L.T("PerApp_ModeOnly") };
+        ModePopup.SelectedIndex = _config.UiItem.PerAppProxyBypass ? ModeExcept : ModeOnly;
+        ModePopup.Picked += (_, _) => UpdateModeValue();
+        // Каретка и приглушение значения ведутся ОТ состояния окошка, а не от тапа: окошко умеет
+        // закрыться само (Esc, клик мимо, уход со страницы), и строка обязана это отражать.
+        ModePopup.GetObservable(ValuePopup.IsOpenProperty).Subscribe(open =>
+        {
+            SubPageUtil.SetClass(ModeCaret, "open", open);
+            SubPageUtil.SetClass(txtModeValue, "open", open);
+        });
+        RowMode.Tapped += (_, _) => ModePopup.Toggle();
+        UpdateModeValue();
 
         LoadProcesses();
     }
+
+    private void UpdateModeValue() =>
+        txtModeValue.Text = ModePopup.SelectedIndex == ModeOnly
+            ? L.T("PerApp_ModeOnly")
+            : L.T("PerApp_ModeExcept");
 
     private void LoadProcesses()
     {
@@ -54,7 +100,8 @@ public partial class PerAppProxyPage : UserControl, ISubPage
 
         var items = new Dictionary<string, AppItem>(StringComparer.OrdinalIgnoreCase);
 
-        // Manually-added / previously-selected entries first (so paths survive even if not running).
+        // Сначала добавленные вручную / ранее выбранные — так путь переживает то, что программа
+        // сейчас не запущена и в списке процессов её нет.
         foreach (var id in selected)
         {
             items[id] = new AppItem
@@ -103,15 +150,33 @@ public partial class PerAppProxyPage : UserControl, ISubPage
     private void ApplyFilter()
     {
         var q = txtFilter.Text?.Trim();
-        if (q.IsNullOrEmpty())
+        var shown = q.IsNullOrEmpty()
+            ? _all.ToList()
+            : _all.Where(x => (x.Display?.Contains(q!, StringComparison.OrdinalIgnoreCase) ?? false)
+                           || (x.Identifier?.Contains(q!, StringComparison.OrdinalIgnoreCase) ?? false))
+                  .ToList();
+
+        // Разделитель рисует сама строка, поэтому у ПЕРВОЙ его быть не должно — иначе под шапкой
+        // карточки появляется лишняя линия.
+        for (var i = 0; i < shown.Count; i++)
         {
-            listApps.ItemsSource = _all.ToList();
+            shown[i].ShowDivider = i > 0;
+        }
+
+        listApps.ItemsSource = shown;
+        AppsCard.IsVisible = shown.Count > 0;
+        AppsEmpty.IsVisible = shown.Count == 0;
+        txtProgramsLabel.Text = $"{L.T("PerApp_Programs")} · {L.F("PerApp_Chosen", _all.Count(x => x.IsChecked))}";
+    }
+
+    private void OnAppRowTapped(object? sender, TappedEventArgs e)
+    {
+        if ((sender as Control)?.DataContext is not AppItem item)
+        {
             return;
         }
-        listApps.ItemsSource = _all
-            .Where(x => (x.Display?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false)
-                     || (x.Identifier?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false))
-            .ToList();
+        item.IsChecked = !item.IsChecked;
+        txtProgramsLabel.Text = $"{L.T("PerApp_Programs")} · {L.F("PerApp_Chosen", _all.Count(x => x.IsChecked))}";
     }
 
     private async Task AddExeAsync()
@@ -150,7 +215,7 @@ public partial class PerAppProxyPage : UserControl, ISubPage
         _saved = true;
 
         var enabled = switchEnabled.IsChecked == true;
-        var bypass = rbBypass.IsChecked == true;
+        var bypass = ModePopup.SelectedIndex != ModeOnly;
         var chosen = _all.Where(x => x.IsChecked && x.Identifier.IsNotEmpty())
                          .Select(x => x.Identifier!)
                          .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -170,7 +235,7 @@ public partial class PerAppProxyPage : UserControl, ISubPage
         BackRequested?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <summary>Rewrite ONLY our managed rules in the active routing; user rules are untouched.</summary>
+    /// <summary>Переписывает ТОЛЬКО наши управляемые правила; пользовательские не трогаются.</summary>
     private async Task ApplyToRoutingAsync(bool active, bool bypass, List<string> apps)
     {
         var routing = await ConfigHandler.GetDefaultRouting(_config);
@@ -186,7 +251,7 @@ public partial class PerAppProxyPage : UserControl, ISubPage
         {
             if (bypass)
             {
-                // Listed apps go DIRECT (bypass the tunnel). Everything else follows the existing rules.
+                // Перечисленные — НАПРЯМУЮ (мимо туннеля). Остальное живёт по существующим правилам.
                 rules.Insert(0, new RulesItem
                 {
                     Id = Utils.GetGuid(false),
@@ -198,7 +263,7 @@ public partial class PerAppProxyPage : UserControl, ISubPage
             }
             else
             {
-                // Only listed apps go through the proxy; everything else goes DIRECT (catch-all after).
+                // Через прокси идут только перечисленные; всё остальное — напрямую (catch-all в конце).
                 rules.Insert(0, new RulesItem
                 {
                     Id = Utils.GetGuid(false),
@@ -228,11 +293,43 @@ public partial class PerAppProxyPage : UserControl, ISubPage
     private static bool IsCoreRunning() =>
         AppManager.Instance.IsRunningCore(ECoreType.Xray) || AppManager.Instance.IsRunningCore(ECoreType.sing_box);
 
-    public sealed class AppItem
+    /// <summary>Строка списка программ. Уведомляет об изменениях, потому что галочку и разделитель
+    /// строки ведёт разметка через <c>Classes.on</c> / <c>IsVisible</c>, а не код-behind по имени.</summary>
+    public sealed class AppItem : INotifyPropertyChanged
     {
+        private bool _isChecked;
+        private bool _showDivider;
+
         public string Identifier { get; set; } = string.Empty;
         public string? Display { get; set; }
         public string? Path { get; set; }
-        public bool IsChecked { get; set; }
+
+        /// <summary>Инициал для плитки. Пустое имя даёт «?», а не пустой квадрат.</summary>
+        public string Letter =>
+            Display.IsNullOrEmpty() ? "?" : Display!.Trim()[..1].ToUpperInvariant();
+
+        public bool IsChecked
+        {
+            get => _isChecked;
+            set => Set(ref _isChecked, value);
+        }
+
+        public bool ShowDivider
+        {
+            get => _showDivider;
+            set => Set(ref _showDivider, value);
+        }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        private void Set(ref bool field, bool value, [CallerMemberName] string? name = null)
+        {
+            if (field == value)
+            {
+                return;
+            }
+            field = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+        }
     }
 }
