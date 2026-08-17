@@ -19,14 +19,37 @@ public static class ConfigHandler
     public static Config? LoadConfig()
     {
         Config? config = null;
-        var result = EmbedUtils.LoadResource(Utils.GetConfigPath(_configRes));
+        var configPath = Utils.GetConfigPath(_configRes);
+        var result = EmbedUtils.LoadResource(configPath);
         if (result.IsNotEmpty())
         {
             config = JsonUtils.Deserialize<Config>(result);
+
+            // The file had content but would not parse. JsonUtils.Deserialize swallows the exception
+            // and returns null (JsonUtils.cs:77-80), so this used to fall silently into the
+            // `config ??= new Config()` below — a factory reset that drops IndexId, SubIndexId,
+            // language, TUN mode and every other setting, which the next SaveConfig then writes back
+            // over the damaged file, making the loss permanent and untraceable.
+            //
+            // Keep starting with defaults (refusing to launch is worse), but preserve the original
+            // bytes next to the config first, so a damaged file is diagnosable and the user's settings
+            // are recoverable instead of gone. Best-effort: a failure to copy must not block startup.
+            if (config is null)
+            {
+                Logging.SaveLog($"{_tag}: config file exists but could not be parsed, falling back to defaults");
+                try
+                {
+                    File.Copy(configPath, $"{configPath}.bad", true);
+                }
+                catch (Exception ex)
+                {
+                    Logging.SaveLog(_tag, ex);
+                }
+            }
         }
         else
         {
-            if (File.Exists(Utils.GetConfigPath(_configRes)))
+            if (File.Exists(configPath))
             {
                 Logging.SaveLog("LoadConfig Exception");
                 return null;
@@ -191,6 +214,26 @@ public static class ConfigHandler
     }
 
     /// <summary>
+    /// Serialises every config save. The write-temp-then-move below is only atomic against a CRASH;
+    /// it is not atomic against a SECOND concurrent save, because both share the one "<res>_temp"
+    /// path. Saves genuinely do overlap: several call sites are fire-and-forget
+    /// (ThemeSettingViewModel :44/:57/:69, SettingsViewModel :541, MainWindow.axaml.cs :1582),
+    /// TaskManager saves from its own timer thread every 20 minutes (TaskManager.cs:45), and a
+    /// subscription import saves from a thread-pool task (AddBatchServersCommon, :1648).
+    ///
+    /// Interleaved, that destroyed the live config:
+    ///   A: WriteAllTextAsync(temp, contentA)  -> temp holds a COMPLETE config
+    ///   B: WriteAllTextAsync(temp, contentB)  -> FileMode.Create TRUNCATES temp to 0, starts writing
+    ///   A: File.Move(temp, config, true)      -> moves B's HALF-WRITTEN file over the live config
+    /// The next launch then read a truncated guiNConfig.json, and LoadConfig turns that into silent
+    /// data loss: a zero-length file returns null (:29-33) so the app exits without a word, and a
+    /// partial-but-non-empty file fails Deserialize and falls through to `config ??= new Config()`
+    /// (:36) — a factory reset that discards IndexId, SubIndexId, language, TUN mode and every
+    /// setting, which is then written back over the file on the next save.
+    /// </summary>
+    private static readonly SemaphoreSlim _saveConfigLock = new(1, 1);
+
+    /// <summary>
     /// Save the configuration to a file
     /// First writes to a temporary file, then replaces the original file
     /// </summary>
@@ -198,6 +241,7 @@ public static class ConfigHandler
     /// <returns>0 if successful, -1 if failed</returns>
     public static async Task<int> SaveConfig(Config config)
     {
+        await _saveConfigLock.WaitAsync();
         try
         {
             //save temp file
@@ -218,6 +262,10 @@ public static class ConfigHandler
         {
             Logging.SaveLog(_tag, ex);
             return -1;
+        }
+        finally
+        {
+            _saveConfigLock.Release();
         }
 
         return 0;
