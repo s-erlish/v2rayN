@@ -583,37 +583,39 @@ public partial class App : Application
         static SolidColorBrush Alpha(string hex, double opacity) => new(Color.Parse(hex)) { Opacity = opacity };
 
         // Серый «акцент»/чернила и поверхности из Android mono_* набора.
-        var accent = light ? "#111214" : "#FFFFFF"; // primary
-        var onAccent = light ? "#FFFFFF" : "#111214"; // onPrimary
-        var accentContainer = light ? "#E6E6E8" : "#2A2A2E"; // primaryContainer
-        var onAccentContainer = light ? "#111214" : "#F4F4F5"; // текст на контейнере ≈ onSurface
-        var connected = light ? "#111214" : "#FFFFFF"; // mono connected (не синий)
-        var onSurface = light ? "#111214" : "#F4F4F5";
-        var onSurfaceVariant = light ? "#5A5A5E" : "#B0B0B4";
-        var highest = light ? "#E7E7E9" : "#232326"; // surfaceContainerHighest
+        var accent = "#F2F4F8";            // акцент чёрно-белой = белый
+        var onAccent = "#0A0A0B";
+        var accentContainer = "#22242A";
+        var onAccentContainer = "#F2F4F8";
+        var connected = "#F2F4F8";         // «хорошо» сведено к белому
+        var onSurface = "#F2F4F8";
+        var onSurfaceVariant = "#9BA1AD";
+        var highest = "#282A2E";           // плитка / окошко
         // Красный сохраняем для деструктива (Android mono держит iconTintRed/failed красным).
-        var red = light ? "#C42B32" : "#E5484D";
-        // Красный ТЕКСТ на mono-поверхностях (ошибки): ярче заливки ради контраста ≥4.5:1 —
-        // light #C42B32 (5.6:1 на #FFFFFF) / dark #FF6069 (7.1:1 на #000000). Совпадает с базовым
-        // RedText (dark/light) — красный единый на всё приложение, единственный неубираемый в mono тон.
-        var redText = light ? "#C42B32" : "#FF6069";
+        // «Плохо» в этой теме тоже белое (tokens.md): цвета не остаётся нигде, кроме глифа Telegram
+        // — а он здесь тоже белый. Красный держим ОДИН, для кнопки закрытия окна: она системная,
+        // и её наведение красное во всех темах по README «Хром окна».
+        var red = "#F2F4F8";
+        // Красного текста в этой теме нет: ошибки печатаются тем же белым, что и всё остальное —
+        // «в чёрно-белой теме не остаётся синего», и цвета вообще. Ключ существует ради единого API.
+        var redText = "#F2F4F8";
 
         // Полупрозрачные производные — единый серый под tile/selected/статус-чип.
         // На тёмной базе — белый лифт, на светлой — чёрный (как ховер).
-        var greyTint = light ? "#111214" : "#FFFFFF";
+        var greyTint = "#F2F4F8";
 
         return new ResourceDictionary
         {
             // ── Поверхности / чернила / контуры (mono_*) ──
-            ["Brush.Bg"] = Solid(light ? "#FFFFFF" : "#000000"),
-            ["Brush.Surface"] = Solid(light ? "#FFFFFF" : "#121214"),
-            ["Brush.SurfaceHigh"] = Solid(light ? "#EEEEEF" : "#1B1B1E"), // surfaceContainerHigh
-            ["Brush.SurfaceVariant"] = Solid(light ? "#F1F1F2" : "#1E1E20"),
+            ["Brush.Bg"] = Solid("#141416"),
+            ["Brush.Surface"] = Solid("#1A1A1D"),
+            ["Brush.SurfaceHigh"] = Solid("#202024"),
+            ["Brush.SurfaceVariant"] = Solid("#232326"),
             ["Brush.SurfaceHighest"] = Solid(highest),
             ["Brush.OnSurface"] = Solid(onSurface),
             ["Brush.OnSurfaceVariant"] = Solid(onSurfaceVariant),
-            ["Brush.Outline"] = Solid(light ? "#D2D2D6" : "#38383C"),
-            ["Brush.OutlineVariant"] = Solid(light ? "#E6E6E8" : "#28282C"),
+            ["Brush.Outline"] = Solid("#34363C"),
+            ["Brush.OutlineVariant"] = Solid("#26262A"),
 
             // ── Акцент → серый (схлопывание #4C8DFF) ──
             ["Brush.Accent"] = Solid(accent),
@@ -622,13 +624,25 @@ public partial class App : Application
             ["Brush.OnAccentContainer"] = Solid(onAccentContainer),
             // Semi-тема тянет primary по DynamicResource — тоже в серый, иначе синие фокусы/кнопки.
             ["SemiColorPrimary"] = Solid(accent),
-            ["SemiColorPrimaryHover"] = Solid(light ? "#2A2A2E" : "#E7E7E9"),
-            ["SemiColorPrimaryActive"] = Solid(light ? "#000000" : "#C9C9CD"),
+            ["SemiColorPrimaryHover"] = Solid("#E7E7E9"),
+            ["SemiColorPrimaryActive"] = Solid("#C9C9CD"),
 
             // ── Семантика: зелёный/оранжевый/жёлтый → серый; КРАСНЫЙ остаётся (деструктив) ──
             ["Brush.Green"] = Solid(connected), // «подключено»/успех = mono connected (серо-белый)
             ["Brush.Red"] = Solid(red),
             ["Brush.RedText"] = Solid(redText),
+
+            // ── Новые токены пакета. Без них чёрно-белая осталась бы с синими кольцами,
+            //    синим диском и синим глифом Telegram — «в чёрно-белой не остаётся синего». ──
+            ["Brush.ButtonOutline"] = Solid("#34363C"),
+            ["Brush.ConnectDisc"] = Solid("#1E1E22"),
+            ["Brush.ShieldOff"] = Solid("#4A4E57"),
+            ["Brush.PressBg"] = Solid("#131315"),
+            ["Brush.Yellow"] = Solid("#9BA1AD"),
+            ["Brush.Telegram"] = Solid("#F2F4F8"),
+            ["Brush.Ring.Outer"] = Alpha("#F2F4F8", 0.16),
+            ["Brush.Ring.Inner"] = Alpha("#F2F4F8", 0.45),
+            ["Brush.SelectedFill"] = Alpha("#F2F4F8", 0.10),
 
             // ── Плитки иконок: цветные → серые; красная плитка остаётся красной ──
             ["Brush.Tile.Neutral"] = Solid(highest),
@@ -648,8 +662,9 @@ public partial class App : Application
             ["Brush.StatusChip.Yellow"] = Alpha(greyTint, 0.12),
             ["Brush.StatusChip.Red"] = Alpha(red, 0.18),
 
-            // ── Ховер: белый лифт на тёмной базе, чёрное затемнение на светлой ──
-            ["Brush.Hover"] = light ? Alpha("#000000", 0.05) : Alpha("#FFFFFF", 0.06),
+            // ── Ховер: белый лифт. Палитра одна, поэтому и ховер один (tokens.md
+            //    «Наведение rgba(255,255,255,.06)»). ──
+            ["Brush.Hover"] = Alpha("#FFFFFF", 0.06),
 
             // ── Тост / фон Главной ──
             ["Brush.Toast.Bg"] = Solid(highest),
@@ -671,18 +686,11 @@ public partial class App : Application
             RadiusX = new RelativeScalar(0.75, RelativeUnit.Relative),
             RadiusY = new RelativeScalar(0.75, RelativeUnit.Relative),
         };
-        if (light)
-        {
-            brush.GradientStops.Add(new GradientStop(Color.Parse("#FFFFFF"), 0));
-            brush.GradientStops.Add(new GradientStop(Color.Parse("#FAFAFB"), 0.55));
-            brush.GradientStops.Add(new GradientStop(Color.Parse("#F1F1F2"), 1));
-        }
-        else
-        {
-            brush.GradientStops.Add(new GradientStop(Color.Parse("#1B1B1E"), 0));
-            brush.GradientStops.Add(new GradientStop(Color.Parse("#121214"), 0.55));
-            brush.GradientStops.Add(new GradientStop(Color.Parse("#000000"), 1));
-        }
+        // Одна палитра на тему, поэтому ветвления по базе больше нет. Значения tokens.md;
+        // нижняя точка #101012, а НЕ чёрный — «не чистый чёрный, фон поднят до серого».
+        brush.GradientStops.Add(new GradientStop(Color.Parse("#1C1C1F"), 0));
+        brush.GradientStops.Add(new GradientStop(Color.Parse("#141416"), 0.55));
+        brush.GradientStops.Add(new GradientStop(Color.Parse("#101012"), 1));
         return brush;
     }
 

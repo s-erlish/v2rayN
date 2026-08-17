@@ -35,20 +35,26 @@
     <!--  Значения 1:1 из Android res/values(-night) + §3.3 (light column).       -->
     <!-- ==================================================================== -->
 
-    <!--  Акцент — ОДИН синий на все темы (#4C8DFF). Connected-щит всегда синий.  -->
-    <Color x:Key="Color.Accent">#4C8DFF</Color>
-    <Color x:Key="Color.OnAccent">#00183A</Color>
+    <!--  АКЦЕНТ — ОДИН НА ВСЕ ТЕМЫ: #1F6FF5 (handoff README, tokens.md). Был #4C8DFF.
+          Сверено по прототипу: #1F6FF5 там есть, #4C8DFF как СПЛОШНОЙ цвет — нет.
+
+          НО КОЛЬЦА И ЗАЛИВКА ВЫБРАННОГО СВЕТЛЕЕ АКЦЕНТА, И ЭТО НАМЕРЕННО. Прототип держит их на
+          rgba(76,141,255,…) — прежнем, более светлом синем — при сплошном акценте #1F6FF5. Это не
+          забытое значение: плёнка из #1F6FF5 на тёмном уходит в грязный синий, а из #4C8DFF
+          читается как свет. Ring.* / SelectedFill / ConnectGlow поэтому НЕ следуют за акцентом.
+
+          Brush.OnAccent переехал в темы: #001433 тёмная / #FFFFFF светлая / #0A0A0B чёрно-белая.  -->
+    <Color x:Key="Color.Accent">#1F6FF5</Color>
     <SolidColorBrush x:Key="Brush.Accent" Color="{StaticResource Color.Accent}" />
-    <SolidColorBrush x:Key="Brush.OnAccent" Color="{StaticResource Color.OnAccent}" />
 
     <!--  Плитки иконок: полупрозрачный акцент (общий для light/dark, как Android icon_tile_*).  -->
-    <SolidColorBrush x:Key="Brush.Tile.Blue" Color="#4C8DFF" Opacity="0.20" />
+    <SolidColorBrush x:Key="Brush.Tile.Blue" Color="#1F6FF5" Opacity="0.20" />
     <SolidColorBrush x:Key="Brush.Tile.Green" Color="#22C55E" Opacity="0.20" />
 
     <!--  Акцент темы Semi = наш синий (если Semi берёт по DynamicResource).  -->
     <SolidColorBrush x:Key="SemiColorPrimary" Color="{StaticResource Color.Accent}" />
-    <SolidColorBrush x:Key="SemiColorPrimaryHover" Color="#5F9AFF" />
-    <SolidColorBrush x:Key="SemiColorPrimaryActive" Color="#3D7EF0" />
+    <SolidColorBrush x:Key="SemiColorPrimaryHover" Color="#4A87F7" />
+    <SolidColorBrush x:Key="SemiColorPrimaryActive" Color="#1657C4" />
 
     <!-- ==================================================================== -->
     <!--  ТЕМА-ЗАВИСИМЫЕ ТОКЕНЫ. Каждый Brush.* резолвится по активному          -->
@@ -60,7 +66,16 @@
 
         <!--  ТЁМНАЯ (Incy, res/values-night)  -->
         <ResourceDictionary x:Key="Dark">
-            <SolidColorBrush x:Key="Brush.Bg" Color="#0A0B0D" />
+            <SolidColorBrush x:Key="Brush.Bg" Color="#0E1119" />
+            <SolidColorBrush x:Key="Brush.OnAccent" Color="#001433" />
+            <!--  Контур КНОПКИ отличается от контура карточки (tokens.md «Контур кнопки»).  -->
+            <SolidColorBrush x:Key="Brush.ButtonOutline" Color="#3A4150" />
+            <!--  Диск под щитом темнее карточки — кольца лежат на нём.  -->
+            <SolidColorBrush x:Key="Brush.ConnectDisc" Color="#141822" />
+            <SolidColorBrush x:Key="Brush.ShieldOff" Color="#3A4A66" />
+            <SolidColorBrush x:Key="Brush.PressBg" Color="#1E2126" />
+            <SolidColorBrush x:Key="Brush.Yellow" Color="#EAB308" />
+            <SolidColorBrush x:Key="Brush.Telegram" Color="#2AABEE" />
             <SolidColorBrush x:Key="Brush.Surface" Color="#141619" />
             <SolidColorBrush x:Key="Brush.SurfaceHigh" Color="#1A1D21" />
             <SolidColorBrush x:Key="Brush.SurfaceVariant" Color="#1E2126" />
@@ -74,8 +89,8 @@
             <SolidColorBrush x:Key="Brush.OnSurfaceVariantHover" Color="#6E7480" />
             <SolidColorBrush x:Key="Brush.Outline" Color="#2A2E36" />
             <SolidColorBrush x:Key="Brush.OutlineVariant" Color="#20242B" />
-            <SolidColorBrush x:Key="Brush.AccentContainer" Color="#17325C" />
-            <SolidColorBrush x:Key="Brush.OnAccentContainer" Color="#CFE0FF" />
+            <SolidColorBrush x:Key="Brush.AccentContainer" Color="#142C52" />
+            <SolidColorBrush x:Key="Brush.OnAccentContainer" Color="#C7DBFF" />
             <SolidColorBrush x:Key="Brush.Green" Color="#22C55E" />
             <SolidColorBrush x:Key="Brush.Red" Color="#F04452" />
             <!--  Красный ТЕКСТ на тёмных поверхностях (ошибки входа/синхронизации). Ярче заливки
@@ -90,8 +105,8 @@
                                  GradientOrigin="50%,30%"
                                  RadiusX="75%"
                                  RadiusY="75%">
-                <GradientStop Offset="0" Color="#1B2D50" />
-                <GradientStop Offset="0.55" Color="#0E141F" />
+                <GradientStop Offset="0" Color="#151C2B" />
+                <GradientStop Offset="0.55" Color="#0E1119" />
                 <GradientStop Offset="1" Color="#0A0B0D" />
             </RadialGradientBrush>
         </ResourceDictionary>
@@ -99,9 +114,16 @@
         <!--  СВЕТЛАЯ (§3.3, res/values). Реальные светлые поверхности + тёмные чернила.  -->
         <ResourceDictionary x:Key="Light">
             <SolidColorBrush x:Key="Brush.Bg" Color="#F4F7FC" />
+            <SolidColorBrush x:Key="Brush.OnAccent" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="Brush.ButtonOutline" Color="#C3CCDC" />
+            <SolidColorBrush x:Key="Brush.ConnectDisc" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="Brush.ShieldOff" Color="#AEB8C8" />
+            <SolidColorBrush x:Key="Brush.PressBg" Color="#E9EEF7" />
+            <SolidColorBrush x:Key="Brush.Yellow" Color="#9A6B00" />
+            <SolidColorBrush x:Key="Brush.Telegram" Color="#2AABEE" />
             <SolidColorBrush x:Key="Brush.Surface" Color="#FFFFFF" />
-            <SolidColorBrush x:Key="Brush.SurfaceHigh" Color="#EAEFF7" />
-            <SolidColorBrush x:Key="Brush.SurfaceVariant" Color="#E9EEF7" />
+            <SolidColorBrush x:Key="Brush.SurfaceHigh" Color="#F7F9FD" />
+            <SolidColorBrush x:Key="Brush.SurfaceVariant" Color="#EEF2F9" />
             <SolidColorBrush x:Key="Brush.SurfaceHighest" Color="#E3EAF4" />
             <SolidColorBrush x:Key="Brush.OnSurface" Color="#111826" />
             <SolidColorBrush x:Key="Brush.OnSurfaceVariant" Color="#54607A" />
@@ -111,7 +133,7 @@
             <SolidColorBrush x:Key="Brush.Outline" Color="#C3CCDC" />
             <SolidColorBrush x:Key="Brush.OutlineVariant" Color="#DCE3EF" />
             <SolidColorBrush x:Key="Brush.AccentContainer" Color="#D8E4FF" />
-            <SolidColorBrush x:Key="Brush.OnAccentContainer" Color="#14468F" />
+            <SolidColorBrush x:Key="Brush.OnAccentContainer" Color="#123C82" />
             <SolidColorBrush x:Key="Brush.Green" Color="#0B7D4A" />
             <SolidColorBrush x:Key="Brush.Red" Color="#C42B32" />
             <!--  Красный ТЕКСТ на светлых поверхностях. #C42B32 = 5.2:1 на Bg #F4F7FC, 5.6:1 на
@@ -126,9 +148,9 @@
                                  GradientOrigin="50%,30%"
                                  RadiusX="75%"
                                  RadiusY="75%">
-                <GradientStop Offset="0" Color="#FFFFFF" />
-                <GradientStop Offset="0.55" Color="#EEF3FB" />
-                <GradientStop Offset="1" Color="#DFE6F1" />
+                <GradientStop Offset="0" Color="#EEF3FC" />
+                <GradientStop Offset="0.55" Color="#F4F7FC" />
+                <GradientStop Offset="1" Color="#F7F9FD" />
             </RadialGradientBrush>
         </ResourceDictionary>
 
@@ -224,7 +246,7 @@
           blue/green/purple/red/yellow/neutral. purple≡blue, глиф blue/green/purple/red/neutral
           уже покрыты Accent/Green/Red/OnSurfaceVariant.  -->
     <SolidColorBrush x:Key="Brush.Tile.Orange" Color="#FB923C" Opacity="0.20" />
-    <SolidColorBrush x:Key="Brush.Tile.Purple" Color="#4C8DFF" Opacity="0.20" />
+    <SolidColorBrush x:Key="Brush.Tile.Purple" Color="#1F6FF5" Opacity="0.20" />
     <SolidColorBrush x:Key="Brush.Tile.Red" Color="#F04452" Opacity="0.20" />
     <SolidColorBrush x:Key="Brush.Tile.Yellow" Color="#EAB308" Opacity="0.20" />
     <SolidColorBrush x:Key="Brush.Icon.Orange" Color="#FB923C" />
