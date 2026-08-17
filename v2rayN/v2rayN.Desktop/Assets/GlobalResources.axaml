@@ -76,6 +76,7 @@
             <SolidColorBrush x:Key="Brush.PressBg" Color="#1E2126" />
             <SolidColorBrush x:Key="Brush.Yellow" Color="#EAB308" />
             <SolidColorBrush x:Key="Brush.Telegram" Color="#2AABEE" />
+            <SolidColorBrush x:Key="Brush.PopBg" Color="#20242B" />
             <SolidColorBrush x:Key="Brush.Surface" Color="#141619" />
             <SolidColorBrush x:Key="Brush.SurfaceHigh" Color="#1A1D21" />
             <SolidColorBrush x:Key="Brush.SurfaceVariant" Color="#1E2126" />
@@ -121,6 +122,8 @@
             <SolidColorBrush x:Key="Brush.PressBg" Color="#E9EEF7" />
             <SolidColorBrush x:Key="Brush.Yellow" Color="#9A6B00" />
             <SolidColorBrush x:Key="Brush.Telegram" Color="#2AABEE" />
+            <!--  Светлая: прототип даёт #FFFFFF, не #E3EAF4 из tokens.md. См. заметку в тёмной.  -->
+            <SolidColorBrush x:Key="Brush.PopBg" Color="#FFFFFF" />
             <SolidColorBrush x:Key="Brush.Surface" Color="#FFFFFF" />
             <SolidColorBrush x:Key="Brush.SurfaceHigh" Color="#F7F9FD" />
             <SolidColorBrush x:Key="Brush.SurfaceVariant" Color="#EEF2F9" />
@@ -230,6 +233,8 @@
     <!--    Dur.Shell    0:0:0.20  — кроссфейд 3-путёвого оверлея оболочки (200мс)    -->
     <!--    Dur.Slow     0:0:0.45  — ОДИН hand-off auth→home, Ease.OutExpo (450мс)    -->
     <!--    Dur.Stagger  0:0:0.04  — стаггер списка (40мс)                           -->
+    <!--    Dur.Pop      0:0:0.26  — раскрытие окошка у значения, СРЕЗ сверху вниз (260мс)   -->
+    <!--    Dur.PopFade  0:0:0.18  — его же прозрачность (180мс)                          -->
     <!--    Dur.Emphasis 0:0:0.60  — ОДИН hero-момент: connect-сонар (emphasis 600мс)-->
     <!--  Реверс отключения = 75% темпа: revState 0:0:0.165 · revReveal 0:0:0.225.  -->
     <!--  C#-ЗЕРКАЛО этой шкалы (кривые + длительности как TimeSpan) — Common/Motion.cs      -->
@@ -303,6 +308,9 @@
     <SolidColorBrush x:Key="Brush.Ring.Inner" Color="#804C8DFF" />
 
     <!--  Дополнительные радиусы  -->
+    <!--  Пункт «окошка у значения». 9, а не Radius.Chip 12: концентрично внутри окошка 14
+          при 6 отступа (14 − 6 ≈ 9), tokens.md «Скругления».  -->
+    <CornerRadius x:Key="Radius.PopOption">9</CornerRadius>
     <CornerRadius x:Key="Radius.Search">14</CornerRadius>
     <CornerRadius x:Key="Radius.Traffic">8</CornerRadius>
 
@@ -331,6 +339,9 @@
     <x:Double x:Key="Size.SkeletonCard">76</x:Double>
 
     <!--  Векторные глифы нав-рейла (порт Android bottom-nav ic_nav_*, Material 24dp, filled)  -->
+    <!--  КАРЕТКА, А НЕ ШЕВРОН, И РАЗНИЦА СМЫСЛОВАЯ: шеврон обещает переход на подэкран,
+          каретка — что значение меняется на месте. Строка с «окошком у значения» носит каретку.  -->
+    <StreamGeometry x:Key="Geo.Caret">M7,10l5,5 5,-5z</StreamGeometry>
     <StreamGeometry x:Key="Geo.Nav.Home">M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z</StreamGeometry>
     <StreamGeometry x:Key="Geo.Nav.Servers">M20 13H4c-.55 0-1 .45-1 1v6c0 .55.45 1 1 1h16c.55 0 1-.45 1-1v-6c0-.55-.45-1-1-1zM7 19c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zM20 3H4c-.55 0-1 .45-1 1v6c0 .55.45 1 1 1h16c.55 0 1-.45 1-1V4c0-.55-.45-1-1-1zM7 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z</StreamGeometry>
     <StreamGeometry x:Key="Geo.Nav.Settings">M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z</StreamGeometry>

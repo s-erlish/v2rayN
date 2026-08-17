@@ -640,6 +640,7 @@ public partial class App : Application
             ["Brush.PressBg"] = Solid("#131315"),
             ["Brush.Yellow"] = Solid("#9BA1AD"),
             ["Brush.Telegram"] = Solid("#F2F4F8"),
+            ["Brush.PopBg"] = Solid("#282A2E"),
             ["Brush.Ring.Outer"] = Alpha("#F2F4F8", 0.16),
             ["Brush.Ring.Inner"] = Alpha("#F2F4F8", 0.45),
             ["Brush.SelectedFill"] = Alpha("#F2F4F8", 0.10),

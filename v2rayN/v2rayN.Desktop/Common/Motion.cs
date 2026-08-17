@@ -33,8 +33,26 @@ public static class Motion
         /// <summary>220 мс — смена состояния / tint-crossfade (двусторонняя), кривая <see cref="Ease.Standard"/>.</summary>
         public static readonly TimeSpan State = TimeSpan.FromMilliseconds(220);
 
+        /// <summary>
+        /// 280 мс — переезд полоски активного раздела навигации, кривая <see cref="Ease.OutQuart"/>
+        /// (motion.md «Навигация»: полоска ОДНА на всю панель и ПЕРЕЕЗЖАЕТ — 280мс ease-out-quart).
+        /// Отдельная ступень, а не <see cref="State"/> 220: полоска проходит целую треть панели
+        /// (или слот рейла), и на 220 этот путь читается дёрганым — тогда как 220 отвечает за смену
+        /// цвета/состояния НА МЕСТЕ. Обе навигации (рейл + нижний бар) обязаны брать это значение
+        /// отсюда, иначе они снова разъедутся.
+        /// </summary>
+        public static readonly TimeSpan Nav = TimeSpan.FromMilliseconds(280);
+
         /// <summary>300 мс — раскрытие: вход экрана, entrance chip, settle синхронизации, кривая <see cref="Ease.OutQuint"/>.</summary>
         public static readonly TimeSpan Reveal = TimeSpan.FromMilliseconds(300);
+
+        /// <summary>Раскрытие «окошка у значения»: СРЕЗ сверху вниз, 260 мс. Масштаб здесь
+        /// не используется — от него дёргается текст внутри (motion.md).</summary>
+        public static readonly TimeSpan Pop = TimeSpan.FromMilliseconds(260);
+
+        /// <summary>Прозрачность того же окошка, 180 мс — короче среза, чтобы оно проявилось
+        /// раньше, чем доедет нижняя кромка.</summary>
+        public static readonly TimeSpan PopFade = TimeSpan.FromMilliseconds(180);
 
         /// <summary>150 мс — выход экрана / суб-страницы (короче входа), кривая <see cref="Ease.Standard"/>.</summary>
         public static readonly TimeSpan Exit = TimeSpan.FromMilliseconds(150);
