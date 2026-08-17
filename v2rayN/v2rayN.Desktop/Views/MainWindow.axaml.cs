@@ -130,6 +130,9 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         this.GetObservable(WindowStateProperty)
             .Subscribe(s => resizeGripHost.IsVisible = s == WindowState.Normal);
 
+        // Скруглённые углы безрамочного окна (см. подробный комментарий у ApplyWindowCorners).
+        WireWindowCorners();
+
         // «Облегчённый режим» (reduced-motion) теперь РЕАКТИВЕН: единый источник — MotionState.
         // MainWindow сеет его из конфига и подписывается на изменения; SettingsViewModel двигает флаг
         // live (без рестарта). ApplyMotionMode вешает/снимает класс .lite (обнуляет press/hover/reveal
@@ -828,6 +831,17 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
             return;
         }
 
+        // Пока открыт ПРОЗРАЧНЫЙ подэкран, шелл под ним погашен (ApplySubPageShellGate) и трогать его
+        // нельзя: этот метод дёргают наблюдатели VM (пришли серверы, сменился IsLoggedIn, поднялся
+        // IsImportingAccount), и без гейта, например, приход серверов во время открытого «Входа» зажёг
+        // бы «Главную» ПРЯМО ПОД полупрозрачной страницей входа. Отложенный кадр не теряется: на
+        // закрытии последнего подэкрана ApplySubPageShellGate зовёт этот метод заново, и он посчитает
+        // видимость по АКТУАЛЬНОМУ состоянию.
+        if (_subStack.Count > 0)
+        {
+            return;
+        }
+
         // 3-way gate (E3 + Bug4): SYNCING > EMPTY > CONTENT. Оверлей синхронизации перекрывает и пустой
         // онбординг, и половинчатую «Главную». Его поднимают ДВА независимых сигнала загрузки:
         //   • _isSyncing (IsImportingAccount) — пост-логин импорт: между закрытием «Входа» и приходом
@@ -1071,12 +1085,39 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
 
     #region Sub-page host (Buy / Login / Devices / History)
 
+    // ==================== Гейт шелла под прозрачными подэкранами ====================
+    // README «Хром окна»: «Подэкраны и оверлей прогрузки ПРОЗРАЧНЫЕ — фон окна непрерывный. Экран под
+    // ними НЕ рендерится, иначе просвечивает содержимое».
+    //
+    // subPageHost стал Background=Transparent, поэтому перекрыть шелл собой он больше не может — гасим
+    // шелл явно. Пока стек подэкранов не пуст, все три поверхности шелла скрыты, и подэкран лежит на
+    // непрерывном фоне окна (windowShell). Как только стек пустеет, видимость возвращает штатный
+    // 3-way-гейт ApplyShellVisibility (SYNCING > EMPTY > CONTENT) — состояние не дублируется здесь и не
+    // может разойтись с ним.
+    //
+    // МОМЕНТ переключения выбран так, чтобы под полупрозрачным слоем НИКОГДА не было видно живого шелла:
+    //   • push — гасим СРАЗУ (до входной анимации): страница въезжает на пустой фон окна;
+    //   • pop  — возвращаем СРАЗУ (до выходной анимации): уходящая страница растворяется, открывая
+    //     уже стоящий на месте шелл, без провала в пустоту и без вспышки в конце.
+    private void ApplySubPageShellGate()
+    {
+        if (_subStack.Count > 0)
+        {
+            accountSyncView.IsVisible = false;
+            onboardingView.IsVisible = false;
+            bodyRoot.IsVisible = false;
+            return;
+        }
+        ApplyShellVisibility();
+    }
+
     // Кладёт суб-страницу поверх контента/онбординга и показывает хост с направленным slide+fade (C2).
     private void PushSubPage(Control view)
     {
         _subStack.Add(view);
         subPageHost.Content = view;
         subPageHost.IsVisible = true;
+        ApplySubPageShellGate();   // гасим шелл ДО входной анимации — см. комментарий выше
         AnimateSubPageIn();
     }
 
@@ -1090,6 +1131,7 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
             _subStack.RemoveAt(_subStack.Count - 1);
         }
         var next = _subStack.Count > 0 ? _subStack[^1] : null;
+        ApplySubPageShellGate();   // шелл возвращается ДО выходной анимации — см. комментарий выше
         AnimateSubPageOut(next);
     }
 
@@ -1489,6 +1531,51 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         }
         e.Handled = true;
         BeginResizeDrag(edge, e);
+    }
+
+    // ==================== Скруглённые углы безрамочного окна (README «Хром окна»: 14) ====================
+    // Углы рисует НЕ ОС, а корневой Border windowShell (XAML, ClipToBounds): само окно прозрачно
+    // (Background=Transparent + TransparencyLevelHint=Transparent), поэтому за скруглением — дыра, сквозь
+    // которую видно то, что лежит под окном. Отсюда два случая, когда скругление ОБЯЗАНО исчезнуть, иначе
+    // в углах будут клинья:
+    //
+    //   1) РАЗВЁРНУТОЕ окно (Maximized/FullScreen). Развёрнутое окно занимает всю рабочую область и
+    //      прижато к краям экрана; скруглённые углы оставили бы в них вырезы с рабочим столом (а на
+    //      части WM — с чёрным). Нативные окна в максимуме тоже прямоугольные. Радиус → 0.
+    //
+    //   2) НЕТ НАСТОЯЩЕЙ ПРОЗРАЧНОСТИ. Windows (DWM) даёт её всегда, а вот X11 — ТОЛЬКО при живом
+    //      композиторе: Avalonia.X11.TransparencyHelper поддерживает Transparent ⇔ IsCompositionEnabled,
+    //      иначе уровень падает в None. Без композитора вырез за скруглением нечем показать — его зальёт
+    //      TransparencyBackgroundFallback (в XAML задан Brush.Bg; дефолт Avalonia — БЕЛЫЙ, что дало бы
+    //      светлые клинья в тёмной теме). Радиус → 0: честный прямоугольник лучше клиньев.
+    //      Композитор на X11 можно запустить/убить на ходу, и Avalonia шлёт об этом уведомление
+    //      (CompositionChanged/WindowManagerChanged → TransparencyLevelChanged), поэтому подписка ЖИВАЯ,
+    //      а не разовая проверка на старте.
+    //
+    // Windows-специфика: на Win11 DWM самостоятельно скругляет углы верхнеуровневых окон. Поверх нашего
+    // собственного скругления это дало бы двойной радиус (срез по чужой кривой). Просим DWM не трогать
+    // углы (DWMWA_WINDOW_CORNER_PREFERENCE = DoNotRound через Win32Properties) — форму задаём только мы.
+    // На X11/macOS атрибут игнорируется, вызов безвреден.
+    private const double WindowCornerRadius = 14.0;
+
+    private void WireWindowCorners()
+    {
+        try
+        {
+            Win32Properties.SetWindowCornerPreference(this, Win32Properties.WindowCornerPreference.DoNotRound);
+        }
+        catch { }
+
+        this.GetObservable(WindowStateProperty).Subscribe(_ => ApplyWindowCorners());
+        this.GetObservable(ActualTransparencyLevelProperty).Subscribe(_ => ApplyWindowCorners());
+        ApplyWindowCorners();
+    }
+
+    private void ApplyWindowCorners()
+    {
+        var squared = WindowState is WindowState.Maximized or WindowState.FullScreen
+                      || ActualTransparencyLevel == WindowTransparencyLevel.None;
+        windowShell.CornerRadius = new CornerRadius(squared ? 0d : WindowCornerRadius);
     }
 
     #region In-app UI-масштаб (zoom)

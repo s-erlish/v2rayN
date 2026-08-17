@@ -15,44 +15,54 @@
     MinWidth="340"
     MinHeight="560"
     x:DataType="vms:MainWindowViewModel"
-    Background="{DynamicResource Brush.Bg}"
+    Background="Transparent"
     Design.DataContext="{x:Static dd:DesignData.MainWindow}"
     WindowDecorations="None"
     FontFamily="{DynamicResource Font.Grotesk}"
-    Icon="/Assets/NotifyShieldOn.ico"
+    Icon="/Assets/AppIcon.ico"
     ShowInTaskbar="True"
+    TransparencyBackgroundFallback="{DynamicResource Brush.Bg}"
+    TransparencyLevelHint="Transparent"
     WindowStartupLocation="CenterScreen"
     mc:Ignorable="d">
 
-    <!--  Мягкая close-заливка (тема-верная). Ховер «крестика» больше НЕ заливается неон-акцентом
-          Brush.Red (#F04452) на всю пилюлю — это и был «ужасный красный бокс». Вместо него приглушённый
-          ГЛУБОКИЙ красный, вписанный в chrome (как caption-close в Win11), с белым глифом; pressed на шаг
-          темнее. В покое фон прозрачный (как min/max). Ключи резолвятся по ThemeVariant → dark/light/mono
-          корректны (mono/AMOLED строится поверх Dark).  -->
+    <!--  ==================== Скруглённые углы безрамочного окна (14) ====================
+          Само окно ПРОЗРАЧНО (Background=Transparent + TransparencyLevelHint=Transparent); видимую
+          поверхность рисует корневой Border windowShell со скруглением 14 и ClipToBounds — Avalonia'ский
+          Border реализует IVisualWithRoundRectClip (ClipToBoundsRadius => CornerRadius), поэтому дети
+          обрезаются ИМЕННО по скруглению, а не по прямоугольнику.
+
+          Радиус ставит КОД (ApplyWindowCorners), а не разметка, потому что он зависит от двух вещей,
+          которые разметка не видит:
+            • WindowState — у развёрнутого окна углы ПРЯМЫЕ. Скруглённый максимум оставил бы в углах
+              вырезы, а за ними (окно прозрачно) — не «ничего», а рабочий стол/чёрный клин;
+            • ActualTransparencyLevel — на X11 прозрачность существует ТОЛЬКО при живом композиторе
+              (Avalonia.X11.TransparencyHelper: Transparent поддержан ⇔ IsCompositionEnabled, иначе
+              уровень падает в None). Без композитора вырез за скруглением нечем показать — там будет
+              заливка TransparencyBackgroundFallback (по умолчанию БЕЛАЯ, поэтому и задана Brush.Bg).
+              В этом случае углы тоже прямые: лучше честный прямоугольник, чем светлые/чёрные клинья.
+          Уровень прозрачности на X11 меняется НА ХОДУ (композитор можно запустить/убить), поэтому
+          подписка живая, а не разовая проверка на старте.  -->
+    <!--  Красный закрытия — ОДИН на все три темы, включая чёрно-белую: это единственный красный,
+          который в ней намеренно выживает (README «Хром окна»). Поэтому он НЕ в ThemeDictionaries —
+          тема-скоупленный Brush.Red в моно сводится к белому/серому и для закрытия не годится.
+          Наведение — #E5484D с белым глифом, нажатие — на шаг темнее.  -->
     <Window.Resources>
         <ResourceDictionary>
-            <ResourceDictionary.ThemeDictionaries>
-                <ResourceDictionary x:Key="Dark">
-                    <SolidColorBrush x:Key="Brush.CloseHover" Color="#C43843" />
-                    <SolidColorBrush x:Key="Brush.ClosePressed" Color="#A62C36" />
-                </ResourceDictionary>
-                <ResourceDictionary x:Key="Light">
-                    <SolidColorBrush x:Key="Brush.CloseHover" Color="#C42B32" />
-                    <SolidColorBrush x:Key="Brush.ClosePressed" Color="#A31F26" />
-                </ResourceDictionary>
-            </ResourceDictionary.ThemeDictionaries>
-            <!--  Глиф «X» поверх красной заливки — чистый белый в обеих темах (заливка достаточно тёмная).  -->
+            <SolidColorBrush x:Key="Brush.CloseHover" Color="#E5484D" />
+            <SolidColorBrush x:Key="Brush.ClosePressed" Color="#CC3B40" />
+            <!--  Глиф «X» поверх красной заливки — чистый белый во всех темах.  -->
             <SolidColorBrush x:Key="Brush.OnClose" Color="#FFFFFF" />
         </ResourceDictionary>
     </Window.Resources>
 
-    <!--  Кнопки окна (min/max/close) в стиле Incy: прозрачные, hover — min/max subtle darken, close —
-          мягкая глубокая-красная заливка + белый глиф (см. Window.Resources выше).  -->
+    <!--  Кнопки окна (min/max/close): 40×30, скругление 8, в покое прозрачные. Наведение — шаг фона
+          (Brush.Hover), у закрытия — красная заливка #E5484D с белым глифом (см. Window.Resources).  -->
     <Window.Styles>
         <Style Selector="Button.WinBtn">
             <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
-            <Setter Property="Width" Value="44" />
-            <Setter Property="Height" Value="22" />
+            <Setter Property="Width" Value="40" />
+            <Setter Property="Height" Value="30" />
             <Setter Property="Padding" Value="0" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
@@ -298,6 +308,16 @@
           (Ctrl +/Ctrl −/Ctrl 0 и строка настроек «Масштаб интерфейса»), фактор персистится (UiItem.UiScale)
           и применяется на старте. Ресайз-грипы (resizeGripHost) лежат ЗА трансформом → держат ФИЗИЧЕСКИЕ края
           окна при любом zoom и тащат нативный ресайз безрамочного окна (Window.BeginResizeDrag).  -->
+    <!--  windowShell — ВИДИМАЯ поверхность окна: само окно прозрачно, фон и скруглённые углы рисует
+          он. Background здесь ПЛОСКИЙ Brush.Bg (tokens.md «Плоский фон — подэкраны, оверлеи»): именно
+          он остаётся непрерывным под прозрачными подэкранами и оверлеем прогрузки, когда шелл под
+          ними погашен. Радиальный градиент «Главной» по-прежнему живёт под contentArea.
+          CornerRadius ставит ApplyWindowCorners (см. шапку файла) — 14 / 0.  -->
+    <Border
+        x:Name="windowShell"
+        Background="{DynamicResource Brush.Bg}"
+        ClipToBounds="True"
+        CornerRadius="14">
     <Panel x:Name="windowRoot">
         <LayoutTransformControl x:Name="uiScaleHost">
             <LayoutTransformControl.LayoutTransform>
@@ -309,47 +329,34 @@
                 CloseOnClickAway="True"
                 DisableOpeningAnimation="True">
         <Panel>
-            <Grid x:Name="chromeRoot" RowDefinitions="28,*">
+            <Grid x:Name="chromeRoot" RowDefinitions="40,*">
 
-                <!--  ==================== Кастомная строка окна (chrome, высота 28) ====================
-                      Слим-рамка-заголовок (было 40 → 32 → 28 — владелец: «слишком толстая»); держит
-                      мини-вордмарк (лого 18 + «departament» 14) + drag + системные кнопки 44×22.
-                      Глифы уменьшены (~11px) под тонкую полосу.  -->
+                <!--  ==================== Кастомная строка окна (хром, высота 40) ====================
+                      README «Хром окна»: ни фона, ни разделительной линии — надпись «departament» и три
+                      кнопки лежат ПРЯМО на фоне приложения и перекрашиваются вместе с темой.
+                      Полоса 40 · кнопки 40×30 (скругление 8) · надпись 12.5/500 приглушённым цветом ·
+                      отступы 14 слева / 6 справа · зазор между кнопками 2 — всё из прототипа.
+
+                      История высоты: полоса уже была 40 и по просьбе владельца ужималась 40 → 32 → 28
+                      («слишком толстая»). Тогда в ней сидели акцентная плитка-логотип 18 и жирная
+                      надпись 14 — толщину давал ВЕС содержимого. Пакет редизайна возвращает 40, но с
+                      лёгким наполнением: плитки нет, надпись 12.5/500 приглушённая. Высота из README,
+                      наполнение из прототипа — если 40 снова покажется толстой, ужимать надо здесь.  -->
                 <Grid
                     x:Name="titleBar"
                     Grid.Row="0"
                     Background="Transparent">
-                    <!--  Мини-вордмарк слева  -->
-                    <StackPanel
-                        Margin="14,0"
+                    <!--  Надпись-логотип слева. Без плитки: только слово, приглушённым текстом.  -->
+                    <TextBlock
+                        Margin="14,0,0,0"
                         HorizontalAlignment="Left"
                         VerticalAlignment="Center"
-                        Orientation="Horizontal"
-                        Spacing="7">
-                        <Border
-                            Width="18"
-                            Height="18"
-                            Background="{DynamicResource Brush.Accent}"
-                            CornerRadius="6">
-                            <TextBlock
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Center"
-                                FontFamily="{DynamicResource Font.Grotesk}"
-                                FontSize="11"
-                                FontWeight="Bold"
-                                Foreground="{DynamicResource Brush.OnAccent}"
-                                Text="d" />
-                        </Border>
-                        <TextBlock
-                            VerticalAlignment="Center"
-                            FontFamily="{DynamicResource Font.Grotesk}"
-                            FontSize="14"
-                            FontWeight="Bold"
-                            Foreground="{DynamicResource Brush.OnSurface}"
-                            Text="departament" />
-                    </StackPanel>
+                        FontSize="12.5"
+                        FontWeight="Medium"
+                        Foreground="{DynamicResource Brush.OnSurfaceVariant}"
+                        Text="departament" />
 
-                    <!--  Системные кнопки справа  -->
+                    <!--  Системные кнопки справа. Глифы 16×16, обводка 1.3, круглые концы — прототип.  -->
                     <StackPanel
                         Margin="0,0,6,0"
                         HorizontalAlignment="Right"
@@ -359,29 +366,29 @@
                         <Button x:Name="btnMin" Classes="WinBtn">
                             <Border Classes="WinBtnBg">
                                 <Path
-                                    Width="11"
-                                    Height="11"
+                                    Width="16"
+                                    Height="16"
                                     HorizontalAlignment="Center"
                                     VerticalAlignment="Center"
-                                    Data="M0,5.5 H11"
+                                    Data="M3.5,8 H12.5"
                                     Stretch="None"
                                     Stroke="{DynamicResource Brush.OnSurfaceVariant}"
                                     StrokeLineCap="Round"
-                                    StrokeThickness="1.4" />
+                                    StrokeThickness="1.3" />
                             </Border>
                         </Button>
                         <Button x:Name="btnMax" Classes="WinBtn">
                             <Border Classes="WinBtnBg">
                                 <Path
-                                    Width="10"
-                                    Height="10"
+                                    Width="16"
+                                    Height="16"
                                     HorizontalAlignment="Center"
                                     VerticalAlignment="Center"
-                                    Data="M0.5,0.5 H9.5 V9.5 H0.5 Z"
+                                    Data="M5.2,3.6 H10.8 A1.6,1.6 0 0 1 12.4,5.2 V10.8 A1.6,1.6 0 0 1 10.8,12.4 H5.2 A1.6,1.6 0 0 1 3.6,10.8 V5.2 A1.6,1.6 0 0 1 5.2,3.6 Z"
                                     Stretch="None"
                                     Stroke="{DynamicResource Brush.OnSurfaceVariant}"
                                     StrokeJoin="Round"
-                                    StrokeThickness="1.4" />
+                                    StrokeThickness="1.3" />
                             </Border>
                         </Button>
                         <Button
@@ -389,15 +396,15 @@
                             Classes="WinBtn close">
                             <Border Classes="WinBtnBg">
                                 <Path
-                                    Width="11"
-                                    Height="11"
+                                    Width="16"
+                                    Height="16"
                                     HorizontalAlignment="Center"
                                     VerticalAlignment="Center"
                                     Classes="CloseGlyph"
-                                    Data="M0.5,0.5 L10.5,10.5 M10.5,0.5 L0.5,10.5"
+                                    Data="M4,4 L12,12 M12,4 L4,12"
                                     Stretch="None"
                                     StrokeLineCap="Round"
-                                    StrokeThickness="1.4" />
+                                    StrokeThickness="1.3" />
                             </Border>
                         </Button>
                     </StackPanel>
@@ -604,13 +611,20 @@
                     <views:AccountSyncView x:Name="accountSyncView" IsVisible="False" />
 
                     <!--  ==================== Хост суб-страниц (Buy/Login/Devices/History) ====================
-                          Поверх контента И онбординга: суб-вью — полноэкранные, каждая со своим бесшовным
-                          back-тулбаром (Brush.Bg фон полностью перекрывает низлежащее). Стек «назад» ведёт
-                          MainWindow.PushSubPage/PopSubPage; скрыт, пока стек пуст. Открытие/закрытие —
-                          направленный slide+fade (C2) в PushSubPage/PopSubPage.  -->
+                          README «Хром окна»: подэкраны ПРОЗРАЧНЫ — фон окна непрерывен, а экран под ними
+                          НЕ рендерится, иначе просвечивает содержимое.
+
+                          Раньше хост перекрывал шелл непрозрачным Brush.Bg, и это работало ровно до
+                          прозрачности: при Background=Transparent (как требует README) сквозь подэкран
+                          было бы видно живую «Главную»/онбординг, а на входе/выходе — ещё и их движение
+                          под полупрозрачным слоем. Поэтому фон снят ЗДЕСЬ, а гашение шелла под стеком
+                          подэкранов делает code-behind (ApplySubPageShellGate): пока стек не пуст, все
+                          три поверхности шелла (bodyRoot / onboardingView / accountSyncView) скрыты,
+                          и подэкран лежит на непрерывном фоне окна (windowShell, плоский Brush.Bg).
+                          Так же снимается двойная заливка: подэкраны больше НЕ обязаны красить свой фон.  -->
                     <ContentControl
                         x:Name="subPageHost"
-                        Background="{DynamicResource Brush.Bg}"
+                        Background="Transparent"
                         IsVisible="False"
                         RenderTransformOrigin="50%,50%" />
 
@@ -734,4 +748,5 @@
                 Cursor="BottomRightCorner" />
         </Grid>
     </Panel>
+    </Border>
 </Window>
