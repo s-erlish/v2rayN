@@ -101,6 +101,21 @@ public sealed partial class L
         Add("Account_NoUpgrades", "Вы на максимальном тарифе", "You're on the top plan");
         Add("Account_BackAction", "Назад", "Back");
 
+        // ── Вкладка «Аккаунт», редизайн: семь полос (screens.md «Вкладка Аккаунт») ──
+        // Кольцо трафика: подпись под крупной цифрой потраченного.
+        Add("Account_TrafficNoLimit", "без ограничений", "no limit");
+        Add("Account_TrafficOf", "из {0}", "of {0}");
+        // Строки «Управление» — подпись под названием (что за этой строкой).
+        Add("Account_BuySubtitle", "Тарифы и продление", "Plans and renewal");
+        Add("Account_DevicesSubtitle", "Управление устройствами", "Manage devices");
+        Add("Account_HistorySubtitle", "Все ваши операции", "All your transactions");
+        // Полоса «Выйти из аккаунта» — отдельная карточка в цвете «плохо».
+        Add("Account_SignOutFull", "Выйти из аккаунта", "Sign out of your account");
+        // «Способы входа»: подпись строки несёт состояние привязки.
+        Add("Account_SiteMethod", "Сайт", "Website");
+        Add("Account_LinkedAs", "Привязан · {0}", "Linked · {0}");
+        Add("Account_NotLinked", "Не привязан", "Not linked");
+
         // ── Linking block (Способы входа) ──
         Add("Account_LinkingTitle", "Способы входа", "Sign-in methods");
         Add("Account_LinkEmail", "Email и пароль", "Email & password");

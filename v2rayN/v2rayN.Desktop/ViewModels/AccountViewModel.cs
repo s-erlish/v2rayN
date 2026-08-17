@@ -170,6 +170,14 @@ public class AccountViewModel : MyReactiveObject
     /// <summary>Fixed pixel width every carousel card takes — computed by the view from the carousel viewport (peek-aware).</summary>
     [Reactive] public double CardWidth { get; set; } = 320;
 
+    /// <summary>
+    /// Первая (корневая) подписка как карточка — единственный объект, к которому обращаются полосы
+    /// вкладки: «Продлить» (реальное продление в область root/secondary) и тумблер автопродления.
+    /// Вьюха биндится по пути <c>ActiveCard.*</c>, поэтому вся уже работающая механика карточки
+    /// (armed-тумблер с откатом при ошибке, выбор способа оплаты) переиспользуется как есть.
+    /// </summary>
+    [Reactive] public AccountSubCard? ActiveCard { get; set; }
+
     [Reactive] public string SubName { get; set; } = string.Empty;
     [Reactive] public string TariffBadge { get; set; } = string.Empty;
     [Reactive] public bool HasTariffBadge { get; set; }
@@ -177,12 +185,40 @@ public class AccountViewModel : MyReactiveObject
     [Reactive] public bool HasSubExpiry { get; set; }
     [Reactive] public string SubDevicesText { get; set; } = string.Empty;
 
+    // ── Полоса 2: кольцо трафика 164 + блок тарифа ──────────────────────────────
+    // Кольцо показывает ПОТРАЧЕННЫЙ трафик: крупная цифра внутри и подпись под ней; заполнение —
+    // доля от лимита. Безлимит = кольцо целиком (в прототипе dash «478 0») и подпись «без ограничений»,
+    // потому что «сколько осталось» при безлимите не существует, а пустое кольцо читалось бы как ноль.
+
+    /// <summary>Крупная цифра в кольце: израсходованный трафик («2,1 ТБ»).</summary>
+    [Reactive] public string TrafficUsedText { get; set; } = string.Empty;
+
+    /// <summary>Подпись под цифрой: «без ограничений» либо «из 10 ГБ».</summary>
+    [Reactive] public string TrafficOfText { get; set; } = string.Empty;
+
+    /// <summary>Дуга заполнения кольца в градусах (0…360). Анимируется переходом 500 мс во вьюхе.</summary>
+    [Reactive] public double TrafficSweep { get; set; }
+
+    /// <summary>Срок жизни подписки строкой блока тарифа: «Действует до 04.06.2099» / «Бессрочно» / «Истекла …».</summary>
+    [Reactive] public string PlanValidText { get; set; } = string.Empty;
+    [Reactive] public bool HasPlanValid { get; set; }
+
+    // ── Полоса 6: «Способы входа» ───────────────────────────────────────────────
+    // Ровно две строки (screens.md): Telegram и Сайт. Подпись строки несёт СОСТОЯНИЕ привязки,
+    // а не название метода: «Привязан · @serumfx» / «Не привязан».
+
+    [Reactive] public string TelegramRowValue { get; set; } = string.Empty;
+    [Reactive] public string SiteRowValue { get; set; } = string.Empty;
+
     [Reactive] public string DevicesRowValue { get; set; } = string.Empty;
     [Reactive] public bool HasDevicesRowValue { get; set; }
     [Reactive] public string HistoryRowValue { get; set; } = string.Empty;
     [Reactive] public bool HasHistoryRowValue { get; set; }
 
     [Reactive] public string ErrorText { get; set; } = string.Empty;
+
+    /// <summary>Показывать полосу 2 (кольцо + блок тарифа): есть подписка ЛИБО идёт первая загрузка.</summary>
+    [Reactive] public bool ShowPlanBand { get; set; }
 
     // The four mutually-exclusive hero states (skeleton / active / empty / error).
     [Reactive] public bool ShowSkeleton { get; set; }
@@ -1975,6 +2011,8 @@ public class AccountViewModel : MyReactiveObject
             TelegramLinkedId = GoogleLinkedId = EmailLinkedId = string.Empty;
             TelegramLinkPending = false;
             TelegramCanLink = false;
+            TelegramRowValue = string.Empty;
+            SiteRowValue = string.Empty;
         }
         else
         {
@@ -2008,6 +2046,17 @@ public class AccountViewModel : MyReactiveObject
             GoogleLinkedId = GoogleLinked ? profile.Email : string.Empty;
             EmailLinked = profile.HasPassword && profile.Email.IsNotEmpty();
             EmailLinkedId = EmailLinked ? profile.Email : string.Empty;
+
+            // Подписи строк «Способы входа». Привязанный метод называет СЕБЯ идентификатором
+            // («Привязан · @serumfx»), непривязанный честно говорит «Не привязан» — строка никогда
+            // не пустует, иначе высота карточки прыгает между состояниями.
+            TelegramRowValue = TelegramLinked && TelegramLinkedId.IsNotEmpty()
+                ? L.F("Account_LinkedAs", TelegramLinkedId)
+                : (TelegramLinked ? L.T("Account_Linked") : L.T("Account_NotLinked"));
+            var siteId = FirstNonBlank(EmailLinkedId, GoogleLinkedId);
+            SiteRowValue = siteId.IsNotEmpty()
+                ? L.F("Account_LinkedAs", siteId)
+                : L.T("Account_NotLinked");
         }
 
         // Active subscription block (first/root of the merged list)
@@ -2022,6 +2071,11 @@ public class AccountViewModel : MyReactiveObject
             SubDevicesText = string.Empty;
             DevicesRowValue = string.Empty;
             HasDevicesRowValue = false;
+            TrafficUsedText = string.Empty;
+            TrafficOfText = string.Empty;
+            TrafficSweep = 0;
+            PlanValidText = string.Empty;
+            HasPlanValid = false;
         }
         else
         {
@@ -2043,6 +2097,27 @@ public class AccountViewModel : MyReactiveObject
                 HasSubExpiry = sub.ExpireAtIso.IsNotEmpty();
                 SubExpiry = HasSubExpiry ? L.F("Account_ValidUntil", FormatIsoDate(sub.ExpireAtIso)) : string.Empty;
             }
+
+            // Строка срока в блоке тарифа = та же правда, что в SubExpiry, но истёкшая подписка
+            // говорит «Истекла …», а не «Действует до …» — иначе экран врал бы в самом заметном месте.
+            var (planHealth, planExpiryText, _) = ResolveHealth(sub);
+            PlanValidText = planHealth == SubHealth.Expired ? planExpiryText : SubExpiry;
+            HasPlanValid = HasSubExpiry;
+
+            // Кольцо трафика. Безлимит — целое кольцо (360°) и подпись «без ограничений»; лимит —
+            // доля потраченного. Нулевой (но не null) лимит трактуем как безлимит — ровно так же,
+            // как это делает пилюля трафика на Главной, чтобы два экрана не расходились.
+            var trafficRaw = sub.Subscription?.Raw();
+            var trafficUsedBytes = trafficRaw?.TrafficUsed ?? trafficRaw?.UserTraffic?.UsedTrafficBytes ?? 0L;
+            var trafficLimitBytes = trafficRaw?.TrafficLimitBytes ?? 0L;
+            var unlimitedTraffic = trafficRaw?.IsUnlimitedTraffic() != false || trafficLimitBytes <= 0L;
+            TrafficUsedText = FormatBytes(trafficUsedBytes);
+            TrafficOfText = unlimitedTraffic
+                ? L.T("Account_TrafficNoLimit")
+                : L.F("Account_TrafficOf", FormatBytes(trafficLimitBytes));
+            TrafficSweep = unlimitedTraffic
+                ? 360.0
+                : 360.0 * Math.Clamp((double)trafficUsedBytes / trafficLimitBytes, 0.0, 1.0);
 
             var unlimited = sub.Subscription?.Raw()?.IsUnlimitedDevices() == true;
             var totalStr = unlimited ? "∞" : sub.TotalDevices.ToString();
@@ -2083,6 +2158,8 @@ public class AccountViewModel : MyReactiveObject
             c.CardWidth = CardWidth;
         }
         SubCards = cards;
+        // Корневая карточка — та, на которую смотрят «Продлить» и тумблер автопродления полосы 4.
+        ActiveCard = cards.FirstOrDefault();
         HasMultipleSubs = cards.Count > 1;
         if (CarouselIndex > cards.Count - 1)
         {
@@ -2108,6 +2185,7 @@ public class AccountViewModel : MyReactiveObject
             ShowActiveSub = false;
             ShowEmpty = false;
             ShowError = false;
+            ShowPlanBand = false;
             ShowLoginCta = true;
             return;
         }
@@ -2138,6 +2216,9 @@ public class AccountViewModel : MyReactiveObject
         ShowActiveSub = active;
         ShowEmpty = empty;
         ShowError = error;
+        // Полоса 2 держит место и на время первой загрузки: иначе кольцо появлялось бы рывком и
+        // сдвигало вниз «Управление» — самый заметный скачок раскладки на вкладке.
+        ShowPlanBand = active || skeleton;
     }
 
     /// <summary>Health state of a subscription, derived purely from its expiry date. Colour-blind-safe: paired with copy.</summary>
