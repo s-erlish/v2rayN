@@ -2,7 +2,11 @@
 
 	<PropertyGroup>
 		<OutputType>WinExe</OutputType>
-		<ApplicationIcon>Assets\NotifyShieldOn.ico</ApplicationIcon>
+		<!-- Иконка EXE (Explorer/панель задач Windows) — логотип владельца целиком, как есть.
+		     Раньше здесь стоял NotifyShieldOn.ico, то есть иконкой приложения был ГЛИФ ТРЕЯ
+		     в состоянии «подключено». Разные роли — разные файлы: AppIcon.ico это приложение,
+		     NotifyShield*.ico это состояния трея. -->
+		<ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
 		<BuiltInComInteropSupport>true</BuiltInComInteropSupport>
 		<AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
 		<AssemblyName>departament</AssemblyName>
