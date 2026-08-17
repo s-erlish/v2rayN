@@ -1,4 +1,7 @@
-<Styles xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+<Styles
+    xmlns="https://github.com/avaloniaui"
+    xmlns:cm="clr-namespace:v2rayN.Desktop.Common"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <!-- ==================================================================== -->
     <!--  Радиус кнопок (CTA/пилюль) — НЕ пилюля, НЕ капсула.                   -->
     <!--  Android Material-CTA задаёт cornerRadius=26dp на кнопке 52dp          -->
@@ -14,6 +17,28 @@
     <!-- ==================================================================== -->
     <Styles.Resources>
         <CornerRadius x:Key="Radius.Button">16</CornerRadius>
+
+        <!-- ==================================================================== -->
+        <!--  Кривые отклика на нажатие (motion.md «Кривые»). В GlobalResources лежат      -->
+        <!--  четыре общих ease-out; эти две — специально про палец: у возврата контрольная -->
+        <!--  точка Y1=1.25, то есть он ПЕРЕЛЕТАЕТ единицу и оседает обратно («лёгкий        -->
+        <!--  отскок»). Такой кривой в общем наборе нет и быть не должно — переезды и        -->
+        <!--  раскрытия обязаны оставаться строго ease-out, без отскока.                     -->
+        <!--                                                                                 -->
+        <!--  Почему сплайн, а не SpringEasing (motion.md предлагает stiffness≈900,           -->
+        <!--  dampingRatio≈0.62): нормативная запись пакета — именно CSS-кривая               -->
+        <!--  cubic-bezier(0.34,1.25,0.64,1), и прототип едет на ней. Плюс у                  -->
+        <!--  Avalonia.SpringEasing параметр Damping — АБСОЛЮТНОЕ демпфирование, а не         -->
+        <!--  коэффициент: ζ=0.62 при k=900, m=1 это c=2ζ√(km)=37.2, и подстановка 0.62      -->
+        <!--  напрямую дала бы почти незатухающие качели. Сплайн повторяет прототип точь-в-  -->
+        <!--  точь и не зависит от того, как пружина нормирует время.                        -->
+        <!--  Замер на реальном SplineEasing: пик 1.0202 на t≈0.70, то есть перелёт 2% от     -->
+        <!--  хода (для 0.985→1.0 это 1.0003) — ровно «лёгкий», без пружинного звона.         -->
+        <!-- ==================================================================== -->
+        <!--  вход нажатия (палец давит) — 70мс  -->
+        <SplineEasing x:Key="Ease.PressIn" X1="0.4" Y1="0" X2="0.6" Y2="1" />
+        <!--  возврат нажатия (лёгкий отскок) — 200мс  -->
+        <SplineEasing x:Key="Ease.PressBack" X1="0.34" Y1="1.25" X2="0.64" Y2="1" />
 
         <!-- ==================================================================== -->
         <!--  Flyout Incy (замена светло-серого дефолта Semi FlyoutPresenter).       -->
@@ -382,7 +407,7 @@
     <!--  они центрируются сами, там origin намеренно абсолютный no-op, см. ниже.)   -->
     <!-- ==================================================================== -->
 
-    <!--  Первичная (акцент). 48h, Grotesk 15 Bold. press scale 0.97 @90мс.  -->
+    <!--  Первичная (акцент). 48h, Grotesk 15 Bold. Ступень «кнопка» — press scale 0.975.  -->
     <Style Selector="Button.Primary">
         <Setter Property="RenderTransformOrigin" Value="50%,50%" />
         <Setter Property="Background" Value="{DynamicResource Brush.Accent}" />
@@ -395,16 +420,31 @@
         <Setter Property="FontSize" Value="15" />
         <Setter Property="HorizontalContentAlignment" Value="Center" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
-        <!--  Press-feedback: scale(0.97) с Ease.OutQuart @120мс (был линейный ramp 90мс). OutQuart
-              даёт уверенный decelerate в обе стороны — «кусает» решительно, оседает мягко, без bounce.  -->
+        <!--  Отклик на нажатие по лестнице motion.md: ступень «кнопка» 0.975,
+              вход 70мс Ease.PressIn, возврат 200мс Ease.PressBack (лёгкий отскок).  -->
         <Setter Property="Transitions">
             <Transitions>
-                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" Easing="{StaticResource Ease.OutQuart}" />
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.2" Easing="{StaticResource Ease.PressBack}" />
             </Transitions>
         </Setter>
+        <!--  «Аппаратный слой» под текстом на время прогиба (см. PressFeedback.Composited):
+              базовая линия не привязывается к пиксельной сетке, глифы всегда серо-сглажены —
+              поэтому на возврате текст не снапится. Нужен именно код: у TextOptions нет
+              AvaloniaProperty, из Setter'а их не выставить.  -->
+        <Setter Property="cm:PressFeedback.Composited" Value="True" />
+        <!--  Покой = ЯВНЫЙ scale(1), а не отсутствие трансформа: элемент всегда несёт
+              трансформ, поэтому рендер не переключается между ветками «трансформа нет» и
+              «трансформ есть» на последнем кадре возврата (это и был бы рывок), а
+              TransformOperations интерполирует scale→scale точно, без разложения матрицы.  -->
+        <Setter Property="RenderTransform" Value="scale(1)" />
     </Style>
     <Style Selector="Button.Primary:pressed">
-        <Setter Property="RenderTransform" Value="scale(0.97)" />
+        <Setter Property="RenderTransform" Value="scale(0.975)" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.07" Easing="{StaticResource Ease.PressIn}" />
+            </Transitions>
+        </Setter>
     </Style>
     <Style Selector="Button.Primary:disabled">
         <Setter Property="Opacity" Value="0.38" />
@@ -445,7 +485,7 @@
     </Style>
 
     <!--  Тональная. 48h, SurfaceHighest/OnSurface, Grotesk 15 Medium.
-          ДОБАВЛЕНЫ press scale 0.97 + переход (раньше их не было) — как Primary.  -->
+          ДОБАВЛЕНЫ press scale 0.975 + переход (раньше их не было) — как Primary.  -->
     <Style Selector="Button.Tonal">
         <Setter Property="RenderTransformOrigin" Value="50%,50%" />
         <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHighest}" />
@@ -458,15 +498,30 @@
         <Setter Property="FontSize" Value="15" />
         <Setter Property="HorizontalContentAlignment" Value="Center" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
-        <!--  Press-feedback: тот же Ease.OutQuart @120мс, что у Primary (был линейный 90мс).  -->
+        <!--  Ступень «кнопка» 0.975: вход 70мс Ease.PressIn, возврат 200мс Ease.PressBack (лёгкий отскок) — как Primary.  -->
         <Setter Property="Transitions">
             <Transitions>
-                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" Easing="{StaticResource Ease.OutQuart}" />
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.2" Easing="{StaticResource Ease.PressBack}" />
             </Transitions>
         </Setter>
+        <!--  «Аппаратный слой» под текстом на время прогиба (см. PressFeedback.Composited):
+              базовая линия не привязывается к пиксельной сетке, глифы всегда серо-сглажены —
+              поэтому на возврате текст не снапится. Нужен именно код: у TextOptions нет
+              AvaloniaProperty, из Setter'а их не выставить.  -->
+        <Setter Property="cm:PressFeedback.Composited" Value="True" />
+        <!--  Покой = ЯВНЫЙ scale(1), а не отсутствие трансформа: элемент всегда несёт
+              трансформ, поэтому рендер не переключается между ветками «трансформа нет» и
+              «трансформ есть» на последнем кадре возврата (это и был бы рывок), а
+              TransformOperations интерполирует scale→scale точно, без разложения матрицы.  -->
+        <Setter Property="RenderTransform" Value="scale(1)" />
     </Style>
     <Style Selector="Button.Tonal:pressed">
-        <Setter Property="RenderTransform" Value="scale(0.97)" />
+        <Setter Property="RenderTransform" Value="scale(0.975)" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.07" Easing="{StaticResource Ease.PressIn}" />
+            </Transitions>
+        </Setter>
     </Style>
     <Style Selector="Button.Tonal:disabled">
         <Setter Property="Opacity" Value="0.38" />
@@ -484,7 +539,7 @@
           тонали своим токеном (СВЕТЛЕЕ / уход в акцент). Затемняем СУБТИЛЬНО тем же
           Brush.Hover, что несут все прочие ховеры Incy (Row/IconButton/BackNav) —
           полупрозрачное затемнение, единое в dark/light/mono, НИКОГДА не светление и
-          не акцент-флип. Текст (OnSurface) и press-scale 0.97 не трогаем.  -->
+          не акцент-флип. Текст (OnSurface) и press-scale 0.975 не трогаем.  -->
     <Style Selector="Button.Tonal:pointerover /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
     </Style>
@@ -511,12 +566,27 @@
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="Transitions">
             <Transitions>
-                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" Easing="{StaticResource Ease.OutQuart}" />
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.2" Easing="{StaticResource Ease.PressBack}" />
             </Transitions>
         </Setter>
+        <!--  «Аппаратный слой» под текстом на время прогиба (см. PressFeedback.Composited):
+              базовая линия не привязывается к пиксельной сетке, глифы всегда серо-сглажены —
+              поэтому на возврате текст не снапится. Нужен именно код: у TextOptions нет
+              AvaloniaProperty, из Setter'а их не выставить.  -->
+        <Setter Property="cm:PressFeedback.Composited" Value="True" />
+        <!--  Покой = ЯВНЫЙ scale(1), а не отсутствие трансформа: элемент всегда несёт
+              трансформ, поэтому рендер не переключается между ветками «трансформа нет» и
+              «трансформ есть» на последнем кадре возврата (это и был бы рывок), а
+              TransformOperations интерполирует scale→scale точно, без разложения матрицы.  -->
+        <Setter Property="RenderTransform" Value="scale(1)" />
     </Style>
     <Style Selector="Button.OutlinedAccent:pressed">
-        <Setter Property="RenderTransform" Value="scale(0.97)" />
+        <Setter Property="RenderTransform" Value="scale(0.975)" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.07" Easing="{StaticResource Ease.PressIn}" />
+            </Transitions>
+        </Setter>
     </Style>
     <Style Selector="Button.OutlinedAccent:disabled">
         <Setter Property="Opacity" Value="0.38" />
@@ -556,9 +626,19 @@
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Transitions">
             <Transitions>
-                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" Easing="{StaticResource Ease.OutQuart}" />
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.2" Easing="{StaticResource Ease.PressBack}" />
             </Transitions>
         </Setter>
+        <!--  «Аппаратный слой» под текстом на время прогиба (см. PressFeedback.Composited):
+              базовая линия не привязывается к пиксельной сетке, глифы всегда серо-сглажены —
+              поэтому на возврате текст не снапится. Нужен именно код: у TextOptions нет
+              AvaloniaProperty, из Setter'а их не выставить.  -->
+        <Setter Property="cm:PressFeedback.Composited" Value="True" />
+        <!--  Покой = ЯВНЫЙ scale(1), а не отсутствие трансформа: элемент всегда несёт
+              трансформ, поэтому рендер не переключается между ветками «трансформа нет» и
+              «трансформ есть» на последнем кадре возврата (это и был бы рывок), а
+              TransformOperations интерполирует scale→scale точно, без разложения матрицы.  -->
+        <Setter Property="RenderTransform" Value="scale(1)" />
     </Style>
     <!--  Глиф степпера: 20, цвет Accent (перекрывает базовый PathIcon 16/tertiary).  -->
     <Style Selector="Button.Stepper PathIcon">
@@ -567,7 +647,12 @@
         <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
     </Style>
     <Style Selector="Button.Stepper:pressed">
-        <Setter Property="RenderTransform" Value="scale(0.94)" />
+        <Setter Property="RenderTransform" Value="scale(0.975)" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.07" Easing="{StaticResource Ease.PressIn}" />
+            </Transitions>
+        </Setter>
     </Style>
     <Style Selector="Button.Stepper:disabled">
         <Setter Property="Opacity" Value="0.38" />
@@ -604,7 +689,7 @@
     </Style>
 
     <!--  Строка сервера (bg_server_row): default прозрачная, hover→SurfaceHigh,
-          press scale 0.96, selected = заливка #1F4C8DFF + 1.5px Accent, radius 20.
+          press scale 0.985 (ступень «строка списка»), selected = заливка #1F4C8DFF + 1.5px Accent, radius 20.
           Рамка всегда 1.5px (прозрачная в покое), чтобы выбор не сдвигал раскладку.  -->
     <Style Selector="Border.ServerRow">
         <Setter Property="RenderTransformOrigin" Value="50%,50%" />
@@ -620,16 +705,31 @@
               ДВЕ строки. Оставляем press-scale и BorderBrush-переход.  -->
         <Setter Property="Transitions">
             <Transitions>
-                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" />
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.2" Easing="{StaticResource Ease.PressBack}" />
                 <BrushTransition Property="BorderBrush" Duration="0:0:0.15" />
             </Transitions>
         </Setter>
+        <!--  «Аппаратный слой» под текстом на время прогиба (см. PressFeedback.Composited):
+              базовая линия не привязывается к пиксельной сетке, глифы всегда серо-сглажены —
+              поэтому на возврате текст не снапится. Нужен именно код: у TextOptions нет
+              AvaloniaProperty, из Setter'а их не выставить.  -->
+        <Setter Property="cm:PressFeedback.Composited" Value="True" />
+        <!--  Покой = ЯВНЫЙ scale(1), а не отсутствие трансформа: элемент всегда несёт
+              трансформ, поэтому рендер не переключается между ветками «трансформа нет» и
+              «трансформ есть» на последнем кадре возврата (это и был бы рывок), а
+              TransformOperations интерполирует scale→scale точно, без разложения матрицы.  -->
+        <Setter Property="RenderTransform" Value="scale(1)" />
     </Style>
     <Style Selector="Border.ServerRow:pointerover">
         <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
     </Style>
     <Style Selector="Border.ServerRow.pressed">
-        <Setter Property="RenderTransform" Value="scale(0.96)" />
+        <Setter Property="RenderTransform" Value="scale(0.985)" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.07" Easing="{StaticResource Ease.PressIn}" />
+            </Transitions>
+        </Setter>
     </Style>
     <Style Selector="Border.ServerRow.selected">
         <Setter Property="Background" Value="{DynamicResource Brush.SelectedFill}" />
@@ -647,17 +747,27 @@
     <!--  карты (карта клипует углы), focus = авто-кольцо FocusAdorner (строка становится     -->
     <!--  Focusable/IsTabStop в code-behind, как AccountChip).                                -->
     <!--                                                                                      -->
-    <!--  БЕЗ press-scale: владелец не хочет «продавливания» строки при тапе. Прежний класс     -->
-    <!--  .pressed (scale 0.98 по PointerPressed) не только визуально «сжимал» строку, но и      -->
-    <!--  съезжал под курсором на нажатии — жест Tapped отменялся, и тап срабатывал «через раз».  -->
-    <!--  Отклик на нажатие несёт сам ховер (Brush.Hover) под курсором; кольцо фокуса — a11y.      -->
+    <!--  ПРОГИБ 0.985 (motion.md «Отклик на нажатие», строка настроек) ВЕРНУЛСЯ — но НЕ тем       -->
+    <!--  механизмом, что сняли в 1e884ad9 «Settings rows: remove press-scale, fix every-other-tap».-->
+    <!--  Там класс .pressed вешал RenderTransform на САМУ строку, а render-transform в Avalonia    -->
+    <!--  участвует в hit-test: строка уезжала из-под курсора, у краёв прилетал PointerExited,      -->
+    <!--  обработчик снимал .pressed, строка возвращалась — и на этом дребезге жест Tapped          -->
+    <!--  отменялся («тап через раз»).                                                              -->
+    <!--                                                                                            -->
+    <!--  Теперь прогиб ведёт cm:PressFeedback.Scale и применяет его к СОДЕРЖИМОМУ строки, а не к    -->
+    <!--  ней самой: границы строки под нажатием НЕ меняются, поэтому hit-test, IsPointerOver и      -->
+    <!--  Tapped физически не могут сбиться — дефект исключён по построению, а не подобран           -->
+    <!--  таймингами. Ховер-заливка (её рисует сам Border) тоже стоит на месте и не съёживается.     -->
+    <!--  Wiring в SettingsView.axaml.cs НЕ нужен: свойство ставится отсюда, селектором.             -->
+    <!--                                                                                            -->
     <!--  Ховер МГНОВЕННЫЙ (без BrushTransition на Background): при прокрутке колесом подсвечена    -->
-    <!--  ровно одна строка (паритет ServerRow).                                                    -->
+    <!--  ровно одна строка (паритет ServerRow). Кольцо фокуса — a11y.                              -->
     <!--  ==================================================================== -->
     <Style Selector="Border.SettingRow">
         <Setter Property="MinHeight" Value="{DynamicResource Size.Row}" />
         <Setter Property="Padding" Value="16,12" />
         <Setter Property="Background" Value="Transparent" />
+        <Setter Property="cm:PressFeedback.Scale" Value="0.985" />
         <!--  Кольцо фокуса ВНУТРЕННЕЕ (отступ 3, радиус 12): строка во всю ширину карты, внешнее
               кольцо вылезло бы за скруглённый край карты. Мгновенно, переживает lite (a11y > движение).  -->
         <Setter Property="FocusAdorner">
@@ -675,6 +785,17 @@
           у .segmentRow ховер тела подавлен (реагируют сами чипы). Специфичнее базового → перекрывает.  -->
     <Style Selector="Border.SettingRow.segmentRow:pointerover">
         <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <!--  …и по той же причине НЕ прогибается: прогиб без действия — тот же ложный аффорданс.  -->
+    <Style Selector="Border.SettingRow.segmentRow">
+        <Setter Property="cm:PressFeedback.Scale" Value="NaN" />
+    </Style>
+    <!--  Фон нажатия (прототип: .row:active берёт переменную pressBg) — шаг ГЛУБЖЕ ховера.
+          Класс .pressed вешает PressFeedback; масштаб он не трогает (иначе трансформ снова сел бы
+          на саму строку). Под «Облегчённым режимом» этот фон остаётся единственным откликом на
+          нажатие — движение там погашено, а строка обязана отвечать на палец.  -->
+    <Style Selector="Border.SettingRow.pressed">
+        <Setter Property="Background" Value="{DynamicResource Brush.PressBg}" />
     </Style>
 
     <!--  Поиск-пилюля (bg_search_pill): Surface, radius 14, 1px OutlineVariant.  -->
@@ -757,14 +878,24 @@
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         <Setter Property="VerticalContentAlignment" Value="Stretch" />
         <Setter Property="Cursor" Value="Hand" />
-        <!--  Press-возврат = Ease.OutQuint (уверенное оседание из центра, origin 50%,50% выше).
-              Длительность = Motion.Dur.PressOut 160мс — ЕДИНОЕ значение press для ОБЕИХ навигаций
-              (рейл + нижний бар), убирает прежний разнобой 120/100 (P1-3).  -->
+        <!--  Press-возврат ПУНКТА НАВИГАЦИИ — 160мс ease-out-quart, БЕЗ отскока: так задан «.nav»
+              в прототипе (кнопки и строки возвращаются 200мс с перелётом, навигация — нет).
+              Значение общее с Button.BottomNavItem: обе навигации ходят одинаково.  -->
         <Setter Property="Transitions">
             <Transitions>
-                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.16" Easing="{StaticResource Ease.OutQuint}" />
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.16" Easing="{StaticResource Ease.OutQuart}" />
             </Transitions>
         </Setter>
+        <!--  «Аппаратный слой» под текстом на время прогиба (см. PressFeedback.Composited):
+              базовая линия не привязывается к пиксельной сетке, глифы всегда серо-сглажены —
+              поэтому на возврате текст не снапится. Нужен именно код: у TextOptions нет
+              AvaloniaProperty, из Setter'а их не выставить.  -->
+        <Setter Property="cm:PressFeedback.Composited" Value="True" />
+        <!--  Покой = ЯВНЫЙ scale(1), а не отсутствие трансформа: элемент всегда несёт
+              трансформ, поэтому рендер не переключается между ветками «трансформа нет» и
+              «трансформ есть» на последнем кадре возврата (это и был бы рывок), а
+              TransformOperations интерполирует scale→scale точно, без разложения матрицы.  -->
+        <Setter Property="RenderTransform" Value="scale(1)" />
     </Style>
     <!--  Гасим стандартную заливку кнопки (нет светлого ripple темы Semi). У иконочной
           НАВИГАЦИИ ФОНА НЕТ ВООБЩЕ — ни в покое, ни на ховере, ни на нажатии: владелец
@@ -791,6 +922,11 @@
     </Style>
     <Style Selector="Button.NavRailItem:pressed">
         <Setter Property="RenderTransform" Value="scale(0.92)" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" Easing="{StaticResource Ease.PressIn}" />
+            </Transitions>
+        </Setter>
     </Style>
     <!--  Глиф/подпись: неактивные  -->
     <Style Selector="Button.NavRailItem PathIcon">
@@ -855,9 +991,19 @@
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Transitions">
             <Transitions>
-                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" />
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.2" Easing="{StaticResource Ease.PressBack}" />
             </Transitions>
         </Setter>
+        <!--  «Аппаратный слой» под текстом на время прогиба (см. PressFeedback.Composited):
+              базовая линия не привязывается к пиксельной сетке, глифы всегда серо-сглажены —
+              поэтому на возврате текст не снапится. Нужен именно код: у TextOptions нет
+              AvaloniaProperty, из Setter'а их не выставить.  -->
+        <Setter Property="cm:PressFeedback.Composited" Value="True" />
+        <!--  Покой = ЯВНЫЙ scale(1), а не отсутствие трансформа: элемент всегда несёт
+              трансформ, поэтому рендер не переключается между ветками «трансформа нет» и
+              «трансформ есть» на последнем кадре возврата (это и был бы рывок), а
+              TransformOperations интерполирует scale→scale точно, без разложения матрицы.  -->
+        <Setter Property="RenderTransform" Value="scale(1)" />
     </Style>
     <!--  Гасим Semi-тинт и рисуем Incy hover на ContentPresenter (круг Pill).  -->
     <Style Selector="Button.IconButton40 /template/ ContentPresenter#PART_ContentPresenter">
@@ -871,7 +1017,12 @@
         <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
     </Style>
     <Style Selector="Button.IconButton40:pressed">
-        <Setter Property="RenderTransform" Value="scale(0.92)" />
+        <Setter Property="RenderTransform" Value="scale(0.90)" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.07" Easing="{StaticResource Ease.PressIn}" />
+            </Transitions>
+        </Setter>
     </Style>
     <Style Selector="Button.IconButton40:disabled">
         <Setter Property="Opacity" Value="0.38" />
@@ -920,9 +1071,19 @@
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Transitions">
             <Transitions>
-                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" />
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.2" Easing="{StaticResource Ease.PressBack}" />
             </Transitions>
         </Setter>
+        <!--  «Аппаратный слой» под текстом на время прогиба (см. PressFeedback.Composited):
+              базовая линия не привязывается к пиксельной сетке, глифы всегда серо-сглажены —
+              поэтому на возврате текст не снапится. Нужен именно код: у TextOptions нет
+              AvaloniaProperty, из Setter'а их не выставить.  -->
+        <Setter Property="cm:PressFeedback.Composited" Value="True" />
+        <!--  Покой = ЯВНЫЙ scale(1), а не отсутствие трансформа: элемент всегда несёт
+              трансформ, поэтому рендер не переключается между ветками «трансформа нет» и
+              «трансформ есть» на последнем кадре возврата (это и был бы рывок), а
+              TransformOperations интерполирует scale→scale точно, без разложения матрицы.  -->
+        <Setter Property="RenderTransform" Value="scale(1)" />
     </Style>
     <Style Selector="Button.BackNav /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="Transparent" />
@@ -935,7 +1096,12 @@
         <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
     </Style>
     <Style Selector="Button.BackNav:pressed">
-        <Setter Property="RenderTransform" Value="scale(0.92)" />
+        <Setter Property="RenderTransform" Value="scale(0.90)" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.07" Easing="{StaticResource Ease.PressIn}" />
+            </Transitions>
+        </Setter>
     </Style>
     <Style Selector="Button.BackNav PathIcon">
         <Setter Property="Width" Value="{DynamicResource Size.Glyph}" />
@@ -944,7 +1110,7 @@
     </Style>
 
     <!--  Линк-действие (текст-кнопка акцента, §5.4): без рамки/фона, 40h тач-
-          таргет, press scale 0.97. Пример: «Открыть Telegram», «Забыли пароль».  -->
+          таргет, press scale 0.975. Пример: «Открыть Telegram», «Забыли пароль».  -->
     <Style Selector="Button.LinkAction">
         <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
         <Setter Property="RenderTransformOrigin" Value="50%,50%" />
@@ -959,18 +1125,33 @@
         <Setter Property="HorizontalContentAlignment" Value="Center" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="Cursor" Value="Hand" />
-        <!--  Press-feedback: тот же Ease.OutQuart @120мс, что у Primary/Tonal (был линейный 90мс).  -->
+        <!--  Ступень «кнопка» 0.975: вход 70мс Ease.PressIn, возврат 200мс Ease.PressBack (лёгкий отскок) — как Primary/Tonal.  -->
         <Setter Property="Transitions">
             <Transitions>
-                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" Easing="{StaticResource Ease.OutQuart}" />
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.2" Easing="{StaticResource Ease.PressBack}" />
             </Transitions>
         </Setter>
+        <!--  «Аппаратный слой» под текстом на время прогиба (см. PressFeedback.Composited):
+              базовая линия не привязывается к пиксельной сетке, глифы всегда серо-сглажены —
+              поэтому на возврате текст не снапится. Нужен именно код: у TextOptions нет
+              AvaloniaProperty, из Setter'а их не выставить.  -->
+        <Setter Property="cm:PressFeedback.Composited" Value="True" />
+        <!--  Покой = ЯВНЫЙ scale(1), а не отсутствие трансформа: элемент всегда несёт
+              трансформ, поэтому рендер не переключается между ветками «трансформа нет» и
+              «трансформ есть» на последнем кадре возврата (это и был бы рывок), а
+              TransformOperations интерполирует scale→scale точно, без разложения матрицы.  -->
+        <Setter Property="RenderTransform" Value="scale(1)" />
     </Style>
     <Style Selector="Button.LinkAction /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="Transparent" />
     </Style>
     <Style Selector="Button.LinkAction:pressed">
-        <Setter Property="RenderTransform" Value="scale(0.97)" />
+        <Setter Property="RenderTransform" Value="scale(0.975)" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.07" Easing="{StaticResource Ease.PressIn}" />
+            </Transitions>
+        </Setter>
     </Style>
 
     <!-- ==================================================================== -->
@@ -993,9 +1174,19 @@
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="Transitions">
             <Transitions>
-                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" Easing="{StaticResource Ease.OutQuart}" />
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.2" Easing="{StaticResource Ease.PressBack}" />
             </Transitions>
         </Setter>
+        <!--  «Аппаратный слой» под текстом на время прогиба (см. PressFeedback.Composited):
+              базовая линия не привязывается к пиксельной сетке, глифы всегда серо-сглажены —
+              поэтому на возврате текст не снапится. Нужен именно код: у TextOptions нет
+              AvaloniaProperty, из Setter'а их не выставить.  -->
+        <Setter Property="cm:PressFeedback.Composited" Value="True" />
+        <!--  Покой = ЯВНЫЙ scale(1), а не отсутствие трансформа: элемент всегда несёт
+              трансформ, поэтому рендер не переключается между ветками «трансформа нет» и
+              «трансформ есть» на последнем кадре возврата (это и был бы рывок), а
+              TransformOperations интерполирует scale→scale точно, без разложения матрицы.  -->
+        <Setter Property="RenderTransform" Value="scale(1)" />
     </Style>
     <Style Selector="Button.Destructive /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource Brush.Red}" />
@@ -1010,7 +1201,12 @@
         <Setter Property="Foreground" Value="White" />
     </Style>
     <Style Selector="Button.Destructive:pressed">
-        <Setter Property="RenderTransform" Value="scale(0.97)" />
+        <Setter Property="RenderTransform" Value="scale(0.975)" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.07" Easing="{StaticResource Ease.PressIn}" />
+            </Transitions>
+        </Setter>
     </Style>
     <Style Selector="Button.Destructive:disabled">
         <Setter Property="Opacity" Value="0.38" />
@@ -1147,6 +1343,10 @@
         <Setter Property="CornerRadius" Value="{DynamicResource Radius.Search}" />
         <Setter Property="Padding" Value="12" />
         <Setter Property="Background" Value="Transparent" />
+        <!--  Ступень «карточка» 0.975 (motion.md). Как и у строки настроек — через
+              cm:PressFeedback, т.е. прогибается СОДЕРЖИМОЕ, а границы карточки стоят на месте:
+              выбор тарифа идёт по Tapped в BuyView, и сбить его прогибом теперь нечем.  -->
+        <Setter Property="cm:PressFeedback.Scale" Value="0.975" />
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineVariant}" />
         <Setter Property="BorderThickness" Value="1.5" />
         <Setter Property="Transitions">
@@ -1208,7 +1408,7 @@
     <!-- ==================================================================== -->
     <!--  Сегмент-переключатель (§2.11c ToggleButton.Segment): чипы 44, single-    -->
     <!--  select. Покой = прозрачный + 1px OutlineVariant, текст muted; checked =  -->
-    <!--  SelectedFill + 1.5px Accent, текст Accent. press scale 0.96, без ripple. -->
+    <!--  SelectedFill + 1.5px Accent, текст Accent. press scale 0.975, без ripple. -->
     <!--  Одиночный выбор обеспечивает потребитель (RadioButton-группа/биндинг).   -->
     <!-- ==================================================================== -->
     <Style Selector="ToggleButton.Segment">
@@ -1230,10 +1430,20 @@
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Transitions">
             <Transitions>
-                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" />
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.2" Easing="{StaticResource Ease.PressBack}" />
                 <BrushTransition Property="BorderBrush" Duration="0:0:0.15" />
             </Transitions>
         </Setter>
+        <!--  «Аппаратный слой» под текстом на время прогиба (см. PressFeedback.Composited):
+              базовая линия не привязывается к пиксельной сетке, глифы всегда серо-сглажены —
+              поэтому на возврате текст не снапится. Нужен именно код: у TextOptions нет
+              AvaloniaProperty, из Setter'а их не выставить.  -->
+        <Setter Property="cm:PressFeedback.Composited" Value="True" />
+        <!--  Покой = ЯВНЫЙ scale(1), а не отсутствие трансформа: элемент всегда несёт
+              трансформ, поэтому рендер не переключается между ветками «трансформа нет» и
+              «трансформ есть» на последнем кадре возврата (это и был бы рывок), а
+              TransformOperations интерполирует scale→scale точно, без разложения матрицы.  -->
+        <Setter Property="RenderTransform" Value="scale(1)" />
     </Style>
     <Style Selector="ToggleButton.Segment /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="Transparent" />
@@ -1243,7 +1453,12 @@
         <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
     </Style>
     <Style Selector="ToggleButton.Segment:pressed">
-        <Setter Property="RenderTransform" Value="scale(0.96)" />
+        <Setter Property="RenderTransform" Value="scale(0.975)" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.07" Easing="{StaticResource Ease.PressIn}" />
+            </Transitions>
+        </Setter>
     </Style>
     <Style Selector="ToggleButton.Segment:checked /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource Brush.SelectedFill}" />
@@ -1251,6 +1466,45 @@
     <Style Selector="ToggleButton.Segment:checked">
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+    </Style>
+
+    <!-- ==================================================================== -->
+    <!--  Пункт «окошка у значения» (Button.PopOption, компонент ValuePopup).      -->
+    <!--                                                                          -->
+    <!--  motion.md держит «Кнопка, чип, пункт окошка» на ОДНОЙ ступени 0.975,     -->
+    <!--  поэтому это не новая ступень, а лишь селектор, которого лестнице не       -->
+    <!--  хватало. Сам компонент намеренно оставил себе ТОЛЬКО цвета ховера и       -->
+    <!--  нажатия: локальный Setter масштаба в ValuePopup.axaml оказался бы         -->
+    <!--  специфичнее глобального и молча перебил бы лестницу — тогда у окошка       -->
+    <!--  завёлся бы второй, расходящийся темп нажатия.                             -->
+    <!--                                                                            -->
+    <!--  Прогиб живёт ТОЛЬКО на пункте. Раскрытие самого окошка — СРЕЗ (clip),      -->
+    <!--  а не масштаб (motion.md: «Масштаб не использовать — от него текст внутри   -->
+    <!--  дёргается»), и эти две вещи не складываются: срез анимирует оболочку,      -->
+    <!--  scale(0.975) — отдельную кнопку внутри неё. На оболочку масштаб не         -->
+    <!--  попадает ни одним селектором.                                             -->
+    <!-- ==================================================================== -->
+    <Style Selector="Button.PopOption">
+        <!--  Центр прогиба — относительный «50%,50%» (см. шапку системы кнопок).  -->
+        <Setter Property="RenderTransformOrigin" Value="50%,50%" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.2" Easing="{StaticResource Ease.PressBack}" />
+            </Transitions>
+        </Setter>
+        <!--  «Аппаратный слой» под текстом пункта — иначе на возврате подпись снапится
+              по пиксельной сетке (см. PressFeedback.Composited).  -->
+        <Setter Property="cm:PressFeedback.Composited" Value="True" />
+        <!--  Покой = явный scale(1): ветка рендера не переключается на последнем кадре.  -->
+        <Setter Property="RenderTransform" Value="scale(1)" />
+    </Style>
+    <Style Selector="Button.PopOption:pressed">
+        <Setter Property="RenderTransform" Value="scale(0.975)" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.07" Easing="{StaticResource Ease.PressIn}" />
+            </Transitions>
+        </Setter>
     </Style>
 
     <!-- ==================================================================== -->
