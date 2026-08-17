@@ -1,17 +1,22 @@
 namespace v2rayN.Desktop.Views;
 
 /// <summary>
-/// «Пинг» — in-app суб-страница (раньше отдельное окно). Экран выбирает МЕТОД измерения задержки
-/// серверов и хранит параметры проверки: адрес (<c>SpeedTestItem.SpeedPingTestUrl</c>) +
-/// тайм-аут (<c>SpeedTestItem.SpeedTestTimeout</c>).
-/// Ядро поддерживает только реальную задержку (Realping) и TCP (Tcping); прочие методы (Httping/Icmping)
-/// в движке отсутствуют, поэтому не предлагаются, а ранее сохранённое значение сводится к Realping.
-/// Выбранный метод пишется в <c>SpeedTestItem.PingMethod</c>. Persist only.
-/// Уход со страницы сохраняет и поднимает <see cref="BackRequested"/>.
+/// «Пинг» — подэкран настроек по единому лекалу (screens.md «Подэкраны»). Выбирает МЕТОД измерения
+/// задержки серверов и хранит параметры проверки: адрес (<c>SpeedTestItem.SpeedPingTestUrl</c>)
+/// и тайм-аут (<c>SpeedTestItem.SpeedTestTimeout</c>). Выбранный метод → <c>SpeedTestItem.PingMethod</c>.
+///
+/// Спецификация просит ЧЕТЫРЕ метода (реальная задержка · HTTP-запрос · TCP-соединение · ICMP), но
+/// ядро умеет два: в <c>ESpeedActionType</c> нет ни Httping, ни Icmping, а <c>SpeedtestService</c>
+/// сводит неизвестный метод к реальной задержке. Показать четыре строки, две из которых молча делают
+/// одно и то же, — это ложный выбор, поэтому строк две, а сноска называет причину. Ранее сохранённое
+/// Httping/Icmping (из легаси-окна) так же сводится к реальной задержке.
+///
+/// Persist only: смена метода не поднимает ядро. Уход со страницы сохраняет и поднимает
+/// <see cref="BackRequested"/>.
 /// </summary>
 public partial class PingSettingsPage : UserControl, ISubPage
 {
-    // Ключи метода, совпадающие с ESpeedActionType. Ядро поддерживает только Realping/Tcping.
+    // Ключи метода совпадают с именами ESpeedActionType — их читает ProfilesViewModel.ServerSpeedtest.
     private const string MethodReal = "Realping";
     private const string MethodTcp = "Tcping";
 
@@ -27,11 +32,7 @@ public partial class PingSettingsPage : UserControl, ISubPage
 
         _config = AppManager.Instance.Config;
 
-        // Только Realping/Tcping реально измеряются; всё остальное (в т.ч. старые Httping/Icmping)
-        // сводим к Realping — движок и так мапит неподдержанные методы на реальную задержку.
-        _method = _config.SpeedTestItem.PingMethod == MethodTcp
-            ? MethodTcp
-            : MethodReal;
+        _method = _config.SpeedTestItem.PingMethod == MethodTcp ? MethodTcp : MethodReal;
 
         txtPingUrl.Text = _config.SpeedTestItem.SpeedPingTestUrl ?? string.Empty;
         txtTimeout.Text = _config.SpeedTestItem.SpeedTestTimeout > 0
@@ -41,7 +42,7 @@ public partial class PingSettingsPage : UserControl, ISubPage
         RowReal.Tapped += (_, _) => SelectMethod(MethodReal);
         RowTcp.Tapped += (_, _) => SelectMethod(MethodTcp);
 
-        UpdateChecks();
+        UpdateSelection();
 
         btnBack.Click += async (_, _) => await SaveAndBackAsync();
     }
@@ -49,13 +50,13 @@ public partial class PingSettingsPage : UserControl, ISubPage
     private void SelectMethod(string method)
     {
         _method = method;
-        UpdateChecks();
+        UpdateSelection();
     }
 
-    private void UpdateChecks()
+    private void UpdateSelection()
     {
-        CheckReal.IsVisible = _method == MethodReal;
-        CheckTcp.IsVisible = _method == MethodTcp;
+        SubPageUtil.SetClass(DotReal, "on", _method == MethodReal);
+        SubPageUtil.SetClass(DotTcp, "on", _method == MethodTcp);
     }
 
     private async Task SaveAndBackAsync()
@@ -73,6 +74,8 @@ public partial class PingSettingsPage : UserControl, ISubPage
         {
             _config.SpeedTestItem.SpeedPingTestUrl = url;
         }
+        // Мусорный тайм-аут молча НЕ пишем: лучше оставить прежнее рабочее значение, чем сохранить
+        // ноль и получить проверку, которая никогда не дожидается ответа.
         if (int.TryParse(txtTimeout.Text?.Trim(), out var t) && t is > 0 and < 600)
         {
             _config.SpeedTestItem.SpeedTestTimeout = t;

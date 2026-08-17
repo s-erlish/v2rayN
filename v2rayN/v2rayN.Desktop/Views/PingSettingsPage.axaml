@@ -5,156 +5,123 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:loc="clr-namespace:v2rayN.Desktop.Common"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    d:DesignWidth="520"
-    d:DesignHeight="440"
-    Background="{DynamicResource Brush.Bg}"
+    d:DesignWidth="800"
+    d:DesignHeight="620"
     mc:Ignorable="d">
 
-    <UserControl.Resources>
-        <StreamGeometry x:Key="Geo.Sub.Back">M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z</StreamGeometry>
-        <!--  Галочка выбранного метода (ic_check_24dp)  -->
-        <StreamGeometry x:Key="Geo.Sub.Check">M9,16.17L4.83,12l-1.42,1.41L9,19 21,7l-1.41,-1.41z</StreamGeometry>
-    </UserControl.Resources>
+    <!--  Фон НЕ задан: подэкран прозрачный, шелл под ним погашен (ApplySubPageShellGate).  -->
 
     <UserControl.Styles>
-        <Style Selector="Button.IconButton">
-            <Setter Property="Transitions">
-                <Transitions>
-                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" />
-                </Transitions>
-            </Setter>
-        </Style>
-        <Style Selector="Button.IconButton:pressed">
-            <Setter Property="RenderTransform" Value="scale(0.92)" />
-        </Style>
-
-        <!--  Строка выбора метода пинга: minHeight 56, hover→Hover (затемнение) внутри клипующей карты.  -->
-        <Style Selector="Border.MethodRow">
-            <Setter Property="MinHeight" Value="{DynamicResource Size.Row}" />
-            <Setter Property="Padding" Value="16,12" />
-            <Setter Property="Background" Value="Transparent" />
-        </Style>
-        <Style Selector="Border.MethodRow:pointerover">
-            <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
-        </Style>
-        <!--  Галочка выбранного метода: 22, акцент, по правому краю.  -->
-        <Style Selector="PathIcon.MethodCheck">
-            <Setter Property="Width" Value="22" />
-            <Setter Property="Height" Value="22" />
-            <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
-            <Setter Property="VerticalAlignment" Value="Center" />
-            <Setter Property="Margin" Value="8,0,0,0" />
-        </Style>
-        <!--  Разделитель 1px, инсет слева 16.  -->
-        <Style Selector="Border.MethodDivider">
-            <Setter Property="Height" Value="1" />
-            <Setter Property="Margin" Value="16,0,0,0" />
-            <Setter Property="Background" Value="{DynamicResource Brush.OutlineVariant}" />
-        </Style>
+        <StyleInclude Source="avares://departament/Assets/SubScreenStyles.axaml" />
     </UserControl.Styles>
 
-    <DockPanel MaxWidth="620">
-        <Grid
-            DockPanel.Dock="Top"
-            MinHeight="56"
-            Margin="16,8,16,0"
-            ColumnDefinitions="Auto,*">
-            <Button
-                x:Name="btnBack"
-                Grid.Column="0"
-                Width="40"
-                Height="40"
-                Padding="0"
-                VerticalAlignment="Center"
-                Classes="IconButton"
-                ToolTip.Tip="{loc:T Common_Back}">
-                <PathIcon
-                    Width="22"
-                    Height="22"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center"
-                    Data="{StaticResource Geo.Sub.Back}"
-                    Foreground="{DynamicResource Brush.OnSurface}" />
-            </Button>
-            <TextBlock
-                Grid.Column="1"
-                Margin="16,0,0,0"
-                VerticalAlignment="Center"
-                Classes="Headline"
-                Text="{loc:T Settings_Ping}"
-                TextTrimming="CharacterEllipsis" />
-        </Grid>
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <StackPanel
+            MaxWidth="760"
+            Margin="20,10,20,20"
+            HorizontalAlignment="Center">
 
-        <StackPanel Margin="16,12,16,24" Spacing="8">
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <Button
+                    x:Name="btnBack"
+                    Classes="SubBack"
+                    ToolTip.Tip="{loc:T Common_Back}">
+                    <PathIcon
+                        Width="22"
+                        Height="22"
+                        Data="{DynamicResource Geo.Sub.Back}"
+                        Foreground="{DynamicResource Brush.OnSurface}" />
+                </Button>
+                <TextBlock Classes="SubTitle" Text="{loc:T Settings_Ping}" />
+            </StackPanel>
             <TextBlock
-                Classes="Subtitle"
-                Text="{loc:T Ping_Intro}"
-                TextWrapping="Wrap" />
+                Margin="0,8,0,0"
+                Classes="SubNote"
+                Text="{loc:T Ping_Intro}" />
 
-            <!--  Метод проверки задержки — одна карта с 4 выбираемыми строками (как в Android).  -->
-            <Border
-                Classes="Card"
-                ClipToBounds="True"
-                Padding="0">
+            <!--  ==================== Метод ====================
+                  Радио. Спецификация просит четыре метода, ядро умеет два: HTTP-запрос и ICMP
+                  в ESpeedActionType отсутствуют, а SpeedtestService сводит неизвестный метод к
+                  реальной задержке. Показывать неработающий выбор — врать пользователю, поэтому
+                  строк две, а сноска под группой честно называет причину.  -->
+            <Border Classes="SubCard" Margin="0,14,0,0">
                 <StackPanel>
-                    <Border x:Name="RowReal" Classes="MethodRow">
+                    <Border x:Name="RowReal" Classes="SubRow tap">
                         <Grid ColumnDefinitions="*,Auto">
-                            <StackPanel Grid.Column="0" Spacing="2">
-                                <TextBlock Classes="Body" Text="{loc:T Ping_RealTitle}" />
+                            <StackPanel Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center">
+                                <TextBlock Classes="SubName" Text="{loc:T Ping_RealTitle}" />
                                 <TextBlock
-                                    Classes="Subtitle"
+                                    Classes="SubSub"
                                     Text="{loc:T Ping_RealHint}"
                                     TextWrapping="Wrap" />
                             </StackPanel>
-                            <PathIcon
-                                x:Name="CheckReal"
-                                Grid.Column="1"
-                                Classes="MethodCheck"
-                                Data="{StaticResource Geo.Sub.Check}" />
+                            <Border x:Name="DotReal" Grid.Column="1" Classes="SubRadio">
+                                <Ellipse />
+                            </Border>
                         </Grid>
                     </Border>
 
-                    <Border Classes="MethodDivider" />
-
-                    <Border x:Name="RowTcp" Classes="MethodRow">
+                    <Border Classes="SubDivider" />
+                    <Border x:Name="RowTcp" Classes="SubRow tap">
                         <Grid ColumnDefinitions="*,Auto">
-                            <StackPanel Grid.Column="0" Spacing="2">
-                                <TextBlock Classes="Body" Text="TCP" />
+                            <StackPanel Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center">
+                                <TextBlock Classes="SubName" Text="{loc:T Ping_TcpTitle}" />
                                 <TextBlock
-                                    Classes="Subtitle"
+                                    Classes="SubSub"
                                     Text="{loc:T Ping_TcpHint}"
                                     TextWrapping="Wrap" />
                             </StackPanel>
-                            <PathIcon
-                                x:Name="CheckTcp"
-                                Grid.Column="1"
-                                Classes="MethodCheck"
-                                Data="{StaticResource Geo.Sub.Check}" />
+                            <Border x:Name="DotTcp" Grid.Column="1" Classes="SubRadio">
+                                <Ellipse />
+                            </Border>
                         </Grid>
                     </Border>
                 </StackPanel>
             </Border>
+            <TextBlock Classes="SubFoot" Text="{loc:T Ping_Unsupported}" />
 
-            <Border Classes="Card" Padding="16,12">
-                <StackPanel Spacing="6">
-                    <TextBlock Classes="Subtitle" Text="{loc:T Ping_TestAddress}" />
-                    <TextBox
-                        x:Name="txtPingUrl"
-                        VerticalContentAlignment="Center"
-                        Watermark="https://www.gstatic.com/generate_204" />
-                </StackPanel>
-            </Border>
+            <!--  ==================== Параметры проверки ====================
+                  Адрес и тайм-аут правятся прямо в строке (TextBox.SubField): значение справа, рамка
+                  появляется только на фокусе — строка не превращается в форму.  -->
+            <TextBlock Classes="SubGroupLabel" Text="{loc:T Ping_Params}" />
+            <Border Classes="SubCard">
+                <StackPanel>
+                    <Border Classes="SubRow">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock
+                                Grid.Column="0"
+                                Margin="0,0,12,0"
+                                VerticalAlignment="Center"
+                                Classes="SubName"
+                                Text="{loc:T Ping_TestAddress}" />
+                            <TextBox
+                                x:Name="txtPingUrl"
+                                Grid.Column="1"
+                                MinWidth="260"
+                                Classes="SubField"
+                                PlaceholderText="https://www.gstatic.com/generate_204" />
+                        </Grid>
+                    </Border>
 
-            <Border Classes="Card" Padding="16,12">
-                <StackPanel Spacing="6">
-                    <TextBlock Classes="Subtitle" Text="{loc:T Ping_Timeout}" />
-                    <TextBox
-                        x:Name="txtTimeout"
-                        MaxLength="3"
-                        VerticalContentAlignment="Center"
-                        Watermark="5" />
+                    <Border Classes="SubDivider" />
+                    <Border Classes="SubRow">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock
+                                Grid.Column="0"
+                                Margin="0,0,12,0"
+                                VerticalAlignment="Center"
+                                Classes="SubName"
+                                Text="{loc:T Ping_Timeout}" />
+                            <TextBox
+                                x:Name="txtTimeout"
+                                Grid.Column="1"
+                                Classes="SubField"
+                                MaxLength="3"
+                                PlaceholderText="5" />
+                        </Grid>
+                    </Border>
                 </StackPanel>
             </Border>
         </StackPanel>
-    </DockPanel>
+    </ScrollViewer>
 </UserControl>
