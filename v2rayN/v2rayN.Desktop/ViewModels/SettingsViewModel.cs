@@ -13,7 +13,8 @@ namespace v2rayN.Desktop.ViewModels;
 ///   • Mux count       → <c>Mux4SboxItem.MaxConnections</c>      (cycled on tap, visible only when Mux on);
 ///   • Fragment        → <c>CoreBasicItem.EnableFragment</c>     (== OptionSettingViewModel.EnableFragment);
 ///   • local proxy     → <c>Inbound[0].LocalPort / User / Pass</c> (== OptionSettingViewModel local proxy fields);
-///   • autostart       → <c>GuiItem.AutoRun</c> + <see cref="AutoStartupHandler.UpdateTask"/>;
+///   • autostart       → <c>GuiItem.AutoRun</c> + <see cref="Common.AutostartHelper"/> (Windows: задача
+///     планировщика, т.к. приложение elevated) / <see cref="AutoStartupHandler.UpdateTask"/> (Linux/macOS);
 ///   • sub auto-update → <c>GuiItem.AutoUpdateInterval</c>       (cycled on tap);
 ///   • language        → <c>UiItem.CurrentLanguage</c>          (cycled on tap, reboot to fully apply);
 ///   • lite mode       → <c>UiItem.LiteMode</c>                (shared persisted reduced-motion flag);
@@ -105,6 +106,7 @@ public class SettingsViewModel : MyReactiveObject
 
         LoadFromConfig();
         WirePersistence();
+        ReconcileAutostart();
 
         // Mode row reflects the shared TUN state (single source of truth). Its segment sets the config
         // directly (see SetTunMode) — passively, never routing through the reload/UAC path.
@@ -253,8 +255,10 @@ public class SettingsViewModel : MyReactiveObject
         }
         _config.GuiItem.AutoRun = v;
         await ConfigHandler.SaveConfig(_config);
-        // Windows: write/remove the human-readable HKCU\...\Run value «departament» → exe.
-        // Non-Windows: AutostartHelper is a no-op, so the shared handler owns autostart there.
+        // Windows: регистрируем/снимаем автозапуск под именем «departament». departament запускается
+        // elevated (app.manifest requireAdministrator ради TUN), поэтому AutostartHelper заводит ЗАДАЧУ
+        // ПЛАНИРОВЩИКА — Run-ключ Windows для elevated-приложения при входе молча пропускает.
+        // Non-Windows: AutostartHelper — no-op, автозапуском владеет общий handler (.desktop/LaunchAgent).
         if (Utils.IsWindows())
         {
             v2rayN.Desktop.Common.AutostartHelper.Apply(v);
@@ -263,6 +267,50 @@ public class SettingsViewModel : MyReactiveObject
         {
             await AutoStartupHandler.UpdateTask(_config);
         }
+    }
+
+    /// <summary>
+    /// Автозапуск: источник правды — ОС, а не запомненный флаг. Строка «Запуск при загрузке» читала
+    /// <c>GuiItem.AutoRun</c>, который мог разойтись с реальностью, поэтому сверяем их при старте:
+    ///   • флаг включён, но рабочей регистрации нет (или она указывает на переехавший после обновления
+    ///     exe, или осталась прежним Run-значением, которое Windows не выполняла из-за UAC) →
+    ///     перерегистрируем — это чинит уже сломанную установку без участия пользователя;
+    ///   • флаг выключен, а регистрация в системе есть → показываем строку включённой, чтобы она
+    ///     не врала о том, что произойдёт при входе в систему.
+    /// Работа с планировщиком задач идёт в фоне: конструктор окна не должен её ждать. Не-Windows —
+    /// автозапуском владеет <see cref="AutoStartupHandler"/>, сверять здесь нечего.
+    /// </summary>
+    private void ReconcileAutostart()
+    {
+        if (_designMode || !Utils.IsWindows())
+        {
+            return;
+        }
+
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                if (_config.GuiItem.AutoRun)
+                {
+                    if (!v2rayN.Desktop.Common.AutostartHelper.IsCurrent())
+                    {
+                        v2rayN.Desktop.Common.AutostartHelper.Set();
+                    }
+                }
+                else if (v2rayN.Desktop.Common.AutostartHelper.IsEnabled())
+                {
+                    // Присвоение поднимет OnAutoStartChanged → флаг запишется в конфиг, регистрация
+                    // приведётся к актуальному виду. Только из UI-потока: за ним следит биндинг строки.
+                    Dispatcher.UIThread.Post(() => AutoStart = true);
+                }
+            }
+            catch (Exception ex)
+            {
+                // Автозапуск — не критичный путь: сбой планировщика не должен ронять запуск приложения.
+                Logging.SaveLog("SettingsViewModel", ex);
+            }
+        });
     }
 
     /// <summary>«Облегчённый режим» — a pure UI/motion flag. Persist it so it survives restart AND so the

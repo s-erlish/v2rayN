@@ -150,7 +150,7 @@ public static class AutoStartupHandler
             var linuxConfig = EmbedUtils.GetEmbedText(Global.LinuxAutostartConfig);
             if (linuxConfig.IsNotEmpty())
             {
-                linuxConfig = linuxConfig.Replace("$ExecPath$", Utils.GetExePath());
+                linuxConfig = linuxConfig.Replace("$ExecPath$", QuoteExecPathLinux(Utils.GetExePath()));
                 Logging.SaveLog(linuxConfig);
 
                 var homePath = GetHomePathLinux();
@@ -161,6 +161,29 @@ public static class AutoStartupHandler
         {
             Logging.SaveLog(_tag, ex);
         }
+    }
+
+    /// <summary>
+    /// Exec= in a .desktop file is parsed by the freedesktop rules: whitespace separates arguments, so an
+    /// install path containing a space ("/opt/My Apps/...") becomes a nonexistent command and autostart
+    /// silently never fires. Quote the path only when it actually contains a reserved character, so the
+    /// Exec= line for ordinary paths stays byte-for-byte what it has always been.
+    /// </summary>
+    private static string QuoteExecPathLinux(string exePath)
+    {
+        var reserved = new[] { ' ', '\t', '"', '\'', '\\', '$', '`' };
+        if (exePath.IsNullOrEmpty() || exePath.IndexOfAny(reserved) < 0)
+        {
+            return exePath;
+        }
+
+        // Backslash first — it is the escape character itself.
+        var escaped = exePath
+            .Replace("\\", "\\\\")
+            .Replace("\"", "\\\"")
+            .Replace("$", "\\$")
+            .Replace("`", "\\`");
+        return $"\"{escaped}\"";
     }
 
     [SupportedOSPlatform("linux")]
