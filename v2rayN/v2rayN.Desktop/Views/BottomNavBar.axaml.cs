@@ -32,13 +32,17 @@ public partial class BottomNavBar : UserControl
     // вместо трёх независимых пилюль, «мигавших» на месте. Центр берётся из ЖИВЫХ bounds активной
     // кнопки, поэтому корректен и в 3-пунктовом (вошёл), и в 2-пунктовом (без «Аккаунта») состоянии,
     // и пере-решается при ресайзе окна / смене числа колонок. Первый показ — мгновенно на активной
-    // трети (без скольжения с X=0); дальше — Motion.Dur.State 220мс OutQuint. Под lite / off-screen —
-    // мгновенно. Токен _indicatorAnim отменяет незавершённое скольжение при новом тапе.
+    // трети (без скольжения с X=0); дальше — переезд Motion.Dur.Nav 280мс ease-out-quart (motion.md
+    // «Навигация»). Под lite / off-screen — мгновенно. Токен _indicatorAnim отменяет незавершённое
+    // скольжение при новом тапе.
     private readonly TranslateTransform _indicatorTransform = new();
     private bool _indicatorSeeded;
     private double _lastTargetX = double.NaN;
     private CancellationTokenSource? _indicatorAnim;
-    private const double IndicatorWidth = 34d;
+
+    // Ширина полоски (tokens.md «Нижняя панель»: 30×3). Держать равной Width у BottomIndicator в
+    // разметке — из неё считается «центр трети минус половина полоски».
+    private const double IndicatorWidth = 30d;
 
     public BottomNavBar()
     {
@@ -161,10 +165,12 @@ public partial class BottomNavBar : UserControl
 
     private async void AnimateIndicator(double from, double targetX, CancellationToken ct)
     {
+        //  motion.md «Навигация»: переезд 280мс ease-out-quart. Полоска ОДНА и физически едет —
+        //  не гаснет и зажигается, поэтому кривая должна быть «доезжающей», а не двусторонней.
         var anim = new Animation
         {
-            Duration = Motion.Dur.State,
-            Easing = Motion.Ease.OutQuint,
+            Duration = Motion.Dur.Nav,
+            Easing = Motion.Ease.OutQuart,
             FillMode = FillMode.Forward,
             Children =
             {

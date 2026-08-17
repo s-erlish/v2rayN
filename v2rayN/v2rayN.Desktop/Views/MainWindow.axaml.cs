@@ -522,14 +522,20 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     }
 
     // ==================== Путешествующий индикатор рейла (P0-1) ====================
-    // ОДНА акцентная полоса (railIndicator) физически СКОЛЬЗИТ по Y между слотами (M3 nav-rail idiom),
-    // вместо трёх независимых пилюль, «мигавших» на месте. Рейл всегда показывает 3 пункта (Home/Settings/
-    // Account), поэтому шаг фиксированный (высота пункта 64), слот индикатора (высота 28) центрируется:
-    // Y = index·64 + (64−28)/2. Первый показ (не seeded) / lite / off-screen / layout-своп (animate:false) —
-    // мгновенно на активном слоте (без скольжения с Y=0); дальше — Motion.Dur.State 220 OutQuint. Токен
+    // ОДНА акцентная полоса (railIndicator) физически СКОЛЬЗИТ по Y между слотами (motion.md
+    // «Навигация»: полоска одна на всю панель и ПЕРЕЕЗЖАЕТ, а не гаснет и зажигается), вместо трёх
+    // независимых пилюль, «мигавших» на месте. Рейл всегда показывает 3 пункта (Home/Settings/Account),
+    // поэтому шаг фиксированный: позиция = отступ + индекс × высота кнопки. Геометрия из tokens.md
+    // «Рейл» — кнопка 64×72, полоска 3×30, значит слот центрируется как Y = index·72 + (72−30)/2 = 21.
+    // Первый показ (не seeded) / lite / off-screen / layout-своп (animate:false) — мгновенно на активном
+    // слоте (без скольжения с Y=0); дальше — переезд Motion.Dur.Nav 280мс ease-out-quart. Токен
     // _indicatorAnim отменяет незавершённое скольжение при новом тапе; на layout-свопе рейл↔бар пере-садим
     // мгновенно (animate:false из ShowTab), т.к. геометрии разные.
-    private static double RailSlotY(AppTab tab) => (NavIndex(tab) * 64d) + 18d;
+    private const double RailButtonHeight = 72d;   // tokens.md «Рейл»: кнопка 64×72
+    private const double RailIndicatorHeight = 30d;   // tokens.md «Рейл»: полоска 3×30
+
+    private static double RailSlotY(AppTab tab)
+        => (NavIndex(tab) * RailButtonHeight) + ((RailButtonHeight - RailIndicatorHeight) / 2d);
 
     private void MoveRailIndicator(AppTab tab, bool animate)
     {
@@ -569,10 +575,12 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         {
             return;
         }
+        //  motion.md «Навигация»: переезд 280мс ease-out-quart — ровно то же значение, что у полоски
+        //  нижней панели (BottomNavBar.AnimateIndicator). Одна навигация, один темп.
         var anim = new Animation
         {
-            Duration = Motion.Dur.State,
-            Easing = Motion.Ease.OutQuint,
+            Duration = Motion.Dur.Nav,
+            Easing = Motion.Ease.OutQuart,
             FillMode = FillMode.Forward,
             Children =
             {

@@ -2,6 +2,7 @@
     x:Class="v2rayN.Desktop.Views.BottomNavBar"
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:cm="clr-namespace:v2rayN.Desktop.Common"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:loc="clr-namespace:v2rayN.Desktop.Common"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -14,8 +15,9 @@
           разворачивается из 0 в равную долю). Отдельной вкладки «Сервера» нет — компактная
           «Главная» показывает щит + мету + список серверов в ОДНОМ скролле, так что вторая
           вкладка серверов была бы избыточной.
-          Каждый пункт: глиф 24 + подпись 11 + короткая синяя пилюля 34×3 (видна у выбранного).
-          Выбранный: глиф/подпись серый→accent, вес 500→700, пилюля fade-in. Press: scale 0.92.
+          Геометрия по tokens.md «Нижняя панель (узкий режим)»: высота 62, глиф 23, подпись 11,
+          полоска 30×3 внизу, позиция = центр трети минус половина полоски, от ЖИВОЙ ширины окна.
+          Выбранный: глиф/подпись серый→accent, вес 500→700. Press: scale 0.92 (пункт навигации).
           Под панелью — лёгкий градиент-скрим (frameless-вид), а не сплошная заливка.
           =================================================================================  -->
 
@@ -37,17 +39,22 @@
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Padding" Value="0,8,0,6" />
-            <Setter Property="MinHeight" Value="56" />
+            <Setter Property="MinHeight" Value="0" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
             <Setter Property="Cursor" Value="Hand" />
-            <!--  Press = Motion.Dur.PressOut 160мс OutQuint — ЕДИНОЕ значение press для ОБЕИХ
-                  навигаций (рейл + нижний бар), убирает прежний разнобой 100/120 (P1-3).  -->
+            <!--  Возврат нажатия у ПУНКТА НАВИГАЦИИ — 160мс ease-out-quart, БЕЗ отскока: так задан
+                  «.nav» в прототипе (у кнопок и строк там 200мс с перелётом, у навигации — нет).
+                  Значение общее с Button.NavRailItem в GlobalStyles: обе навигации ходят одинаково.  -->
             <Setter Property="Transitions">
                 <Transitions>
-                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.16" Easing="{StaticResource Ease.OutQuint}" />
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.16" Easing="{StaticResource Ease.OutQuart}" />
                 </Transitions>
             </Setter>
+            <!--  Текст подписи не должен дёргаться на возврате — см. PressFeedback.Composited.  -->
+            <Setter Property="cm:PressFeedback.Composited" Value="True" />
+            <!--  Покой = явный scale(1): рендер не переключает ветку «трансформа нет»↔«есть».  -->
+            <Setter Property="RenderTransform" Value="scale(1)" />
         </Style>
         <Style Selector="Button.BottomNavItem /template/ ContentPresenter#PART_ContentPresenter">
             <Setter Property="Background" Value="Transparent" />
@@ -60,12 +67,18 @@
         </Style>
         <Style Selector="Button.BottomNavItem:pressed">
             <Setter Property="RenderTransform" Value="scale(0.92)" />
+            <!--  Вход нажатия у «.nav» — 90мс (быстрее общего 70мс+отскок, но и ход глубже).  -->
+            <Setter Property="Transitions">
+                <Transitions>
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" Easing="{StaticResource Ease.PressIn}" />
+                </Transitions>
+            </Setter>
         </Style>
 
         <!--  Глиф/подпись — неактивные (серый), плавный переход цвета.  -->
         <Style Selector="Button.BottomNavItem PathIcon">
-            <Setter Property="Width" Value="24" />
-            <Setter Property="Height" Value="24" />
+            <Setter Property="Width" Value="23" />
+            <Setter Property="Height" Value="23" />
             <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
             <!--  Тон серый↔accent = Ease.Standard 200мс (двусторонняя смена, как рейл/Android nav).  -->
             <Setter Property="Transitions">
@@ -127,7 +140,9 @@
         </Style>
     </UserControl.Styles>
 
-    <Panel Background="{StaticResource Nav.Scrim}">
+    <!--  Высота панели 62 (tokens.md). Задаётся ЗДЕСЬ, а не MinHeight на пунктах: пункты тянутся
+          на всю высоту, поэтому тап-таргет = вся треть панели, а не только глиф с подписью.  -->
+    <Panel Background="{StaticResource Nav.Scrim}" Height="62">
         <Grid x:Name="NavGrid" ColumnDefinitions="*,*,*">
             <Button
                 x:Name="ItemHome"
@@ -158,16 +173,17 @@
                 </StackPanel>
             </Button>
 
-            <!--  ОДИН путешествующий индикатор (P0-1): акцентная полоса 34×3, СКОЛЬЗИТ по X к
+            <!--  ОДИН путешествующий индикатор: акцентная полоса 30×3 (tokens.md), СКОЛЬЗИТ по X к
                   центру активной трети. Спан по всем колонкам, база (left,bottom); реальный X ставит
                   TranslateTransform.X из code-behind (PositionIndicator) — центры берутся из ЖИВЫХ
                   ширин колонок, поэтому индикатор корректен и в 3-, и в 2-пунктовом (без «Аккаунта»)
-                  состоянии. Первый показ — мгновенно на активной трети, дальше — скольжение 220 OutQuint.  -->
+                  состоянии, и пере-решается на каждом ресайзе окна. Первый показ — мгновенно на
+                  активной трети, дальше — переезд Motion.Dur.Nav 280мс ease-out-quart.  -->
             <Border
                 x:Name="BottomIndicator"
                 Grid.Column="0"
                 Grid.ColumnSpan="3"
-                Width="34"
+                Width="30"
                 Height="3"
                 Margin="0,0,0,6"
                 HorizontalAlignment="Left"

@@ -865,13 +865,15 @@
     <!-- ==================================================================== -->
     <!--  Навигационный рейл (замена Android bottom-nav): пункт 76×64, глиф 24 +   -->
     <!--  подпись 11. Неактив = OnSurfaceVariant/500; актив = Accent/700 + левая    -->
-    <!--  пилюля 3×28. Press scale 0.92. Без ripple/glow.                          -->
+    <!--  пилюля 3×30. Press scale 0.92. Без ripple/glow.                          -->
     <!-- ==================================================================== -->
     <Style Selector="Button.NavRailItem">
         <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
         <Setter Property="RenderTransformOrigin" Value="50%,50%" />
-        <Setter Property="Width" Value="76" />
-        <Setter Property="Height" Value="64" />
+        <!--  Кнопка 64×72 (tokens.md «Рейл»). Полоса рейла шире (74) — кнопка встаёт в неё по
+              центру, а 3px-индикатор садится вплотную к ЛЕВОМУ краю полосы, не задевая кнопку.  -->
+        <Setter Property="Width" Value="64" />
+        <Setter Property="Height" Value="72" />
         <Setter Property="Padding" Value="0" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
@@ -928,10 +930,10 @@
             </Transitions>
         </Setter>
     </Style>
-    <!--  Глиф/подпись: неактивные  -->
+    <!--  Глиф/подпись: неактивные. Размеры — tokens.md «Рейл»: иконка 25, подпись 10.5.  -->
     <Style Selector="Button.NavRailItem PathIcon">
-        <Setter Property="Width" Value="24" />
-        <Setter Property="Height" Value="24" />
+        <Setter Property="Width" Value="25" />
+        <Setter Property="Height" Value="25" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
         <!--  Тон серый↔accent = Ease.Standard 200мс (двусторонняя смена состояния, Android nav 200).  -->
         <Setter Property="Transitions">
@@ -941,6 +943,7 @@
         </Setter>
     </Style>
     <Style Selector="Button.NavRailItem TextBlock">
+        <Setter Property="FontSize" Value="10.5" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
         <Setter Property="FontWeight" Value="Medium" />
         <Setter Property="Transitions">
@@ -1603,7 +1606,7 @@
     <!--  DESIGN_PLAN Часть 3). Фон Bg (сливается с окном), БЕЗ правой границы.    -->
     <!--  Аддитивный класс: контейнер рейла в MainWindow переходит на него в       -->
     <!--  проходе дедупликации (сейчас там Surface + 1px правая граница).          -->
-    <!--  Активный пункт (Accent глиф + левая пилюля 3×28, press 0.92, без ripple) -->
+    <!--  Активный пункт (Accent глиф + левая пилюля 3×30, press 0.92, без ripple) -->
     <!--  уже задан классом Button.NavRailItem выше.                              -->
     <!-- ==================================================================== -->
     <Style Selector="Border.NavRail">

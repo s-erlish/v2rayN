@@ -212,9 +212,11 @@
             <Setter Property="RenderTransform" Value="rotate(180deg)" />
         </Style>
 
-        <!--  Столбец вкладок: развёрнут 76, ClipToBounds; плавная свёртка ширины/непрозрачности.  -->
+        <!--  Столбец вкладок: развёрнут 74 (tokens.md «Рейл»: ширина 74 при кнопке 64×72 —
+              кнопка встаёт по центру полосы, слева остаётся поле под 3px-индикатор),
+              ClipToBounds; плавная свёртка ширины/непрозрачности.  -->
         <Style Selector="StackPanel.RailItems">
-            <Setter Property="Width" Value="76" />
+            <Setter Property="Width" Value="74" />
             <Setter Property="Transitions">
                 <Transitions>
                     <DoubleTransition Property="Width" Duration="0:0:0.2">
@@ -468,7 +470,7 @@
                                             <StackPanel
                                                 HorizontalAlignment="Center"
                                                 VerticalAlignment="Center"
-                                                Spacing="4">
+                                                Spacing="5">
                                                 <PathIcon Data="{StaticResource Geo.Nav.Home}" />
                                                 <TextBlock
                                                     HorizontalAlignment="Center"
@@ -480,7 +482,7 @@
                                             <StackPanel
                                                 HorizontalAlignment="Center"
                                                 VerticalAlignment="Center"
-                                                Spacing="4">
+                                                Spacing="5">
                                                 <PathIcon Data="{StaticResource Geo.Nav.Settings}" />
                                                 <TextBlock
                                                     HorizontalAlignment="Center"
@@ -492,7 +494,7 @@
                                             <StackPanel
                                                 HorizontalAlignment="Center"
                                                 VerticalAlignment="Center"
-                                                Spacing="4">
+                                                Spacing="5">
                                                 <PathIcon Data="{StaticResource Geo.Nav.Account}" />
                                                 <TextBlock
                                                     HorizontalAlignment="Center"
@@ -501,18 +503,21 @@
                                             </StackPanel>
                                         </Button>
                                     </StackPanel>
-                                    <!--  ОДИН акцентный бар: базовая позиция (top,left); реальный слот
-                                          ставит TranslateTransform.Y из code-behind (первый показ —
-                                          мгновенно на активном слоте, дальше — скольжение 220 OutQuint).  -->
+                                    <!--  ОДИН акцентный бар 3×30 (tokens.md «Рейл»), ПРИЖАТ К ЛЕВОМУ КРАЮ
+                                          полосы: скругление 0 3 3 0 — то есть срезаны только правые углы,
+                                          левые прямые, полоска «выходит» из края рейла, а не висит рядом.
+                                          Базовая позиция (top,left); реальный слот ставит
+                                          TranslateTransform.Y из code-behind (первый показ — мгновенно на
+                                          активном слоте, дальше — переезд 280мс ease-out-quart).  -->
                                     <Border
                                         x:Name="railIndicator"
                                         Width="3"
-                                        Height="28"
+                                        Height="30"
                                         HorizontalAlignment="Left"
                                         VerticalAlignment="Top"
                                         Background="{DynamicResource Brush.Accent}"
                                         Classes="RailIndicator"
-                                        CornerRadius="2"
+                                        CornerRadius="0,3,3,0"
                                         IsHitTestVisible="False" />
                                 </Panel>
 
