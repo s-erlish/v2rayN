@@ -49,6 +49,14 @@ public sealed class SubscriptionSyncManager
         // subscription" account returns a 200 with an empty subscription (not an error), so the
         // best-effort try/catch only swallows genuine transient failures — the subsequent
         // AccountViewModel.FetchAndApplySubscriptions surfaces those to the UI.
+        //
+        // `authoritative` records whether we actually LEARNED the remote state. Every transport
+        // failure (offline, DNS not up yet, timeout, 5xx, unparseable body) is normalised to an
+        // ApiError by DepartamentApiClient, so a swallowed ApiError means "we know nothing", NOT
+        // "the account has no subscriptions". Import must never infer a deletion from that — see
+        // the reconciliation guard in Import.
+        var authoritative = true;
+
         PrimarySubscriptionDto? primary = null;
         try
         {
@@ -57,6 +65,7 @@ public sealed class SubscriptionSyncManager
         catch (ApiError)
         {
             // fall through — still import anything /all exposes
+            authoritative = false;
         }
 
         List<SubInfoDto> all;
@@ -67,13 +76,14 @@ public sealed class SubscriptionSyncManager
         catch (ApiError)
         {
             all = new List<SubInfoDto>();
+            authoritative = false;
         }
 
         var profile = AuthTokenStore.GetUser();
-        return await Import(primary, all, profile);
+        return await Import(primary, all, profile, authoritative);
     }
 
-    private async Task<List<string>> Import(PrimarySubscriptionDto? primary, List<SubInfoDto> all, UserProfileDto? profile)
+    private async Task<List<string>> Import(PrimarySubscriptionDto? primary, List<SubInfoDto> all, UserProfileDto? profile, bool authoritative)
     {
         var config = AppManager.Instance.Config;
         var managed = AuthTokenStore.GetManagedGuids();
@@ -122,6 +132,39 @@ public sealed class SubscriptionSyncManager
         }
 
         // Drop any previously managed subscription whose guid is not in the freshly imported set.
+        //
+        // ONLY when the remote answer was authoritative. "This guid is gone remotely" is an inference
+        // from the fetched set, and a fetch that FAILED carries no such information: with
+        // authoritative == false the candidate list is empty for want of an answer, not because the
+        // account lost its subscriptions. Reconciling against it deleted every managed SubItem and —
+        // via DeleteSubItem -> RemoveServersViaSubid -> "delete from ProfileItem where subid = ..." —
+        // every server behind them, permanently. That fired on the ordinary cold-start path
+        // (AccountViewModel ctor -> StartupLoad -> RunSyncPhases -> AutoImportSubscriptions) whenever
+        // the network was not up yet at launch, which is exactly the reported "сервера просто
+        // исчезают при запуске". Worse, ImportAll then returned normally, so AccountRepository.Guard
+        // reported SUCCESS and the user was handed a silently empty Home with no error at all.
+        //
+        // When we learned nothing, we change nothing: keep every managed mapping (merging in anything
+        // we did manage to import) and report the full managed set to the caller.
+        if (!authoritative)
+        {
+            var merged = new Dictionary<string, string>(managed);
+            foreach (var kv in newMap)
+            {
+                merged[kv.Key] = kv.Value;
+            }
+            AuthTokenStore.SetManagedGuids(merged);
+
+            foreach (var guid in merged.Values)
+            {
+                if (guid.IsNotEmpty() && !resultGuids.Contains(guid))
+                {
+                    resultGuids.Add(guid);
+                }
+            }
+            return resultGuids;
+        }
+
         foreach (var kv in managed)
         {
             if (kv.Value.IsNotEmpty() && !newMap.Values.Contains(kv.Value))
