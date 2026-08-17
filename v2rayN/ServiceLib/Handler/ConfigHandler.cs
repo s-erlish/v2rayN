@@ -1926,60 +1926,75 @@ public static class ConfigHandler
         }
 
         var counter = 0;
-        if (Utils.IsBase64String(strData))
+        try
         {
-            counter = await AddBatchServersCommon(config, Utils.Base64Decode(strData), subid, isSub);
-        }
-        if (counter < 1)
-        {
-            counter = await AddBatchServersCommon(config, strData, subid, isSub);
-        }
-        if (counter < 1)
-        {
-            counter = await AddBatchServersCommon(config, Utils.Base64Decode(strData), subid, isSub);
-        }
-
-        if (counter < 1)
-        {
-            counter = await AddBatchServers4SsSIP008(config, strData, subid, isSub);
-        }
-
-        //maybe wireguard config
-        if (counter < 1)
-        {
-            counter = await AddBatchServers4Wireguard(config, strData, subid, isSub);
-        }
-
-        //May be standard uri mixed with internal uri
-        var innerUriCount = 0;
-        if (Utils.IsBase64String(strData))
-        {
-            innerUriCount = await AddBatchServers4InnerUri(config, Utils.Base64Decode(strData), subid, isSub);
-        }
-        if (innerUriCount < 1)
-        {
-            innerUriCount = await AddBatchServers4InnerUri(config, strData, subid, isSub);
-        }
-        if (innerUriCount < 1)
-        {
-            innerUriCount = await AddBatchServers4InnerUri(config, Utils.Base64Decode(strData), subid, isSub);
-        }
-        if (innerUriCount > 0)
-        {
-            if (counter > 0)
+            if (Utils.IsBase64String(strData))
             {
-                counter += innerUriCount;
+                counter = await AddBatchServersCommon(config, Utils.Base64Decode(strData), subid, isSub);
             }
-            else
+            if (counter < 1)
             {
-                counter = innerUriCount;
+                counter = await AddBatchServersCommon(config, strData, subid, isSub);
+            }
+            if (counter < 1)
+            {
+                counter = await AddBatchServersCommon(config, Utils.Base64Decode(strData), subid, isSub);
+            }
+
+            if (counter < 1)
+            {
+                counter = await AddBatchServers4SsSIP008(config, strData, subid, isSub);
+            }
+
+            //maybe wireguard config
+            if (counter < 1)
+            {
+                counter = await AddBatchServers4Wireguard(config, strData, subid, isSub);
+            }
+
+            //May be standard uri mixed with internal uri
+            var innerUriCount = 0;
+            if (Utils.IsBase64String(strData))
+            {
+                innerUriCount = await AddBatchServers4InnerUri(config, Utils.Base64Decode(strData), subid, isSub);
+            }
+            if (innerUriCount < 1)
+            {
+                innerUriCount = await AddBatchServers4InnerUri(config, strData, subid, isSub);
+            }
+            if (innerUriCount < 1)
+            {
+                innerUriCount = await AddBatchServers4InnerUri(config, Utils.Base64Decode(strData), subid, isSub);
+            }
+            if (innerUriCount > 0)
+            {
+                if (counter > 0)
+                {
+                    counter += innerUriCount;
+                }
+                else
+                {
+                    counter = innerUriCount;
+                }
+            }
+
+            //maybe other sub
+            if (counter < 1)
+            {
+                counter = await AddBatchServers4Custom(config, strData, subid, isSub);
             }
         }
-
-        //maybe other sub
-        if (counter < 1)
+        catch
         {
-            counter = await AddBatchServers4Custom(config, strData, subid, isSub);
+            // A parser THREW after the delete above — the same "old gone, new never written" hole as a
+            // zero-count parse, just reached by an exception. The live case is an invalid
+            // SubItem.Filter: AddBatchServersCommon calls Regex.IsMatch with it (:1613) and an
+            // unparseable pattern throws ArgumentException, which unwinds all the way out to
+            // SubscriptionHandler.UpdateProcess's catch (:49) — past the zero-count restore below.
+            // Put the servers back, then let the exception continue to its existing handler so the
+            // failure is still reported exactly as before.
+            await RestoreOriginalSubServers(subid, lstOriSub);
+            throw;
         }
 
         // Nothing parsed, but the old servers for this subscription were already deleted above ->
@@ -1992,31 +2007,12 @@ public static class ConfigHandler
         //   • a captive-portal / hotspot login page or a proxy error page (HTML, 200 OK);
         //   • the panel answering with a JSON error object instead of the node list;
         //   • a truncated / corrupted base64 body from a dropped connection;
-        //   • an invalid SubItem.Filter regex — Regex.IsMatch throws out of AddBatchServersCommon
-        //     (:1613) AFTER the delete, and UpdateProcess only catches it at :49.
+        //   • an invalid SubItem.Filter regex (handled by the catch above, which restores and rethrows).
         // In every one of these the subscription's whole server list vanished for good, which is the
         // other half of the reported "бывает, что просто сервера исчезают и все".
-        //
-        // Restoring the snapshot is exact, not approximate: IndexId is the ProfileItem primary key
-        // (Models/Entities/ProfileItem.cs:156), so the rows come back with their ORIGINAL ids and
-        // config.IndexId, ProfileExItem and ServerStatItem keep resolving. Only a failed refresh
-        // restores — a successful one still replaces, exactly as before.
-        if (counter < 1 && lstOriSub is { Count: > 0 })
+        if (counter < 1)
         {
-            try
-            {
-                var remaining = (await AppManager.Instance.ProfileItemIndexes(subid)) ?? [];
-                var lstRestore = lstOriSub.Where(t => !remaining.Contains(t.IndexId)).ToList();
-                if (lstRestore.Count > 0)
-                {
-                    await SQLiteHelper.Instance.InsertAllAsync(lstRestore);
-                    Logging.SaveLog($"{_tag}: subscription update parsed 0 servers, restored {lstRestore.Count} existing server(s) for subid {subid}");
-                }
-            }
-            catch (Exception ex)
-            {
-                Logging.SaveLog(_tag, ex);
-            }
+            await RestoreOriginalSubServers(subid, lstOriSub);
         }
 
         //Select active node
@@ -2045,6 +2041,42 @@ public static class ConfigHandler
         }
 
         return counter;
+    }
+
+    /// <summary>
+    /// Puts a subscription's previous servers back after a refresh deleted them and then imported
+    /// nothing. <see cref="AddBatchServers"/> deletes BEFORE it has the replacement
+    /// (RemoveServersViaSubid), so every path that ends with zero imported servers used to leave the
+    /// user with an empty list and no way back.
+    ///
+    /// The restore is EXACT, not approximate: IndexId is the ProfileItem primary key
+    /// (Models/Entities/ProfileItem.cs:156), so the rows return under their ORIGINAL ids and
+    /// config.IndexId, ProfileExItem and ServerStatItem all keep resolving. Rows still present are
+    /// filtered out first — RemoveServersViaSubid with isSub=1 only deletes `isSub = 1` rows, while the
+    /// snapshot covers every row of the group — so re-inserting can never hit a primary-key conflict.
+    /// Best-effort and idempotent: a failure here is logged, never thrown, and never blocks the caller.
+    /// </summary>
+    private static async Task RestoreOriginalSubServers(string subid, List<ProfileItem>? lstOriSub)
+    {
+        if (lstOriSub is not { Count: > 0 })
+        {
+            return;
+        }
+
+        try
+        {
+            var remaining = (await AppManager.Instance.ProfileItemIndexes(subid)) ?? [];
+            var lstRestore = lstOriSub.Where(t => !remaining.Contains(t.IndexId)).ToList();
+            if (lstRestore.Count > 0)
+            {
+                await SQLiteHelper.Instance.InsertAllAsync(lstRestore);
+                Logging.SaveLog($"{_tag}: subscription update imported 0 servers, restored {lstRestore.Count} existing server(s) for subid {subid}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog(_tag, ex);
+        }
     }
 
     #endregion Batch add servers
