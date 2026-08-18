@@ -30,7 +30,11 @@ public partial class BackupAndRestoreView : ReactiveUserControl<BackupAndRestore
         // напрямую (new BackupAndRestoreView()), поэтому модель заводим сами — иначе поля пустые.
         ViewModel ??= new BackupAndRestoreViewModel();
 
-        btnBack.Click += (_, _) => BackRequested?.Invoke(this, EventArgs.Empty);
+        btnBack.Click += async (_, _) =>
+        {
+            await PersistAsync();
+            BackRequested?.Invoke(this, EventArgs.Empty);
+        };
 
         RowCheck.Tapped += (_, _) => Run(ViewModel.WebDavCheckCmd);
         RowUpload.Tapped += (_, _) => Run(ViewModel.RemoteBackupCmd);
@@ -45,6 +49,17 @@ public partial class BackupAndRestoreView : ReactiveUserControl<BackupAndRestore
             this.Bind(ViewModel, vm => vm.SelectedSource.Password, v => v.txtWebDavPassword.Text).DisposeWith(disposables);
             this.Bind(ViewModel, vm => vm.SelectedSource.DirName, v => v.txtWebDavDirName.Text).DisposeWith(disposables);
         });
+    }
+
+    /// <summary>Введённое сохраняется при уходе с экрана, а не только по «Проверить подключение»:
+    /// движковая модель пишет SelectedSource в конфиг лишь внутри WebDavCheck, и адрес, набранный без
+    /// проверки, терялся — строка «Настройки WebDAV» на экране копирования так и говорила
+    /// «Не настроено». Экран настроек не имеет права терять введённое.</summary>
+    private async Task PersistAsync()
+    {
+        var config = AppManager.Instance.Config;
+        config.WebDavItem = ViewModel!.SelectedSource;
+        await ConfigHandler.SaveConfig(config);
     }
 
     /// <summary>Пока команда идёт, действия теряют акцент и не откликаются: акцентный текст читается
