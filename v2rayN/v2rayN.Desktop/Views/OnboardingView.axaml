@@ -74,9 +74,16 @@
             <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
             <Setter Property="BorderBrush" Value="{DynamicResource Brush.ButtonOutline}" />
             <Setter Property="BorderThickness" Value="1.5" />
-            <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill}" />
+            <!--  Радиус пилюли = ПОЛОВИНА её высоты. Avalonia режет CornerRadius ПО КАЖДОЙ ОСИ
+                  отдельно: на кнопке 360×50 значение 100 даёт rx=100 / ry=25 — вздутый по бокам
+                  эллипс, а не пилюлю (в CSS `border-radius:100px` браузер подрезает сам).  -->
+            <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill50}" />
             <Setter Property="Height" Value="50" />
             <Setter Property="Padding" Value="20,0" />
+            <!--  Обе пилюли — на всю ширину колонки и потому РАВНЫЕ. Semi отдаёт кнопке ширину по
+                  содержимому, и без этого «Войти через Telegram» и «Добавить из буфера обмена»
+                  вышли бы двумя разными по ширине пилюлями, а на эталонном кадре они одинаковые.  -->
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
             <Setter Property="HorizontalContentAlignment" Value="Center" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
             <Setter Property="Cursor" Value="Hand" />
@@ -168,7 +175,7 @@
             <Setter Property="RenderTransformOrigin" Value="50%,50%" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill}" />
+            <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill40}" />
             <Setter Property="Height" Value="40" />
             <Setter Property="Padding" Value="16,0" />
             <Setter Property="HorizontalContentAlignment" Value="Center" />
@@ -274,10 +281,16 @@
                         Height="118"
                         HorizontalAlignment="Center"
                         RenderTransformOrigin="50%,50%">
+                        <!--  Свечение — ШЁПОТ, а не шар: на эталонном кадре (shots/F_first_dark.png)
+                              внутри кольца фон ПЛОСКИЙ, прибавка синего к фону меньше единицы по
+                              каналу. Brush.ConnectGlow заведён для гало connect-щита 230 и на 118
+                              даёт видимый диск, который вдобавок просвечивает сквозь вырез контурного
+                              щита и делает его «залитым». Гасим до 0.3 — свечение остаётся, шар уходит.  -->
                         <Ellipse
                             Width="118"
                             Height="118"
-                            Fill="{DynamicResource Brush.ConnectGlow}" />
+                            Fill="{DynamicResource Brush.ConnectGlow}"
+                            Opacity="0.3" />
                         <Ellipse
                             Width="118"
                             Height="118"
@@ -458,10 +471,13 @@
                                     FontWeight="Medium"
                                     Foreground="{DynamicResource Brush.OnSurfaceVariant}"
                                     Text="{loc:T Start_MoreWays}" />
+                                <!--  Каретка 12: PathIcon вписывает геометрию Uniform, а треугольник
+                                      10×5 — вдвое шире, чем выше. При Width 17 он растягивался в
+                                      17×8.5 и читался тяжелее эталонного (~11×6).  -->
                                 <PathIcon
                                     x:Name="MoreCaret"
-                                    Width="17"
-                                    Height="17"
+                                    Width="12"
+                                    Height="12"
                                     VerticalAlignment="Center"
                                     Classes="StartCaret"
                                     Data="{StaticResource Geo.Start.Caret}"
@@ -469,7 +485,12 @@
                             </StackPanel>
                         </Button>
 
-                        <!--  Раскрытие «Другие способы»: две строки 46 с шевроном.  -->
+                        <!--  Раскрытие «Другие способы»: две строки 46 с шевроном. Фон, скругление и
+                              паддинг НЕ задаются локально: у Border.Row они уже есть, а локальное
+                              значение в Avalonia сильнее любого сеттера стиля — прибитый
+                              Background="Transparent" глушил бы :pointerover, и строка под курсором
+                              не темнела бы (на эталонном кадре темнеет). Прогиб 0.985 — «строка
+                              списка» из motion.md.  -->
                         <Border
                             x:Name="MoreRevealHost"
                             Height="0"
@@ -479,11 +500,9 @@
                                 <Border
                                     x:Name="QrRow"
                                     MinHeight="46"
-                                    Padding="12,0"
-                                    Background="Transparent"
                                     Classes="Row"
-                                    CornerRadius="12"
-                                    Cursor="Hand">
+                                    Cursor="Hand"
+                                    cm:PressFeedback.Scale="0.985">
                                     <Grid ColumnDefinitions="Auto,12,*,Auto">
                                         <PathIcon
                                             Grid.Column="0"
@@ -511,11 +530,9 @@
                                 <Border
                                     x:Name="SiteRow"
                                     MinHeight="46"
-                                    Padding="12,0"
-                                    Background="Transparent"
                                     Classes="Row"
-                                    CornerRadius="12"
-                                    Cursor="Hand">
+                                    Cursor="Hand"
+                                    cm:PressFeedback.Scale="0.985">
                                     <Grid ColumnDefinitions="Auto,12,*,Auto">
                                         <PathIcon
                                             Grid.Column="0"

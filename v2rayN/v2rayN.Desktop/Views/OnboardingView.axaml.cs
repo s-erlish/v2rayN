@@ -26,9 +26,16 @@ namespace v2rayN.Desktop.Views;
 /// </summary>
 public partial class OnboardingView : UserControl
 {
-    // ── Моушен-трансформы появления ──────────────────────────────────────────
-    // TransformOperations композируются чисто с анимацией RenderTransform (в отличие от
-    // разложения матрицы), поэтому масштаб щита и подъём остальных блоков живут именно так.
+    // ── Моушен появления ─────────────────────────────────────────────────────
+    // Появление ведут ПЕРЕХОДЫ (Transitions), а не Animation. Это не стилистический выбор, а
+    // единственный работающий способ, проверенный на живом окне:
+    //   • Animation с ключевыми кадрами по Visual.RenderTransform падает на первом же кадре —
+    //     «No animator registered for the property RenderTransform»;
+    //   • Animation по числам самого трансформа (ScaleTransform.ScaleX/Y, TranslateTransform.Y)
+    //     падает на Animation.RunAsync — «Unable to cast ScaleTransform to Avalonia.Visual».
+    // Оба падения тихие (задача fire-and-forget уходит в UnobservedTaskException), поэтому со
+    // стороны это выглядело как «появление просто не играет»: блок мгновенно оказывался на месте.
+    // TransformOperationsTransition же работает — на нём стоит вся лестница :pressed в GlobalStyles.
     private static readonly ITransform _lift16 = TransformOperations.Parse("translateY(16px)");
     private static readonly ITransform _lift0 = TransformOperations.Parse("translateY(0px)");
     private static readonly ITransform _scale082 = TransformOperations.Parse("scale(0.82)");
@@ -135,64 +142,72 @@ public partial class OnboardingView : UserControl
         }
 
         // Щит — bloom: 620 мс из 0.82×, кривая появления (0.22,1,0.36,1) = Ease.OutQuint.
-        _ = PlayReveal(ShieldRing, TimeSpan.Zero, _bloomDuration, _scale082, _scale1);
+        PlayReveal(ShieldRing, TimeSpan.Zero, _bloomDuration, _scale082, _scale1);
         // Остальное — подъём translateY 16→0 + проявление, 460 мс, со сдвигом по смыслу.
-        _ = PlayReveal(TitleText, TimeSpan.FromMilliseconds(80), _liftDuration, _lift16, _lift0);
-        _ = PlayReveal(SubtitleText, TimeSpan.FromMilliseconds(140), _liftDuration, _lift16, _lift0);
-        _ = PlayReveal(ActionsBlock, TimeSpan.FromMilliseconds(200), _liftDuration, _lift16, _lift0);
+        PlayReveal(TitleText, TimeSpan.FromMilliseconds(80), _liftDuration, _lift16, _lift0);
+        PlayReveal(SubtitleText, TimeSpan.FromMilliseconds(140), _liftDuration, _lift16, _lift0);
+        PlayReveal(ActionsBlock, TimeSpan.FromMilliseconds(200), _liftDuration, _lift16, _lift0);
     }
 
     /// <summary>
-    /// Появление одного блока: opacity 0→1 + RenderTransform from→to. FillMode.None + сброс базы в
-    /// finally — иначе анимация «залипла» бы поверх :pressed-прогиба кнопок (у них тот же
-    /// RenderTransform). Предохранитель возвращает полную видимость, если анимацию оборвал
-    /// отсоединением от дерева.
+    /// Появление одного блока: прозрачность 0→1 и трансформ from→to за одну длительность с одной
+    /// задержкой. Ведут два перехода, поставленных на сам элемент.
+    ///
+    /// Порядок важен: сначала выставляем ИСХОДНОЕ состояние БЕЗ переходов (иначе первая же
+    /// установка сама поехала бы анимацией из значения по умолчанию), затем вешаем переходы, и
+    /// только следующим оборотом диспетчера ставим целевое — эта установка и анимируется.
+    ///
+    /// По окончании переходы снимаются, а трансформ обнуляется: он живёт на том же свойстве, что
+    /// и :pressed-прогиб кнопок внутри блока, и оставленная «единица» перебивала бы его.
     /// </summary>
-    private static async Task PlayReveal(Control el, TimeSpan delay, TimeSpan duration, ITransform from, ITransform to)
+    private static void PlayReveal(Control el, TimeSpan delay, TimeSpan duration, ITransform from, ITransform to)
     {
+        el.Transitions = null;
         el.Opacity = 0;
-        var anim = new Animation
-        {
-            Duration = duration,
-            Delay = delay,
-            Easing = Motion.Ease.OutQuint,
-            FillMode = FillMode.None,
-            Children =
-            {
-                new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(Visual.OpacityProperty, 0d), new Setter(Visual.RenderTransformProperty, from) } },
-                new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(Visual.OpacityProperty, 1d), new Setter(Visual.RenderTransformProperty, to) } },
-            },
-        };
+        el.RenderTransform = from;
 
-        var cts = new CancellationTokenSource();
-        var safety = DispatcherTimer.RunOnce(
+        el.Transitions =
+        [
+            new TransformOperationsTransition
+            {
+                Property = Visual.RenderTransformProperty,
+                Duration = duration,
+                Delay = delay,
+                Easing = Motion.Ease.OutQuint,
+            },
+            new DoubleTransition
+            {
+                Property = Visual.OpacityProperty,
+                Duration = duration,
+                Delay = delay,
+                Easing = Motion.Ease.OutQuint,
+            },
+        ];
+
+        Dispatcher.UIThread.Post(
             () =>
             {
-                cts.Cancel();
+                el.Opacity = 1;
+                el.RenderTransform = to;
+            },
+            DispatcherPriority.Background);
+
+        // Уборка: переходы нужны ровно на один проигрыш, дальше экран полностью статичен.
+        DispatcherTimer.RunOnce(
+            () =>
+            {
+                el.Transitions = null;
                 el.Opacity = 1;
                 el.RenderTransform = null;
             },
-            delay + duration + TimeSpan.FromMilliseconds(250));
-        try
-        {
-            await anim.RunAsync(el, cts.Token);
-        }
-        catch (OperationCanceledException)
-        {
-        }
-        finally
-        {
-            safety.Dispose();
-            el.Opacity = 1;
-            el.RenderTransform = null;
-            cts.Dispose();
-        }
+            delay + duration + TimeSpan.FromMilliseconds(120));
     }
 
     private void RestoreAll()
     {
         foreach (var el in new Control[] { ShieldRing, TitleText, SubtitleText, ActionsBlock })
         {
+            el.Transitions = null;
             el.Opacity = 1;
             el.RenderTransform = null;
         }
@@ -374,7 +389,28 @@ public partial class OnboardingView : UserControl
         {
             return;
         }
-        FlowRequested?.Invoke(this, new StartFlowRequest(StartFlow.Clipboard, vm.AddViaClipboard()));
+        var work = vm.AddViaClipboard();
+        FlowRequested?.Invoke(this, new StartFlowRequest(StartFlow.Clipboard, work));
+        Observe(work, "Onboarding.AddViaClipboard");
+    }
+
+    /// <summary>
+    /// Наблюдаем задачу импорта, даже если её никто не подхватил. <see cref="FlowRequested"/> —
+    /// событие: пока MainWindow на него не подписан (проводки нет), задача остаётся ничьей, и её
+    /// падение уходит в UnobservedTaskException, то есть в тишину. Тап по кнопке в этом случае
+    /// «ничего не делает» и следов не оставляет. Ошибка сама по себе здесь не лечится — она
+    /// принадлежит движку импорта, — но она обязана быть видна в журнале.
+    /// </summary>
+    private static async void Observe(Task work, string tag)
+    {
+        try
+        {
+            await work;
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog(tag, ex);
+        }
     }
 
     // «Добавить по QR-коду» — скан экрана, БЕЗ экрана прогрузки. Две причины, обе по делу:
@@ -385,7 +421,7 @@ public partial class OnboardingView : UserControl
     {
         if (DataContext is HomeViewModel vm)
         {
-            _ = vm.AddViaQr();
+            Observe(vm.AddViaQr(), "Onboarding.AddViaQr");
         }
     }
 
