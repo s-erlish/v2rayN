@@ -6,179 +6,185 @@
     xmlns:loc="clr-namespace:v2rayN.Desktop.Common"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:v="clr-namespace:v2rayN.Desktop.Views"
-    d:DesignWidth="560"
+    d:DesignWidth="800"
     d:DesignHeight="680"
-    Background="{DynamicResource Brush.Bg}"
     mc:Ignorable="d">
 
+    <!--  Фон НЕ задан: подэкран прозрачный, шелл под ним погашен (ApplySubPageShellGate).  -->
+
     <UserControl.Resources>
-        <StreamGeometry x:Key="Geo.Sub.Back">M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z</StreamGeometry>
-        <StreamGeometry x:Key="Geo.Sub.Check">M9,16.17 4.83,12l-1.42,1.41L9,19 21,7l-1.41,-1.41z</StreamGeometry>
         <!--  «{0} правил» — язык-зависимый формат (L.F) поверх целочисленного RuleNum.  -->
         <v:RuleCountConverter x:Key="RuleCountConverter" />
     </UserControl.Resources>
 
     <UserControl.Styles>
-        <Style Selector="Button.IconButton">
-            <Setter Property="Transitions">
-                <Transitions>
-                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" />
-                </Transitions>
-            </Setter>
-        </Style>
-        <Style Selector="Button.IconButton:pressed">
-            <Setter Property="RenderTransform" Value="scale(0.92)" />
-        </Style>
+        <StyleInclude Source="avares://departament/Assets/SubScreenStyles.axaml" />
 
-        <!--  Строка профиля маршрутизации: тап = сделать активным. Press scale, hover-подсветка.  -->
-        <Style Selector="Border.RouteRow">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="CornerRadius" Value="{StaticResource Radius.Tile}" />
-            <Setter Property="Cursor" Value="Hand" />
+        <!--  Каретка строки «Разрешение доменов»: поворот на 180° за 300 мс, пока окошко открыто.  -->
+        <Style Selector="PathIcon.StrategyCaret">
+            <Setter Property="RenderTransformOrigin" Value="50%,50%" />
             <Setter Property="Transitions">
                 <Transitions>
-                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" />
-                    <BrushTransition Property="Background" Duration="0:0:0.12" />
+                    <TransformOperationsTransition Duration="0:0:0.30" Property="RenderTransform" />
                 </Transitions>
             </Setter>
         </Style>
-        <Style Selector="Border.RouteRow:pointerover">
-            <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
+        <Style Selector="PathIcon.StrategyCaret.open">
+            <Setter Property="RenderTransform" Value="rotate(180deg)" />
         </Style>
-        <Style Selector="Border.RouteRow:pressed">
-            <Setter Property="RenderTransform" Value="scale(0.99)" />
+        <!--  Значение гаснет до приглушённого, пока окошко открыто (motion.md).  -->
+        <Style Selector="TextBlock.StrategyValue.open">
+            <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
+            <Setter Property="FontWeight" Value="Normal" />
         </Style>
     </UserControl.Styles>
 
-    <DockPanel MaxWidth="620">
-        <Grid
-            DockPanel.Dock="Top"
-            MinHeight="56"
-            Margin="16,8,16,0"
-            ColumnDefinitions="Auto,*">
-            <Button
-                x:Name="btnBack"
-                Grid.Column="0"
-                Width="40"
-                Height="40"
-                Padding="0"
-                VerticalAlignment="Center"
-                Classes="IconButton"
-                ToolTip.Tip="{loc:T Common_Back}">
-                <PathIcon
-                    Width="22"
-                    Height="22"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center"
-                    Data="{StaticResource Geo.Sub.Back}"
-                    Foreground="{DynamicResource Brush.OnSurface}" />
-            </Button>
-            <TextBlock
-                Grid.Column="1"
-                Margin="16,0,0,0"
-                VerticalAlignment="Center"
-                Classes="Headline"
-                Text="{loc:T Settings_Routing}"
-                TextTrimming="CharacterEllipsis" />
-        </Grid>
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <StackPanel
+            MaxWidth="760"
+            Margin="20,10,20,20"
+            HorizontalAlignment="Center">
 
-        <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-            <StackPanel Margin="16,12,16,24" Spacing="8">
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <Button
+                    x:Name="btnBack"
+                    Classes="SubBack"
+                    ToolTip.Tip="{loc:T Common_Back}">
+                    <PathIcon
+                        Width="22"
+                        Height="22"
+                        Data="{DynamicResource Geo.Sub.Back}"
+                        Foreground="{DynamicResource Brush.OnSurface}" />
+                </Button>
+                <TextBlock Classes="SubTitle" Text="{loc:T Settings_Routing}" />
+            </StackPanel>
+            <!--  Пояснения под заголовком тут нет: на этом экране его нет и в эталонном кадре.
+                  «Правила proxy, direct и block» уже сказано подписью строки, из которой сюда пришли.  -->
 
-                <TextBlock
-                    Classes="Subtitle"
-                    Text="{loc:T Routing_Intro}"
-                    TextWrapping="Wrap" />
-
-                <TextBlock Margin="0,6,0,0" Classes="SectionHeader" Text="{loc:T Routing_RuleSets}" />
-                <Border Classes="Card" Padding="8,6">
-                    <ItemsControl x:Name="listRoutings">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:CompileBindings="False">
-                                <Border
-                                    Classes="RouteRow"
-                                    Padding="12,10"
-                                    Tapped="OnRoutingRowTapped">
-                                    <Grid ColumnDefinitions="Auto,*,Auto" MinHeight="48">
-                                        <!--  Галочка активного набора (иначе прозрачная — сохраняет выравнивание).  -->
-                                        <PathIcon
-                                            Grid.Column="0"
-                                            Width="20"
-                                            Height="20"
-                                            Margin="4,0,12,0"
-                                            VerticalAlignment="Center"
-                                            Data="{StaticResource Geo.Sub.Check}"
-                                            Foreground="{DynamicResource Brush.Accent}"
-                                            IsVisible="{Binding IsActive}" />
-                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                            <TextBlock
-                                                Classes="Body"
-                                                Text="{Binding Remarks}"
-                                                TextTrimming="CharacterEllipsis" />
-                                            <TextBlock
-                                                Margin="0,3,0,0"
-                                                Classes="Subtitle"
-                                                Text="{Binding RuleNum, Converter={StaticResource RuleCountConverter}}" />
-                                        </StackPanel>
-                                        <Border
-                                            Grid.Column="2"
-                                            Margin="12,0,0,0"
-                                            Padding="10,4"
-                                            VerticalAlignment="Center"
-                                            Background="{DynamicResource Brush.SurfaceHigh}"
-                                            CornerRadius="{StaticResource Radius.Chip}"
-                                            IsVisible="{Binding IsActive}">
-                                            <TextBlock
-                                                Classes="Chip"
-                                                Foreground="{DynamicResource Brush.OnSurfaceVariant}"
-                                                Text="{loc:T Routing_Active}" />
-                                        </Border>
-                                    </Grid>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </Border>
-
-                <TextBlock Margin="0,6,0,0" Classes="SectionHeader" Text="{loc:T Routing_DomainStrategy}" />
-                <Border Classes="Card" Padding="16,4">
-                    <Grid ColumnDefinitions="*,Auto" MinHeight="56">
-                        <StackPanel Grid.Column="0" Margin="0,0,8,0" VerticalAlignment="Center">
-                            <TextBlock Classes="Body" Text="{loc:T Routing_DomainResolution}" />
-                            <TextBlock
-                                Margin="0,4,0,0"
-                                Classes="Subtitle"
-                                Text="{loc:T Routing_DomainHint}"
-                                TextWrapping="Wrap" />
-                        </StackPanel>
-                        <ComboBox
-                            x:Name="cmbStrategy"
+            <!--  ==================== Доменная стратегия ====================
+                  Выбор из трёх — общее «окошко у значения», а не отдельный экран: шеврон обещал бы
+                  страницу, на которой лежали бы те же три пункта.
+                  ClipToBounds=False — контракт ValuePopup: карточка не имеет права обрезать окошко
+                  нижней кромкой, поэтому углы маскирует сама строка (15 = 16 карточки минус контур).  -->
+            <TextBlock Classes="SubGroupLabel" Text="{loc:T Routing_DomainStrategy}" />
+            <Border Classes="SubCard" ClipToBounds="False">
+                <Border
+                    x:Name="RowStrategy"
+                    Classes="SubRow tap"
+                    CornerRadius="15">
+                    <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                        <Border Grid.Column="0" Classes="SubTile">
+                            <PathIcon Data="{DynamicResource Geo.Sub.Globe}" />
+                        </Border>
+                        <TextBlock
                             Grid.Column="1"
-                            MinWidth="170"
-                            VerticalAlignment="Center" />
+                            Margin="16,0,12,0"
+                            VerticalAlignment="Center"
+                            Classes="SubName"
+                            Text="{loc:T Routing_DomainResolution}" />
+                        <TextBlock
+                            x:Name="txtStrategyValue"
+                            Grid.Column="2"
+                            Classes="SubValue strong StrategyValue" />
+                        <PathIcon
+                            x:Name="StrategyCaret"
+                            Grid.Column="3"
+                            Classes="SubChevron StrategyCaret"
+                            Data="{DynamicResource Geo.Sub.Caret}" />
+
+                        <!--  Компонент занимает 0×0 и не двигает раскладку строки.  -->
+                        <v:ValuePopup
+                            x:Name="StrategyPopup"
+                            Grid.Column="3"
+                            Anchor="{Binding #RowStrategy}"
+                            PopupWidth="230"
+                            Trigger="{Binding #RowStrategy}" />
                     </Grid>
                 </Border>
+            </Border>
+            <TextBlock Classes="SubFoot" Text="{loc:T Routing_DomainHint}" />
 
-                <TextBlock Margin="0,6,0,0" Classes="SectionHeader" Text="{loc:T Routing_Maintenance}" />
-                <Border Classes="Card" Padding="16,4">
-                    <Grid ColumnDefinitions="*,Auto" MinHeight="56">
-                        <StackPanel Grid.Column="0" Margin="0,0,8,0" VerticalAlignment="Center">
-                            <TextBlock Classes="Body" Text="{loc:T Routing_DefaultRules}" />
+            <!--  ==================== Наборы правил ====================
+                  В ветке маршрутизация живёт НАБОРАМИ правил, а не отдельными строками proxy /
+                  direct / block, как в прототипе: тап делает набор активным. Показывать три
+                  фиксированные строки поверх этого значило бы врать про устройство экрана.
+                  Отдельного правила отсюда не открыть — редактор правил был отдельным окном, а
+                  отдельных окон в приложении больше нет (вопрос владельцу).  -->
+            <TextBlock Classes="SubGroupLabel" Text="{loc:T Routing_RuleSets}" />
+            <Border Classes="SubCard">
+                <ItemsControl x:Name="listRoutings">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:CompileBindings="False">
+                            <StackPanel>
+                                <Border Classes="SubDivider" IsVisible="{Binding ShowDivider}" />
+                                <Border Classes="SubRow tap" Tapped="OnRoutingRowTapped">
+                                    <Grid ColumnDefinitions="Auto,*,Auto">
+                                        <Border Grid.Column="0" Classes="SubTile">
+                                            <PathIcon Data="{DynamicResource Geo.Sub.Routing}" />
+                                        </Border>
+                                        <StackPanel
+                                            Grid.Column="1"
+                                            Margin="16,0,12,0"
+                                            VerticalAlignment="Center">
+                                            <TextBlock Classes="SubName" Text="{Binding Item.Remarks}" />
+                                            <TextBlock Classes="SubSub" Text="{Binding Item.RuleNum, Converter={StaticResource RuleCountConverter}}" />
+                                        </StackPanel>
+                                        <!--  «Активен» — не чип, а значение строки: тот же слот справа,
+                                              что у остальных подэкранов. Скрыт у неактивных целиком
+                                              (а не прозрачен) — иначе его прочитал бы экранный диктор.
+                                              Имя и подпись стоят в левой колонке и не съезжают.  -->
+                                        <TextBlock
+                                            Grid.Column="2"
+                                            Classes="SubValue accent"
+                                            IsVisible="{Binding Item.IsActive}"
+                                            Text="{loc:T Routing_Active}" />
+                                    </Grid>
+                                </Border>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Border>
+
+            <!--  Пустое состояние: наборов может не быть после сброса конфига.  -->
+            <Border x:Name="RulesEmpty" Classes="SubEmpty" IsVisible="False">
+                <StackPanel VerticalAlignment="Center" Spacing="12">
+                    <Border Classes="SubEmptyTile">
+                        <PathIcon Data="{DynamicResource Geo.Sub.Routing}" />
+                    </Border>
+                    <TextBlock Classes="SubEmptyTitle" Text="{loc:T Routing_NoRules}" />
+                    <TextBlock Classes="SubEmptyText" Text="{loc:T Routing_DefaultRulesHint}" />
+                </StackPanel>
+            </Border>
+
+            <!--  ==================== Обслуживание ====================  -->
+            <TextBlock Classes="SubGroupLabel" Text="{loc:T Routing_Maintenance}" />
+            <Border Classes="SubCard">
+                <Border x:Name="RowResetRules" Classes="SubRow tap">
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                        <Border Grid.Column="0" Classes="SubTile">
+                            <PathIcon Data="{DynamicResource Geo.Sub.Refresh}" />
+                        </Border>
+                        <StackPanel
+                            Grid.Column="1"
+                            Margin="16,0,12,0"
+                            VerticalAlignment="Center">
                             <TextBlock
-                                Margin="0,4,0,0"
-                                Classes="Subtitle"
+                                x:Name="txtResetRules"
+                                Classes="SubName accent"
+                                Text="{loc:T Routing_DefaultRules}" />
+                            <TextBlock
+                                Classes="SubSub"
                                 Text="{loc:T Routing_DefaultRulesHint}"
                                 TextWrapping="Wrap" />
                         </StackPanel>
-                        <Button
-                            x:Name="btnResetRules"
-                            Grid.Column="1"
-                            VerticalAlignment="Center"
-                            Content="{loc:T Routing_Reset}" />
+                        <TextBlock
+                            x:Name="txtResetState"
+                            Grid.Column="2"
+                            Classes="SubValue" />
                     </Grid>
                 </Border>
-
-            </StackPanel>
-        </ScrollViewer>
-    </DockPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
 </UserControl>

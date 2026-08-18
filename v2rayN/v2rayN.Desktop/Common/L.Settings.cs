@@ -52,6 +52,7 @@ public sealed partial class L
         Add("Settings_SecInterface", "Интерфейс", "Interface");
         Add("Settings_Appearance", "Оформление", "Appearance");
         Add("Settings_Language", "Язык", "Language");
+        Add("Settings_FontSize", "Размер шрифта", "Font size");
         Add("Settings_UiScale", "Масштаб интерфейса", "Interface scale");
         Add("Settings_Autostart", "Запуск с системой", "Launch with the system");
         Add("Settings_AutostartHint", "Открывать при входе в систему", "Open when you sign in");
@@ -182,7 +183,7 @@ public sealed partial class L
         Add("UrlSchemes_RemoveFailed", "Не удалось удалить: ", "Removal failed: ");
 
         // ── ProviderSettingsPage ──
-        Add("Provider_Title", "Настройки провайдеров", "Provider settings");
+        Add("Provider_Title", "Настройки подписок", "Subscription settings");
         Add("Provider_SecUpdates", "Обновление", "Updates");
         Add("Provider_AutoUpdate", "Автообновление", "Auto-update");
         Add("Provider_AutoUpdateHint", "Автоматически обновлять подписки", "Update subscriptions automatically");
@@ -235,6 +236,7 @@ public sealed partial class L
         Add("Routing_Rules", "Правила", "Rules");
         Add("Routing_AddRule", "Добавить правило", "Add a rule");
         Add("Routing_NoRules", "Правил пока нет", "No rules yet");
+        Add("Routing_Resetting", "Пересоздаём…", "Rebuilding…");
 
         // ── Файлы ресурсов ──
         Add("Geo_Source", "Источник Geo-файлов", "Geo file source");
@@ -262,6 +264,10 @@ public sealed partial class L
         Add("Update_Check", "Проверить обновление", "Check for updates");
         Add("Update_Checking", "Проверяем…", "Checking…");
         Add("Update_Components", "Компоненты", "Components");
+        Add("Update_Now", "Обновить сейчас", "Update now");
+        Add("Update_App", "Приложение", "Application");
+        Add("Update_GeoFiles", "Geo-базы", "Geo databases");
+        Add("Update_Foot", "departament {0}", "departament {0}");
 
         // ── Резервное копирование ──
         Add("Backup_SecData", "Данные", "Data");
@@ -273,6 +279,14 @@ public sealed partial class L
         Add("Backup_WebDav", "Настройки WebDAV", "WebDAV settings");
         Add("Backup_WebDavNotSet", "Не настроено", "Not configured");
         Add("Backup_WebDavUrl", "Адрес сервера", "Server address");
+        Add("Backup_WebDavIntro", "Копия хранится на вашем сервере WebDAV", "The backup is kept on your own WebDAV server");
+        Add("Backup_WebDavServer", "Сервер", "Server");
+        Add("Backup_WebDavFolder", "Папка", "Folder");
+        Add("Backup_SecActions", "Действия", "Actions");
+        Add("Backup_WebDavCheck", "Проверить подключение", "Test the connection");
+        Add("Backup_CloudUpload", "Выгрузить копию", "Upload a backup");
+        Add("Backup_CloudRestore", "Восстановить из облака", "Restore from the cloud");
+        Add("Backup_Working", "Выполняем…", "Working…");
 
         // ── Схемы URL-адресов ──
         Add("UrlSchemes_Intro", "Быстрые команды для запуска из браузера и ярлыков", "Quick commands to launch from the browser and shortcuts");
@@ -281,6 +295,7 @@ public sealed partial class L
         Add("UrlSchemes_SubHint", "Добавить подписку по ссылке", "Add a subscription by link");
         Add("UrlSchemes_Copied", "Схема скопирована", "Scheme copied");
         Add("UrlSchemes_Commands", "Команды", "Commands");
+        Add("UrlSchemes_RegisterRow", "Открывать ссылки depv://", "Open depv:// links");
 
         // ── О приложении ──
         Add("About_SecApp", "Приложение", "Application");
@@ -294,5 +309,10 @@ public sealed partial class L
         Add("About_Privacy", "Политика конфиденциальности", "Privacy policy");
         Add("About_CheckUpdates", "Проверить обновления", "Check for updates");
         Add("About_Copied", "Скопировано", "Copied");
+        Add("About_Site", "Сайт departament", "departament website");
+        Add("About_System", "Система", "System");
+
+        // ── Настройки подписок ──
+        Add("Provider_Intro", "Как приложение обновляет подписки и представляется серверу", "How the app updates subscriptions and identifies itself to the server");
     }
 }

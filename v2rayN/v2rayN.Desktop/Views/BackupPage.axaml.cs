@@ -3,10 +3,17 @@ using v2rayN.Desktop.Common;
 namespace v2rayN.Desktop.Views;
 
 /// <summary>
-/// «Резервное копирование» — in-app суб-страница (раньше отдельное окно). Real: exports the whole config
-/// directory to a .zip and restores from one, reusing the engine's <see cref="BackupAndRestoreViewModel"/>
-/// (LocalBackup / LocalRestore). Restore makes its own safety backup first, then relaunches the app. No
-/// core interaction. Стрелка «назад» поднимает <see cref="BackRequested"/>.
+/// «Резервное копирование» — подэкран настроек по единому лекалу (screens.md «Подэкраны»):
+/// «Данные» (сохранить копию / восстановить из файла) → «Облако» (настройки WebDAV).
+///
+/// Real: пакует весь каталог конфигурации в .zip и восстанавливает из него движковым
+/// <see cref="BackupAndRestoreViewModel"/> (LocalBackup / LocalRestore). Восстановление сначала
+/// делает собственную страховочную копию, затем перезапускает приложение. Ядро не трогается.
+///
+/// Строка «Настройки WebDAV» кладёт <see cref="BackupAndRestoreView"/> на ТОТ ЖЕ стек оболочки —
+/// подэкран поверх подэкрана, без единого отдельного окна. Подпись строки — живое состояние
+/// (адрес сервера либо «Не настроено»), поэтому по возврате она перечитывается.
+/// Стрелка «назад» поднимает <see cref="BackRequested"/>.
 /// </summary>
 public partial class BackupPage : UserControl, ISubPage
 {
@@ -19,9 +26,37 @@ public partial class BackupPage : UserControl, ISubPage
     {
         InitializeComponent();
 
+        RefreshWebDavState();
+
         btnBack.Click += (_, _) => BackRequested?.Invoke(this, EventArgs.Empty);
-        btnExport.Click += async (_, _) => await ExportAsync();
-        btnImport.Click += async (_, _) => await ImportAsync();
+        RowExport.Tapped += async (_, _) => await ExportAsync();
+        RowImport.Tapped += async (_, _) => await ImportAsync();
+        RowWebDav.Tapped += (_, _) => OpenWebDav();
+    }
+
+    private void OpenWebDav()
+    {
+        if (TopLevel.GetTopLevel(this) is not MainWindow main)
+        {
+            return;
+        }
+        var page = new BackupAndRestoreView();
+        // Подпись строки — живое состояние: после правки адреса она обязана перечитаться.
+        page.BackRequested += (_, _) => RefreshWebDavState();
+        main.OpenSubPage(page);
+    }
+
+    /// <summary>Показываем ХОСТ, а не полный адрес: строка узкая, а из «https://…/remote.php/dav/»
+    /// опознают сервер по хосту.</summary>
+    private void RefreshWebDavState()
+    {
+        var url = AppManager.Instance.Config.WebDavItem?.Url;
+        if (url.IsNullOrEmpty())
+        {
+            txtWebDavState.Text = L.T("Backup_WebDavNotSet");
+            return;
+        }
+        txtWebDavState.Text = Uri.TryCreate(url, UriKind.Absolute, out var uri) ? uri.Host : url!;
     }
 
     private async Task ExportAsync()

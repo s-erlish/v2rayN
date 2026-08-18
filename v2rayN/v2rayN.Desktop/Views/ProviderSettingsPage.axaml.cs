@@ -4,16 +4,25 @@ using v2rayN.Desktop.Common;
 namespace v2rayN.Desktop.Views;
 
 /// <summary>
-/// «Настройки провайдеров» — in-app суб-страница (раньше отдельное окно). Real, persisted:
-///   • Автообновление + интервал → <c>GuiItem.AutoUpdateInterval</c> (0 = off; drives the updater);
-///   • User-Agent → <c>CoreBasicItem.DefUserAgent</c> (the UA the core sends on outbounds);
-///   • HWID → shows the real device id (<c>AuthTokenStore.DeviceId()</c>) with copy-to-clipboard.
-/// No core start (settings-only); the interval feeds the background sub-updater on save. Уход со
-/// страницы сохраняет и поднимает <see cref="BackRequested"/>.
+/// «Настройки подписок» — подэкран настроек по единому лекалу (screens.md «Подэкраны»):
+/// «Обновление» (автообновление + зависимая строка интервала) → «Сеть» (идентификатор устройства,
+/// User-Agent).
+///
+/// Этого экрана в дизайн-пакете нет вовсе — это пробел пакета, а не указание его убрать: всё, что
+/// он показывает, реально и сохраняется:
+///   • Автообновление + интервал → <c>GuiItem.AutoUpdateInterval</c> (0 = выключено; им живёт
+///     фоновый обновлятель подписок);
+///   • User-Agent → <c>CoreBasicItem.DefUserAgent</c> (его ядро шлёт на исходящих);
+///   • Идентификатор устройства → настоящий <c>AuthTokenStore.DeviceId()</c> с копированием.
+/// Ядро не запускается (экран только настроек); интервал подхватывается обновлятором при
+/// сохранении. Уход со страницы сохраняет и поднимает <see cref="BackRequested"/>.
 /// </summary>
 public partial class ProviderSettingsPage : UserControl, ISubPage
 {
-    private static readonly int[] IntervalOptions = { 0, 6, 12, 24, 48 };
+    // 0 = выключено; остальное — часы. Первый пункт окошка соответствует «выключено», поэтому при
+    // включённом тумблере он недостижим: тумблер и есть выключатель.
+    private static readonly int[] IntervalOptions = { 6, 12, 24, 48 };
+    private const int DefaultInterval = 24;
 
     private readonly Config _config;
     private bool _saved;
@@ -26,38 +35,55 @@ public partial class ProviderSettingsPage : UserControl, ISubPage
 
         _config = AppManager.Instance.Config;
 
-        cmbInterval.ItemsSource = IntervalOptions.Select(h => h == 0 ? L.T("Common_Off") : L.F("Common_HoursShort", h)).ToList();
         var cur = _config.GuiItem.AutoUpdateInterval;
         var idx = Array.IndexOf(IntervalOptions, cur);
-        cmbInterval.SelectedIndex = idx < 0 ? 0 : idx;
+
+        IntervalPopup.Options = IntervalOptions.Select(h => L.F("Common_HoursShort", h)).ToList();
+        IntervalPopup.SelectedIndex = idx < 0 ? Array.IndexOf(IntervalOptions, DefaultInterval) : idx;
+        IntervalPopup.Picked += (_, _) => UpdateIntervalValue();
+        IntervalPopup.GetObservable(ValuePopup.IsOpenProperty).Subscribe(open =>
+        {
+            SubPageUtil.SetClass(IntervalCaret, "open", open);
+            SubPageUtil.SetClass(txtIntervalValue, "open", open);
+        });
+        RowInterval.Tapped += (_, _) => IntervalPopup.Toggle();
+        UpdateIntervalValue();
+
         switchAutoUpdate.IsChecked = cur > 0;
+        SetIntervalVisible(cur > 0);
+        switchAutoUpdate.IsCheckedChanged += (_, _) => SetIntervalVisible(switchAutoUpdate.IsChecked == true);
+
+        // Тап по строке-тумблеру переключает тумблер — но не когда источником тапа был он сам.
+        RowAutoUpdate.Tapped += (_, e) =>
+        {
+            if (!SubPageUtil.OriginatedIn<ToggleSwitch>(e.Source))
+            {
+                switchAutoUpdate.IsChecked = switchAutoUpdate.IsChecked != true;
+            }
+        };
 
         txtUserAgent.Text = _config.CoreBasicItem.DefUserAgent ?? string.Empty;
         txtHwid.Text = SafeDeviceId();
-
-        switchAutoUpdate.IsCheckedChanged += (_, _) =>
-        {
-            // Toggling off zeroes the interval; toggling on restores a sane 24 ч if it was off.
-            if (switchAutoUpdate.IsChecked == true && cmbInterval.SelectedIndex == 0)
-            {
-                cmbInterval.SelectedIndex = Array.IndexOf(IntervalOptions, 24);
-            }
-            else if (switchAutoUpdate.IsChecked == false)
-            {
-                cmbInterval.SelectedIndex = 0;
-            }
-        };
-        cmbInterval.SelectionChanged += (_, _) =>
-        {
-            switchAutoUpdate.IsChecked = cmbInterval.SelectedIndex > 0;
-        };
-
-        btnCopyHwid.Click += async (_, _) =>
-        {
-            await AvaUtils.SetClipboardData(this, txtHwid.Text ?? string.Empty);
-        };
+        btnCopyHwid.Click += async (_, _) => await SubPageUtil.CopyAsync(this, txtHwid.Text);
 
         btnBack.Click += async (_, _) => await SaveAndBackAsync();
+    }
+
+    private void UpdateIntervalValue()
+    {
+        var i = IntervalPopup.SelectedIndex;
+        txtIntervalValue.Text = i >= 0 && i < IntervalOptions.Length ? L.F("Common_HoursShort", IntervalOptions[i]) : string.Empty;
+    }
+
+    /// <summary>Строка интервала существует только при включённом автообновлении. Закрываем окошко
+    /// при скрытии: иначе оно осталось бы висеть над исчезнувшей строкой.</summary>
+    private void SetIntervalVisible(bool on)
+    {
+        if (!on)
+        {
+            IntervalPopup.Close();
+        }
+        intervalRow.IsVisible = on;
     }
 
     private async Task SaveAndBackAsync()
@@ -68,11 +94,11 @@ public partial class ProviderSettingsPage : UserControl, ISubPage
         }
         _saved = true;
 
-        var i = cmbInterval.SelectedIndex;
-        _config.GuiItem.AutoUpdateInterval = i >= 0 && i < IntervalOptions.Length ? IntervalOptions[i] : 0;
+        var i = IntervalPopup.SelectedIndex;
+        var hours = i >= 0 && i < IntervalOptions.Length ? IntervalOptions[i] : DefaultInterval;
+        _config.GuiItem.AutoUpdateInterval = switchAutoUpdate.IsChecked == true ? hours : 0;
 
-        var ua = txtUserAgent.Text?.Trim() ?? string.Empty;
-        _config.CoreBasicItem.DefUserAgent = ua;
+        _config.CoreBasicItem.DefUserAgent = txtUserAgent.Text?.Trim() ?? string.Empty;
 
         await ConfigHandler.SaveConfig(_config);
         BackRequested?.Invoke(this, EventArgs.Empty);

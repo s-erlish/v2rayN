@@ -4,12 +4,15 @@ using v2rayN.Desktop.Common;
 namespace v2rayN.Desktop.Views;
 
 /// <summary>
-/// «Схемы URL-адресов» — in-app суб-страница (раньше отдельное окно). Real on Windows: registers/unregisters
-/// the <c>depv://</c> protocol under HKCU\Software\Classes (per-user, no admin) so the OS launches
-/// departament for those links, and shows live registration status. Each scheme row copies to the clipboard.
-/// No core interaction. Стрелка «назад» поднимает <see cref="BackRequested"/>.
-/// NOTE: dispatching the launched command into the running app is handled by the app-startup layer
-/// (argument parsing) — this screen owns the OS-level protocol registration + discovery.
+/// «Схемы URL-адресов» — подэкран настроек по единому лекалу (screens.md «Подэкраны»): список
+/// команд (тап копирует) → регистрация схемы в системе.
+///
+/// Real на Windows: регистрирует/снимает протокол <c>depv://</c> в HKCU\Software\Classes (per-user,
+/// без прав администратора), чтобы система запускала departament по таким ссылкам, и показывает
+/// живое состояние регистрации. Ядро не трогается.
+/// NOTE: доставка запущенной команды в работающее приложение — забота слоя старта (разбор
+/// аргументов); этот экран владеет регистрацией протокола в ОС и её обнаружением.
+/// Стрелка «назад» поднимает <see cref="BackRequested"/>.
 /// </summary>
 public partial class UrlSchemesPage : UserControl, ISubPage
 {
@@ -20,56 +23,94 @@ public partial class UrlSchemesPage : UserControl, ISubPage
     // «depv» does not match. Registered alongside «depv» so «Войти через сайт» can round-trip back.
     private const string AuthScheme = "departamentvpn";
 
+    private bool _suppressSwitch;
+
     public event EventHandler? BackRequested;
 
     public UrlSchemesPage()
     {
         InitializeComponent();
 
-        listSchemes.ItemsSource = new List<SchemeRow>
+        // Порядок — от самой частой команды к самой редкой: сначала то, ради чего схему заводят.
+        var schemes = new List<(string Scheme, string Hint)>
         {
-            new("depv://connect", L.T("UrlSchemes_StartTunnel")),
-            new("depv://open", L.T("UrlSchemes_OpenApp")),
-            new("depv://disconnect", L.T("UrlSchemes_Stop")),
-            new("depv://close", L.T("UrlSchemes_Stop")),
-            new("depv://toggle", L.T("UrlSchemes_Toggle")),
-            new("depv://import/{base64}", L.T("UrlSchemes_Import")),
-            new("depv://add/{url}", L.T("UrlSchemes_AddByUrl")),
-            new("departamentvpn://auth", L.T("Common_SignInWebsite")),
+            ("depv://connect", L.T("UrlSchemes_ConnectHint")),
+            ("depv://disconnect", L.T("UrlSchemes_DisconnectHint")),
+            ("depv://toggle", L.T("UrlSchemes_Toggle")),
+            ("depv://open", L.T("UrlSchemes_OpenApp")),
+            ("depv://close", L.T("UrlSchemes_Stop")),
+            ("depv://add/{url}", L.T("UrlSchemes_SubHint")),
+            ("depv://import/{base64}", L.T("UrlSchemes_Import")),
+            ("departamentvpn://auth", L.T("Common_SignInWebsite")),
         };
+        listSchemes.ItemsSource = schemes.Select((s, i) => new SchemeRow(s.Scheme, s.Hint, i > 0)).ToList();
 
         btnBack.Click += (_, _) => BackRequested?.Invoke(this, EventArgs.Empty);
-        btnRegister.Click += (_, _) => Register();
-        btnUnregister.Click += (_, _) => Unregister();
+
+        // Тап по строке переключает тумблер — но не когда источником тапа был он сам.
+        RowRegister.Tapped += (_, e) =>
+        {
+            if (!SubPageUtil.OriginatedIn<ToggleSwitch>(e.Source) && switchRegister.IsEnabled)
+            {
+                switchRegister.IsChecked = switchRegister.IsChecked != true;
+            }
+        };
+        switchRegister.IsCheckedChanged += (_, _) =>
+        {
+            if (_suppressSwitch)
+            {
+                return;
+            }
+            if (switchRegister.IsChecked == true)
+            {
+                Register();
+            }
+            else
+            {
+                Unregister();
+            }
+        };
 
         RefreshStatus();
     }
 
-    private void OnCopyClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    private void OnSchemeRowTapped(object? sender, TappedEventArgs e)
     {
-        if (sender is Button { Tag: string scheme })
+        if (sender is Border { DataContext: SchemeRow row })
         {
-            _ = CopyAsync(scheme);
+            _ = CopyAsync(row.Scheme);
         }
     }
 
     private async Task CopyAsync(string text)
     {
-        await AvaUtils.SetClipboardData(this, text);
+        await SubPageUtil.CopyAsync(this, text);
+        txtCopyState.Text = L.T("UrlSchemes_Copied");
     }
 
+    /// <summary>Приводит тумблер и подпись к настоящему состоянию реестра. Ставим тумблер под
+    /// заглушкой <c>_suppressSwitch</c>: иначе синхронизация состояния сама вызвала бы регистрацию.</summary>
     private void RefreshStatus()
     {
-        if (!Utils.IsWindows())
+        _suppressSwitch = true;
+        try
         {
-            txtStatus.Text = L.T("UrlSchemes_WindowsOnly");
-            btnRegister.IsEnabled = false;
-            btnUnregister.IsEnabled = false;
-            return;
+            if (!Utils.IsWindows())
+            {
+                txtStatus.Text = L.T("UrlSchemes_WindowsOnly");
+                switchRegister.IsChecked = false;
+                switchRegister.IsEnabled = false;
+                RowRegister.Classes.Remove("tap");
+                return;
+            }
+            var reg = IsRegistered();
+            switchRegister.IsChecked = reg;
+            txtStatus.Text = reg ? L.T("UrlSchemes_Registered") : L.T("UrlSchemes_NotRegistered");
         }
-        txtStatus.Text = IsRegistered()
-            ? L.T("UrlSchemes_Registered")
-            : L.T("UrlSchemes_NotRegistered");
+        finally
+        {
+            _suppressSwitch = false;
+        }
     }
 
     private static bool IsRegistered()
@@ -103,13 +144,13 @@ public partial class UrlSchemesPage : UserControl, ISubPage
             // Register both the tunnel-action scheme and the browser→app sign-in return scheme.
             RegisterScheme(Scheme, exe!);
             RegisterScheme(AuthScheme, exe!);
-            txtStatus.Text = L.T("UrlSchemes_Registered");
         }
         catch (Exception ex)
         {
             txtStatus.Text = L.T("UrlSchemes_RegisterFailed") + ex.Message;
+            return;
         }
-        RefreshStatusButtons();
+        RefreshStatus();
     }
 
     private static void RegisterScheme(string scheme, string exe)
@@ -137,21 +178,16 @@ public partial class UrlSchemesPage : UserControl, ISubPage
         {
             Registry.CurrentUser.DeleteSubKeyTree($@"Software\Classes\{Scheme}", throwOnMissingSubKey: false);
             Registry.CurrentUser.DeleteSubKeyTree($@"Software\Classes\{AuthScheme}", throwOnMissingSubKey: false);
-            txtStatus.Text = L.T("UrlSchemes_RemovedOk");
         }
         catch (Exception ex)
         {
             txtStatus.Text = L.T("UrlSchemes_RemoveFailed") + ex.Message;
+            return;
         }
-        RefreshStatusButtons();
+        RefreshStatus();
     }
 
-    private void RefreshStatusButtons()
-    {
-        var reg = IsRegistered();
-        btnRegister.IsEnabled = !reg;
-        btnUnregister.IsEnabled = reg;
-    }
-
-    public sealed record SchemeRow(string Scheme, string Hint);
+    /// <summary>Строка списка: схема, пояснение и флаг разделителя (он рисуется перед каждой строкой,
+    /// кроме первой).</summary>
+    public sealed record SchemeRow(string Scheme, string Hint, bool ShowDivider);
 }

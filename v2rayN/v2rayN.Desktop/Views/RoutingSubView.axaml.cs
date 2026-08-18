@@ -4,15 +4,18 @@ using v2rayN.Desktop.Common;
 namespace v2rayN.Desktop.Views;
 
 /// <summary>
-/// «Маршрутизация» — новая Incy in-app суб-страница (заменяет легаси Semi-окно
-/// <c>RoutingSettingWindow</c>). Русская, в стиле Incy: список наборов правил с отметкой активного
-/// (тап = сделать активным), выбор стратегии доменов и сброс к стандартным правилам.
+/// «Маршрутизация» — подэкран настроек по единому лекалу (screens.md «Подэкраны»):
+/// «Доменная стратегия» (окошко у значения) → «Наборы правил» (тап делает набор активным) →
+/// «Обслуживание» (пересоздать встроенные наборы).
 ///
-/// Логика НЕ дублируется: DataContext — тот же движковый <see cref="RoutingSettingViewModel"/>, что
-/// стоял за старым окном, поэтому все изменения пишутся в тот же реальный конфиг
-/// (SetDefaultRouting / InitRouting / DomainStrategy → ConfigHandler.SaveConfig). Редактирование
-/// отдельных правил (что открывало ещё одно окно) здесь намеренно не показываем — на суб-странице
-/// живут только основные, самодостаточные элементы; никаких отдельных окон.
+/// Заменяет легаси Semi-окно <c>RoutingSettingWindow</c>. Логика НЕ дублируется: DataContext — тот
+/// же движковый <see cref="RoutingSettingViewModel"/>, что стоял за окном, поэтому изменения пишутся
+/// в тот же реальный конфиг (SetDefaultRouting / InitRouting / DomainStrategy → SaveConfig).
+///
+/// В прототипе на этом экране лежат три строки правил — proxy / direct / block. В ветке правила
+/// живут НАБОРАМИ, и отдельного правила отсюда не открыть: его редактор был отдельным окном, а
+/// отдельных окон в приложении больше нет. Дорисовывать три фиксированные строки поверх наборов не
+/// стали — это соврало бы про устройство экрана (вопрос владельцу).
 ///
 /// OFF-модель: при уходе со страницы перестраиваем маршруты и меню, и применяем вживую только если
 /// ядро уже запущено. Стрелка «назад» поднимает <see cref="BackRequested"/>.
@@ -20,8 +23,8 @@ namespace v2rayN.Desktop.Views;
 public partial class RoutingSubView : UserControl, ISubPage
 {
     // Технические значения Xray-стратегии → дружелюбные подписи (значение хранится «как есть»).
-    // Подпись берётся из локали (L.T) — суб-страница строится заново при каждом открытии, поэтому
-    // язык, выбранный в SettingsView, применяется к комбо на следующем входе.
+    // Подпись берётся из локали (L.T) — подэкран строится заново при каждом открытии, поэтому
+    // язык, выбранный в настройках, применяется к окошку на следующем входе.
     private static readonly (string Value, string LabelKey)[] StrategyOptions =
     [
         ("AsIs", "Routing_DsAsIs"),
@@ -31,8 +34,8 @@ public partial class RoutingSubView : UserControl, ISubPage
 
     private readonly Config _config;
     private readonly RoutingSettingViewModel _vm;
-    private bool _suppressStrategy = true;
     private bool _saved;
+    private bool _resetting;
 
     public event EventHandler? BackRequested;
 
@@ -44,49 +47,74 @@ public partial class RoutingSubView : UserControl, ISubPage
         _vm = new RoutingSettingViewModel();
         DataContext = _vm;
 
-        listRoutings.ItemsSource = _vm.RoutingItems;
+        RefreshRuleSets();
 
-        cmbStrategy.ItemsSource = StrategyOptions.Select(x => L.T(x.LabelKey)).ToList();
+        // --- Доменная стратегия: общее окошко у значения ---
+        StrategyPopup.Options = StrategyOptions.Select(x => L.T(x.LabelKey)).ToList();
         var curIdx = Array.FindIndex(StrategyOptions, x => x.Value == _vm.DomainStrategy);
-        cmbStrategy.SelectedIndex = curIdx < 0 ? 0 : curIdx;
-        _suppressStrategy = false;
-        cmbStrategy.SelectionChanged += OnStrategyChanged;
+        StrategyPopup.SelectedIndex = curIdx < 0 ? 0 : curIdx;
+        UpdateStrategyValue();
 
-        btnResetRules.Click += async (_, _) => await ResetRulesAsync();
+        StrategyPopup.Picked += (_, idx) =>
+        {
+            if (idx >= 0 && idx < StrategyOptions.Length)
+            {
+                // Присваивание Reactive-свойству VM само сохраняет конфиг (его подписка на DomainStrategy).
+                _vm.DomainStrategy = StrategyOptions[idx].Value;
+            }
+            UpdateStrategyValue();
+        };
+        StrategyPopup.GetObservable(ValuePopup.IsOpenProperty).Subscribe(open =>
+        {
+            SubPageUtil.SetClass(StrategyCaret, "open", open);
+            SubPageUtil.SetClass(txtStrategyValue, "open", open);
+        });
+        RowStrategy.Tapped += (_, _) => StrategyPopup.Toggle();
+
+        RowResetRules.Tapped += async (_, _) => await ResetRulesAsync();
         btnBack.Click += async (_, _) => await BackAsync();
+    }
+
+    private void UpdateStrategyValue()
+    {
+        var i = StrategyPopup.SelectedIndex;
+        txtStrategyValue.Text = i >= 0 && i < StrategyOptions.Length ? L.T(StrategyOptions[i].LabelKey) : string.Empty;
+    }
+
+    /// <summary>Перечитывает наборы правил из модели. Разделитель рисуется перед каждой строкой,
+    /// кроме первой, поэтому строки заворачиваются в обёртку со своим флагом.</summary>
+    private void RefreshRuleSets()
+    {
+        var rows = _vm.RoutingItems.Select((item, i) => new RuleSetRow(item, i > 0)).ToList();
+        listRoutings.ItemsSource = rows;
+
+        // Пустая карточка читается как поломка — вместо неё пустое состояние.
+        var any = rows.Count > 0;
+        listRoutings.IsVisible = any;
+        RulesEmpty.IsVisible = !any;
     }
 
     /// <summary>Тап по строке набора → сделать его активным по умолчанию (движковый SetDefaultRouting).</summary>
     private async void OnRoutingRowTapped(object? sender, TappedEventArgs e)
     {
-        if (sender is Border { DataContext: RoutingItemModel item })
+        if (sender is Border { DataContext: RuleSetRow row } && !row.Item.IsActive)
         {
-            if (item.IsActive)
-            {
-                return;
-            }
-            _vm.SelectedSource = item;
+            _vm.SelectedSource = row.Item;
             await _vm.RoutingAdvancedSetDefault();
+            RefreshRuleSets();
         }
     }
 
-    private void OnStrategyChanged(object? sender, SelectionChangedEventArgs e)
+    /// <summary>Пока идёт пересоздание, действие теряет акцент и не откликается: акцентный текст
+    /// читается как «нажми», а нажимать в этот момент нечего.</summary>
+    private async Task ResetRulesAsync()
     {
-        if (_suppressStrategy)
+        if (_resetting)
         {
             return;
         }
-        var idx = cmbStrategy.SelectedIndex;
-        if (idx >= 0 && idx < StrategyOptions.Length)
-        {
-            // Присваивание Reactive-свойству VM само сохраняет конфиг (его подписка на DomainStrategy).
-            _vm.DomainStrategy = StrategyOptions[idx].Value;
-        }
-    }
-
-    private async Task ResetRulesAsync()
-    {
-        btnResetRules.IsEnabled = false;
+        _resetting = true;
+        SetResetBusy(true);
         try
         {
             // Пересоздаёт встроенные наборы правил и обновляет список (движковая команда).
@@ -94,8 +122,17 @@ public partial class RoutingSubView : UserControl, ISubPage
         }
         finally
         {
-            btnResetRules.IsEnabled = true;
+            _resetting = false;
+            SetResetBusy(false);
+            RefreshRuleSets();
         }
+    }
+
+    private void SetResetBusy(bool busy)
+    {
+        txtResetRules.Classes.Set("accent", !busy);
+        RowResetRules.Classes.Set("tap", !busy);
+        txtResetState.Text = busy ? L.T("Routing_Resetting") : string.Empty;
     }
 
     private async Task BackAsync()
@@ -123,6 +160,21 @@ public partial class RoutingSubView : UserControl, ISubPage
 
     private static bool IsCoreRunning() =>
         AppManager.Instance.IsRunningCore(ECoreType.Xray) || AppManager.Instance.IsRunningCore(ECoreType.sing_box);
+
+    /// <summary>Обёртка строки списка: сам набор плюс флаг разделителя (он рисуется перед каждой
+    /// строкой, кроме первой).</summary>
+    public sealed class RuleSetRow
+    {
+        public RuleSetRow(RoutingItemModel item, bool showDivider)
+        {
+            Item = item;
+            ShowDivider = showDivider;
+        }
+
+        public RoutingItemModel Item { get; }
+
+        public bool ShowDivider { get; }
+    }
 }
 
 /// <summary>Форматирует число правил через язык-зависимый шаблон «{0} правил» / «{0} rules» (L.F).

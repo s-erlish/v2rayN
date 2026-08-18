@@ -4,63 +4,76 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:dd="clr-namespace:v2rayN.Desktop.DesignData"
+    xmlns:loc="clr-namespace:v2rayN.Desktop.Common"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:resx="clr-namespace:ServiceLib.Resx;assembly=ServiceLib"
     xmlns:vms="clr-namespace:v2rayN.Desktop.ViewModels"
     x:DataType="vms:ThemeSettingViewModel"
     Design.DataContext="{x:Static dd:DesignData.ThemeSetting}"
     mc:Ignorable="d">
+
+    <!--
+        Легаси-виджет строки состояния: кнопка с выпадающим списком «Оформление · Размер шрифта ·
+        Язык». В Incy-оболочке эти три значения живут строками-окошками на вкладке «Настройки», и
+        оболочка этот виджет не размещает. Файл сохранён (правило проекта — уточнять, а не удалять)
+        и приведён к общему языку: та же иконочная кнопка 40, та же карточка и те же строки 56, что
+        на подэкранах, и подписи из локали вместо англоязычного ResUI.
+    -->
+
     <UserControl.Styles>
-        <Style Selector="TextBlock">
-            <Setter Property="Width" Value="100" />
-        </Style>
+        <StyleInclude Source="avares://departament/Assets/SubScreenStyles.axaml" />
         <Style Selector="ComboBox">
-            <Setter Property="Width" Value="130" />
+            <Setter Property="MinWidth" Value="150" />
+            <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
     </UserControl.Styles>
 
-    <Button Margin="{StaticResource MarginLr8}" Classes="IconButton">
+    <Button Classes="IconButton40" ToolTip.Tip="{loc:T Settings_Appearance}">
         <Button.Content>
-            <PathIcon Data="{StaticResource SemiIconMore}">
-                <PathIcon.RenderTransform>
-                    <RotateTransform Angle="90" />
-                </PathIcon.RenderTransform>
-            </PathIcon>
+            <PathIcon Data="{DynamicResource Geo.Nav.Settings}" />
         </Button.Content>
         <Button.Flyout>
             <Flyout>
-                <StackPanel Margin="{StaticResource MarginTb8}">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock
-                            Margin="{StaticResource Margin4}"
-                            VerticalAlignment="Center"
-                            Text="{x:Static resx:ResUI.TbSettingsTheme}" />
-                        <ComboBox
-                            x:Name="cmbCurrentTheme"
-                            Margin="{StaticResource Margin4}"
-                            HorizontalAlignment="Center" />
+                <Border Classes="SubCard" Width="380">
+                    <StackPanel>
+                        <Border Classes="SubRow">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock
+                                    Grid.Column="0"
+                                    Margin="0,0,12,0"
+                                    VerticalAlignment="Center"
+                                    Classes="SubName"
+                                    Text="{loc:T Settings_Appearance}" />
+                                <ComboBox x:Name="cmbCurrentTheme" Grid.Column="1" />
+                            </Grid>
+                        </Border>
+
+                        <Border Classes="SubDivider" />
+                        <Border Classes="SubRow">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock
+                                    Grid.Column="0"
+                                    Margin="0,0,12,0"
+                                    VerticalAlignment="Center"
+                                    Classes="SubName"
+                                    Text="{loc:T Settings_FontSize}" />
+                                <ComboBox x:Name="cmbCurrentFontSize" Grid.Column="1" />
+                            </Grid>
+                        </Border>
+
+                        <Border Classes="SubDivider" />
+                        <Border Classes="SubRow">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock
+                                    Grid.Column="0"
+                                    Margin="0,0,12,0"
+                                    VerticalAlignment="Center"
+                                    Classes="SubName"
+                                    Text="{loc:T Settings_Language}" />
+                                <ComboBox x:Name="cmbCurrentLanguage" Grid.Column="1" />
+                            </Grid>
+                        </Border>
                     </StackPanel>
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock
-                            Margin="{StaticResource Margin4}"
-                            VerticalAlignment="Center"
-                            Text="{x:Static resx:ResUI.TbSettingsFontSize}" />
-                        <ComboBox
-                            x:Name="cmbCurrentFontSize"
-                            Margin="{StaticResource Margin4}"
-                            HorizontalAlignment="Center" />
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock
-                            Margin="{StaticResource Margin4}"
-                            VerticalAlignment="Center"
-                            Text="{x:Static resx:ResUI.TbSettingsLanguage}" />
-                        <ComboBox
-                            x:Name="cmbCurrentLanguage"
-                            Margin="{StaticResource Margin4}"
-                            HorizontalAlignment="Center" />
-                    </StackPanel>
-                </StackPanel>
+                </Border>
             </Flyout>
         </Button.Flyout>
     </Button>

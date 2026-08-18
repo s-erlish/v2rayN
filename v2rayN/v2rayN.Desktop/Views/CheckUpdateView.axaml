@@ -3,93 +3,145 @@
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:dd="clr-namespace:v2rayN.Desktop.DesignData"
+    xmlns:loc="clr-namespace:v2rayN.Desktop.Common"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:resx="clr-namespace:ServiceLib.Resx;assembly=ServiceLib"
-    xmlns:vms="clr-namespace:ServiceLib.ViewModels;assembly=ServiceLib"
-    d:DesignHeight="600"
     d:DesignWidth="800"
-    x:DataType="vms:CheckUpdateViewModel"
-    Design.DataContext="{x:Static dd:DesignData.CheckUpdate}"
+    d:DesignHeight="620"
     mc:Ignorable="d">
 
-    <DockPanel Margin="{StaticResource Margin8}">
-        <Border
-            Margin="{StaticResource Margin4}"
-            VerticalAlignment="Center"
-            DockPanel.Dock="Bottom"
-            Theme="{DynamicResource CardBorder}">
+    <!--  Фон НЕ задан: подэкран прозрачный, шелл под ним погашен (ApplySubPageShellGate).  -->
 
-            <StackPanel
-                Margin="{StaticResource Margin4}"
-                HorizontalAlignment="Center"
-                Orientation="Horizontal">
+    <UserControl.Styles>
+        <StyleInclude Source="avares://departament/Assets/SubScreenStyles.axaml" />
+    </UserControl.Styles>
 
-                <TextBlock
-                    Margin="{StaticResource Margin4}"
-                    HorizontalAlignment="Left"
-                    VerticalAlignment="Center"
-                    Text="{x:Static resx:ResUI.TbSettingsEnableCheckPreReleaseUpdate}" />
-                <ToggleSwitch
-                    x:Name="togEnableCheckPreReleaseUpdate"
-                    Margin="{StaticResource Margin4}"
-                    HorizontalAlignment="Left" />
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <StackPanel
+            MaxWidth="760"
+            Margin="20,10,20,20"
+            HorizontalAlignment="Center">
 
+            <StackPanel Orientation="Horizontal" Spacing="10">
                 <Button
-                    x:Name="btnCheckOnly"
-                    Width="100"
-                    Margin="{StaticResource Margin4}"
-                    Content="{x:Static resx:ResUI.menuCheckOnly}" />
-
-                <Button
-                    x:Name="btnCheckUpdate"
-                    Width="100"
-                    Margin="{StaticResource Margin4}"
-                    Content="{x:Static resx:ResUI.menuCheckUpdate}" />
+                    x:Name="btnBack"
+                    Classes="SubBack"
+                    ToolTip.Tip="{loc:T Common_Back}">
+                    <PathIcon
+                        Width="22"
+                        Height="22"
+                        Data="{DynamicResource Geo.Sub.Back}"
+                        Foreground="{DynamicResource Brush.OnSurface}" />
+                </Button>
+                <TextBlock Classes="SubTitle" Text="{loc:T Update_Title}" />
             </StackPanel>
-        </Border>
 
-        <Border
-            Margin="{StaticResource Margin4}"
-            VerticalAlignment="Center"
-            Theme="{DynamicResource CardBorder}">
+            <!--  ==================== Предварительные выпуски + действия ====================
+                  Действий ДВА, потому что в движке их два и они разные: «Проверить обновление»
+                  только спрашивает у релизов, есть ли новая версия, а «Обновить сейчас» качает и
+                  ставит. Одна кнопка на оба означала бы, что нажатие «просто посмотреть» молча
+                  подменит ядро.  -->
+            <Border Classes="SubCard" Margin="0,14,0,0">
+                <StackPanel>
+                    <Border x:Name="RowPreRelease" Classes="SubRow tap">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <Border Grid.Column="0" Classes="SubTile">
+                                <PathIcon Data="{DynamicResource Geo.Sub.Frag}" />
+                            </Border>
+                            <StackPanel
+                                Grid.Column="1"
+                                Margin="16,0,12,0"
+                                VerticalAlignment="Center">
+                                <TextBlock Classes="SubName" Text="{loc:T Update_PreRelease}" />
+                                <TextBlock
+                                    Classes="SubSub"
+                                    Text="{loc:T Update_PreReleaseHint}"
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ToggleSwitch
+                                x:Name="togEnableCheckPreReleaseUpdate"
+                                Grid.Column="2"
+                                VerticalAlignment="Center"
+                                Theme="{DynamicResource ToggleSwitch.iOS}" />
+                        </Grid>
+                    </Border>
 
-            <ListBox
-                x:Name="lstCheckUpdates"
-                BorderThickness="1"
-                ItemsSource="{Binding CheckUpdateModels}">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate>
-                        <StackPanel Orientation="Vertical" />
-                    </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <Panel Width="500" VerticalAlignment="Center">
-                            <Grid ColumnDefinitions="1*,1*,3*" RowDefinitions="Auto">
-                                <ToggleSwitch
-                                    x:Name="togAutoRefresh"
-                                    Grid.Column="0"
-                                    Margin="{StaticResource Margin4}"
-                                    HorizontalAlignment="Left"
-                                    VerticalAlignment="Center"
-                                    IsChecked="{Binding IsSelected}" />
-                                <TextBlock
-                                    Grid.Column="1"
-                                    HorizontalAlignment="Left"
-                                    VerticalAlignment="Center"
-                                    Text="{Binding CoreTypeForStorage}" />
-                                <TextBlock
-                                    Grid.Column="2"
-                                    HorizontalAlignment="Left"
-                                    VerticalAlignment="Center"
-                                    Text="{Binding Remarks}"
-                                    TextWrapping="WrapWithOverflow" />
-                            </Grid>
-                        </Panel>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ListBox>
-        </Border>
-    </DockPanel>
+                    <Border Classes="SubDivider" />
+
+                    <Border x:Name="RowCheckOnly" Classes="SubRow tap">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <Border Grid.Column="0" Classes="SubTile">
+                                <PathIcon Data="{DynamicResource Geo.Sub.Refresh}" />
+                            </Border>
+                            <TextBlock
+                                x:Name="txtCheckOnly"
+                                Grid.Column="1"
+                                Margin="16,0,12,0"
+                                VerticalAlignment="Center"
+                                Classes="SubName accent"
+                                Text="{loc:T Update_Check}" />
+                            <TextBlock
+                                x:Name="txtCheckState"
+                                Grid.Column="2"
+                                Classes="SubValue" />
+                        </Grid>
+                    </Border>
+
+                    <Border Classes="SubDivider" />
+
+                    <Border x:Name="RowInstall" Classes="SubRow tap">
+                        <Grid ColumnDefinitions="Auto,*">
+                            <Border Grid.Column="0" Classes="SubTile">
+                                <PathIcon Data="{DynamicResource Geo.Sub.Backup}" />
+                            </Border>
+                            <TextBlock
+                                x:Name="txtInstall"
+                                Grid.Column="1"
+                                Margin="16,0,0,0"
+                                VerticalAlignment="Center"
+                                Classes="SubName accent"
+                                Text="{loc:T Update_Now}" />
+                        </Grid>
+                    </Border>
+                </StackPanel>
+            </Border>
+
+            <!--  ==================== Компоненты ====================
+                  В прототипе этой группы нет, но в ветке обновляемых частей несколько (приложение,
+                  ядро, Geo-базы) и выбор реально хранится в конфиге. Убрать группу значило бы
+                  выключить выбор, а не упростить экран. Подпись строки — живой ответ проверки.  -->
+            <TextBlock Classes="SubGroupLabel" Text="{loc:T Update_Components}" />
+            <Border Classes="SubCard">
+                <ItemsControl x:Name="listComponents">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:CompileBindings="False">
+                            <StackPanel>
+                                <Border Classes="SubDivider" IsVisible="{Binding ShowDivider}" />
+                                <Border Classes="SubRow tap" Tapped="OnComponentRowTapped">
+                                    <Grid ColumnDefinitions="Auto,*,Auto">
+                                        <Border Grid.Column="0" Classes="SubTile">
+                                            <PathIcon Data="{DynamicResource Geo.Sub.File}" />
+                                        </Border>
+                                        <StackPanel
+                                            Grid.Column="1"
+                                            Margin="16,0,12,0"
+                                            VerticalAlignment="Center">
+                                            <TextBlock Classes="SubName" Text="{Binding Title}" />
+                                            <TextBlock Classes="SubSub" Text="{Binding Model.Remarks}" />
+                                        </StackPanel>
+                                        <ToggleSwitch
+                                            Grid.Column="2"
+                                            VerticalAlignment="Center"
+                                            IsChecked="{Binding Model.IsSelected}"
+                                            Theme="{DynamicResource ToggleSwitch.iOS}" />
+                                    </Grid>
+                                </Border>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Border>
+
+            <TextBlock x:Name="txtFoot" Classes="SubFoot" />
+        </StackPanel>
+    </ScrollViewer>
 </UserControl>

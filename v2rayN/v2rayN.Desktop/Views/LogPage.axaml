@@ -34,10 +34,8 @@
                 </Button>
                 <TextBlock Classes="SubTitle" Text="{loc:T Log_Title}" />
             </StackPanel>
-            <TextBlock
-                Margin="0,8,0,0"
-                Classes="SubNote"
-                Text="{loc:T Log_Intro}" />
+            <!--  Пояснения под заголовком тут нет: на этом экране его нет и в эталонном кадре.
+                  «Лог ядра за текущий сеанс» уже сказано подписью строки, из которой сюда пришли.  -->
 
             <!--  ==================== Поиск ====================  -->
             <Border Classes="SubSearch" Margin="0,14,0,0">

@@ -3,211 +3,192 @@
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:dd="clr-namespace:v2rayN.Desktop.DesignData"
+    xmlns:loc="clr-namespace:v2rayN.Desktop.Common"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:resx="clr-namespace:ServiceLib.Resx;assembly=ServiceLib"
-    d:DesignHeight="450"
     d:DesignWidth="800"
-    Design.DataContext="{x:Static dd:DesignData.BackupAndRestore}"
+    d:DesignHeight="620"
     mc:Ignorable="d">
+
+    <!--  Фон НЕ задан: подэкран прозрачный, шелл под ним погашен (ApplySubPageShellGate).  -->
+
     <UserControl.Styles>
-        <Style Selector="Button">
-            <Setter Property="MinWidth" Value="180" />
-        </Style>
+        <StyleInclude Source="avares://departament/Assets/SubScreenStyles.axaml" />
     </UserControl.Styles>
 
-    <DockPanel Margin="{StaticResource Margin8}">
-        <StackPanel Margin="{StaticResource Margin4}" DockPanel.Dock="Bottom">
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <StackPanel
+            MaxWidth="760"
+            Margin="20,10,20,20"
+            HorizontalAlignment="Center">
+
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <Button
+                    x:Name="btnBack"
+                    Classes="SubBack"
+                    ToolTip.Tip="{loc:T Common_Back}">
+                    <PathIcon
+                        Width="22"
+                        Height="22"
+                        Data="{DynamicResource Geo.Sub.Back}"
+                        Foreground="{DynamicResource Brush.OnSurface}" />
+                </Button>
+                <TextBlock Classes="SubTitle" Text="{loc:T Backup_WebDav}" />
+            </StackPanel>
             <TextBlock
-                Name="txtMsg"
-                Margin="{StaticResource Margin4}"
-                HorizontalAlignment="Left" />
-        </StackPanel>
+                Margin="0,8,0,0"
+                Classes="SubNote"
+                Text="{loc:T Backup_WebDavIntro}" />
 
-        <StackPanel>
-            <Border
-                Margin="{StaticResource Margin4}"
-                VerticalAlignment="Center"
-                Theme="{DynamicResource CardBorder}">
+            <!--  ==================== Сервер ====================
+                  Поля правятся прямо в строках — без формы и без модалок: это те же четыре значения,
+                  что и на всех остальных подэкранах, а не отдельный диалог настройки.  -->
+            <TextBlock Classes="SubGroupLabel" Text="{loc:T Backup_WebDavServer}" />
+            <Border Classes="SubCard">
+                <StackPanel>
+                    <Border Classes="SubRow">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <Border Grid.Column="0" Classes="SubTile">
+                                <PathIcon Data="{DynamicResource Geo.Sub.Globe}" />
+                            </Border>
+                            <TextBlock
+                                Grid.Column="1"
+                                Margin="16,0,12,0"
+                                VerticalAlignment="Center"
+                                Classes="SubName"
+                                Text="{loc:T Backup_WebDavUrl}" />
+                            <TextBox
+                                x:Name="txtWebDavUrl"
+                                Grid.Column="2"
+                                MinWidth="260"
+                                Classes="SubField" />
+                        </Grid>
+                    </Border>
 
-                <Grid
-                    Margin="{StaticResource Margin4}"
-                    ColumnDefinitions="300,200"
-                    RowDefinitions="Auto,Auto,Auto,Auto">
-                    <TextBlock
-                        Grid.Row="0"
-                        Grid.Column="0"
-                        Margin="{StaticResource Margin4}"
-                        Text="{x:Static resx:ResUI.menuLocalBackupAndRestore}" />
+                    <Border Classes="SubDivider" />
+                    <Border Classes="SubRow">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <Border Grid.Column="0" Classes="SubTile">
+                                <PathIcon Data="{DynamicResource Geo.Sub.Lock}" />
+                            </Border>
+                            <TextBlock
+                                Grid.Column="1"
+                                Margin="16,0,12,0"
+                                VerticalAlignment="Center"
+                                Classes="SubName"
+                                Text="{loc:T LocalProxy_Login}" />
+                            <TextBox
+                                x:Name="txtWebDavUserName"
+                                Grid.Column="2"
+                                MinWidth="180"
+                                Classes="SubField" />
+                        </Grid>
+                    </Border>
 
-                    <TextBlock
-                        Grid.Row="1"
-                        Grid.Column="0"
-                        Margin="{StaticResource Margin4}"
-                        VerticalAlignment="Center"
-                        Text="{x:Static resx:ResUI.menuLocalBackup}" />
-                    <Button
-                        Name="menuLocalBackup"
-                        Grid.Row="1"
-                        Grid.Column="1"
-                        Margin="{StaticResource Margin4}"
-                        VerticalAlignment="Center"
-                        Content="{x:Static resx:ResUI.menuLocalBackup}" />
+                    <Border Classes="SubDivider" />
+                    <Border Classes="SubRow">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <Border Grid.Column="0" Classes="SubTile">
+                                <PathIcon Data="{DynamicResource Geo.Sub.Lock}" />
+                            </Border>
+                            <TextBlock
+                                Grid.Column="1"
+                                Margin="16,0,12,0"
+                                VerticalAlignment="Center"
+                                Classes="SubName"
+                                Text="{loc:T LocalProxy_Password}" />
+                            <TextBox
+                                x:Name="txtWebDavPassword"
+                                Grid.Column="2"
+                                MinWidth="180"
+                                Classes="SubField"
+                                PasswordChar="•" />
+                        </Grid>
+                    </Border>
 
-                    <Separator
-                        Grid.Row="2"
-                        Grid.Column="0"
-                        Grid.ColumnSpan="2"
-                        Margin="{StaticResource MarginTb8}" />
-
-                    <TextBlock
-                        Grid.Row="3"
-                        Grid.Column="0"
-                        Margin="{StaticResource Margin4}"
-                        VerticalAlignment="Center"
-                        Text="{x:Static resx:ResUI.menuLocalRestore}" />
-                    <Button
-                        Name="menuLocalRestore"
-                        Grid.Row="3"
-                        Grid.Column="1"
-                        Margin="{StaticResource Margin4}"
-                        VerticalAlignment="Center"
-                        Content="{x:Static resx:ResUI.menuLocalRestore}" />
-                </Grid>
+                    <Border Classes="SubDivider" />
+                    <Border Classes="SubRow">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <Border Grid.Column="0" Classes="SubTile">
+                                <PathIcon Data="{DynamicResource Geo.Sub.File}" />
+                            </Border>
+                            <TextBlock
+                                Grid.Column="1"
+                                Margin="16,0,12,0"
+                                VerticalAlignment="Center"
+                                Classes="SubName"
+                                Text="{loc:T Backup_WebDavFolder}" />
+                            <TextBox
+                                x:Name="txtWebDavDirName"
+                                Grid.Column="2"
+                                MinWidth="180"
+                                Classes="SubField" />
+                        </Grid>
+                    </Border>
+                </StackPanel>
             </Border>
-            <Border
-                Margin="{StaticResource Margin4}"
-                VerticalAlignment="Center"
-                Theme="{DynamicResource CardBorder}">
-                <Grid
-                    Margin="{StaticResource Margin4}"
-                    ColumnDefinitions="300,200"
-                    RowDefinitions="Auto,Auto,Auto,Auto,Auto">
-                    <StackPanel
-                        Grid.Row="0"
-                        Grid.Column="0"
-                        Orientation="Horizontal">
-                        <TextBlock Margin="{StaticResource Margin4}" Text="{x:Static resx:ResUI.menuRemoteBackupAndRestore}" />
 
-                        <Button Margin="{StaticResource MarginLr8}" Classes="IconButton">
-                            <Button.Content>
-                                <PathIcon Data="{StaticResource SemiIconMore}">
-                                    <PathIcon.RenderTransform>
-                                        <RotateTransform Angle="90" />
-                                    </PathIcon.RenderTransform>
-                                </PathIcon>
-                            </Button.Content>
-                            <Button.Flyout>
-                                <Flyout>
-                                    <StackPanel>
-                                        <Grid ColumnDefinitions="Auto,300" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
-                                            <TextBlock
-                                                Grid.Row="0"
-                                                Grid.Column="0"
-                                                Margin="{StaticResource Margin4}"
-                                                VerticalAlignment="Center"
-                                                Text="{x:Static resx:ResUI.LvWebDavUrl}" />
+            <!--  ==================== Действия ====================
+                  Порядок — по возрастанию последствий: проверить связь, выгрузить копию, и только
+                  потом восстановление, которое заменит текущие серверы.  -->
+            <TextBlock Classes="SubGroupLabel" Text="{loc:T Backup_SecActions}" />
+            <Border Classes="SubCard">
+                <StackPanel>
+                    <Border x:Name="RowCheck" Classes="SubRow tap">
+                        <Grid ColumnDefinitions="Auto,*">
+                            <Border Grid.Column="0" Classes="SubTile">
+                                <PathIcon Data="{DynamicResource Geo.Sub.Router}" />
+                            </Border>
+                            <TextBlock
+                                x:Name="txtCheck"
+                                Grid.Column="1"
+                                Margin="16,0,0,0"
+                                VerticalAlignment="Center"
+                                Classes="SubName accent"
+                                Text="{loc:T Backup_WebDavCheck}" />
+                        </Grid>
+                    </Border>
 
-                                            <TextBox
-                                                x:Name="txtWebDavUrl"
-                                                Grid.Row="0"
-                                                Grid.Column="1"
-                                                Margin="{StaticResource Margin4}"
-                                                VerticalAlignment="Center"
-                                                TextWrapping="Wrap" />
+                    <Border Classes="SubDivider" />
+                    <Border x:Name="RowUpload" Classes="SubRow tap">
+                        <Grid ColumnDefinitions="Auto,*">
+                            <Border Grid.Column="0" Classes="SubTile">
+                                <PathIcon Data="{DynamicResource Geo.Sub.Backup}" />
+                            </Border>
+                            <TextBlock
+                                x:Name="txtUpload"
+                                Grid.Column="1"
+                                Margin="16,0,0,0"
+                                VerticalAlignment="Center"
+                                Classes="SubName accent"
+                                Text="{loc:T Backup_CloudUpload}" />
+                        </Grid>
+                    </Border>
 
-                                            <TextBlock
-                                                Grid.Row="1"
-                                                Grid.Column="0"
-                                                Margin="{StaticResource Margin4}"
-                                                VerticalAlignment="Center"
-                                                Text="{x:Static resx:ResUI.LvWebDavUserName}" />
-
-                                            <TextBox
-                                                x:Name="txtWebDavUserName"
-                                                Grid.Row="1"
-                                                Grid.Column="1"
-                                                Margin="{StaticResource Margin4}"
-                                                VerticalAlignment="Center" />
-
-                                            <TextBlock
-                                                Grid.Row="2"
-                                                Grid.Column="0"
-                                                Margin="{StaticResource Margin4}"
-                                                VerticalAlignment="Center"
-                                                Text="{x:Static resx:ResUI.LvWebDavPassword}" />
-
-                                            <TextBox
-                                                x:Name="txtWebDavPassword"
-                                                Grid.Row="2"
-                                                Grid.Column="1"
-                                                Margin="{StaticResource Margin4}"
-                                                VerticalAlignment="Center" />
-
-                                            <TextBlock
-                                                Grid.Row="3"
-                                                Grid.Column="0"
-                                                Margin="{StaticResource Margin4}"
-                                                VerticalAlignment="Center"
-                                                Text="{x:Static resx:ResUI.LvWebDavDirName}" />
-
-                                            <TextBox
-                                                x:Name="txtWebDavDirName"
-                                                Grid.Row="3"
-                                                Grid.Column="1"
-                                                Margin="{StaticResource Margin4}"
-                                                VerticalAlignment="Center" />
-
-                                            <Button
-                                                x:Name="menuWebDavCheck"
-                                                Grid.Row="4"
-                                                Grid.Column="1"
-                                                Margin="{StaticResource Margin4}"
-                                                HorizontalAlignment="Right"
-                                                VerticalAlignment="Center"
-                                                Content="{x:Static resx:ResUI.LvWebDavCheck}" />
-                                        </Grid>
-                                    </StackPanel>
-                                </Flyout>
-                            </Button.Flyout>
-                        </Button>
-
-                    </StackPanel>
-
-                    <TextBlock
-                        Grid.Row="1"
-                        Grid.Column="0"
-                        Margin="{StaticResource Margin4}"
-                        VerticalAlignment="Center"
-                        Text="{x:Static resx:ResUI.menuRemoteBackup}" />
-                    <Button
-                        Name="menuRemoteBackup"
-                        Grid.Row="1"
-                        Grid.Column="1"
-                        Margin="{StaticResource Margin4}"
-                        VerticalAlignment="Center"
-                        Content="{x:Static resx:ResUI.menuRemoteBackup}" />
-
-                    <Separator
-                        Grid.Row="2"
-                        Grid.Column="0"
-                        Grid.ColumnSpan="2"
-                        Margin="{StaticResource MarginTb8}" />
-                    <TextBlock
-                        Grid.Row="3"
-                        Grid.Column="0"
-                        Margin="{StaticResource Margin4}"
-                        VerticalAlignment="Center"
-                        Text="{x:Static resx:ResUI.menuRemoteRestore}" />
-                    <Button
-                        Name="menuRemoteRestore"
-                        Grid.Row="3"
-                        Grid.Column="1"
-                        Margin="{StaticResource Margin4}"
-                        VerticalAlignment="Center"
-                        Content="{x:Static resx:ResUI.menuRemoteRestore}" />
-                </Grid>
+                    <Border Classes="SubDivider" />
+                    <Border x:Name="RowDownload" Classes="SubRow tap">
+                        <Grid ColumnDefinitions="Auto,*">
+                            <Border Grid.Column="0" Classes="SubTile">
+                                <PathIcon Data="{DynamicResource Geo.Sub.Refresh}" />
+                            </Border>
+                            <StackPanel
+                                Grid.Column="1"
+                                Margin="16,0,0,0"
+                                VerticalAlignment="Center">
+                                <TextBlock
+                                    x:Name="txtDownload"
+                                    Classes="SubName accent"
+                                    Text="{loc:T Backup_CloudRestore}" />
+                                <TextBlock
+                                    Classes="SubSub"
+                                    Text="{loc:T Backup_RestoreFileHint}"
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </StackPanel>
             </Border>
+
+            <TextBlock x:Name="txtMsg" Classes="SubFoot" />
         </StackPanel>
-    </DockPanel>
+    </ScrollViewer>
 </UserControl>

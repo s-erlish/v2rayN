@@ -5,111 +5,106 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:loc="clr-namespace:v2rayN.Desktop.Common"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    d:DesignWidth="560"
-    d:DesignHeight="640"
-    Background="{DynamicResource Brush.Bg}"
+    d:DesignWidth="800"
+    d:DesignHeight="720"
     mc:Ignorable="d">
 
-    <UserControl.Resources>
-        <StreamGeometry x:Key="Geo.Sub.Back">M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z</StreamGeometry>
-    </UserControl.Resources>
+    <!--  Фон НЕ задан: подэкран прозрачный, шелл под ним погашен (ApplySubPageShellGate).  -->
 
     <UserControl.Styles>
-        <Style Selector="Button.IconButton">
-            <Setter Property="Transitions">
-                <Transitions>
-                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" />
-                </Transitions>
-            </Setter>
-        </Style>
-        <Style Selector="Button.IconButton:pressed">
-            <Setter Property="RenderTransform" Value="scale(0.92)" />
-        </Style>
+        <StyleInclude Source="avares://departament/Assets/SubScreenStyles.axaml" />
     </UserControl.Styles>
 
-    <DockPanel MaxWidth="620">
-        <Grid
-            DockPanel.Dock="Top"
-            MinHeight="56"
-            Margin="16,8,16,0"
-            ColumnDefinitions="Auto,*">
-            <Button
-                x:Name="btnBack"
-                Grid.Column="0"
-                Width="40"
-                Height="40"
-                Padding="0"
-                VerticalAlignment="Center"
-                Classes="IconButton"
-                ToolTip.Tip="{loc:T Common_Back}">
-                <PathIcon
-                    Width="22"
-                    Height="22"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center"
-                    Data="{StaticResource Geo.Sub.Back}"
-                    Foreground="{DynamicResource Brush.OnSurface}" />
-            </Button>
-            <TextBlock
-                Grid.Column="1"
-                Margin="16,0,0,0"
-                VerticalAlignment="Center"
-                Classes="Headline"
-                Text="{loc:T Settings_UrlSchemes}"
-                TextTrimming="CharacterEllipsis" />
-        </Grid>
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <StackPanel
+            MaxWidth="760"
+            Margin="20,10,20,20"
+            HorizontalAlignment="Center">
 
-        <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-            <StackPanel Margin="16,12,16,24" Spacing="8">
-
-                <Border
-                    Background="{DynamicResource Brush.SurfaceHigh}"
-                    CornerRadius="{DynamicResource Radius.Card}"
-                    Padding="16,12">
-                    <StackPanel Spacing="4">
-                        <TextBlock Classes="Body" Text="{loc:T UrlSchemes_Registration}" />
-                        <TextBlock
-                            x:Name="txtStatus"
-                            Classes="Subtitle"
-                            Text="—"
-                            TextWrapping="Wrap" />
-                        <StackPanel Margin="0,8,0,0" Orientation="Horizontal" Spacing="8">
-                            <Button x:Name="btnRegister" Classes="Primary" Content="{loc:T UrlSchemes_Register}" />
-                            <Button x:Name="btnUnregister" Content="{loc:T UrlSchemes_Remove}" />
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
-
-                <TextBlock
-                    Classes="Subtitle"
-                    Text="{loc:T UrlSchemes_Hint}"
-                    TextWrapping="Wrap" />
-
-                <Border Classes="Card" Padding="8,4">
-                    <ItemsControl x:Name="listSchemes">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:CompileBindings="False">
-                                <Grid ColumnDefinitions="*,Auto" MinHeight="48">
-                                    <StackPanel Grid.Column="0" Margin="8,0,0,0" VerticalAlignment="Center">
-                                        <TextBlock
-                                            FontFamily="Consolas,monospace"
-                                            Foreground="{DynamicResource Brush.OnSurface}"
-                                            Text="{Binding Scheme}" />
-                                        <TextBlock Classes="Subtitle" Text="{Binding Hint}" />
-                                    </StackPanel>
-                                    <Button
-                                        Grid.Column="1"
-                                        VerticalAlignment="Center"
-                                        Click="OnCopyClick"
-                                        Content="{loc:T Common_Copy}"
-                                        Tag="{Binding Scheme}" />
-                                </Grid>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </Border>
-
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <Button
+                    x:Name="btnBack"
+                    Classes="SubBack"
+                    ToolTip.Tip="{loc:T Common_Back}">
+                    <PathIcon
+                        Width="22"
+                        Height="22"
+                        Data="{DynamicResource Geo.Sub.Back}"
+                        Foreground="{DynamicResource Brush.OnSurface}" />
+                </Button>
+                <TextBlock Classes="SubTitle" Text="{loc:T Settings_UrlSchemes}" />
             </StackPanel>
-        </ScrollViewer>
-    </DockPanel>
+            <TextBlock
+                Margin="0,8,0,0"
+                Classes="SubNote"
+                Text="{loc:T UrlSchemes_Intro}" />
+
+            <!--  ==================== Команды ====================
+                  Тап по строке копирует схему; «Копировать» справа — не кнопка, а подпись действия
+                  строки. Отдельная кнопка внутри строки, которая делает ровно то же, что строка,
+                  заставляла бы целиться в неё.  -->
+            <Border Classes="SubCard" Margin="0,14,0,0">
+                <ItemsControl x:Name="listSchemes">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:CompileBindings="False">
+                            <StackPanel>
+                                <Border Classes="SubDivider" IsVisible="{Binding ShowDivider}" />
+                                <Border Classes="SubRow tap" Tapped="OnSchemeRowTapped">
+                                    <Grid ColumnDefinitions="Auto,*,Auto">
+                                        <Border Grid.Column="0" Classes="SubTile">
+                                            <PathIcon Data="{DynamicResource Geo.Sub.Url}" />
+                                        </Border>
+                                        <StackPanel
+                                            Grid.Column="1"
+                                            Margin="16,0,12,0"
+                                            VerticalAlignment="Center">
+                                            <TextBlock Classes="SubName" Text="{Binding Scheme}" />
+                                            <TextBlock Classes="SubSub" Text="{Binding Hint}" />
+                                        </StackPanel>
+                                        <TextBlock
+                                            Grid.Column="2"
+                                            Classes="SubValue accent"
+                                            Text="{loc:T Common_Copy}" />
+                                    </Grid>
+                                </Border>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Border>
+
+            <!--  ==================== Регистрация ====================
+                  В прототипе этой группы нет: на телефоне схему регистрирует система. На Windows её
+                  регистрирует приложение, и без этой строки команды выше никуда не ведут.
+                  ОДИН тумблер вместо пары «Зарегистрировать» / «Убрать»: состояние ровно одно, и
+                  две кнопки заставляли бы выяснять, какая из них сейчас действует.  -->
+            <TextBlock Classes="SubGroupLabel" Text="{loc:T UrlSchemes_Registration}" />
+            <Border Classes="SubCard">
+                <Border x:Name="RowRegister" Classes="SubRow tap">
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                        <Border Grid.Column="0" Classes="SubTile">
+                            <PathIcon Data="{DynamicResource Geo.Sub.Router}" />
+                        </Border>
+                        <StackPanel
+                            Grid.Column="1"
+                            Margin="16,0,12,0"
+                            VerticalAlignment="Center">
+                            <TextBlock Classes="SubName" Text="{loc:T UrlSchemes_RegisterRow}" />
+                            <TextBlock
+                                x:Name="txtStatus"
+                                Classes="SubSub"
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                        <ToggleSwitch
+                            x:Name="switchRegister"
+                            Grid.Column="2"
+                            VerticalAlignment="Center"
+                            Theme="{DynamicResource ToggleSwitch.iOS}" />
+                    </Grid>
+                </Border>
+            </Border>
+
+            <TextBlock x:Name="txtCopyState" Classes="SubFoot" />
+        </StackPanel>
+    </ScrollViewer>
 </UserControl>

@@ -4,9 +4,18 @@ using v2rayN.Desktop.Common;
 namespace v2rayN.Desktop.Views;
 
 /// <summary>
-/// «О приложении» — in-app суб-страница (раньше отдельное окно). Real: shows the actual assembly version +
-/// runtime info, and opens the real departament site / Telegram bot in the default browser. Nothing here
-/// touches the core. Стрелка «назад» поднимает <see cref="BackRequested"/>.
+/// «О приложении» — подэкран настроек по единому лекалу (screens.md «Подэкраны»):
+/// «Приложение» (факты с кнопкой копирования) → «Ссылки и документы» (строки с шевроном).
+///
+/// Всё показанное — настоящее: версия берётся из сборки, строка системы — из
+/// <see cref="System.Runtime.InteropServices.RuntimeInformation"/>, адреса — из
+/// <see cref="BackendConfig"/>. Ни одной декоративной строки: у каждой есть адрес или экран.
+/// Из списка прототипа не перенесены «Исходный код», «Лицензии открытого ПО», «Канал в Telegram» и
+/// «Политика конфиденциальности» — под них в ветке нет ни адреса, ни экрана (вопрос владельцу).
+///
+/// «Проверить обновления» кладёт <see cref="CheckUpdateView"/> на ТОТ ЖЕ стек оболочки — подэкран
+/// поверх подэкрана, без единого отдельного окна.
+/// Стрелка «назад» поднимает <see cref="BackRequested"/>.
 /// </summary>
 public partial class AboutPage : UserControl, ISubPage
 {
@@ -16,32 +25,62 @@ public partial class AboutPage : UserControl, ISubPage
     {
         InitializeComponent();
 
-        txtVersion.Text = L.F("About_VersionValue", Utils.GetVersionInfo());
-        txtRuntime.Text = BuildRuntimeInfo();
+        txtVersion.Text = Utils.GetVersionInfo();
+        txtSystem.Text = SystemLine();
 
         btnBack.Click += (_, _) => BackRequested?.Invoke(this, EventArgs.Empty);
-        btnSite.Click += (_, _) => OpenUrl(SiteUrl());
-        btnTelegram.Click += (_, _) => OpenUrl($"https://t.me/{BackendConfig.BotUsername}");
-        btnCopy.Click += async (_, _) =>
+
+        // Копируем не то, что видно в срезанной строке, а полную запись: копию несут в поддержку.
+        btnCopyVersion.Click += async (_, _) => await CopyAsync(L.F("About_TitleVersion", Utils.GetVersionInfo()));
+        btnCopySystem.Click += async (_, _) => await CopyAsync(SystemDetails());
+
+        RowSite.Tapped += (_, _) => OpenUrl(SiteUrl());
+        RowFeedback.Tapped += (_, _) => OpenUrl($"https://t.me/{BackendConfig.BotUsername}");
+        RowCheckUpdate.Tapped += (_, _) =>
         {
-            await AvaUtils.SetClipboardData(this, $"{L.F("About_TitleVersion", Utils.GetVersionInfo())}\n{txtRuntime.Text}");
+            if (TopLevel.GetTopLevel(this) is MainWindow main)
+            {
+                main.OpenSubPage(new CheckUpdateView());
+            }
         };
+    }
+
+    private async Task CopyAsync(string text)
+    {
+        await SubPageUtil.CopyAsync(this, text);
+        txtCopyState.Text = L.T("About_Copied");
     }
 
     private static string SiteUrl()
     {
-        // BackendConfig.BaseUrl ends with /api — strip it to reach the site root.
+        // BackendConfig.BaseUrl оканчивается на /api — отрезаем, чтобы попасть в корень сайта.
         var b = BackendConfig.BaseUrl;
         var idx = b.IndexOf("/api", StringComparison.OrdinalIgnoreCase);
         return idx > 0 ? b[..idx] : b;
     }
 
-    private static string BuildRuntimeInfo()
+    /// <summary>Одна строка для значения справа: ОС и разрядность. Длинное описание ОС уедет в
+    /// многоточие — за полной записью есть кнопка копирования.</summary>
+    private static string SystemLine()
     {
         try
         {
             var arch = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString();
-            var os = System.Runtime.InteropServices.RuntimeInformation.OSDescription;
+            var os = System.Runtime.InteropServices.RuntimeInformation.OSDescription.Trim();
+            return $"{os} · {arch}";
+        }
+        catch
+        {
+            return "—";
+        }
+    }
+
+    private static string SystemDetails()
+    {
+        try
+        {
+            var arch = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString();
+            var os = System.Runtime.InteropServices.RuntimeInformation.OSDescription.Trim();
             return L.F("About_SystemInfo", os, arch, Environment.Version);
         }
         catch
