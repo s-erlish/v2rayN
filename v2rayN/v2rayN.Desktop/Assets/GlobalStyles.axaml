@@ -486,14 +486,18 @@
     </Style>
     <!--  Ховер/нажатие как у «Пополнить»: мягкий затемняющий тинт ВНУТРИ контура, контур прибит
           к акценту (иначе Semi уводит его в свой цвет). Никакого светления и никакого акцент-флипа.  -->
-    <!--  Цвет содержимого задаём и на ПРЕЗЕНТЕРЕ: Semi ставит свой Foreground внутри шаблона, и он
-          побеждал наш на кнопке — в чёрно-белой подпись оставалась синей, хотя акцент там белый.  -->
+    <!--  Цвет содержимого И РАМКУ задаём на ПРЕЗЕНТЕРЕ: Semi ставит внутри шаблона свои, и они
+          побеждали наши на кнопке — подпись в чёрно-белой оставалась синей, а контур у «Продолжить»
+          пропадал вовсе (Semi обнуляла толщину). Прибиваем оба во всех трёх состояниях.  -->
     <Style Selector="Button.Primary /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+        <Setter Property="BorderThickness" Value="1.5" />
     </Style>
     <Style Selector="Button.Primary:pointerover /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+        <Setter Property="BorderThickness" Value="1.5" />
     </Style>
     <Style Selector="Button.Primary:pressed /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />

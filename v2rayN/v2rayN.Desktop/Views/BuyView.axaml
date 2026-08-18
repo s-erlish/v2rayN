@@ -361,7 +361,10 @@
         <Style Selector="Panel#SheetOverlay.open Border#SheetScrim">
             <Setter Property="Opacity" Value="1" />
         </Style>
+        <!--  Обычная стрелка над всей шторкой: «рука» с кнопок протекала на её поверхность, и
+              нажимаемым выглядело всё окно (владелец). Кнопки внутри ставят свой курсор сами.  -->
         <Style Selector="Border#Sheet">
+            <Setter Property="Cursor" Value="Arrow" />
             <Setter Property="Opacity" Value="0" />
             <Setter Property="RenderTransform" Value="translateY(24px)" />
             <Setter Property="Transitions">

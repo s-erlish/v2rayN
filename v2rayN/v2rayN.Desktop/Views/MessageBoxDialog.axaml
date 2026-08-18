@@ -6,6 +6,7 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:resx="clr-namespace:ServiceLib.Resx;assembly=ServiceLib"
     Background="Transparent"
+    Cursor="Arrow"
     CanResize="False"
     FontFamily="{DynamicResource Font.Grotesk}"
     ShowInTaskbar="False"
