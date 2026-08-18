@@ -67,7 +67,7 @@
                             </Border>
                             <TextBlock
                                 Grid.Column="1"
-                                Margin="16,0,8,0"
+                                Margin="16,0,12,0"
                                 VerticalAlignment="Center"
                                 Classes="SubName"
                                 Text="{loc:T LocalProxy_Address}" />
@@ -90,7 +90,7 @@
                             </Border>
                             <TextBlock
                                 Grid.Column="1"
-                                Margin="16,0,8,0"
+                                Margin="16,0,12,0"
                                 VerticalAlignment="Center"
                                 Classes="SubName"
                                 Text="{loc:T LocalProxy_PortSocks}" />
@@ -116,7 +116,7 @@
                             </Border>
                             <StackPanel
                                 Grid.Column="1"
-                                Margin="16,0,8,0"
+                                Margin="16,0,12,0"
                                 VerticalAlignment="Center">
                                 <TextBlock Classes="SubName" Text="{loc:T LocalProxy_PortHttp}" />
                                 <TextBlock
@@ -146,7 +146,7 @@
                             </Border>
                             <StackPanel
                                 Grid.Column="1"
-                                Margin="16,0,8,0"
+                                Margin="16,0,12,0"
                                 VerticalAlignment="Center">
                                 <TextBlock Classes="SubName" Text="{loc:T Settings_Socks5Auth}" />
                                 <TextBlock
@@ -171,7 +171,7 @@
                                 <Border Grid.Column="0" Classes="SubTile" Opacity="0" />
                                 <TextBlock
                                     Grid.Column="1"
-                                    Margin="16,0,8,0"
+                                    Margin="16,0,12,0"
                                     VerticalAlignment="Center"
                                     Classes="SubName"
                                     Text="{loc:T LocalProxy_Login}" />
@@ -188,7 +188,7 @@
                                 <Border Grid.Column="0" Classes="SubTile" Opacity="0" />
                                 <TextBlock
                                     Grid.Column="1"
-                                    Margin="16,0,8,0"
+                                    Margin="16,0,12,0"
                                     VerticalAlignment="Center"
                                     Classes="SubName"
                                     Text="{loc:T LocalProxy_Password}" />
@@ -210,7 +210,7 @@
                             </Border>
                             <StackPanel
                                 Grid.Column="1"
-                                Margin="16,0,8,0"
+                                Margin="16,0,12,0"
                                 VerticalAlignment="Center">
                                 <TextBlock Classes="SubName" Text="{loc:T LocalProxy_BlockUdp}" />
                                 <TextBlock

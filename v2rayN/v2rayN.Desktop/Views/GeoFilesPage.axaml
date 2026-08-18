@@ -28,7 +28,13 @@
             Margin="20,10,20,20"
             HorizontalAlignment="Stretch">
 
-            <StackPanel Orientation="Horizontal" Spacing="10">
+            <!--  Отступ 2 сверху — из прототипа (`padding:2px 0 0` у строки заголовка поверх
+                  `padding:10px 0 20px` у самой прокрутки). Без него шапка садится на 2 выше эталона:
+                  замер по кадру — центр стрелки «назад» 69.5 вместо 71.5.  -->
+            <StackPanel
+                Margin="0,2,0,0"
+                Orientation="Horizontal"
+                Spacing="10">
                 <Button
                     x:Name="btnBack"
                     Classes="SubBack"

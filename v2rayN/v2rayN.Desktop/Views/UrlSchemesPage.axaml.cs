@@ -95,14 +95,16 @@ public partial class UrlSchemesPage : UserControl, ISubPage
         _suppressSwitch = true;
         try
         {
+            // Не Windows — группы просто нет: схему тут заводит не приложение, и показывать ради
+            // этого навсегда выключенный тумблер значит рисовать орган управления, который на любое
+            // нажатие отвечает отказом. Решение владельца: «Регистрация» только под Windows.
             if (!Utils.IsWindows())
             {
-                txtStatus.Text = L.T("UrlSchemes_WindowsOnly");
+                RegistrationGroup.IsVisible = false;
                 switchRegister.IsChecked = false;
-                switchRegister.IsEnabled = false;
-                RowRegister.Classes.Remove("tap");
                 return;
             }
+            RegistrationGroup.IsVisible = true;
             var reg = IsRegistered();
             switchRegister.IsChecked = reg;
             txtStatus.Text = reg ? L.T("UrlSchemes_Registered") : L.T("UrlSchemes_NotRegistered");
