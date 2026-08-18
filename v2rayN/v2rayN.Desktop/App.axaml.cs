@@ -343,6 +343,27 @@ public partial class App : Application
     private static bool IsCoreRunning() =>
         AppManager.Instance.IsRunningCore(ECoreType.Xray) || AppManager.Instance.IsRunningCore(ECoreType.sing_box);
 
+    /// <summary>Показать или спрятать значок в области уведомлений — по строке настроек, на месте.</summary>
+    public static void ApplyTrayIconVisibility(bool hidden)
+    {
+        try
+        {
+            if (Current is null)
+            {
+                return;
+            }
+            var icons = TrayIcon.GetIcons(Current);
+            if (icons is { Count: > 0 })
+            {
+                icons[0].IsVisible = !hidden;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog("App", ex);
+        }
+    }
+
     private void SetupTrayMenu()
     {
         try
@@ -351,6 +372,12 @@ public partial class App : Application
             if (icons is { Count: > 0 })
             {
                 var trayIcon = icons[0];
+
+                //  «Скрыть значок в трее» (screens.md). Значок нужен не всем: у кого-то трей и так
+                //  забит, а приложение живёт в панели задач. Прячем сам значок, поведение окна не
+                //  трогаем — закрытие по-прежнему сворачивает или завершает по своей настройке.
+                //  Читаем ПРИ СБОРКЕ меню; переключение строки применяет видимость на месте.
+                trayIcon.IsVisible = !AppManager.Instance.Config.UiItem.HideTrayIcon;
 
                 // Bug2: подсказка иконки трея при наведении = ВСЕГДА «departament», а не строка статуса
                 // подключения. В App.axaml ToolTipText привязан к {Binding RunningServerToolTipText};

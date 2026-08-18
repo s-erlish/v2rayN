@@ -56,6 +56,8 @@ public sealed partial class L
         Add("Settings_UiScale", "Масштаб интерфейса", "Interface scale");
         Add("Settings_Autostart", "Запуск с системой", "Launch with the system");
         Add("Settings_AutostartHint", "Открывать при входе в систему", "Open when you sign in");
+        Add("Settings_HideTray", "Скрыть значок в трее", "Hide the tray icon");
+        Add("Settings_HideTrayHint", "Не показывать значок в области уведомлений", "Keep the icon out of the notification area");
 
         Add("Settings_SecSubscription", "Подписка", "Subscription");
         Add("Settings_SubAutoUpdate", "Автообновление подписки", "Auto-update subscription");

@@ -722,6 +722,25 @@
                         </Grid>
                     </Border>
 
+                    <!--  Скрыть значок в трее + тумблер  -->
+                    <Border x:Name="RowTrayIcon" Classes="SettingRow">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <Border Grid.Column="0" Classes="SetTile">
+                                <PathIcon Data="{StaticResource Geo.Set.Power}" />
+                            </Border>
+                            <StackPanel Grid.Column="1" Classes="RowText">
+                                <TextBlock Classes="RowTitle" Text="{loc:T Settings_HideTray}" />
+                                <TextBlock Classes="RowSub" Text="{loc:T Settings_HideTrayHint}" />
+                            </StackPanel>
+                            <ToggleSwitch
+                                x:Name="SwitchTrayIcon"
+                                Grid.Column="2"
+                                Classes="RowSwitch"
+                                IsChecked="{Binding HideTrayIcon, Mode=TwoWay}"
+                                Theme="{StaticResource ToggleSwitch.Row}" />
+                        </Grid>
+                    </Border>
+
                 </StackPanel>
             </Border>
 

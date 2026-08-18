@@ -117,6 +117,13 @@ public class UIItem
     public bool DoubleClick2Activate { get; set; }
     public bool AutoHideStartup { get; set; }
     public bool Hide2TrayWhenClose { get; set; }
+
+    /// <summary>
+    /// Прятать значок в области уведомлений. Значок нужен не всем: у кого-то трей и так забит, а
+    /// приложение живёт в панели задач. Выключенный значок НЕ меняет поведения окна — закрытие
+    /// по-прежнему сворачивает или завершает по своей настройке.
+    /// </summary>
+    public bool HideTrayIcon { get; set; }
     public bool MacOSShowInDock { get; set; }
     public List<ColumnItem> MainColumnItem { get; set; }
     public List<WindowSizeItem> WindowSizeItem { get; set; }
