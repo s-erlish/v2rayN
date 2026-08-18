@@ -102,6 +102,16 @@ public partial class BuyView : UserControl
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnAttachedToVisualTree(e);
+
+        // Образец каталога (превьювер / скриншот-хук): подписок аккаунта нет и быть не может,
+        // поэтому «текущим» помечаем первый тариф образца — иначе бейдж не увидеть НИГДЕ, а он
+        // в лекале есть. Живого пути это не касается: у настоящей модели IsDesign = false.
+        if (Vm is { IsDesign: true } design)
+        {
+            CurrentTariffIds = design.Tariffs.Take(1).Select(t => t.Tariff.Id).ToList();
+            return;
+        }
+
         if (Design.IsDesignMode || AccountViewModel.Shared is not { } account)
         {
             return;
