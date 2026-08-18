@@ -103,6 +103,17 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     private bool _edgeSnapSuspended;
     private bool _titleDragging;
     private bool _edgeExpandRequested;
+
+    // ==================== Персист ПОЛОЖЕНИЯ окна между запусками ====================
+    // Размер окна персистит база (WindowBase.OnClosed → UiItem.WindowSizeItem), а позицию она не хранила
+    // вовсе — каждый запуск центрировал окно заново. Модель UiItem лежит в ServiceLib (чужая дорожка),
+    // поэтому desktop-слой держит позицию в СВОЁМ маленьком файле guiConfigs/WindowPosition.txt («X,Y»
+    // в физ. пикселях). Помним последнюю позицию НОРМАЛЬНОГО состояния (развёрнутое/свёрнутое окно не
+    // должно перетирать её), пишем на тех же выходных путях, что и размер (StorageUI/OnClosed), а
+    // восстанавливаем ПОСЛЕ base.OnLoaded (тот центрирует) — и только если сохранённая точка попадает
+    // на живой экран: отключённый монитор не должен уносить окно за пределы видимого.
+    private PixelPoint? _lastNormalPosition;   // живая позиция Normal-окна (пишется на каждом переносе)
+    private bool _positionSeeded;              // первичное восстановление сделано → живые переносы можно запоминать
     private AppTab _currentTab = AppTab.Home;   // ОДНО состояние вкладки на обе раскладки
     private bool _isEmpty = true;
     private bool _isSyncing;                     // E3: идёт пост-логин импорт → оверлей синхронизации
@@ -173,6 +184,21 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         _uiScale = UiScaleState.Effective;
         UiScaleState.Changed += OnUiScaleChanged;
         ApplyUiScaleToWindow();   // трансформ + мин-размеры на старте (OnLoaded затем впишет окно в экран)
+
+        // Сохранённый размер применяем СРАЗУ, до первого layout: иначе дефолт разметки (900×860) успевает
+        // дать первый Bounds-тик ДО того, как WindowBase.OnLoaded восстановит размер, раскладка пересекает
+        // брейкпоинт от ЧУЖОЙ ширины (900 → компакт), а гистерезис затем удерживает её и на настоящей
+        // (сохранённые 1100…1123 открывались компактными). Экран здесь ещё не нужен: кламп в рабочую
+        // область сделает WindowBase.OnLoaded, размер хранится уже в физ. DIP (после UI-zoom).
+        try
+        {
+            if (ConfigHandler.GetWindowSizeItem(_config, GetType().Name) is { } savedSize)
+            {
+                Width = savedSize.Width;
+                Height = savedSize.Height;
+            }
+        }
+        catch { }
 
         // Ресайз-грипы безрамочного окна: 8 зон → BeginResizeDrag. Видимость грипов = только Normal-состояние.
         WireResizeGrips();
@@ -275,7 +301,7 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         // Режим на старте берём из ЛОГИЧЕСКОЙ ширины, с которой окно откроется (сохранённый размер или
         // компактный пресет), а не из «широкой по умолчанию»: иначе первый же Bounds-тик перекладывал бы
         // шелл широкая→компактная и первый кадр показывал бы чужую раскладку.
-        _layout = ResolveLayout(StartupLogicalWidth());
+        _layout = ResolveLayoutInitial(StartupLogicalWidth());
         ApplyLayoutMode(_layout);
         // Пороги раскладки живут в КООРДИНАТАХ КОНТЕНТА (после UI-zoom): LayoutTransformControl
         // масштабирует контент на _uiScale, поэтому контент видит ширину Bounds.Width/_uiScale. Делим здесь,
@@ -779,6 +805,20 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         return width < compactEdge ? LayoutMode.Compact : LayoutMode.Wide;
     }
 
+    // Стартовый резолв — ЧИСТЫЕ пороги, без гистерезиса. Гистерезис существует, чтобы окно,
+    // «припаркованное» на границе, не мигало при живом драге ОТ уже выбранного режима — а на холодном
+    // старте прежнего режима нет, и опора ResolveLayout на дефолт поля _layout (Compact) смещала бы
+    // выбор: сохранённое окно 1100…1123 открывалось бы компактным, хотя тем же размером при сжатии из
+    // широкой оно оставалось широким. Первый живой Bounds-тик дальше работает уже с гистерезисом.
+    private LayoutMode ResolveLayoutInitial(double width)
+    {
+        if (width <= Math.Max(NarrowBreakpointWidth, TwoColumnMinWidth))
+        {
+            return LayoutMode.Narrow;
+        }
+        return width < CompactBreakpointWidth ? LayoutMode.Compact : LayoutMode.Wide;
+    }
+
     // Переклад chrome вокруг ЕДИНОГО contentHost: широкая/компактная = [рейл(Auto) | контент(*)],
     // узкая = [контент(*) / нижняя-нав(Auto)]. Меняем только Grid-раскладку/видимость chrome и Content
     // хоста — сами контролы НЕ переносятся между деревьями (нет двойного родителя → нет краша).
@@ -1242,7 +1282,7 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     // README «Хром окна»: «Подэкраны и оверлей прогрузки ПРОЗРАЧНЫЕ — фон окна непрерывный. Экран под
     // ними НЕ рендерится, иначе просвечивает содержимое».
     //
-    // subPageHost стал Background=Transparent, поэтому перекрыть шелл собой он больше не может — гасим
+    // subPageHost прозрачен (Background=Transparent в разметке) и сам шелл собой не перекрывает — гасим
     // шелл явно. Пока стек подэкранов не пуст, все три поверхности шелла скрыты, и подэкран лежит на
     // непрерывном фоне окна (windowShell). Как только стек пустеет, видимость возвращает штатный
     // 3-way-гейт ApplyShellVisibility (SYNCING > EMPTY > CONTENT) — состояние не дублируется здесь и не
@@ -1570,6 +1610,14 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     // дёргает при программных клампах). После разворота раскладка = Wide — повторно не срабатывает.
     private void OnPositionChanged(object? sender, PixelPointEventArgs e)
     {
+        // Персист позиции: запоминаем КАЖДУЮ живую позицию Normal-состояния (перенос пользователем и
+        // программные клампы дают одинаково честную конечную точку), но только после первичного
+        // восстановления — стартовые центрирования base.OnLoaded не должны перетирать сохранённое.
+        if (_positionSeeded && WindowState == WindowState.Normal)
+        {
+            _lastNormalPosition = e.Point;
+        }
+
         if (_edgeSnapSuspended || !_titleDragging || _layout == LayoutMode.Wide || WindowState != WindowState.Normal)
         {
             return;
@@ -1877,6 +1925,74 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
 
             Width = width;
             Height = height;
+        }
+        catch { }
+    }
+
+    // ==================== Персист положения окна (см. поля _lastNormalPosition/_positionSeeded) ====================
+
+    private static string WindowPositionPath => Utils.GetConfigPath("WindowPosition.txt");
+
+    // Восстановление позиции ПОСЛЕ base.OnLoaded (который центрирует): первый вызов читает файл, повторные
+    // (если Loaded придёт ещё раз) — последнюю живую позицию. Сохранённая точка применяется, только если
+    // лежит на живом экране, и клампится в его рабочую область целиком — заголовок всегда достижим.
+    private void RestoreWindowPosition()
+    {
+        var saved = _positionSeeded ? _lastNormalPosition : LoadWindowPosition();
+        _positionSeeded = true;
+        if (saved is not PixelPoint pos)
+        {
+            return;
+        }
+        try
+        {
+            var screen = Screens.ScreenFromPoint(pos) ?? Screens.All.FirstOrDefault(s => s.Bounds.Contains(pos));
+            if (screen is null)
+            {
+                return;   // точка ни на одном экране (монитор отключили) — остаёмся по центру
+            }
+            var scaling = screen.Scaling > 0 ? screen.Scaling : 1.0;
+            var wa = screen.WorkingArea;
+            var physW = Width * scaling;
+            var physH = Height * scaling;
+            var x = Math.Max(wa.X, Math.Min(pos.X, wa.X + wa.Width - physW));
+            var y = Math.Max(wa.Y, Math.Min(pos.Y, wa.Y + wa.Height - physH));
+            Position = new PixelPoint((int)x, (int)y);
+            _lastNormalPosition = Position;
+        }
+        catch { }
+    }
+
+    private static PixelPoint? LoadWindowPosition()
+    {
+        try
+        {
+            var path = WindowPositionPath;
+            if (!File.Exists(path))
+            {
+                return null;
+            }
+            var parts = File.ReadAllText(path).Trim().Split(',');
+            if (parts.Length == 2 && int.TryParse(parts[0], out var x) && int.TryParse(parts[1], out var y))
+            {
+                return new PixelPoint(x, y);
+            }
+        }
+        catch { }
+        return null;
+    }
+
+    // Пишется на тех же выходных путях, что и размер (StorageUI на выходе приложения + OnClosed).
+    // Позиция уже хранится как «последняя Normal», поэтому состояние окна здесь проверять не нужно.
+    private void SaveWindowPosition()
+    {
+        if (_lastNormalPosition is not PixelPoint p)
+        {
+            return;
+        }
+        try
+        {
+            File.WriteAllText(WindowPositionPath, $"{p.X},{p.Y}");
         }
         catch { }
     }
@@ -2190,6 +2306,8 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         // P1-4: снимаем незавершённое скольжение путешествующего индикатора рейла (та же CTS-дисциплина,
         // что у остальных узлов) — async-void аниматор не дёргает закрывающееся окно.
         _indicatorAnim?.Cancel();
+        // Позиция окна — на закрытии (base.OnClosed рядом персистит размер в UiItem.WindowSizeItem).
+        SaveWindowPosition();
         base.OnClosed(e);
     }
 
@@ -2341,10 +2459,35 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         ApplyStartupSize();
         base.OnLoaded(sender, e);
 
+        // base.OnLoaded центрирует — возвращаем окно на сохранённое место (если оно на живом экране).
+        RestoreWindowPosition();
+
         // Раскладка следует за живой шириной: после клампа окна в экран логическая ширина могла измениться.
         if (Bounds.Width > 0)
         {
             UpdateLayoutMode(Bounds.Width / _uiScale);
+        }
+
+        // DEV probe hooks (скриншот-обвязка, как INITIAL_TAB/PREVIEW_VIEW): DP_SETPOS=x,y ставит позицию
+        // окна, как будто его перенёс пользователь; DP_EXIT_AFTER_MS=N штатно завершает приложение через
+        // N мс (полный путь выхода с персистом размера и позиции) — живая проверка сохранения между
+        // запусками в среде без оконного менеджера.
+        if (Environment.GetEnvironmentVariable("DP_SETPOS") is { } setPos)
+        {
+            var parts = setPos.Split(',');
+            if (parts.Length == 2 && int.TryParse(parts[0], out var px) && int.TryParse(parts[1], out var py))
+            {
+                Position = new PixelPoint(px, py);
+            }
+        }
+        if (int.TryParse(Environment.GetEnvironmentVariable("DP_EXIT_AFTER_MS"), out var exitMs) && exitMs > 0)
+        {
+            Dispatcher.UIThread.Post(async () =>
+            {
+                await Task.Delay(exitMs);
+                await AppManager.Instance.AppExitAsync(false);
+                AppManager.Instance.Shutdown(true);
+            });
         }
 
         if (_config.UiItem.AutoHideStartup)
@@ -2355,7 +2498,11 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
 
     private void StorageUI()
     {
-        // Сохраняем размер ТОЛЬКО в обычном состоянии: развёрнутое/свёрнутое окно
+        // Позиция — независимо от текущего состояния: хранится последняя НОРМАЛЬНАЯ (развёрнутое окно
+        // на следующем запуске откроется обычным — на прежнем месте).
+        SaveWindowPosition();
+
+        // Размер сохраняем ТОЛЬКО в обычном состоянии: развёрнутое/свёрнутое окно
         // не должно перетекать в персист (иначе следующий запуск открывается «на весь экран»).
         if (WindowState != WindowState.Normal)
         {
