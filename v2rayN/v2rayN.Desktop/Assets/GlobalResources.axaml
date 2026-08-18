@@ -176,7 +176,27 @@
     <CornerRadius x:Key="Radius.Tile">12</CornerRadius>
     <CornerRadius x:Key="Radius.Card">20</CornerRadius>
     <CornerRadius x:Key="Radius.Sheet">24,24,0,0</CornerRadius>
-    <CornerRadius x:Key="Radius.Pill">100</CornerRadius>
+    <!--  ПИЛЮЛЯ В AVALONIA — НЕ CSS. В прототипе стоит border-radius:100px, и браузер
+          подрезает его до идеальной пилюли на любой высоте. Avalonia подрезает радиус по
+          КАЖДОЙ ОСИ ОТДЕЛЬНО: на кнопке 250×50 значение 100 даёт rx=100 / ry=25, то есть
+          эллипс, а не пилюлю. Проверено на живом окне под Xvfb — со 100 кнопки старта
+          вздувались по бокам, с половиной высоты стали пилюлями.
+          Отсюда правило: РАДИУС ПИЛЮЛИ = ПОЛОВИНА ЕЁ ВЫСОТЫ, и на каждую высоту свой токен.
+          Квадратных кнопок (40×40) это не касается — там обе оси равны, и 100 подрезалось
+          до 20 само собой.  -->
+    <CornerRadius x:Key="Radius.Pill50">25</CornerRadius>
+    <CornerRadius x:Key="Radius.Pill44">22</CornerRadius>
+    <CornerRadius x:Key="Radius.Pill40">20</CornerRadius>
+    <CornerRadius x:Key="Radius.Pill36">18</CornerRadius>
+    <CornerRadius x:Key="Radius.Pill32">16</CornerRadius>
+    <CornerRadius x:Key="Radius.Pill30">15</CornerRadius>
+    <!--  Тонкие пилюли: цифра — по МЕНЬШЕЙ стороне. Ползунок полосы прокрутки 6 в покое
+          (8 под курсором), ручка шторки 4 высотой.  -->
+    <CornerRadius x:Key="Radius.Pill6">3</CornerRadius>
+    <CornerRadius x:Key="Radius.Pill4">2</CornerRadius>
+    <!--  Radius.Pill остаётся для круглых 40×40 и как значение по умолчанию для высоты 40.
+          Для любой другой высоты берите токен со своей цифрой, иначе получите эллипс.  -->
+    <CornerRadius x:Key="Radius.Pill">20</CornerRadius>
 
     <!--  Размерные токены  -->
     <x:Double x:Key="Size.Tile">40</x:Double>
@@ -221,6 +241,14 @@
     <!--  ease_out_expo (0.16,1,0.3,1): САМЫЙ решительный ease-out — ЗАРЕЗЕРВИРОВАН под ОДИН момент
           hand-off auth→home (Dur.Slow 0:0:0.45), чтобы он читался тяжелее рядового таб-свопа.  -->
     <SplineEasing x:Key="Ease.OutExpo" X1="0.16" Y1="1" X2="0.3" Y2="1" />
+    <!--  Отклик на нажатие. Жили в GlobalStyles рядом с первым потребителем — но это
+          ШКАЛА, а не приём одного стиля: по ней ходят все нажимаемые поверхности.
+          Место шкалы — в каталоге кривых, рядом с остальными четырьмя.  -->
+    <!--  вход нажатия (палец давит) — 70мс  -->
+    <SplineEasing x:Key="Ease.PressIn" X1="0.4" Y1="0" X2="0.6" Y2="1" />
+    <!--  возврат нажатия. Y1=1.25 даёт перелёт 2% от хода на t≈0.70 — «лёгкий»
+          отскок без пружинного звона — 200мс  -->
+    <SplineEasing x:Key="Ease.PressBack" X1="0.34" Y1="1.25" X2="0.64" Y2="1" />
 
     <!--  Длительности (motion.xml) задаются ЛИТЕРАЛАМИ в Duration="…": XAML-       -->
     <!--  компилятор Avalonia НЕ поддерживает интринсик x:TimeSpan. Каталог токенов:-->
@@ -228,6 +256,7 @@
     <!--    Dur.PressIn  0:0:0.09  — палец-вниз (press_in 90мс)                      -->
     <!--    Dur.PressOut 0:0:0.16  — отпускание/возврат (press_out 160мс)           -->
     <!--    Dur.State    0:0:0.22  — смена состояния / tint-crossfade (state 220мс)  -->
+    <!--    Dur.Nav      0:0:0.28  — переезд полоски навигации (nav 280мс)          -->
     <!--    Dur.Reveal   0:0:0.30  — раскрытие / glow (reveal 300мс)                 -->
     <!--    Dur.Exit     0:0:0.15  — выход экрана/суб-страницы, короче входа (150мс)  -->
     <!--    Dur.Shell    0:0:0.20  — кроссфейд 3-путёвого оверлея оболочки (200мс)    -->

@@ -35,10 +35,8 @@
         <!--  Замер на реальном SplineEasing: пик 1.0202 на t≈0.70, то есть перелёт 2% от     -->
         <!--  хода (для 0.985→1.0 это 1.0003) — ровно «лёгкий», без пружинного звона.         -->
         <!-- ==================================================================== -->
-        <!--  вход нажатия (палец давит) — 70мс  -->
-        <SplineEasing x:Key="Ease.PressIn" X1="0.4" Y1="0" X2="0.6" Y2="1" />
-        <!--  возврат нажатия (лёгкий отскок) — 200мс  -->
-        <SplineEasing x:Key="Ease.PressBack" X1="0.34" Y1="1.25" X2="0.64" Y2="1" />
+        <!--  Ease.PressIn и Ease.PressBack переехали в GlobalResources.axaml, к остальным
+              кривым: это общая шкала, а не приём одного стиля.  -->
 
         <!-- ==================================================================== -->
         <!--  Flyout Incy (замена светло-серого дефолта Semi FlyoutPresenter).       -->
@@ -110,7 +108,7 @@
         <!--  Ползунок: пилюля muted, размеры/ховер/press задаёт ScrollBar-шаблон.  -->
         <ControlTheme x:Key="Incy.ScrollBarThumb" TargetType="Thumb">
             <Setter Property="Background" Value="{DynamicResource Brush.OnSurfaceVariant}" />
-            <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill}" />
+            <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill6}" />
             <!--  Покой = невидим; :expanded/ховер/drag проявляют (стили ScrollBar ниже).  -->
             <Setter Property="Opacity" Value="0" />
             <Setter Property="Template">
@@ -1381,7 +1379,7 @@
     <Style Selector="Border.SheetHandle">
         <Setter Property="Width" Value="{DynamicResource Size.SheetHandleW}" />
         <Setter Property="Height" Value="{DynamicResource Size.SheetHandleH}" />
-        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill4}" />
         <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHighest}" />
         <Setter Property="HorizontalAlignment" Value="Center" />
     </Style>
@@ -1396,7 +1394,7 @@
     <!-- ==================================================================== -->
     <Style Selector="Border.Toast">
         <Setter Property="Background" Value="{DynamicResource Brush.Toast.Bg}" />
-        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill36}" />
         <Setter Property="Padding" Value="22,12" />
         <Setter Property="BoxShadow" Value="0 8 24 0 #40000000" />
         <Setter Property="HorizontalAlignment" Value="Center" />
