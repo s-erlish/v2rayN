@@ -51,8 +51,63 @@ public static class ConfigHandler
         {
             if (File.Exists(configPath))
             {
-                Logging.SaveLog("LoadConfig Exception");
-                return null;
+                // The file is there but yielded nothing. Two very different situations hide behind
+                // that, and treating them the same cost the user a working app:
+                //
+                //  • EMPTY (0 bytes). A crash or a kill between creating and writing the file leaves
+                //    exactly this. There is nothing in it to protect, yet the old code returned null,
+                //    which makes InitApp return false and Program.Main call Environment.Exit(0) — the
+                //    app just never opens, with no window and no message, on EVERY subsequent launch,
+                //    until someone finds and deletes the file by hand. Servers live in guiNDB.db, not
+                //    here, so starting from defaults costs at most the UI preferences and gets the
+                //    user back into a working app.
+                //
+                //  • NON-EMPTY but unreadable (locked by another writer, AV scan, permissions). Here
+                //    the bytes ARE the user's settings, so falling back to defaults would overwrite
+                //    them on the next save. Retry the read a couple of times for the transient case,
+                //    and only if it still fails refuse to start — same as before.
+                var length = -1L;
+                try
+                {
+                    length = new FileInfo(configPath).Length;
+                }
+                catch (Exception ex)
+                {
+                    Logging.SaveLog(_tag, ex);
+                }
+
+                if (length == 0)
+                {
+                    Logging.SaveLog($"{_tag}: config file is empty, starting from defaults");
+                }
+                else
+                {
+                    for (var attempt = 0; attempt < 2 && result.IsNullOrEmpty(); attempt++)
+                    {
+                        Thread.Sleep(100);
+                        result = EmbedUtils.LoadResource(configPath);
+                    }
+
+                    if (result.IsNullOrEmpty())
+                    {
+                        Logging.SaveLog("LoadConfig Exception");
+                        return null;
+                    }
+
+                    config = JsonUtils.Deserialize<Config>(result);
+                    if (config is null)
+                    {
+                        Logging.SaveLog($"{_tag}: config file exists but could not be parsed, falling back to defaults");
+                        try
+                        {
+                            File.Copy(configPath, $"{configPath}.bad", true);
+                        }
+                        catch (Exception ex)
+                        {
+                            Logging.SaveLog(_tag, ex);
+                        }
+                    }
+                }
             }
         }
 
@@ -215,8 +270,8 @@ public static class ConfigHandler
 
     /// <summary>
     /// Serialises every config save. The write-temp-then-move below is only atomic against a CRASH;
-    /// it is not atomic against a SECOND concurrent save, because both share the one "<res>_temp"
-    /// path. Saves genuinely do overlap: several call sites are fire-and-forget
+    /// it used NOT to be atomic against a SECOND concurrent save, because both shared the one
+    /// "&lt;res&gt;_temp" path. Saves genuinely do overlap: several call sites are fire-and-forget
     /// (ThemeSettingViewModel :44/:57/:69, SettingsViewModel :541, MainWindow.axaml.cs :1582),
     /// TaskManager saves from its own timer thread every 20 minutes (TaskManager.cs:45), and a
     /// subscription import saves from a thread-pool task (AddBatchServersCommon, :1648).
@@ -242,11 +297,20 @@ public static class ConfigHandler
     public static async Task<int> SaveConfig(Config config)
     {
         await _saveConfigLock.WaitAsync();
+        var tempPath = string.Empty;
         try
         {
             //save temp file
             var resPath = Utils.GetConfigPath(_configRes);
-            var tempPath = $"{resPath}_temp";
+            // The semaphore above only serialises writers INSIDE this process. The scratch file must
+            // therefore be unique per WRITER, not a single shared "<res>_temp": two app processes on
+            // the same config directory (the single-instance gate can be lost — see Program.OnStartup —
+            // and a portable install can simply be launched twice) would otherwise replay the exact
+            // interleaving described above ACROSS processes, and the semaphore cannot see them. A
+            // process-and-call unique name makes the write private and keeps File.Move (rename(2)) the
+            // one atomic publish step, so a reader only ever sees the old or the new file, never a
+            // half-written one.
+            tempPath = $"{resPath}.{Environment.ProcessId}.{Guid.NewGuid():N}.tmp";
 
             var content = JsonUtils.Serialize(config, true, true);
             if (content.IsNullOrEmpty())
@@ -257,6 +321,7 @@ public static class ConfigHandler
 
             //rename
             File.Move(tempPath, resPath, true);
+            tempPath = string.Empty;
         }
         catch (Exception ex)
         {
@@ -265,6 +330,19 @@ public static class ConfigHandler
         }
         finally
         {
+            // A failed save must not leave its scratch file behind: the names are unique now, so
+            // without this they would accumulate in guiConfigs forever.
+            if (tempPath.IsNotEmpty())
+            {
+                try
+                {
+                    File.Delete(tempPath);
+                }
+                catch (Exception ex)
+                {
+                    Logging.SaveLog(_tag, ex);
+                }
+            }
             _saveConfigLock.Release();
         }
 
@@ -1916,18 +1994,68 @@ public static class ConfigHandler
         {
             return -1;
         }
+
+        // A subscription refresh is a DESTRUCTIVE replace (delete the group, then import). Two of them
+        // running at once on the same subid interleave into data loss, and they really do overlap:
+        // the account import at launch (SubscriptionSyncManager -> SubscriptionHandler.UpdateProcess),
+        // TaskManager's per-minute auto-update timer, and the user's own «обновить» all call this for
+        // the SAME subscription with nothing serialising them. The losing interleaving is:
+        //     A: snapshot(20 servers), DELETE  -> group empty
+        //     B: snapshot(0 servers)           -> B's "previous state" is EMPTY
+        //     A: parse fails -> restore(20)    -> group back to 20
+        //     B: DELETE                        -> group empty again
+        //     B: parse fails -> restore(0)     -> nothing to restore. All 20 servers gone for good.
+        // The benign-looking variant is just as wrong: when both succeed, both generations are
+        // inserted and the list silently DOUBLES. One writer per subscription at a time fixes both.
+        var gate = isSub && subid.IsNotEmpty() ? GetSubImportLock(subid) : null;
+        if (gate is not null)
+        {
+            await gate.WaitAsync();
+        }
+        try
+        {
+            return await AddBatchServersInternal(config, strData, subid, isSub);
+        }
+        finally
+        {
+            gate?.Release();
+        }
+    }
+
+    /// <summary>
+    /// One import lock per subscription id. Bounded by the number of subscriptions the user has (a
+    /// handful), so the dictionary never grows meaningfully; entries are intentionally kept for the
+    /// life of the process so a refresh that starts while another finishes still meets the same gate.
+    /// </summary>
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> _subImportLocks = new();
+
+    private static SemaphoreSlim GetSubImportLock(string subid)
+        => _subImportLocks.GetOrAdd(subid, static _ => new SemaphoreSlim(1, 1));
+
+    private static async Task<int> AddBatchServersInternal(Config config, string strData, string subid, bool isSub)
+    {
         List<ProfileItem>? lstOriSub = null;
         ProfileItem? activeProfile = null;
-        if (isSub && subid.IsNotEmpty())
-        {
-            lstOriSub = await AppManager.Instance.ProfileItems(subid);
-            activeProfile = lstOriSub?.FirstOrDefault(t => t.IndexId == config.IndexId);
-            await RemoveServersViaSubid(config, subid, true);
-        }
+        // The json files behind the group's CUSTOM profiles (the departament / Remnawave XRAY_JSON
+        // shape is exactly this). They are NOT deleted with the rows: a failed import puts the rows
+        // back, and rows whose backing config file was already deleted are dead weight — they show in
+        // the list and fail to connect, which is the same complaint wearing a different hat. The files
+        // are dropped further down, only once a replacement really landed.
+        var orphanCustomFiles = new List<string>();
 
         var counter = 0;
         try
         {
+            if (isSub && subid.IsNotEmpty())
+            {
+                lstOriSub = await AppManager.Instance.ProfileItems(subid);
+                activeProfile = lstOriSub?.FirstOrDefault(t => t.IndexId == config.IndexId);
+                // INSIDE the try: this deletes rows, and anything it throws (it used to delete files
+                // too, unguarded) must still reach the restore below instead of unwinding with the
+                // group already emptied.
+                await RemoveServersViaSubid(config, subid, true, orphanCustomFiles);
+            }
+
             if (Utils.IsBase64String(strData))
             {
                 counter = await AddBatchServersCommon(config, Utils.Base64Decode(strData), subid, isSub);
@@ -1992,7 +2120,8 @@ public static class ConfigHandler
             // unparseable pattern throws ArgumentException, which unwinds all the way out to
             // SubscriptionHandler.UpdateProcess's catch (:49) — past the zero-count restore below.
             // Put the servers back, then let the exception continue to its existing handler so the
-            // failure is still reported exactly as before.
+            // failure is still reported exactly as before. The custom json files were deliberately
+            // NOT deleted, so the restored rows are whole, not hollow.
             await RestoreOriginalSubServers(subid, lstOriSub);
             throw;
         }
@@ -2013,6 +2142,13 @@ public static class ConfigHandler
         if (counter < 1)
         {
             await RestoreOriginalSubServers(subid, lstOriSub);
+        }
+        else
+        {
+            // The replacement generation is in place, so the previous generation's custom json files
+            // are finally unreferenced and can go. Doing it only HERE is the whole point: until this
+            // line the old files are the only thing that makes the restore above worth anything.
+            DeleteCustomConfigFiles(orphanCustomFiles);
         }
 
         //Select active node
@@ -2194,11 +2330,44 @@ public static class ConfigHandler
     /// <returns>0 if successful, -1 if failed</returns>
     public static async Task<int> RemoveServersViaSubid(Config config, string subid, bool isSub)
     {
+        return await RemoveServersViaSubid(config, subid, isSub, null);
+    }
+
+    /// <summary>
+    /// Remove servers associated with a subscription ID.
+    ///
+    /// Two hard-won rules live here, both of which cost real user data before:
+    ///
+    /// 1. Only the CUSTOM files of rows this call actually deletes may be touched. The old code
+    ///    collected every Custom row of the group and deleted its backing json REGARDLESS of
+    ///    <paramref name="isSub"/>, while the DELETE with isSub=1 spares `isSub = 0` rows. So a
+    ///    manually added custom profile that happens to sit in a subscription's group silently lost
+    ///    the file behind it on the next subscription refresh: the row stayed in the list, the
+    ///    config it points at was gone, and connecting to it failed forever after.
+    ///
+    /// 2. Deleting the files is CLEANUP, not part of the data operation, so it must never throw.
+    ///    <see cref="AddBatchServers"/> calls this to make room for a fresh import; an exception
+    ///    escaping here (a locked file on Windows, an empty Address whose GetConfigPath resolves to
+    ///    the guiConfigs DIRECTORY) unwound past its restore path with the rows already deleted, and
+    ///    the whole subscription was gone. Each delete is therefore best-effort and logged.
+    ///
+    /// <paramref name="deferredFiles"/> lets a caller that may need to PUT THE ROWS BACK take the
+    /// file list instead of the deletion: the files stay on disk until the caller knows the
+    /// replacement really landed (see <see cref="AddBatchServers"/>).
+    /// </summary>
+    private static async Task<int> RemoveServersViaSubid(Config config, string subid, bool isSub, List<string>? deferredFiles)
+    {
         if (subid.IsNullOrEmpty())
         {
             return -1;
         }
-        var customProfile = await SQLiteHelper.Instance.TableAsync<ProfileItem>().Where(t => t.Subid == subid && t.ConfigType == EConfigType.Custom).ToListAsync();
+        var customProfile = isSub
+            ? await SQLiteHelper.Instance.TableAsync<ProfileItem>()
+                .Where(t => t.Subid == subid && t.ConfigType == EConfigType.Custom && t.IsSub == true)
+                .ToListAsync()
+            : await SQLiteHelper.Instance.TableAsync<ProfileItem>()
+                .Where(t => t.Subid == subid && t.ConfigType == EConfigType.Custom)
+                .ToListAsync();
         if (isSub)
         {
             await SQLiteHelper.Instance.ExecuteAsync($"delete from ProfileItem where isSub = 1 and subid = '{subid}'");
@@ -2207,12 +2376,43 @@ public static class ConfigHandler
         {
             await SQLiteHelper.Instance.ExecuteAsync($"delete from ProfileItem where subid = '{subid}'");
         }
-        foreach (var item in customProfile)
+
+        var files = customProfile.Select(t => t.Address).Where(t => t.IsNotEmpty()).ToList();
+        if (deferredFiles is not null)
         {
-            File.Delete(Utils.GetConfigPath(item.Address));
+            deferredFiles.AddRange(files);
+        }
+        else
+        {
+            DeleteCustomConfigFiles(files);
         }
 
         return 0;
+    }
+
+    /// <summary>
+    /// Best-effort removal of the json files behind CUSTOM profiles. Cleanup only: a failure is
+    /// logged and swallowed so it can never abort — or unwind out of — the caller's data operation.
+    /// An empty name is skipped (GetConfigPath("") is the guiConfigs DIRECTORY, and File.Delete on a
+    /// directory throws).
+    /// </summary>
+    private static void DeleteCustomConfigFiles(IEnumerable<string> fileNames)
+    {
+        foreach (var name in fileNames)
+        {
+            if (name.IsNullOrEmpty())
+            {
+                continue;
+            }
+            try
+            {
+                File.Delete(Utils.GetConfigPath(name));
+            }
+            catch (Exception ex)
+            {
+                Logging.SaveLog(_tag, ex);
+            }
+        }
     }
 
     /// <summary>
