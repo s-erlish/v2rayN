@@ -29,7 +29,7 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
 
     // ==================== ТРИ раскладки (tokens.md «Размеры окна и масштаб») ====================
     //   Wide    — обычная, логические ~1366×768: рейл слева, две колонки (левая 440).
-    //   Compact — 900×860: РЕЙЛ ОСТАЁТСЯ на месте, колонки жмутся (левая 340, кольцо 212, скорости сжаты).
+    //   Compact — 900×600: РЕЙЛ ОСТАЁТСЯ на месте, колонки жмутся (левая 340, кольцо 212, скорости сжаты).
     //   Narrow  — 420×860 «как телефон»: навигация уходит ВНИЗ, колонки складываются в ОДИН скролл
     //             (кольцо сверху, список под ним), кольцо 190.
     // Порог узкого — 420 (tokens.md) и сравнение НЕСТРОГОЕ: пресет 420×860 обязан быть узким. Ниже он
@@ -59,20 +59,23 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     private const double CompactHeroMinWidth = 232.0;
     private const double TwoColumnMinWidth = RailWidth + CompactLeftColumn + 1.0 + CompactHeroMinWidth;
 
-    private LayoutMode _layout = LayoutMode.Compact;  // старт компактный (дефолт окна 900×860); ctor уточняет
+    private LayoutMode _layout = LayoutMode.Compact;  // старт компактный (дефолт окна 900×600); ctor уточняет
     private bool _boundsSeeded;                      // первый живой Bounds-тик — без кроссфейда морфинга
 
     /// <summary>Узкая раскладка: нижняя навигация + одностолбцовая «Главная» (CompactHomeView).</summary>
     private bool IsNarrow => _layout == LayoutMode.Narrow;
 
     // Целевые размеры тумблера раскладки (двойной клик по навигации / drag-to-edge) — ровно пресеты
-    // пакета, в ЛОГИЧЕСКИХ единицах. Не широкая → широкая 1366×768; широкая → компактная 900×860. Узкая
+    // пакета, в ЛОГИЧЕСКИХ единицах. Не широкая → широкая 1366×768; широкая → компактная 900×600. Узкая
     // (420×860) достижима ресайзом до минимума окна (MinWidth = 420), поэтому в тумблере её нет. Все цели
     // домножаются на _uiScale и клампятся в WorkingArea.
     private const double WideToggleWidth = 1366.0;
     private const double WideToggleHeight = 768.0;
     private const double CompactToggleWidth = 900.0;
-    private const double CompactToggleHeight = 860.0;
+    //  600, а не 860: владелец попросил убрать высоту компактной раскладки примерно в полтора раза
+    //  («в 1.4 / 1.5»). На его 2K-мониторе прежние 860 при масштабе 1.25 давали 1075 физических —
+    //  окно выходило выше соседних приложений (Happ там 960). Ширина не тронута.
+    private const double CompactToggleHeight = 600.0;
 
     // Доля рабочей области, которую занимает СТАРТОВОЕ окно, если пресет в неё не влезает. Компактный
     // пресет почти квадратный (900×860), а мониторы 16:9 — на 1920×1080 при факторе 1.40 ему нужно 1204
