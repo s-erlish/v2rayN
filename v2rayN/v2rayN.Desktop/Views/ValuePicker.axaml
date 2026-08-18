@@ -5,6 +5,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:views="clr-namespace:v2rayN.Desktop.Views"
+    ClipToBounds="False"
     mc:Ignorable="d">
 
     <!--  ================================================================================
@@ -22,13 +23,9 @@
           строке (56dp — цель для мыши и таб-стоп), поэтому обработчик строки зовёт Toggle().
           =================================================================================  -->
 
-    <UserControl.Resources>
-        <!--  Каретка (unfold/треугольник вниз) — в GlobalResources такого глифа нет: там есть
-              Geo.ChevronRight («уходит на подэкран»), а окошко меняет значение НА МЕСТЕ и
-              обязано выглядеть иначе. Путь 1:1 из прототипа. Заявка на промоушен в
-              Geo.Caret — в отчёте.  -->
-        <StreamGeometry x:Key="Geo.Caret">M7,10l5,5 5,-5z</StreamGeometry>
-    </UserControl.Resources>
+    <!--  Каретка (треугольник вниз) берётся ГЛОБАЛЬНЫМ ключом Geo.Caret: он отличается от
+          Geo.ChevronRight намеренно — шеврон значит «уходит на подэкран», каретка значит
+          «значение меняется здесь». Локальной копии глифа тут нет.  -->
 
     <UserControl.Styles>
 

@@ -5,9 +5,17 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:views="clr-namespace:v2rayN.Desktop.Views"
+    ClipToBounds="False"
     HorizontalAlignment="Left"
     VerticalAlignment="Top"
     mc:Ignorable="d">
+
+    <!--  ClipToBounds=False НА САМОМ КОМПОНЕНТЕ — без него окошко не видно вообще, а не
+          «подрезано снизу». UserControl в Avalonia обрезает содержимое по своим границам, а
+          границы у этого компонента 0×0 by design (он не должен двигать раскладку строки) —
+          то есть клип по нулевому прямоугольнику съедает окошко целиком. Проверено на живом
+          окне: TransformedBounds окошка приходили с Clip 0,0,0,0. То же нужно и любому
+          контейнеру-обёртке нулевого размера — см. ValuePicker.  -->
 
     <!--  ================================================================================
           «ОКОШКО У ЗНАЧЕНИЯ» — общий компонент выбора, заменяющий модальные диалоги
@@ -36,26 +44,20 @@
           В ДЕРЕВЕ приложения, поэтому zoom, темы и DynamicResource работают даром.
           =================================================================================  -->
 
-    <UserControl.Resources>
-        <!--  ЛОКАЛЬНЫЕ токены компонента. Кандидаты на промоушен в Assets/GlobalResources.axaml
-              (файл занят другим агентом — заявка в отчёте): Radius.PopOption 9 = «пункт окошка»
-              из шкалы скруглений tokens.md. Скругление самого окошка (14) уже есть глобально как
-              Radius.Search — tokens.md держит «поле поиска и мелкая карточка 14 · окошко 14»
-              одним значением, поэтому переиспользуем его, а не заводим второй ключ-двойник.  -->
-        <CornerRadius x:Key="Radius.PopOption">9</CornerRadius>
-    </UserControl.Resources>
-
     <UserControl.Styles>
 
         <!--  ОБОЛОЧКА: хром окошка (подложка, контур, скругление, тень). ClipToBounds здесь
               НЕ ставится: он обрезал бы собственную тень Border'а, которая рисуется ЗА
               границами. Обрезкой содержимого занят внутренний PART_Clip.
 
-              «popBg» отдельного токена в ветке пока нет; Brush.SurfaceHighest — это ровно
-              «Самая высокая / плитка / окошко» из tokens.md (#20242B тёмная, #282A2E ч/б).
-              Расхождение по СВЕТЛОЙ теме вынесено в отчёт.  -->
+              Подложка — Brush.PopBg, отдельный токен «popBg» прототипа. Он НЕ равен
+              Brush.SurfaceHighest: в тёмной и чёрно-белой они совпадают (#20242B / #282A2E), а
+              в СВЕТЛОЙ окошко белое (#FFFFFF), а не серо-голубое (#E3EAF4) — иначе оно слилось бы
+              с плиткой строки. Скругление 14 берём готовым ключом Radius.Search: tokens.md держит
+              «поле поиска и мелкая карточка 14 · окошко 14» одним значением, второй ключ-двойник
+              заводить незачем.  -->
         <Style Selector="Border.PopShell">
-            <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHighest}" />
+            <Setter Property="Background" Value="{DynamicResource Brush.PopBg}" />
             <Setter Property="BorderBrush" Value="{DynamicResource Brush.Outline}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius" Value="{DynamicResource Radius.Search}" />
@@ -103,14 +105,14 @@
             <Setter Property="Background" Value="{DynamicResource Brush.PressBg}" />
         </Style>
 
-        <!--  ВЫБРАННЫЙ ПУНКТ. Прототип красит его в «surf3», но в тёмной и чёрно-белой
-              темах «surf3» РАВЕН подложке окошка (#20242B / #282A2E) — заливка там просто
-              невидима, и носителем состояния остаётся галочка. Переносить невидимую заливку
-              нечестно, поэтому берём Brush.SelectedFill — это уже язык «выбранного» в
-              приложении (строка выбранного сервера) и он читается во всех трёх темах.
-              Главный сигнал всё равно галочка.  -->
+        <!--  ВЫБРАННЫЙ ПУНКТ — «surf3» прототипа, то есть Brush.SurfaceHighest. В тёмной и
+              чёрно-белой он РАВЕН подложке окошка (#20242B / #282A2E), и заливки там не видно:
+              носитель состояния — галочка. В светлой окошко белое, а surf3 серо-голубой — там
+              заливка читается. Так на эталонных кадрах (C_pop_mode_dark/light/mono), и так это
+              и задумано: акцентная подсветка выбранного пункта добавила бы в тёмную тему синеву,
+              которой в прототипе нет.  -->
         <Style Selector="Button.PopOption.selected /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="{DynamicResource Brush.SelectedFill}" />
+            <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHighest}" />
         </Style>
 
         <!--  Текст пункта — 12.5/400 из типографики tokens.md («Значение, пункт окошка»).  -->

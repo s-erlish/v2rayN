@@ -79,12 +79,15 @@ public sealed class ValuePopupItem
 public partial class ValuePopup : UserControl
 {
     /// <summary>Per-caller widths from tokens.md «Окошко у значения». Consumers pass one of these
-    /// to <see cref="PopupWidth"/> instead of typing a number, so the set stays auditable.</summary>
+    /// to <see cref="PopupWidth"/> instead of typing a number, so the set stays auditable.
+    /// <para>DNS и Пинг — 236/246 из ПРОТОТИПА (<c>pop: ['dnsSel', DNSP, '236px']</c> /
+    /// <c>['pingSel', PINGP, '246px']</c>), а не 210/208 из ранней таблицы tokens.md: в прототипе
+    /// эти две строки — окошки, и их набор длиннее («Cloudflare + Google», «Реальная задержка»).</para></summary>
     public static class Widths
     {
         public const double Mode = 196;          // Режим: TUN · Только прокси
-        public const double Dns = 210;           // DNS
-        public const double Ping = 208;          // Пинг
+        public const double Dns = 236;           // DNS
+        public const double Ping = 246;          // Пинг
         public const double Look = 200;          // Оформление
         public const double Language = 180;      // Язык
         public const double AutoUpdate = 190;    // Автообновление подписки
@@ -105,6 +108,9 @@ public partial class ValuePopup : UserControl
     // Подъём над соседями. 30 = «rowZ» прототипа; конкретное число не важно, важно что
     // выше любого штатного ZIndex в разметке (везде 0) и что старое значение возвращается.
     private const int RaisedZIndex = 30;
+
+    // ...и симметричное понижение соседей, стоящих в разметке ПОСЛЕ предка (см. RaiseZ).
+    private const int LoweredZIndex = -1;
 
     /// <summary>Открыто ВСЕГДА ОДНО окошко на всё приложение (motion.md).</summary>
     private static ValuePopup? _current;
@@ -590,6 +596,16 @@ public partial class ValuePopup : UserControl
     /// Поднимает цепочку предков над соседями, чтобы следующие строки и следующая карточка не
     /// рисовались поверх окошка. Останавливается на ближайшем скролл-вьюпорте: он всё равно
     /// обрезает, выше подниматься нечего и вредно (страница перекрыла бы оверлей подэкрана).
+    ///
+    /// <para><b>Двумя ходами сразу, и это не перестраховка.</b> Одного подъёма предка НЕ ХВАТАЕТ:
+    /// проверено на живом окне — окошко DNS, вылезающее из карточки «Подключение», всё равно
+    /// закрывалось следующей карточкой «Обход блокировок», хотя карточка-владелец уже несла
+    /// ZIndex 30, а соседка ноль. Ровно та же схема этажом ниже (строка над следующими строками)
+    /// при этом работала. Что бы ни было тому причиной внутри рендера, ПОРЯДОК СТАНОВИТСЯ
+    /// ОДНОЗНАЧНЫМ, когда каждый сосед, стоящий В РАЗМЕТКЕ ПОСЛЕ предка, получает ZIndex −1:
+    /// теперь «выше» задано с обеих сторон, а не только сверху. Понижаем только тех, кто и так
+    /// рисовался бы поверх, и только на время открытия — исходные значения возвращает
+    /// <see cref="RestoreZ"/> из того же списка.</para>
     /// </summary>
     private void RaiseZ()
     {
@@ -604,6 +620,20 @@ public partial class ValuePopup : UserControl
             }
             _raised.Add((v, v.ZIndex));
             v.ZIndex = RaisedZIndex;
+
+            // Соседи ПОСЛЕ предка уходят под него: в разметке они позже, значит по умолчанию
+            // рисуются поверх — см. развёрнутое объяснение в док-комментарии метода.
+            if (v.GetVisualParent() is Panel panel && v is Control ctrl)
+            {
+                var index = panel.Children.IndexOf(ctrl);
+                for (var i = index + 1; i < panel.Children.Count; i++)
+                {
+                    var later = panel.Children[i];
+                    _raised.Add((later, later.ZIndex));
+                    later.ZIndex = LoweredZIndex;
+                }
+            }
+
             v = v.GetVisualParent();
         }
     }

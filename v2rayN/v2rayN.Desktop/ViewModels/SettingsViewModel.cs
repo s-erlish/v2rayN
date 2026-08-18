@@ -117,13 +117,9 @@ public class SettingsViewModel : MyReactiveObject
 
     #endregion Toggle-backed settings
 
-    #region Local-proxy editable fields (Inbound[0]; committed from the inline sub-panel)
-
-    [Reactive] public string LocalPortText { get; set; } = string.Empty;
-    [Reactive] public string ProxyUser { get; set; } = string.Empty;
-    [Reactive] public string ProxyPass { get; set; } = string.Empty;
-
-    #endregion Local-proxy editable fields
+    //  Полей локального прокси здесь БОЛЬШЕ НЕТ: порт и SOCKS5-авторизация переехали на подэкран
+    //  LocalProxyPage, который пишет тот же Inbound[0] напрямую и, в отличие от прежней инлайн-панели,
+    //  запрещает менять порт на живом туннеле. Дубликата состояния во вкладке не держим.
 
     #region «Окошко у значения» rows — option labels + selected index (TwoWay)
 
@@ -198,7 +194,7 @@ public class SettingsViewModel : MyReactiveObject
         LanguageOptions = ["Системный", "Русский", "English"];
         LanguageIndex = 1;
         UiScaleOptions = ["100%", "110%", "125%", "150%"];
-        AutoUpdateOptions = ["1 ч.", "3 ч.", "6 ч.", "12 ч.", "Выкл"];
+        AutoUpdateOptions = ["1 час", "3 часа", "6 часов", "12 часов", "Выключено"];
         MuxCountOptions = ["4", "8", "16", "32"];
         MuxCountIndex = 1;
         DnsOptions = ["Cloudflare", "Google", "Cloudflare + Google", "AdGuard", "Quad9"];
@@ -206,10 +202,6 @@ public class SettingsViewModel : MyReactiveObject
         PerAppText = "Выкл";
         VersionText = Utils.GetVersionInfo();
         BypassLan = true;
-        LocalPortText = "10808";
-        // Plain v2rayN default: local SOCKS5 has no auth out of the box (empty login/password).
-        ProxyUser = string.Empty;
-        ProxyPass = string.Empty;
     }
 
     /// <summary>Design-only instance referenced from <c>Design.DataContext</c> in the axaml.</summary>
@@ -230,10 +222,6 @@ public class SettingsViewModel : MyReactiveObject
             FragmentEnabled = _config.CoreBasicItem.EnableFragment;
             AutoStart = _config.GuiItem.AutoRun;
             LiteMode = _config.UiItem.LiteMode;
-
-            LocalPortText = (inbound?.LocalPort ?? 0).ToString();
-            ProxyUser = inbound?.User ?? string.Empty;
-            ProxyPass = inbound?.Pass ?? string.Empty;
 
             PerAppText = ResolvePerAppText();
             VersionText = Utils.GetVersionInfo();
@@ -734,45 +722,6 @@ public class SettingsViewModel : MyReactiveObject
         v2rayN.Desktop.App.ApplyTheme(EffectiveThemeName(theme), mono);
     }
 
-    /// <summary>Локальный прокси: commit the inline-edited port / SOCKS5 credentials to <c>Inbound[0]</c>.
-    /// Invalid port → revert the field to the persisted value (never write a broken port). Reloads live
-    /// only if the core is already running.</summary>
-    public async Task CommitLocalProxyAsync()
-    {
-        if (_designMode)
-        {
-            return;
-        }
-
-        var inbound = _config.Inbound.FirstOrDefault();
-        if (inbound == null)
-        {
-            return;
-        }
-
-        var user = ProxyUser?.Trim() ?? string.Empty;
-        var pass = ProxyPass ?? string.Empty;
-
-        var portOk = int.TryParse(LocalPortText?.Trim(), out var port) && port > 0 && port < Global.MaxPort;
-        if (!portOk)
-        {
-            // Reject silently and restore the real value so the UI never shows an un-persisted port.
-            LocalPortText = inbound.LocalPort.ToString();
-            port = inbound.LocalPort;
-        }
-
-        var changed = inbound.LocalPort != port || (inbound.User ?? string.Empty) != user || (inbound.Pass ?? string.Empty) != pass;
-        if (!changed)
-        {
-            return;
-        }
-
-        inbound.LocalPort = port;
-        inbound.User = user;
-        inbound.Pass = pass;
-        await PersistAndMaybeReload();
-    }
-
     /// <summary>Re-read values that a sub-screen (DNS / Пинг / per-app / …) may have changed, so the row
     /// labels stay truthful after it closes. Индексы окошек тоже пере-выставляются — под <c>_loading</c>,
     /// чтобы чтение не превратилось в запись.</summary>
@@ -889,8 +838,41 @@ public class SettingsViewModel : MyReactiveObject
 
     private static string FormatUiScale(double scale) => $"{Math.Round(scale * 100)}%";
 
-    private static string FormatAutoUpdate(int minutes) =>
-        minutes > 0 ? Common.L.F("Common_HoursShort", minutes / 60) : Common.L.T("Common_Off");
+    /// <summary>
+    /// Подписи «Автообновления подписки»: «1 час · 3 часа · 6 часов · 12 часов · Выключено» —
+    /// дословно из прототипа, под них же посчитана ширина окошка (190).
+    ///
+    /// <para>Почему не общими ключами: в таблице L есть только сокращения (<c>Common_HoursShort</c>
+    /// «{0} ч.», <c>Common_Off</c> «Выкл»), а склонение часов требует множественной формы
+    /// (<c>AddPlural</c>), которой для часов заведено не было. Заводить её — правка
+    /// <c>Common/L.Common.cs</c>, файла чужой дорожки, поэтому формы живут здесь, а заявка на
+    /// промоушен «Common_HoursPlural» + «Common_Disabled» — в отчёте. Язык берём у той же
+    /// <see cref="Common.L"/>, так что строка переключается вместе со всем интерфейсом.</para>
+    /// </summary>
+    private static string FormatAutoUpdate(int minutes)
+    {
+        var english = Common.L.Instance.CurrentLang == "en";
+        if (minutes <= 0)
+        {
+            return english ? "Disabled" : "Выключено";
+        }
+
+        var hours = minutes / 60;
+        if (english)
+        {
+            return hours == 1 ? "1 hour" : $"{hours} hours";
+        }
+
+        //  Русская множественная форма: 1 — «час», 2–4 — «часа», 0 и 5–20 — «часов»; десятки
+        //  считаются по последней цифре, кроме подростковых 11–14.
+        var tail = hours % 100;
+        var last = hours % 10;
+        var word = tail is >= 11 and <= 14 ? "часов"
+            : last == 1 ? "час"
+            : last is >= 2 and <= 4 ? "часа"
+            : "часов";
+        return $"{hours} {word}";
+    }
 
     #endregion Display resolvers
 

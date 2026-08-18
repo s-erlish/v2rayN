@@ -13,17 +13,20 @@ namespace v2rayN.Desktop.Views;
 /// <para><b>Три архетипа строки, и каждый правый элемент честен:</b>
 ///   • <b>окошко у значения</b> (значение + каретка, общий <see cref="ValuePicker"/>) — Режим · DNS ·
 ///     Пинг · Оформление · Язык · Масштаб · Автообновление · Число Mux;
-///   • <b>шеврон</b> — строка уходит на суб-страницу: Прокси по приложениям · Маршрутизация ·
-///     Файлы ресурсов · Журнал · Проверить обновления · Резервное копирование · Схемы URL ·
-///     О приложении (+ шеврон-раскрытие 0↔90 у «Локального прокси»);
+///   • <b>шеврон</b> — строка уходит на суб-страницу: Прокси по приложениям · Локальный прокси ·
+///     Маршрутизация · Файлы ресурсов · Журнал · Проверить обновления · Резервное копирование ·
+///     Схемы URL · О приложении;
 ///   • <b>тумблер</b> — булево: Обход локальной сети · IPv6 · Mux · Фрагментация ·
 ///     Облегчённый режим · Запуск с системой.</para>
 ///
-/// <para><b>Нажатие.</b> Прогиб 0.985 приходит из единой лестницы (<see cref="PressFeedback"/>,
-/// подключён селектором в GlobalStyles) — здесь для него НЕТ кода. Лестница гнёт СОДЕРЖИМОЕ строки,
-/// а не саму строку, поэтому её границы не двигаются и жест <c>Tapped</c> сбиться не может: дефект
-/// «тап через раз» из 1e884ad9 исключён по построению, а не подобран таймингами. Поэтому здесь снова
-/// можно опираться на <c>Tapped</c> — один жест, один вызов.</para>
+/// <para><b>Нажатие.</b> У строки настроек только ХОВЕР — так в прототипе (класс <c>.srow</c> несёт
+/// один <c>:hover</c>, прогиб 0.985 живёт на <c>.row</c> Главной и Аккаунта). Строка настроек —
+/// якорь раскрытого окошка, и окошко лежит ВНУТРИ неё: прогиб масштабировал бы вместе со строкой и
+/// его, а motion.md запрещает масштаб под окошком («от него текст внутри дёргается»). Единая
+/// лестница (<see cref="PressFeedback"/>) поэтому гасится одним сеттером в разметке; на других
+/// экранах она работает как работала. Указательный путь один — <c>Tapped</c>: ровно один вызов на
+/// тап, и без трансформа на строке дребезг PointerExited/Entered (дефект «тап через раз», 1e884ad9)
+/// невозможен по построению.</para>
 ///
 /// <para><b>Контракт «окошка».</b> Карточка не обрезает содержимое (иначе окошко нижней строки
 /// срезается её кромкой), значит маскировать углы больше нечем — скругление крайних строк карточки
@@ -36,12 +39,6 @@ namespace v2rayN.Desktop.Views;
 /// </summary>
 public partial class SettingsView : UserControl
 {
-    //  Ширины окошек — per-caller. Режим/Оформление/Язык/Масштаб/Автообновление/Число Mux берём из
-    //  каталога компонента (tokens.md); DNS и Пинг — 236/246 из ПРОТОТИПА: решение координатора,
-    //  тот же документ, что определил сам механизм этих двух строк, задаёт и их геометрию.
-    private const double DnsPopupWidth = 236;
-    private const double PingPopupWidth = 246;
-
     //  «Зависимая строка» (motion.md): раскрытие 320 мс. Уход — 75% темпа, как везде в репозитории.
     private static readonly TimeSpan DependentRevealIn = TimeSpan.FromMilliseconds(320);
     private static readonly TimeSpan DependentRevealOut = TimeSpan.FromMilliseconds(240);
@@ -61,8 +58,8 @@ public partial class SettingsView : UserControl
 
         // --- Строки-ОКОШКИ: ширина из каталога компонента, тап по строке переключает окошко. ---
         WirePicker(RowMode, PickMode, ValuePopup.Widths.Mode);
-        WirePicker(RowDns, PickDns, DnsPopupWidth);
-        WirePicker(RowPingMethod, PickPing, PingPopupWidth);
+        WirePicker(RowDns, PickDns, ValuePopup.Widths.Dns);
+        WirePicker(RowPingMethod, PickPing, ValuePopup.Widths.Ping);
         WirePicker(RowAppearance, PickLook, ValuePopup.Widths.Look);
         WirePicker(RowLanguage, PickLanguage, ValuePopup.Widths.Language);
         WirePicker(RowUiScale, PickUiScale, ValuePopup.Widths.UiScale);
@@ -71,24 +68,14 @@ public partial class SettingsView : UserControl
 
         // --- Строки-НАВИГАЦИИ (шеврон): тап кладёт Incy суб-страницу на общий стек оболочки ---
         WireRow(RowPerApp, () => OpenPage(new PerAppProxyPage(), refresh: true));
+        WireRow(RowLocalProxy, () => OpenPage(new LocalProxyPage()));
         WireRow(RowRouting, () => OpenPage(new RoutingSubView()));
         WireRow(RowAssets, () => OpenPage(new GeoFilesPage()));
+        WireRow(RowLog, () => OpenPage(new LogPage()));
+        WireRow(RowCheckUpdate, () => OpenPage(new CheckUpdateView()));
         WireRow(RowBackup, () => OpenPage(new BackupPage()));
         WireRow(RowUrlScheme, () => OpenPage(new UrlSchemesPage()));
         WireRow(RowAbout, () => OpenPage(new AboutPage()));
-
-        // --- «Журнал» и «Проверить обновления»: строки есть по screens.md, а Incy-подэкранов под них
-        //     в ветке ещё нет (их строит соседний агент — это последние две из одиннадцати). Старые
-        //     англоязычные MsgView/CheckUpdateView сюда не годятся: они не ISubPage, у них нет кнопки
-        //     «назад», и хост оболочки не даёт другого выхода — пользователь остался бы заперт на
-        //     экране. Поэтому тап пока не назначен; проводка — одна строка на каждую, как только
-        //     страницы появятся. Отмечено в отчёте. ---
-
-        // --- Локальный прокси — раскрытие инлайн-панели (анимированный шеврон 0↔90 + слайд панели) ---
-        WireRow(RowLocalProxy, ToggleLocalProxy);
-        ProxyPortBox.LostFocus += OnProxyFieldCommit;
-        ProxyUserBox.LostFocus += OnProxyFieldCommit;
-        ProxyPassBox.LostFocus += OnProxyFieldCommit;
 
         // --- Тумблер-строки: тап по всей строке (58) + Enter/Space переключают тумблер ---
         WireToggleRow(RowBypassLan, SwitchBypassLan);
@@ -286,99 +273,6 @@ public partial class SettingsView : UserControl
             // перебито новым переключением — конечное состояние поставит уже оно
         }
     }
-
-    // ===================== Локальный прокси: шеврон + инлайн-панель =====================
-
-    private async void ToggleLocalProxy()
-    {
-        var open = !LocalProxyPanel.IsVisible;
-        SetProxyChevron(open);
-        if (open)
-        {
-            LocalProxyPanel.IsVisible = true;
-            await RevealPanel(LocalProxyPanel, show: true);
-        }
-        else
-        {
-            await RevealPanel(LocalProxyPanel, show: false);
-            LocalProxyPanel.IsVisible = false;
-            // Сворачивание = коммит введённых значений (порт/логин/пароль → Inbound[0]).
-            _ = Vm?.CommitLocalProxyAsync();
-        }
-    }
-
-    /// <summary>Вращение шеврона 0↔90 (origin — относительный центр 50%,50%, задан в разметке). Плавно
-    /// 220мс Standard; мгновенно под «Облегчённым режимом».</summary>
-    private void SetProxyChevron(bool open)
-    {
-        var to = open ? 90d : 0d;
-        if (MotionState.IsLite)
-        {
-            LocalProxyChevron.RenderTransform = new RotateTransform(to);
-            return;
-        }
-        var from = open ? 0d : 90d;
-        var anim = new Animation
-        {
-            Duration = Motion.Dur.State,
-            Easing = Motion.Ease.Standard,
-            FillMode = FillMode.Forward,
-            Children =
-            {
-                new KeyFrame { Cue = new Cue(0d), Setters = { new Avalonia.Styling.Setter(RotateTransform.AngleProperty, from) } },
-                new KeyFrame { Cue = new Cue(1d), Setters = { new Avalonia.Styling.Setter(RotateTransform.AngleProperty, to) } },
-            },
-        };
-        _ = anim.RunAsync(LocalProxyChevron);
-    }
-
-    /// <summary>Инлайн-панель: раскрытие = fade + translateY −6→0 (300мс OutQuint), сворачивание =
-    /// fade + 0→−6 (150мс Standard). Компоузер-only; под lite — мгновенно.</summary>
-    private static async Task RevealPanel(Control panel, bool show)
-    {
-        if (MotionState.IsLite)
-        {
-            panel.Opacity = show ? 1d : 0d;
-            panel.RenderTransform = null;
-            return;
-        }
-        var dur = show ? Motion.Dur.Reveal : Motion.Dur.Exit;
-        var ease = show ? Motion.Ease.OutQuint : Motion.Ease.Standard;
-        var fromY = show ? -6d : 0d;
-        var toY = show ? 0d : -6d;
-        var fromO = show ? 0d : 1d;
-        var toO = show ? 1d : 0d;
-        var fade = new Animation
-        {
-            Duration = dur,
-            Easing = ease,
-            FillMode = FillMode.Forward,
-            Children =
-            {
-                new KeyFrame { Cue = new Cue(0d), Setters = { new Avalonia.Styling.Setter(Visual.OpacityProperty, fromO) } },
-                new KeyFrame { Cue = new Cue(1d), Setters = { new Avalonia.Styling.Setter(Visual.OpacityProperty, toO) } },
-            },
-        };
-        var slide = new Animation
-        {
-            Duration = dur,
-            Easing = ease,
-            FillMode = FillMode.Forward,
-            Children =
-            {
-                new KeyFrame { Cue = new Cue(0d), Setters = { new Avalonia.Styling.Setter(TranslateTransform.YProperty, fromY) } },
-                new KeyFrame { Cue = new Cue(1d), Setters = { new Avalonia.Styling.Setter(TranslateTransform.YProperty, toY) } },
-            },
-        };
-        await Task.WhenAll(fade.RunAsync(panel), slide.RunAsync(panel));
-        if (show)
-        {
-            panel.Opacity = 1d;
-            panel.RenderTransform = null;
-        }
-    }
-
-    private void OnProxyFieldCommit(object? sender, RoutedEventArgs e) => _ = Vm?.CommitLocalProxyAsync();
 
     // ===================== Навигация / вспомогательное =====================
 

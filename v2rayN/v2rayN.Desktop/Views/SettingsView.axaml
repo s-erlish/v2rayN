@@ -28,19 +28,22 @@
           2) подпись НЕ ПЕРЕНОСИТСЯ (NoWrap + многоточие). Вторая строка подписи — первая из двух
              причин разъехавшихся высот на Android; здесь она невозможна.
         Вторая причина там — у Material-тумблера минимальная высота больше плитки. Здешний
-        ToggleSwitch.iOS — трек 52×32, ниже плитки 40, и ему дополнительно снят MinHeight (см. стиль
+        ToggleSwitch.Row — трек 46×28, ниже плитки 40, и ему дополнительно снят MinHeight (см. стиль
         RowSwitch), так что и он высоту строки поднять не может.
 
-        ОТКЛИК НА НАЖАТИЕ. Прогиб 0.985 приходит из ЕДИНОЙ лестницы (GlobalStyles → cm:PressFeedback
-        на Border.SettingRow) — здесь для него нет ни строчки: ни стиля, ни кода. Лестница применяет
-        масштаб к СОДЕРЖИМОМУ строки, а не к самой строке, поэтому её границы под нажатием не
-        двигаются и дефект «тап через раз» (1e884ad9) воспроизвестись не может по построению.
+        ОТКЛИК НА НАЖАТИЕ. У строки настроек его НЕТ, кроме ховера — так в прототипе: класс `.srow`
+        несёт только `:hover` с фоном ховера, тогда как прогиб 0.985 живёт на `.row`
+        (Главная, Аккаунт). Разница не случайна: строка настроек — ЯКОРЬ раскрытого окошка, а окошко
+        лежит внутри неё, и любой масштаб на строке масштабировал бы вместе с ней и окошко. motion.md
+        про это прямо говорит: «Масштаб не использовать — от него текст внутри дёргается». Поэтому
+        единая лестница (GlobalStyles → cm:PressFeedback на Border.SettingRow) здесь ГАСИТСЯ одним
+        сеттером ниже; сама лестница и её потребители на других экранах не тронуты.
 
-        ОКОШКО У ЗНАЧЕНИЯ. Шесть строк (Режим · Оформление · Язык · Масштаб · Автообновление ·
-        Число Mux) отдают правую половину общему views:ValuePicker — он несёт значение, каретку и сам
-        ValuePopup. Своего окошка этот экран не заводит. Контракт компонента исполняется здесь:
-        карточка НЕ обрезает содержимое (ClipToBounds=False), а скругление крайних строк считает
-        ValuePopup.RowCorners в code-behind.
+        ОКОШКО У ЗНАЧЕНИЯ. Восемь строк (Режим · DNS · Пинг · Число Mux · Оформление · Язык ·
+        Масштаб · Автообновление) отдают правую половину общему views:ValuePicker — он несёт
+        значение, каретку и сам ValuePopup. Своего окошка этот экран не заводит. Контракт компонента
+        исполняется здесь: карточка НЕ обрезает содержимое (ClipToBounds=False), а скругление
+        крайних строк считает ValuePopup.RowCorners в code-behind.
     -->
 
     <UserControl.Resources>
@@ -91,77 +94,123 @@
         <!--  Схемы URL / ссылка (ic_hub_url_scheme)  -->
         <StreamGeometry x:Key="Geo.Set.UrlScheme">M3.9,12c0,-1.71 1.39,-3.1 3.1,-3.1h4V7H7c-2.76,0 -5,2.24 -5,5s2.24,5 5,5h4v-1.9H7c-1.71,0 -3.1,-1.39 -3.1,-3.1zM8,13h8v-2H8v2zM17,7h-4v1.9h4c1.71,0 3.1,1.39 3.1,3.1s-1.39,3.1 -3.1,3.1h-4V17h4c2.76,0 5,-2.24 5,-5s-2.24,-5 -5,-5z</StreamGeometry>
 
-        <!--  Поле ввода локального прокси. Полная ControlTheme (как TextBox.Incy в LoginView),
-              чтобы тема Semi не перекрашивала фон/фокус своими токенами: recessed SurfaceHigh,
-              радиус 12, высота 44, фокус = рамка Accent, текст OnSurface, каретка синяя.  -->
-        <ControlTheme x:Key="TextBox.IncyField" TargetType="TextBox">
-            <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineVariant}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="{DynamicResource Radius.Tile}" />
-            <Setter Property="MinHeight" Value="44" />
-            <Setter Property="Padding" Value="12,0" />
-            <Setter Property="FontSize" Value="15" />
-            <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
-            <Setter Property="CaretBrush" Value="{DynamicResource Brush.Accent}" />
-            <Setter Property="SelectionBrush" Value="#334C8DFF" />
-            <Setter Property="SelectionForegroundBrush" Value="{DynamicResource Brush.OnSurface}" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
-            <Setter Property="Cursor" Value="IBeam" />
+        <!--  ==================== ТУМБЛЕР СТРОКИ ====================
+              tokens.md «Тумблер»: 46×28, скругление 14, обводка 2.
+                · выключен — трек «вариант поверхности» с контуром, бегунок 14, ход 5, цвет
+                  приглушённых чернил;
+                · включён  — трек и контур акцентные, бегунок 20, ход 20, белый.
+              Обводка входит в габарит (box-sizing: border-box в прототипе), поэтому ход бегунка
+              отсчитывается от ВНУТРЕННЕЙ кромки: 5 и 20 — координаты внутри поля 42×24.
+              Всё движение 220 мс ease-out-quart (motion.md «Тумблер»): трек, контур, положение
+              и РАЗМЕР бегунка.
+
+              Почему не общий ToggleSwitch.iOS: там трек 52×32, бегунок 26 постоянного размера и
+              без обводки — другая фигура. Прототип держит ОДИН тумблер на все экраны, поэтому
+              правильное место этой ControlTheme — Assets/GlobalResources.axaml рядом с
+              ToggleSwitch.iOS (файл занят другим агентом — заявка на промоушен в отчёте). До тех
+              пор она живёт здесь и покрывает шесть тумблеров этой вкладки.
+
+              Габарит трека НЕИЗМЕНЕН — его можно ставить прямо в шаблоне. Всё, что переключается
+              состоянием (цвета, размер и ход бегунка), задаётся ТОЛЬКО селекторами: значение,
+              записанное в шаблоне, стало бы локальным и перебило бы стиль :checked.  -->
+        <ControlTheme x:Key="ToggleSwitch.Row" TargetType="ToggleSwitch">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Padding" Value="0" />
             <Setter Property="Template">
                 <ControlTemplate>
                     <Border
-                        x:Name="PART_BorderElement"
-                        Background="{TemplateBinding Background}"
-                        BorderBrush="{TemplateBinding BorderBrush}"
-                        BorderThickness="{TemplateBinding BorderThickness}"
-                        CornerRadius="{TemplateBinding CornerRadius}">
+                        x:Name="track"
+                        Width="46"
+                        Height="28"
+                        BorderThickness="2"
+                        CornerRadius="14">
                         <Border.Transitions>
                             <Transitions>
-                                <BrushTransition Property="BorderBrush" Duration="0:0:0.15" />
+                                <BrushTransition
+                                    Duration="0:0:0.22"
+                                    Easing="{StaticResource Ease.OutQuart}"
+                                    Property="Background" />
+                                <BrushTransition
+                                    Duration="0:0:0.22"
+                                    Easing="{StaticResource Ease.OutQuart}"
+                                    Property="BorderBrush" />
                             </Transitions>
                         </Border.Transitions>
-                        <Grid Margin="{TemplateBinding Padding}" ColumnDefinitions="*,Auto">
-                            <Panel Grid.Column="0" VerticalAlignment="{TemplateBinding VerticalContentAlignment}">
-                                <TextBlock
-                                    x:Name="PART_Watermark"
-                                    VerticalAlignment="Center"
-                                    Foreground="{DynamicResource Brush.OnSurfaceVariant}"
-                                    IsVisible="{TemplateBinding Text, Converter={x:Static StringConverters.IsNullOrEmpty}}"
-                                    Text="{TemplateBinding Watermark}"
-                                    TextAlignment="{TemplateBinding TextAlignment}"
-                                    TextWrapping="NoWrap" />
-                                <ScrollViewer
-                                    x:Name="PART_ScrollViewer"
-                                    HorizontalScrollBarVisibility="Hidden"
-                                    VerticalScrollBarVisibility="Disabled">
-                                    <TextPresenter
-                                        x:Name="PART_TextPresenter"
-                                        VerticalAlignment="Center"
-                                        CaretBrush="{TemplateBinding CaretBrush}"
-                                        CaretIndex="{TemplateBinding CaretIndex}"
-                                        PasswordChar="{TemplateBinding PasswordChar}"
-                                        RevealPassword="{TemplateBinding RevealPassword}"
-                                        SelectionBrush="{TemplateBinding SelectionBrush}"
-                                        SelectionEnd="{TemplateBinding SelectionEnd}"
-                                        SelectionForegroundBrush="{TemplateBinding SelectionForegroundBrush}"
-                                        SelectionStart="{TemplateBinding SelectionStart}"
-                                        Text="{TemplateBinding Text, Mode=TwoWay}"
-                                        TextAlignment="{TemplateBinding TextAlignment}"
-                                        TextWrapping="{TemplateBinding TextWrapping}" />
-                                </ScrollViewer>
+                        <!--  PART_MovingKnobs / PART_SwitchKnob — обязательные части ToggleSwitch (AVLN2205).  -->
+                        <Panel x:Name="PART_MovingKnobs">
+                            <Panel
+                                x:Name="PART_SwitchKnob"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Center">
+                                <Panel.Transitions>
+                                    <Transitions>
+                                        <TransformOperationsTransition
+                                            Duration="0:0:0.22"
+                                            Easing="{StaticResource Ease.OutQuart}"
+                                            Property="RenderTransform" />
+                                        <DoubleTransition
+                                            Duration="0:0:0.22"
+                                            Easing="{StaticResource Ease.OutQuart}"
+                                            Property="Width" />
+                                        <DoubleTransition
+                                            Duration="0:0:0.22"
+                                            Easing="{StaticResource Ease.OutQuart}"
+                                            Property="Height" />
+                                    </Transitions>
+                                </Panel.Transitions>
+                                <Ellipse x:Name="knobFill">
+                                    <Ellipse.Transitions>
+                                        <Transitions>
+                                            <BrushTransition
+                                                Duration="0:0:0.22"
+                                                Easing="{StaticResource Ease.OutQuart}"
+                                                Property="Fill" />
+                                        </Transitions>
+                                    </Ellipse.Transitions>
+                                </Ellipse>
                             </Panel>
-                        </Grid>
+                        </Panel>
                     </Border>
                 </ControlTemplate>
             </Setter>
-            <Style Selector="^:pointerover /template/ Border#PART_BorderElement">
+
+            <!--  ВЫКЛЮЧЕН  -->
+            <Style Selector="^ /template/ Border#track">
+                <Setter Property="Background" Value="{DynamicResource Brush.SurfaceVariant}" />
                 <Setter Property="BorderBrush" Value="{DynamicResource Brush.Outline}" />
             </Style>
-            <Style Selector="^:focus /template/ Border#PART_BorderElement">
+            <Style Selector="^ /template/ Panel#PART_SwitchKnob">
+                <Setter Property="Width" Value="14" />
+                <Setter Property="Height" Value="14" />
+                <Setter Property="RenderTransform" Value="translateX(5px)" />
+            </Style>
+            <Style Selector="^ /template/ Ellipse#knobFill">
+                <Setter Property="Fill" Value="{DynamicResource Brush.OnSurfaceVariant}" />
+            </Style>
+
+            <!--  ВКЛЮЧЁН  -->
+            <Style Selector="^:checked /template/ Border#track">
+                <Setter Property="Background" Value="{DynamicResource Brush.Accent}" />
                 <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
             </Style>
+            <Style Selector="^:checked /template/ Panel#PART_SwitchKnob">
+                <Setter Property="Width" Value="20" />
+                <Setter Property="Height" Value="20" />
+                <Setter Property="RenderTransform" Value="translateX(20px)" />
+            </Style>
+            <Style Selector="^:checked /template/ Ellipse#knobFill">
+                <Setter Property="Fill" Value="White" />
+            </Style>
+
+            <!--  Выключенных тумблеров в этой вкладке сейчас нет; состояние держим ради полноты.  -->
+            <Style Selector="^:disabled">
+                <Setter Property="Opacity" Value="0.38" />
+            </Style>
         </ControlTheme>
+
     </UserControl.Resources>
 
     <UserControl.Styles>
@@ -172,9 +221,15 @@
         <!--  Вертикальный паддинг 9 вместо 12: 40 (плитка) + 9 + 9 = 58 — высота строки прототипа.
               При 12 строка выросла бы до 64 и вкладка стала бы на треть экрана длиннее. Эта вкладка —
               ЕДИНСТВЕННЫЙ потребитель Border.SettingRow во всём приложении (проверено), поэтому
-              локальная правка ничего больше не задевает; заявка на перенос 16,9 в GlobalStyles — в отчёте.  -->
+              локальная правка ничего больше не задевает; заявка на перенос 16,9 в GlobalStyles — в отчёте.
+
+              ПРОГИБ СНЯТ (NaN): см. «ОТКЛИК НА НАЖАТИЕ» в шапке файла. Прототип не гнёт `.srow`, а
+              масштаб на строке-якоре растянул бы и раскрытое окошко — запрещено motion.md. Ховер и
+              кольцо фокуса из GlobalStyles остаются; лестница на других экранах не тронута.
+              Одна строка, чтобы вернуть: убрать сеттер ниже.  -->
         <Style Selector="Border.SettingRow">
             <Setter Property="Padding" Value="16,9" />
+            <Setter Property="loc:PressFeedback.Scale" Value="NaN" />
         </Style>
 
         <!--  Содержимое строки — фиксированные 40 (первый замок единой высоты, см. шапку файла).  -->
@@ -271,11 +326,14 @@
             <Setter Property="CornerRadius" Value="{DynamicResource Radius.SetCard}" />
             <Setter Property="Padding" Value="0" />
             <Setter Property="ClipToBounds" Value="False" />
-            <Setter Property="Margin" Value="0,0,0,8" />
+            <!--  Нижнего поля у карточки НЕТ: зазор до следующего раздела даёт верхний отступ 16 его
+                  заголовка (прототип: padding:16px 4px 8px у заголовка, у карточки полей нет).
+                  Собственное поле 8 добавляло бы к нему второй зазор — 24 вместо 16.  -->
+            <Setter Property="Margin" Value="0" />
         </Style>
 
         <!--  Тумблер строки. MinHeight=0 — второй из двух известных источников неравных высот
-              (у Material-тумблера он больше плитки). Здесь трек 52×32 < плитки 40, и снятый MinHeight
+              (у Material-тумблера он больше плитки). Здесь трек 46×28 < плитки 40, и снятый MinHeight
               гарантирует, что тумблер не поднимет строку ни при какой теме.
               Focusable/IsTabStop=False — таб-стоп и Enter/Space принадлежат самой СТРОКЕ.  -->
         <Style Selector="ToggleSwitch.RowSwitch">
@@ -298,11 +356,21 @@
         HorizontalScrollBarVisibility="Disabled"
         VerticalScrollBarVisibility="Auto">
 
-        <!--  Колонка 760 по центру (прототип: max-width 760, внутренние поля 20). Заголовка сверху нет.  -->
+        <!--  Колонка 760 по центру (прототип: max-width 760, внутренние поля 20). Заголовка сверху нет.
+
+              Выравнивание — Stretch, а НЕ Center: при Center Avalonia отдаёт панели её собственную
+              желаемую ширину, и колонка сжималась по самой длинной строке (карточки выходили ~430
+              вместо 720, а вкладка — узкой лентой посреди экрана). Stretch + MaxWidth даёт ровно
+              то, что нужно: ширина 720, а остаток свободного места делится поровну — то есть та же
+              центровка, но колонка честно занимает свою ширину.
+
+              720, а не 760, потому что в прототипе 760 — это ВНЕШНИЙ габарит колонки ВМЕСТЕ с
+              полями по 20 (`max-width:760;padding:0 20px`), то есть карточки внутри — 720. В
+              Avalonia Margin лежит СНАРУЖИ MaxWidth, поэтому ту же геометрию даёт 720 + поля 20.  -->
         <StackPanel
-            MaxWidth="760"
+            MaxWidth="720"
             Margin="20,14,20,20"
-            HorizontalAlignment="Center">
+            HorizontalAlignment="Stretch">
 
             <!--  ==================== ПОДКЛЮЧЕНИЕ ====================  -->
             <TextBlock Classes="SectionHeader SettingsSection" Text="{loc:T Settings_SecConnection}" />
@@ -367,7 +435,7 @@
                                 Grid.Column="2"
                                 Classes="RowSwitch"
                                 IsChecked="{Binding BypassLan, Mode=TwoWay}"
-                                Theme="{DynamicResource ToggleSwitch.iOS}" />
+                                Theme="{StaticResource ToggleSwitch.Row}" />
                         </Grid>
                     </Border>
 
@@ -388,7 +456,7 @@
                                 Grid.Column="2"
                                 Classes="RowSwitch"
                                 IsChecked="{Binding EnableIpv6, Mode=TwoWay}"
-                                Theme="{DynamicResource ToggleSwitch.iOS}" />
+                                Theme="{StaticResource ToggleSwitch.Row}" />
                         </Grid>
                     </Border>
 
@@ -435,9 +503,10 @@
 
                     <Border Classes="SettingDivider" />
 
-                    <!--  Локальный прокси. Раскрывает инлайн-панель с реальными полями Inbound[0];
-                          отдельной суб-страницы «Локальный прокси» в ветке ещё нет (её строит соседний
-                          агент) — шеврон вращается 0↔90, показывая, что раскрытие здесь.  -->
+                    <!--  Локальный прокси → подэкран (screens.md: «Порт и SOCKS5-авторизация»).
+                          Раньше строка раскрывала инлайн-панель — той панели больше нет: подэкран
+                          LocalProxyPage в ветке появился и, в отличие от панели, не даёт менять порт
+                          на живом туннеле. Шеврон обычный, статичный: строка уходит, а не раскрывает.  -->
                     <Border x:Name="RowLocalProxy" Classes="SettingRow">
                         <Grid ColumnDefinitions="Auto,*,Auto">
                             <Border Grid.Column="0" Classes="SetTile">
@@ -447,61 +516,11 @@
                                 <TextBlock Classes="RowTitle" Text="{loc:T Settings_LocalProxy}" />
                                 <TextBlock Classes="RowSub" Text="{loc:T Settings_LocalProxyHint}" />
                             </StackPanel>
-                            <!--  Раскрытие вращает шеврон 0°→90° БЕЗ CenterX/Y (code-behind ставит голый
-                                  RotateTransform) → origin обязан быть ОТНОСИТЕЛЬНЫМ «50%,50%».  -->
                             <PathIcon
-                                x:Name="LocalProxyChevron"
                                 Grid.Column="2"
                                 Classes="Chevron"
-                                Data="{StaticResource Geo.Set.Chevron}"
-                                RenderTransformOrigin="50%,50%" />
+                                Data="{StaticResource Geo.Set.Chevron}" />
                         </Grid>
-                    </Border>
-
-                    <!--  Инлайн-суб-поверхность локального прокси: реальные поля Inbound[0] (порт +
-                          SOCKS5-авторизация). Фон прозрачный — подложку рисует сама карточка, поэтому
-                          у панели нет собственных углов, которые спорили бы со скруглением карточки.  -->
-                    <Border
-                        x:Name="LocalProxyPanel"
-                        Padding="16,4,16,16"
-                        Background="Transparent"
-                        IsVisible="False">
-                        <StackPanel Spacing="12">
-                            <StackPanel Spacing="6">
-                                <TextBlock Classes="Caption" Text="{loc:T Settings_Port}" />
-                                <TextBox
-                                    x:Name="ProxyPortBox"
-                                    MaxLength="5"
-                                    Text="{Binding LocalPortText, Mode=TwoWay}"
-                                    Theme="{StaticResource TextBox.IncyField}" />
-                            </StackPanel>
-                            <TextBlock
-                                Margin="0,4,0,0"
-                                Classes="Caption"
-                                Foreground="{DynamicResource Brush.OnSurface}"
-                                Text="{loc:T Settings_Socks5Auth}" />
-                            <StackPanel Spacing="6">
-                                <TextBlock Classes="Caption" Text="{loc:T Settings_Username}" />
-                                <TextBox
-                                    x:Name="ProxyUserBox"
-                                    Text="{Binding ProxyUser, Mode=TwoWay}"
-                                    Theme="{StaticResource TextBox.IncyField}"
-                                    Watermark="{loc:T Settings_NotSet}" />
-                            </StackPanel>
-                            <StackPanel Spacing="6">
-                                <TextBlock Classes="Caption" Text="{loc:T Login_Password}" />
-                                <TextBox
-                                    x:Name="ProxyPassBox"
-                                    PasswordChar="●"
-                                    Text="{Binding ProxyPass, Mode=TwoWay}"
-                                    Theme="{StaticResource TextBox.IncyField}"
-                                    Watermark="{loc:T Settings_NotSet}" />
-                            </StackPanel>
-                            <TextBlock
-                                Classes="Caption"
-                                Text="{loc:T Settings_Socks5Hint}"
-                                TextWrapping="Wrap" />
-                        </StackPanel>
                     </Border>
 
                 </StackPanel>
@@ -528,7 +547,7 @@
                                 Grid.Column="2"
                                 Classes="RowSwitch"
                                 IsChecked="{Binding MuxEnabled, Mode=TwoWay}"
-                                Theme="{DynamicResource ToggleSwitch.iOS}" />
+                                Theme="{StaticResource ToggleSwitch.Row}" />
                         </Grid>
                     </Border>
 
@@ -573,7 +592,7 @@
                                 Grid.Column="2"
                                 Classes="RowSwitch"
                                 IsChecked="{Binding FragmentEnabled, Mode=TwoWay}"
-                                Theme="{DynamicResource ToggleSwitch.iOS}" />
+                                Theme="{StaticResource ToggleSwitch.Row}" />
                         </Grid>
                     </Border>
 
@@ -602,7 +621,7 @@
                                 Grid.Column="2"
                                 Classes="RowSwitch"
                                 IsChecked="{Binding LiteMode, Mode=TwoWay}"
-                                Theme="{DynamicResource ToggleSwitch.iOS}" />
+                                Theme="{StaticResource ToggleSwitch.Row}" />
                         </Grid>
                     </Border>
 
@@ -697,7 +716,7 @@
                                 Grid.Column="2"
                                 Classes="RowSwitch"
                                 IsChecked="{Binding AutoStart, Mode=TwoWay}"
-                                Theme="{DynamicResource ToggleSwitch.iOS}" />
+                                Theme="{StaticResource ToggleSwitch.Row}" />
                         </Grid>
                     </Border>
 
