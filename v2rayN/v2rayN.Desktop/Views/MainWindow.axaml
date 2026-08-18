@@ -473,7 +473,7 @@
                             Background="Transparent">
                             <DockPanel LastChildFill="False">
 
-                                <!--  3 вкладки (Главная · Настройки · Аккаунт). Список серверов живёт
+                                <!--  3 вкладки (Главная · Аккаунт · Настройки) — порядок из README пакета и прототипа. Список серверов живёт
                                       в левой колонке «Главной», отдельной вкладки «Сервера» нет.
                                       (Бренд-марка «d» убрана — владелец её не хочет в рейле.)  -->
                                 <!--  Слот-полоса вкладок + ОДИН путешествующий индикатор поверх (P0-1).
@@ -500,18 +500,6 @@
                                                     Text="{loc:T Nav_Home}" />
                                             </StackPanel>
                                         </Button>
-                                        <Button x:Name="navSettings" Classes="NavRailItem">
-                                            <StackPanel
-                                                HorizontalAlignment="Center"
-                                                VerticalAlignment="Center"
-                                                Spacing="5">
-                                                <PathIcon Data="{StaticResource Geo.Nav.Settings}" />
-                                                <TextBlock
-                                                    HorizontalAlignment="Center"
-                                                    Classes="Chip"
-                                                    Text="{loc:T Nav_Settings}" />
-                                            </StackPanel>
-                                        </Button>
                                         <Button x:Name="navAccount" Classes="NavRailItem">
                                             <StackPanel
                                                 HorizontalAlignment="Center"
@@ -522,6 +510,18 @@
                                                     HorizontalAlignment="Center"
                                                     Classes="Chip"
                                                     Text="{loc:T Nav_Account}" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button x:Name="navSettings" Classes="NavRailItem">
+                                            <StackPanel
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                Spacing="5">
+                                                <PathIcon Data="{StaticResource Geo.Nav.Settings}" />
+                                                <TextBlock
+                                                    HorizontalAlignment="Center"
+                                                    Classes="Chip"
+                                                    Text="{loc:T Nav_Settings}" />
                                             </StackPanel>
                                         </Button>
                                     </StackPanel>

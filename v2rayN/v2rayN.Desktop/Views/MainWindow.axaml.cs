@@ -157,7 +157,7 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     private int _contentZ;                       // ZIndex-счётчик: входящая вкладка всегда поверх уходящей
     private TranslateTransform? _railIndicatorTransform;   // Y-слот путешествующего индикатора рейла (P0-1)
     private bool _railIndicatorSeeded;                     // первый показ индикатора — мгновенно на активном слоте
-    private int _navIndex;                                 // индекс текущей вкладки (Home0/Settings1/Account2) → направление слайда (P0-2)
+    private int _navIndex;                                 // индекс текущей вкладки (Home0/Account1/Settings2) → направление слайда (P0-2)
     private readonly HashSet<AppTab> _entrancePlayed = new();  // region-stagger: первая активация вкладки за сессию (P1-1)
 
     // Bug8: интеракции буфера/скана регистрируются на ВРЕМЯ ЖИЗНИ окна (а не под WhenActivated, что снимало
@@ -244,7 +244,7 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
 
         // Единое состояние вкладки для ОБЕИХ раскладок: рейл (широкая) и нижняя навигация
         // (компактная) пишут в ОДИН ShowTab, который кладёт контент в текущий видимый хост.
-        _navButtons = [navHome, navSettings, navAccount];
+        _navButtons = [navHome, navAccount, navSettings];
         navHome.Click += (_, _) => ShowTab(AppTab.Home);
         navSettings.Click += (_, _) => ShowTab(AppTab.Settings);
         navAccount.Click += (_, _) => ShowTab(AppTab.Account);
@@ -435,7 +435,7 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     // detach/reattach. Отдельной вкладки «Сервера» нет: серверы — часть «Главной».
     private void ShowTab(AppTab tab, bool animate = true)
     {
-        // Направление слайда контента = дельта индекса в строке навигации (Home0▸Settings1▸Account2):
+        // Направление слайда контента = дельта индекса в строке навигации (Home0▸Account1▸Settings2):
         // +1 глубже (въезд справа), −1 назад (слева). На мгновенном свопе (layout swap / первый показ)
         // направление не нужно (0). _navIndex обновляем ВСЕГДА, чтобы следующий переход считался от
         // фактической вкладки (layout-свопы зовут ShowTab с той же вкладкой → дельта 0, ничего не ломают).
@@ -452,8 +452,10 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
 
     private static int NavIndex(AppTab tab) => tab switch
     {
-        AppTab.Settings => 1,
-        AppTab.Account => 2,
+        //  Порядок пакета: Главная · Аккаунт · Настройки (README, прототип) — от него считается
+        //  направление слайда контента.
+        AppTab.Account => 1,
+        AppTab.Settings => 2,
         _ => 0,
     };
 

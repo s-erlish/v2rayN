@@ -11,7 +11,7 @@
 
     <!--  ================================================================================
           НИЖНЯЯ НАВИГАЦИЯ (CA-2) — компактная раскладка, 1:1 с Android bottom_nav.
-          Пункты: Главная · Настройки (всегда) + Аккаунт (только при входе, тогда столбец
+          Пункты: Главная · Аккаунт · Настройки (порядок README пакета); «Аккаунт» только при входе (его столбец
           разворачивается из 0 в равную долю). Отдельной вкладки «Сервера» нет — компактная
           «Главная» показывает щит + мету + список серверов в ОДНОМ скролле, так что вторая
           вкладка серверов была бы избыточной.
@@ -158,7 +158,7 @@
             </Button>
             <Button
                 x:Name="ItemSettings"
-                Grid.Column="1"
+                Grid.Column="2"
                 Classes="BottomNavItem">
                 <StackPanel HorizontalAlignment="Center">
                     <PathIcon HorizontalAlignment="Center" Data="{StaticResource Geo.Nav.Settings}" />
@@ -167,7 +167,7 @@
             </Button>
             <Button
                 x:Name="ItemAccount"
-                Grid.Column="2"
+                Grid.Column="1"
                 Classes="BottomNavItem"
                 IsVisible="False">
                 <StackPanel HorizontalAlignment="Center">

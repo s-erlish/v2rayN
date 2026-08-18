@@ -31,11 +31,14 @@ public partial class SubscriptionMetaView : UserControl
     private static readonly IBrush _muted = new SolidColorBrush(Color.Parse("#9BA1AD"));        // Brush.OnSurfaceVariant
     private static readonly IBrush _red = new SolidColorBrush(Color.Parse("#F04452"));          // Brush.Red (destructive)
 
-    //  Порог одной строки для трафик-ряда: ниже этой ширины пилюля-по-центру и правая дата
-    //  (обе фиксированной ширины) начали бы налезать при ~372 — поэтому дату уводим на свою
-    //  строку под пилюлю. Держим запас: центрированные 160 + правая дата требуют ~380–400.
-    private const double TrafficOneRowMinWidth = 400d;
+    //  ДВА порога, и они разные — раньше обе вещи сидели на одном 400, и в компакте (карточка
+    //  ~312) пилюля трафика folded в две строки, хотя эталонный кадр компакта показывает одну.
+    //  Одна строка пилюли реально не влезает только к ~280; интервал «· 1 ч» в подписи — уже к 400
+    //  (замеры по эталонам: компакт 312 — одна строка и БЕЗ интервала, узкий 404 — С интервалом).
+    private const double TrafficOneRowMinWidth = 280d;
+    private const double SubtitleIntervalMinWidth = 400d;
     private bool _trafficOneRow = true;
+    private bool _subtitleWithInterval = true;
 
     //  Живая ширина вида → раскладка трафик-ряда (одна строка ↔ две). Живёт, пока во дереве.
     private IDisposable? _boundsSub;
@@ -154,13 +157,16 @@ public partial class SubscriptionMetaView : UserControl
         ApplyTrafficFill();
 
         var oneRow = width >= TrafficOneRowMinWidth;
-        if (oneRow == _trafficOneRow && ExpiryText.IsInitialized)
+        var withInterval = width >= SubtitleIntervalMinWidth;
+        if (oneRow == _trafficOneRow && withInterval == _subtitleWithInterval && ExpiryText.IsInitialized)
         {
             return;
         }
         _trafficOneRow = oneRow;
+        _subtitleWithInterval = withInterval;
 
-        //  Та же ширина решает и судьбу интервала в подписи (screens.md: компакт — без «· 1 ч»).
+        //  Интервал в подписи живёт на СВОЁМ пороге (400), не на пороге пилюли: компактная карточка
+        //  держит пилюлю в одну строку, но интервал в подпись уже не помещается.
         ApplySubtitle(null);
 
         if (oneRow)
@@ -513,7 +519,7 @@ public partial class SubscriptionMetaView : UserControl
             return;
         }
 
-        var subtitle = FormatSubtitle(sub, withInterval: _trafficOneRow);
+        var subtitle = FormatSubtitle(sub, withInterval: _subtitleWithInterval);
         SubtitleText.Text = subtitle;
         SubtitleText.IsVisible = subtitle.IsNotEmpty();
     }

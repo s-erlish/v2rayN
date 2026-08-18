@@ -328,6 +328,11 @@ public partial class ConnectHeroView : UserControl
 
         HeroFrame.Width = HeroFrame.Height = frame;
 
+        //  Стата-строка дышит вместе с героем: в широкой раскладке интервалы 28 (эталон 1366 даёт
+        //  ~195 на строку), в компактной и узкой — 20 (эталон компакта ~179). Раньше 20 стояло
+        //  всюду, и широкая не отличалась от компактной.
+        StatsRow.Spacing = _heroSize == HeroSize.Normal ? 28 : 20;
+
         //  Кольца: отступ 0 / g / 2g → диаметры frame / frame−2g / frame−4g.
         SetCircle(RingOuter, frame);
         SetCircle(RingHoverGlow, frame);

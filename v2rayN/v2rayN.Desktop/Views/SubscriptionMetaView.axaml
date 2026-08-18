@@ -65,8 +65,11 @@
             <Setter Property="Height" Value="30" />
         </Style>
         <Style Selector="Button.MetaIcon PathIcon">
-            <Setter Property="Width" Value="18" />
-            <Setter Property="Height" Value="18" />
+            <!--  14, не 18: PathIcon растягивает чернила на весь бокс, и 18 выглядел заметно крупнее
+                  эталона (замер чернил по кадрам: 12–15 при боксе 26–30). Бокс 30 не трогаем — цель
+                  касания остаётся.  -->
+            <Setter Property="Width" Value="14" />
+            <Setter Property="Height" Value="14" />
         </Style>
         <!--  «Удалить подписку» — деструктив, но ТИХИЙ: глиф нейтральный (Brush.OnSurfaceVariant от
               IconButton40) в покое и лишь ЗАТЕМНЯЕТСЯ на шаг (Brush.OnSurfaceVariantHover) при

@@ -197,7 +197,9 @@ public partial class BottomNavBar : UserControl
     {
         var logged = AccountSession.IsLoggedIn();
         ItemAccount.IsVisible = logged;
-        NavGrid.ColumnDefinitions[2].Width = logged
+        //  «Аккаунт» теперь СРЕДНЯЯ колонка (порядок пакета Главная · Аккаунт · Настройки);
+        //  без входа она сворачивается до 0, и Главная с Настройками делят панель пополам.
+        NavGrid.ColumnDefinitions[1].Width = logged
             ? new GridLength(1, GridUnitType.Star)
             : new GridLength(0);
 
