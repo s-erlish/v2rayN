@@ -303,7 +303,6 @@
                                                               у недоступного (screens.md «Список серверов»).  -->
                                                         <TextBlock
                                                             VerticalAlignment="Center"
-                                                            VerticalAlignment="Center"
                                                             Classes="Numeric"
                                                             FontSize="12.5"
                                                             FontWeight="Medium"
