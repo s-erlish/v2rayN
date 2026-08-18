@@ -111,17 +111,26 @@ public class DevicesViewModel : MyReactiveObject, IDisposable
         _ = Load();
     }
 
-    /// <summary>Design-time constructor: the list state from android_devices.jpg for the previewer.</summary>
+    /// <summary>
+    /// Design-time constructor. The five rows are the package's own live examples for this screen
+    /// (screens.md «Устройства»: DESKTOP-T0HSSSF · Xiaomi 2203129G (это устройство) ·
+    /// DESKTOP-T0HSSSF_x86_64 · SberDevices SberBox · 22011119UY), so the previewer and the
+    /// screenshot harness show exactly what the reference frame shows — a preview built from
+    /// different names silently hides column/trimming regressions the reference would catch.
+    /// HWIDs are given in FULL: the «…» on the reference frame is text trimming, not stored data.
+    /// </summary>
     private DevicesViewModel(bool design)
     {
         _repo = null!;
         _pendingFirstLoad = false;
-        const string here = "6ec3b80558194dabaf769c0f9351206f"; // «это устройство» in the preview
+        const string here = "538652e5dd1a7d1487d6d7c9b0a34f18"; // «это устройство» in the preview
         var sample = new List<DeviceDto>
         {
-            new() { Hwid = "0210da79ff83470092941af8b390692d", Platform = "android", DeviceModel = "Xiaomi 2203129G", LastActiveAt = "2026-07-10T09:03:00Z" },
-            new() { Hwid = "bdc968c12cd646848b9a814b6556f1a3", Platform = "ios", DeviceModel = "iPhone 15 Pro", LastActiveAt = "2026-07-10T08:41:00Z" },
-            new() { Hwid = here, Platform = "windows", DeviceModel = "PC", LastActiveAt = "2026-07-09T19:12:00Z" },
+            new() { Hwid = "774db157b35802d75bcf7b3f4a1e6d20", Platform = "windows", DeviceModel = "DESKTOP-T0HSSSF", LastActiveAt = "2026-08-17T10:24:00Z" },
+            new() { Hwid = here, Platform = "android", DeviceModel = "Xiaomi 2203129G", LastActiveAt = "2026-08-17T09:03:00Z" },
+            new() { Hwid = "f642316b-dd65-4004-9ada-7c1e5f0b2a93", Platform = "windows", DeviceModel = "DESKTOP-T0HSSSF_x86_64", LastActiveAt = "2026-08-01T19:12:00Z" },
+            new() { Hwid = "5639C957-22F4-5C55-0F8D-1A2B3C4D5E6F", Platform = "Android", DeviceModel = "SberDevices SberBox", LastActiveAt = "2026-08-16T08:41:00Z" },
+            new() { Hwid = "ad49a898f30869eb", Platform = "Android", DeviceModel = "22011119UY", LastActiveAt = "2026-08-17T07:55:00Z" },
         };
         Devices = sample.Select((d, i) => new DeviceRow(d, here, showDivider: i > 0)).ToList();
 
@@ -476,31 +485,47 @@ public class DevicesViewModel : MyReactiveObject, IDisposable
 }
 
 /// <summary>
-/// One device card, display-ready (port of DeviceAdapter.onBindViewHolder): name = model →
-/// platform → «Неизвестное устройство»; meta = «platform · Активно: dd.MM.yyyy» with graceful
-/// degradation; id line = «ID: hwid». Immutable — the list is replaced wholesale on every render.
+/// One device card, display-ready (port of DeviceAdapter.onBindViewHolder). The whole caption is
+/// ONE preformatted string — «Windows · Активно: 17.08.2026 · ID: 774db157…» — because that is what
+/// the reference frame shows and because a single TextBlock is the only shape whose trimming is
+/// guaranteed: the previous two-TextBlock layout put the platform+date in an Auto grid column and
+/// the identifier in the star one, so on a real payload the Auto column claimed its full desired
+/// width first and the identifier was pushed under the right-hand action instead of being cut.
+///
+/// TWO THINGS ARE NORMALISED HERE, both because the backend does not do it:
+///   · CASE — the same platform arrives as «Windows» and «windows», «Android» and «android» in one
+///     list. Known platforms get their canonical spelling (iOS / macOS keep their inner capital),
+///     anything unknown only gets its first letter raised, so a name we have never seen is not
+///     mangled into something it is not.
+///   · LENGTH — the hwid is 32 hex characters, longer than everything else in the caption put
+///     together. Shown is the recognisable head (8) plus «…», exactly as screens.md writes it;
+///     the full value stays reachable in <see cref="SubTip"/> (the row's tooltip), so nothing the
+///     server sent is lost — it is just not allowed to own the line.
+/// Immutable — the list is replaced wholesale on every render.
 /// </summary>
 public sealed class DeviceRow
 {
+    /// <summary>Characters of the hwid kept before the ellipsis (screens.md: «ID: 774db157…»).</summary>
+    private const int HwidHead = 8;
+
     public DeviceDto Dto { get; }
     public string Name { get; }
-    public string Meta { get; }
-    public bool HasMeta { get; }
-    public string HwidText { get; }
-    public bool HasHwid { get; }
+
+    /// <summary>The whole caption, one line: «Windows · Активно: 17.08.2026 · ID: 774db157…».</summary>
+    public string Sub { get; }
+
+    public bool HasSub => Sub.Length > 0;
+
+    /// <summary>Same caption with the FULL identifier — the row tooltip. Blank when nothing was cut.</summary>
+    public string SubTip { get; }
+
+    public bool HasSubTip => SubTip.Length > 0;
 
     // One inset divider BETWEEN rows: every row except the first draws its top hairline.
     public bool ShowDivider { get; }
 
-    // THIS machine: the row is tinted and carries an «Это устройство» marker.
+    // THIS machine: «Это устройство» instead of «Удалить» — the row cannot unlink itself.
     public bool IsCurrent { get; }
-
-    // Platform tile glyph — exactly one is true (the rest drive collapsed PathIcons in the row).
-    public bool IsAndroid { get; }
-    public bool IsApple { get; }
-    public bool IsWindows { get; }
-    public bool IsRouter { get; }
-    public bool IsGenericPlatform { get; }
 
     public DeviceRow(DeviceDto dto, string? currentHwid = null, bool showDivider = false)
     {
@@ -510,53 +535,86 @@ public sealed class DeviceRow
         IsCurrent = currentHwid.IsNotEmpty() && dto.Hwid.IsNotEmpty()
             && string.Equals(dto.Hwid, currentHwid, StringComparison.OrdinalIgnoreCase);
 
-        // Map the free-text platform to one tile glyph. "win" is checked AFTER apple so "darwin"
-        // (macOS) does not fall through to the Windows glyph.
-        var p = (dto.Platform ?? string.Empty).ToLowerInvariant();
-        if (p.Contains("android"))
+        var platform = PlatformLabel(dto.Platform);
+        var lastActive = FormatIsoDate(dto.LastActiveAt);
+
+        // A device with no model is NAMED by its platform, and repeating it one line below
+        // («iOS» over «iOS · ID: ad49a898…») says nothing twice.
+        if (string.Equals(platform, Name, StringComparison.Ordinal))
         {
-            IsAndroid = true;
-        }
-        else if (p.Contains("ios") || p.Contains("iphone") || p.Contains("ipad")
-            || p.Contains("mac") || p.Contains("darwin") || p.Contains("apple"))
-        {
-            IsApple = true;
-        }
-        else if (p.Contains("win"))
-        {
-            IsWindows = true;
-        }
-        else if (p.Contains("router") || p.Contains("openwrt") || p.Contains("keenetic") || p.Contains("gl-"))
-        {
-            IsRouter = true;
-        }
-        else
-        {
-            IsGenericPlatform = true;
+            platform = string.Empty;
         }
 
-        var platform = dto.Platform.NullIfEmpty();
-        var lastActive = FormatIsoDate(dto.LastActiveAt);
-        if (lastActive.IsNotEmpty() && platform != null)
+        string meta;
+        if (lastActive.IsNotEmpty() && platform.IsNotEmpty())
         {
-            Meta = Common.L.F("Devices_PlatformActive", platform, lastActive);
+            meta = Common.L.F("Devices_PlatformActive", platform, lastActive);
         }
         else if (lastActive.IsNotEmpty())
         {
-            Meta = Common.L.F("Devices_Active", lastActive);
+            meta = Common.L.F("Devices_Active", lastActive);
         }
         else
         {
-            Meta = platform ?? dto.AppVersion.NullIfEmpty() ?? string.Empty;
+            meta = platform.NullIfEmpty() ?? dto.AppVersion.NullIfEmpty() ?? string.Empty;
         }
-        HasMeta = Meta.IsNotEmpty();
 
-        HwidText = Common.L.F("Devices_Id", dto.Hwid);
-        HasHwid = dto.Hwid.IsNotEmpty();
+        var hwid = dto.Hwid ?? string.Empty;
+        var shortId = hwid.Length > HwidHead ? hwid[..HwidHead] + "…" : hwid;
+
+        Sub = Join(meta, hwid.IsNotEmpty() ? Common.L.F("Devices_Id", shortId) : string.Empty);
+        SubTip = shortId == hwid
+            ? string.Empty
+            : Join(meta, Common.L.F("Devices_Id", hwid));
     }
 
+    /// <summary>«a · b», or whichever half is non-blank — never a dangling separator.</summary>
+    private static string Join(string a, string b) =>
+        a.IsNotEmpty() && b.IsNotEmpty() ? a + " · " + b : (a.NullIfEmpty() ?? b);
+
     public static string DisplayNameOf(DeviceDto dto) =>
-        dto.DeviceModel.NullIfEmpty() ?? dto.Platform.NullIfEmpty() ?? Common.L.T("Devices_Unknown");
+        dto.DeviceModel.NullIfEmpty() ?? PlatformLabel(dto.Platform).NullIfEmpty() ?? Common.L.T("Devices_Unknown");
+
+    /// <summary>
+    /// Canonical spelling for the free-text platform the backend sends. Unknown values keep their
+    /// own spelling with only the first letter raised — inventing a prettier name for a platform we
+    /// do not know would be inventing data.
+    /// </summary>
+    private static string PlatformLabel(string? platform)
+    {
+        var raw = (platform ?? string.Empty).Trim();
+        if (raw.Length == 0)
+        {
+            return string.Empty;
+        }
+
+        var p = raw.ToLowerInvariant();
+        if (p.Contains("android"))
+        {
+            return "Android";
+        }
+        if (p is "ios" || p.Contains("iphone") || p.Contains("ipad"))
+        {
+            return "iOS";
+        }
+        if (p.Contains("macos") || p.Contains("mac os") || p.Contains("darwin") || p == "mac" || p == "osx")
+        {
+            return "macOS";
+        }
+        if (p.Contains("windows") || p == "win" || p == "win32" || p == "win64")
+        {
+            return "Windows";
+        }
+        if (p.Contains("linux"))
+        {
+            return "Linux";
+        }
+        if (p.Contains("harmony"))
+        {
+            return "HarmonyOS";
+        }
+        return char.ToUpperInvariant(raw[0]) + raw[1..];
+    }
 
     /// <summary>ISO-8601 (or date-only) → dd.MM.yyyy; "" for blank/unparseable input.</summary>
     private static string FormatIsoDate(string? iso)

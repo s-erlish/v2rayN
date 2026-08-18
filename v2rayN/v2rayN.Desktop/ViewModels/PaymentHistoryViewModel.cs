@@ -21,7 +21,7 @@ public sealed record PaymentRow
     /// <summary>Amount with currency sign, e.g. «199 ₽» / «216.50 ₽» (tnum in the view).</summary>
     public string Amount { get; init; } = string.Empty;
 
-    /// <summary>Russian chip label for mapped statuses, the raw status for unmapped, blank = no chip.</summary>
+    /// <summary>Russian label for mapped statuses, the raw status for unmapped, blank = no status.</summary>
     public string StatusLabel { get; init; } = string.Empty;
 
     public bool IsPaid { get; init; }
@@ -29,8 +29,19 @@ public sealed record PaymentRow
     public bool IsFailed { get; init; }
     public bool IsCanceled { get; init; }
 
-    public bool HasDate => Date.Length > 0;
-    public bool HasStatus => StatusLabel.Length > 0;
+    /// <summary>
+    /// The whole caption as ONE string — «09.08.2026 · Оплачено». Date and status used to be two
+    /// TextBlocks side by side, and side by side they drifted: the boxes align by their tops, so the
+    /// moment the two differed by a font (the date carried the numeric face, the status did not) or
+    /// by a margin, the status sat visibly off the date's line. One string cannot drift from itself.
+    /// The separator lives inside the join, so a payment without a date never shows a leading «·».
+    /// </summary>
+    public string Sub =>
+        Date.Length > 0 && StatusLabel.Length > 0 ? Date + " · " + StatusLabel
+        : Date.Length > 0 ? Date
+        : StatusLabel;
+
+    public bool HasSub => Sub.Length > 0;
 }
 
 /// <summary>
@@ -95,7 +106,13 @@ public class PaymentHistoryViewModel : MyReactiveObject
         }
     }
 
-    /// <summary>Design-time constructor: sample rows covering all four chip variants.</summary>
+    /// <summary>
+    /// Design-time constructor. The five rows are the package's own live examples for this screen
+    /// (screens.md «История платежей»: Пополнение баланса ×2 · Тариф Base · Пополнение баланса ×2,
+    /// суммы 1 / 1 / 10 / 10 / 10 ₽), so the previewer and the screenshot harness show exactly what
+    /// the reference frame shows. Dates are deliberately out of order in the literal — the newest-
+    /// first sort has to earn the order on every preview, not be handed it.
+    /// </summary>
     private PaymentHistoryViewModel(bool design)
     {
         _repo = null!;
@@ -103,10 +120,11 @@ public class PaymentHistoryViewModel : MyReactiveObject
         _loaded = true;
         Payments = MapRows(new List<PaymentDto>
         {
-            new() { Description = Common.L.T("History_SampleRenewal"), Amount = 199, Currency = "RUB", Status = "paid", CreatedAt = "2026-07-10T12:00:00Z" },
-            new() { Description = Common.L.T("History_SampleTopUp"), Amount = 300, Currency = "RUB", Status = "pending", CreatedAt = "2026-06-30T09:00:00Z" },
-            new() { Description = Common.L.T("History_SamplePlan"), Amount = 216.5, Currency = "RUB", Status = "failed", CreatedAt = "2026-06-10T18:30:00Z" },
-            new() { Kind = Common.L.T("History_SamplePlan"), Amount = 150, Currency = "RUB", Status = "canceled", CreatedAt = "2026-05-15T10:00:00Z" },
+            new() { Description = Common.L.T("History_SamplePlan"), Amount = 10, Currency = "RUB", Status = "paid", CreatedAt = "2026-05-05T11:20:00Z" },
+            new() { Description = Common.L.T("History_SampleTopUp"), Amount = 10, Currency = "RUB", Status = "paid", CreatedAt = "2026-04-23T10:00:00Z" },
+            new() { Description = Common.L.T("History_SampleTopUp"), Amount = 1, Currency = "RUB", Status = "paid", CreatedAt = "2026-08-09T12:00:00Z" },
+            new() { Description = Common.L.T("History_SampleTopUp"), Amount = 10, Currency = "RUB", Status = "paid", CreatedAt = "2026-04-23T09:00:00Z" },
+            new() { Description = Common.L.T("History_SampleTopUp"), Amount = 1, Currency = "RUB", Status = "paid", CreatedAt = "2026-08-03T09:00:00Z" },
         });
         Recompute();
     }
@@ -164,12 +182,19 @@ public class PaymentHistoryViewModel : MyReactiveObject
         ShowEmpty = !hasRows && Error == null && !coldLoading;
     }
 
-    /// <summary>Network-ish failures get the network message; everything else the generic one. Port of messageFor.</summary>
+    /// <summary>
+    /// The reason, in the user's words — it IS the headline of the error state, so it has to say
+    /// something the generic line does not. Same mapping as the sibling «Устройства» screen: an
+    /// expired session used to surface here as «Не удалось загрузить историю платежей», which sends
+    /// the reader looking for a network problem that is not there instead of to the sign-in they need.
+    /// </summary>
     private static string MessageFor(ApiError error) => error switch
     {
         ApiError.NetworkError => Common.L.T("Common_NetworkError"),
-        ApiError.TimeoutError => Common.L.T("Common_NetworkError"),
-        ApiError.ServiceUnavailable => Common.L.T("Common_NetworkError"),
+        ApiError.TimeoutError => Common.L.T("Common_Timeout"),
+        ApiError.ServiceUnavailable => Common.L.T("Common_ServiceUnavailable"),
+        ApiError.Unauthorized => Common.L.T("Common_SignInRequired"),
+        ApiError.RateLimited => Common.L.T("Common_TooManyRequests"),
         _ => Common.L.T("History_ErrLoad"),
     };
 

@@ -3,7 +3,6 @@
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:conv="clr-namespace:Avalonia.Data.Converters;assembly=Avalonia.Base"
     xmlns:loc="clr-namespace:v2rayN.Desktop.Common"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:vms="clr-namespace:v2rayN.Desktop.ViewModels"
@@ -124,11 +123,16 @@
     <Panel Background="Transparent">
 
         <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-            <!--  Колонка 760 БЕЗ HorizontalAlignment="Center": у Center StackPanel сжимается по
-            содержимому, и экран с короткими строками получает колонку уже соседних. Stretch
-            с MaxWidth даёт ровно 760 и центрируется сам.  -->
+            <!--  Колонка ЛЕКАЛА: MaxWidth 720 + поля 20, внешний габарит 760 (SubScreenStyles,
+            «Ширина колонки»). В Avalonia Margin лежит СНАРУЖИ MaxWidth, поэтому «760» из макета
+            пишется числом 720 — стояло 760, и карточки этого подэкрана были на 40 шире, чем у
+            одиннадцати соседних. Замер эталона E_devices_dark.png: карточка 720…2160 из 2732,
+            то есть ровно 720 при 1366.
+            БЕЗ HorizontalAlignment="Center": у Center StackPanel сжимается по содержимому,
+            и экран с короткими строками получает колонку уже соседних. Stretch с MaxWidth
+            даёт ровно 720 и центрируется сам.  -->
             <StackPanel
-                MaxWidth="760"
+                MaxWidth="720"
                 Margin="20,10,20,20">
 
                 <!--  ==================== Лекало: назад 40 (−8) → заголовок 22/700 → пояснение 13 ====================  -->
@@ -173,50 +177,24 @@
                                                 Margin="16,0,8,0"
                                                 VerticalAlignment="Center">
                                                 <TextBlock Classes="SubName" Text="{Binding Name}" />
-                                                <!--  «платформа · Активно: дата · ID: hwid…» одной строкой:
-                                                      обрезается ХВОСТ идентификатора, а не платформа с датой.  -->
-                                                <!--  Именно Grid, а не StackPanel: у звёздной колонки
-                                                      ширина ограничена, поэтому длинный идентификатор
-                                                      обрезается многоточием, а не наезжает на «Удалить».  -->
-                                                <Grid ColumnDefinitions="Auto,*">
-                                                    <TextBlock
-                                                        Grid.Column="0"
-                                                        Classes="SubSub"
-                                                        FontFamily="{DynamicResource Font.Numeric}"
-                                                        FontFeatures="tnum,lnum,zero"
-                                                        IsVisible="{Binding HasMeta}"
-                                                        Text="{Binding Meta}" />
-                                                    <!--  Разделитель ВНУТРИ строки идентификатора, а не
-                                                          отдельной колонкой: когда места нет, он уходит
-                                                          вместе с ней, а не висит одинокой точкой.  -->
-                                                    <TextBlock
-                                                        Grid.Column="1"
-                                                        Margin="4,0,0,0"
-                                                        Classes="SubSub"
-                                                        FontFamily="{DynamicResource Font.Numeric}"
-                                                        FontFeatures="tnum,lnum,zero"
-                                                        Text="{Binding HwidText, StringFormat='· {0}'}">
-                                                        <TextBlock.IsVisible>
-                                                            <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
-                                                                <Binding Path="HasMeta" />
-                                                                <Binding Path="HasHwid" />
-                                                            </MultiBinding>
-                                                        </TextBlock.IsVisible>
-                                                    </TextBlock>
-                                                    <TextBlock
-                                                        Grid.Column="1"
-                                                        Classes="SubSub"
-                                                        FontFamily="{DynamicResource Font.Numeric}"
-                                                        FontFeatures="tnum,lnum,zero"
-                                                        Text="{Binding HwidText}">
-                                                        <TextBlock.IsVisible>
-                                                            <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
-                                                                <Binding Path="!HasMeta" />
-                                                                <Binding Path="HasHwid" />
-                                                            </MultiBinding>
-                                                        </TextBlock.IsVisible>
-                                                    </TextBlock>
-                                                </Grid>
+                                                <!--  ОДИН TextBlock на всю подпись «Windows · Активно: 17.08.2026
+                                                      · ID: 774db157…» — так же, как в прототипе (там подпись строки
+                                                      тоже одна строка). Прежде она была собрана из ДВУХ блоков в
+                                                      сетке «Auto,*»: платформа с датой сидела в Auto-колонке, а
+                                                      идентификатор в звёздной. На живых данных Auto-колонка первой
+                                                      забирала всю нужную ей ширину, звёздной не оставалось ничего,
+                                                      и 32-символьный hwid уезжал под «Удалить» — ровно тот баг,
+                                                      который владелец увидел на своём окне.
+                                                      Гарнитура — БОДИ (Roboto по умолчанию), а не Font.Numeric:
+                                                      это обычный текст, в котором дата и hwid лишь вкраплениями;
+                                                      гротеск остаётся на заголовках, чипах и столбце сумм.
+                                                      Обрезка хвоста — CharacterEllipsis из .SubSub; полный
+                                                      идентификатор доступен в подсказке, ничего не теряется.  -->
+                                                <TextBlock
+                                                    Classes="SubSub"
+                                                    IsVisible="{Binding HasSub}"
+                                                    Text="{Binding Sub}"
+                                                    ToolTip.Tip="{Binding SubTip}" />
                                             </StackPanel>
 
                                             <!--  Текущее устройство удалить нельзя — вместо действия надпись

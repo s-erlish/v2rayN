@@ -3,7 +3,6 @@
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:conv="clr-namespace:Avalonia.Data.Converters;assembly=Avalonia.Base"
     xmlns:loc="clr-namespace:v2rayN.Desktop.Common"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:vms="clr-namespace:v2rayN.Desktop.ViewModels"
@@ -45,19 +44,24 @@
             <Setter Property="IsVisible" Value="False" />
         </Style>
 
-        <!--  Неуспех подсвечен цветом «плохо»: «Ошибка» и «Отменён» серым читались бы как «всё в
-              порядке». Успех и обработка остаются приглушёнными — ровно как на эталонных кадрах.  -->
+        <!--  Неуспех красит ВСЮ подпись целиком, а не одно слово внутри неё: подпись — один
+              TextBlock (иначе строка разъезжается), а красная строка «17.08.2026 · Ошибка»
+              читается ровно так же ясно, как красное слово. Успех и обработка остаются
+              приглушёнными — как на эталонных кадрах.  -->
         <Style Selector="TextBlock.SubSub.bad">
             <Setter Property="Foreground" Value="{DynamicResource Brush.RedText}" />
         </Style>
     </UserControl.Styles>
 
     <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-        <!--  Колонка 760 БЕЗ HorizontalAlignment="Center": у Center StackPanel сжимается по
-        содержимому, и экран с короткими строками получает колонку уже соседних. Stretch
-        с MaxWidth даёт ровно 760 и центрируется сам.  -->
+        <!--  Колонка ЛЕКАЛА: MaxWidth 720 + поля 20, внешний габарит 760 (SubScreenStyles,
+        «Ширина колонки»). В Avalonia Margin лежит СНАРУЖИ MaxWidth, поэтому «760» из макета
+        пишется числом 720 — стояло 760, и карточка истории была на 40 шире, чем у соседних
+        подэкранов. Замер эталона E_payments_dark.png: карточка 720…2160 из 2732 = ровно 720.
+        БЕЗ HorizontalAlignment="Center": у Center StackPanel сжимается по содержимому, и экран
+        с короткими строками получает колонку уже соседних.  -->
         <StackPanel
-            MaxWidth="760"
+            MaxWidth="720"
             Margin="20,10,20,20">
 
             <!--  ==================== Лекало: назад 40 (−8) → заголовок 22/700 → пояснение 13 ====================  -->
@@ -103,47 +107,20 @@
                                             Margin="16,0,12,0"
                                             VerticalAlignment="Center">
                                             <TextBlock Classes="SubName" Text="{Binding Description}" />
-                                            <!--  Подпись «дата · статус» одной строкой: разделитель живёт
-                                                  вместе со статусом, поэтому без статуса не остаётся висячей точки.  -->
-                                            <!--  Grid, а не StackPanel: звёздная колонка ограничена по
-                                                  ширине, поэтому длинный статус обрезается, а не наезжает
-                                                  на сумму.  -->
-                                            <Grid ColumnDefinitions="Auto,*">
-                                                <TextBlock
-                                                    Grid.Column="0"
-                                                    Classes="SubSub"
-                                                    FontFamily="{DynamicResource Font.Numeric}"
-                                                    FontFeatures="tnum,lnum,zero"
-                                                    IsVisible="{Binding HasDate}"
-                                                    Text="{Binding Date}" />
-                                                <!--  Разделитель ВНУТРИ статуса: без даты не остаётся
-                                                      висячей точки, при нехватке места уходит вместе с ним.  -->
-                                                <TextBlock
-                                                    Grid.Column="1"
-                                                    Margin="4,0,0,0"
-                                                    Classes="SubSub"
-                                                    Classes.bad="{Binding IsFailed}"
-                                                    Text="{Binding StatusLabel, StringFormat='· {0}'}">
-                                                    <TextBlock.IsVisible>
-                                                        <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
-                                                            <Binding Path="HasDate" />
-                                                            <Binding Path="HasStatus" />
-                                                        </MultiBinding>
-                                                    </TextBlock.IsVisible>
-                                                </TextBlock>
-                                                <TextBlock
-                                                    Grid.Column="1"
-                                                    Classes="SubSub"
-                                                    Classes.bad="{Binding IsFailed}"
-                                                    Text="{Binding StatusLabel}">
-                                                    <TextBlock.IsVisible>
-                                                        <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
-                                                            <Binding Path="!HasDate" />
-                                                            <Binding Path="HasStatus" />
-                                                        </MultiBinding>
-                                                    </TextBlock.IsVisible>
-                                                </TextBlock>
-                                            </Grid>
+                                            <!--  ОДИН TextBlock на всю подпись «09.08.2026 · Оплачено».
+                                                  Прежде дата и статус были ДВУМЯ блоками в сетке рядом,
+                                                  и рядом они разъезжались: боксы равняются по верху, а
+                                                  у даты стояла числовая гарнитура, у статуса — нет, плюс
+                                                  расходились верхние отступы. Одна строка от самой себя
+                                                  не отъедет. Разделитель живёт внутри склейки — платёж
+                                                  без даты не получает висячую точку.
+                                                  Гарнитура — БОДИ: гротеск и tnum остаются ТОЛЬКО у суммы
+                                                  справа, где цифры стоят колонкой и обязаны не плясать.  -->
+                                            <TextBlock
+                                                Classes="SubSub"
+                                                Classes.bad="{Binding IsFailed}"
+                                                IsVisible="{Binding HasSub}"
+                                                Text="{Binding Sub}" />
                                         </StackPanel>
 
                                         <TextBlock
@@ -233,7 +210,12 @@
                 </StackPanel>
             </Border>
 
-            <!--  ==================== Ошибка: причина и «Повторить» ====================  -->
+            <!--  ==================== Ошибка: причина и «Повторить» ====================
+                  ОДНА строка причины, а не заголовок плюс подпись. Заголовком стоял
+                  History_ErrLoad, подписью — ErrorText, а ErrorText для всего, что не сеть,
+                  ЕСТЬ History_ErrLoad: на живом окне «Не удалось загрузить историю платежей»
+                  печаталось дважды подряд. Теперь причина одна и она же заголовок — как на
+                  «Устройствах», чтобы два соседних подэкрана не спорили друг с другом.  -->
             <Border
                 Margin="0,14,0,0"
                 Classes="SubEmpty"
@@ -242,8 +224,7 @@
                     <Border Classes="SubEmptyTile">
                         <PathIcon Data="{StaticResource Geo.Pay.History}" />
                     </Border>
-                    <TextBlock Classes="SubEmptyTitle" Text="{loc:T History_ErrLoad}" />
-                    <TextBlock Classes="SubEmptyText" Text="{Binding ErrorText}" />
+                    <TextBlock Classes="SubEmptyTitle" Text="{Binding ErrorText}" />
                     <Button
                         Margin="0,4,0,0"
                         HorizontalAlignment="Center"
