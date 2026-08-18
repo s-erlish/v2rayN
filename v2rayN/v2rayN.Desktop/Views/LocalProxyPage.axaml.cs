@@ -72,25 +72,8 @@ public partial class LocalProxyPage : UserControl, ISubPage
         // а не разбросанными «!» по коду сохранения.
         switchBlockUdp.IsChecked = inbound?.UdpEnabled == false;
 
-        //  Значок в трее: состояние берём из конфига, применяем СРАЗУ по переключению, а не по
-        //  уходу со страницы — строка описывает наблюдаемое состояние, и значок обязан пропасть
-        //  и вернуться на глазах.
-        switchHideTray.IsChecked = _config.UiItem.HideTrayIcon;
-        switchHideTray.IsCheckedChanged += async (_, _) =>
-        {
-            var hide = switchHideTray.IsChecked == true;
-            if (_config.UiItem.HideTrayIcon == hide)
-            {
-                return;
-            }
-            _config.UiItem.HideTrayIcon = hide;
-            await ConfigHandler.SaveConfig(_config);
-            App.ApplyTrayIconVisibility(hide);
-        };
-
         WireRowToggle(RowAuth, switchAuth);
         WireRowToggle(RowBlockUdp, switchBlockUdp);
-        WireRowToggle(RowHideTray, switchHideTray);
 
         btnBack.Click += async (_, _) => await SaveAndBackAsync();
     }
