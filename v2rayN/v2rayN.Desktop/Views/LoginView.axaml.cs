@@ -64,7 +64,6 @@ public partial class LoginView : UserControl
     private enum ViewBlock
     {
         Method,
-        Awaiting,
         EmailPending,
     }
 
@@ -86,9 +85,6 @@ public partial class LoginView : UserControl
     private bool _revealPassword;
 
     // ── Координация движения/состояния ──────────────────────────────────────
-    // AwaitingBlock — показанный сейчас блок (управляет CTA/дугой/дыханием/кроссфейдом).
-    private bool _awaiting;
-
     // Первая раскладка прошла. ДО неё смены состояния СНАПАЮТСЯ (Telegram-вход выставляет ожидание
     // синхронно до первого кадра — самоанимироваться на открытии нельзя).
     private bool _firstRenderDone;
@@ -99,7 +95,7 @@ public partial class LoginView : UserControl
     // Строка ошибки сейчас раскрыта (чтобы не переигрывать reveal при смене текста/языка).
     private bool _errorShown;
 
-    // Гардит перекрывающиеся кроссфейды MethodBlock↔AwaitingBlock.
+    // Гардит перекрывающиеся кроссфейды колонки метода и пред-экрана «письмо отправлено».
     private CancellationTokenSource? _blockCts;
 
     // Success-момент → хэндофф: BackRequested отпускается ТОЛЬКО после проигрыша success-момента.
@@ -127,9 +123,6 @@ public partial class LoginView : UserControl
             BackRequested?.Invoke(this, EventArgs.Empty);
         };
         TelegramButton.Click += OnTelegramClick;
-        RestartButton.Click += OnRestartClick;
-        ChooseAnotherButton.Click += OnChooseAnotherClick;
-        OpenTelegramButton.Click += OnOpenTelegramClick;
         TogglePasswordButton.Click += OnTogglePasswordClick;
 
         // Сегмент «Вход | Регистрация» — переключает режим формы (ApplyMode).
@@ -195,9 +188,9 @@ public partial class LoginView : UserControl
         }
         _entryPending = false;
 
-        // Открылись сразу в ожидание (Telegram-вход) или движение выключено — не стаггерим; просто
-        // возвращаем колонку метода видимой (понадобится при возврате из ожидания: cancel/ошибка).
-        if (IsReducedMotion() || _awaiting || !MethodBlock.IsVisible)
+        // Движение выключено или колонка метода не на экране (пред-экран «письмо отправлено») — не
+        // стаггерим; просто возвращаем колонку метода видимой.
+        if (IsReducedMotion() || !MethodBlock.IsVisible)
         {
             RestoreMethodChildren();
             return;
@@ -280,12 +273,6 @@ public partial class LoginView : UserControl
             .Subscribe(_ => OnLoggedIn())
             .DisposeWith(d);
 
-        // Живой lite-тумблер → пере-оцениваем «дыхание» самолётика (аттачим только пока видно ожидание
-        // и не lite — не тикаем петлю за кадром).
-        void OnLiteChanged(object? s, bool lite) => RunOnUiLang(UpdateBreathe);
-        MotionState.Changed += OnLiteChanged;
-        Disposable.Create(() => MotionState.Changed -= OnLiteChanged).DisposeWith(d);
-
         // Живой перевод императивных строк (строка ошибки + подсказка глаза).
         void OnLanguageChanged(object? s, EventArgs e) => RunOnUiLang(ApplyLanguage);
         L.Instance.LanguageChanged += OnLanguageChanged;
@@ -331,15 +318,15 @@ public partial class LoginView : UserControl
     {
         switch (state)
         {
+            // AwaitingTelegram/Polling сюда больше НЕ приходят своим ходом: вход через Telegram
+            // ведёт экран прогрузки, а он открывается вместо этой страницы, а не поверх неё. Если
+            // состояние всё же долетело (общий VM, чужой поток) — молчим: страница не про него.
             case LoginState.AwaitingTelegram:
             case LoginState.Polling:
-                SetAwaiting(true);
-                SetSiteBusy(false);
-                SetLoginError(string.Empty);
                 break;
 
             case LoginState.SiteLoading:
-                SetAwaiting(false);
+                ShowBlock(ViewBlock.Method);
                 SetSiteBusy(true);
                 SetLoginError(string.Empty);
                 break;
@@ -407,7 +394,7 @@ public partial class LoginView : UserControl
                 break;
 
             case LoginState.Error error:
-                SetAwaiting(false);
+                ShowBlock(ViewBlock.Method);
                 SetSiteBusy(false);
                 SetRegisterBusy(false);
                 SetLoginError(MessageKeyFor(error.ErrorValue));
@@ -419,34 +406,23 @@ public partial class LoginView : UserControl
                 break;
 
             default: // Idle. Ошибку НЕ трогаем: Idle приходит и сразу после показа ошибки.
-                SetAwaiting(false);
+                ShowBlock(ViewBlock.Method);
                 SetSiteBusy(false);
                 SetRegisterBusy(false);
                 break;
         }
     }
 
-    /// <summary>Совместимость: вход/выход из ожидания Telegram — тонкая обёртка над <see cref="ShowBlock"/>.</summary>
-    private void SetAwaiting(bool awaiting) => ShowBlock(awaiting ? ViewBlock.Awaiting : ViewBlock.Method);
-
     /// <summary>
-    /// Показывает один из трёх блоков колонки контента (форма / ожидание Telegram / «письмо отправлено»),
-    /// ЗАМЕНЯЯ текущий КРОССФЕЙДОМ (220мс Ease.Standard, микро-scale), кроме первого кадра/lite — там
-    /// мгновенный снап. Управляет активностью CTA Telegram, вращением дуги ожидания и «дыханием» самолётика.
+    /// Показывает один из двух блоков колонки контента (форма / «письмо отправлено»), ЗАМЕНЯЯ текущий
+    /// КРОССФЕЙДОМ (220мс Ease.Standard, микро-scale), кроме первого кадра/lite — там мгновенный снап.
     /// </summary>
     private void ShowBlock(ViewBlock target)
     {
         var changed = target != _viewBlock;
         var prev = _viewBlock;
         _viewBlock = target;
-        _awaiting = target == ViewBlock.Awaiting;
 
-        // CTA Telegram неактивен ТОЛЬКО пока идёт опрос (паритет showAwaiting).
-        TelegramButton.IsEnabled = !_awaiting;
-        // Дуга крутится только пока видно ожидание (класс + селектор :not(.lite)).
-        SetSpinning(AwaitingSpinner, _awaiting);
-        // «Дыхание» самолётика — только пока видно ожидание и не lite.
-        UpdateBreathe();
         // Кольцо пред-состояния крутится только внутри EmailPending (verify-email); гасим при выходе.
         if (target != ViewBlock.EmailPending)
         {
@@ -467,7 +443,6 @@ public partial class LoginView : UserControl
 
     private Control BlockControl(ViewBlock block) => block switch
     {
-        ViewBlock.Awaiting => AwaitingBlock,
         ViewBlock.EmailPending => EmailPendingBlock,
         _ => MethodBlock,
     };
@@ -484,7 +459,6 @@ public partial class LoginView : UserControl
             c.RenderTransform = null;
         }
         Set(MethodBlock, target == ViewBlock.Method);
-        Set(AwaitingBlock, target == ViewBlock.Awaiting);
         Set(EmailPendingBlock, target == ViewBlock.EmailPending);
     }
 
@@ -534,26 +508,9 @@ public partial class LoginView : UserControl
         _blockCts = null;
     }
 
-    /// <summary>Аттачит/снимает «дыхание» самолётика (петля) по видимости ожидания + lite.</summary>
-    private void UpdateBreathe()
-    {
-        var on = _awaiting && !IsReducedMotion();
-        if (on)
-        {
-            if (!AwaitingPlane.Classes.Contains("breathing"))
-            {
-                AwaitingPlane.Classes.Add("breathing");
-            }
-        }
-        else
-        {
-            AwaitingPlane.Classes.Remove("breathing");
-        }
-    }
-
     /// <summary>
     /// Занятость входа через сайт / 2FA: спиннер на инициировавшей кнопке, submit-кнопки
-    /// заблокированы (паритет setSiteBusy). CTA Telegram НЕ трогаем (им владеет SetAwaiting).
+    /// заблокированы (паритет setSiteBusy). CTA Telegram НЕ трогаем — он уводит на экран прогрузки.
     /// </summary>
     private void SetSiteBusy(bool busy)
     {
@@ -942,15 +899,7 @@ public partial class LoginView : UserControl
         _beatStarted = true;
         try
         {
-            var lite = IsReducedMotion();
-            if (_awaiting)
-            {
-                await PlayAwaitingSuccess(lite);
-            }
-            else
-            {
-                await PlayBadgeSuccess(lite);
-            }
+            await PlayBadgeSuccess(IsReducedMotion());
         }
         catch
         {
@@ -963,38 +912,7 @@ public partial class LoginView : UserControl
         }
     }
 
-    /// <summary>Success на кольце ожидания: дуга→полное кольцо (220), самолётик→галочка (0.9→1, 160), hold 120.</summary>
-    private async Task PlayAwaitingSuccess(bool lite)
-    {
-        SetSpinning(AwaitingSpinner, false);
-        AwaitingPlane.Classes.Remove("breathing");
-
-        if (lite)
-        {
-            AwaitingSpinner.Opacity = 0;
-            AwaitingRingFull.Opacity = 1;
-            AwaitingPlane.Opacity = 0;
-            AwaitingCheck.Opacity = 1;
-            AwaitingCheck.RenderTransform = null;
-            await Task.Delay(120);
-            return;
-        }
-
-        // 1) штрих-дуга → полное кольцо.
-        var ring = Task.WhenAll(
-            Fade(AwaitingSpinner, 1d, 0d, Motion.Dur.State, Motion.Ease.OutQuint),
-            Fade(AwaitingRingFull, 0d, 1d, Motion.Dur.State, Motion.Ease.OutQuint));
-        // 2) самолётик → галочка (scale 0.9→1), старт на +160.
-        await Task.Delay(160);
-        var check = Task.WhenAll(
-            Fade(AwaitingPlane, 1d, 0d, Motion.Dur.PressOut, Motion.Ease.OutQuint),
-            ScaleFadeIn(AwaitingCheck, Motion.Dur.PressOut, Motion.Ease.OutQuint));
-        await Task.WhenAll(ring, check);
-        // 3) короткий hold — сигнал-истина, а не декор.
-        await Task.Delay(120);
-    }
-
-    /// <summary>Success без AwaitingBlock (сайт/2FA/регистрация/verify-email): 64-галочка проявляется,
+    /// <summary>Success-момент: 64-галочка проявляется,
     /// текущий видимый блок (форма или пред-экран) гаснет под ней.</summary>
     private async Task PlayBadgeSuccess(bool lite)
     {
@@ -1015,39 +933,27 @@ public partial class LoginView : UserControl
 
     // ── Действия ────────────────────────────────────────────────────────────
 
-    /// <summary>«Открыть Telegram»: повторно открывает текущий deep link (ссылка ещё живая).</summary>
-    private void OnOpenTelegramClick(object? sender, RoutedEventArgs e)
-    {
-        var deepLink = _vm?.TelegramDeepLink;
-        if (deepLink.IsNotEmpty())
-        {
-            ProcUtils.ProcessStart(deepLink);
-        }
-    }
-
-    /// <summary>«Войти через Telegram»: запускает вход через Telegram (всегда доступен, кроме опроса).</summary>
+    /// <summary>
+    /// «Войти через Telegram» на этой странице ведёт ТУДА ЖЕ, куда та же кнопка начального экрана и
+    /// гейта «Аккаунта»: на экран прогрузки, который сам запускает вход, сам ждёт подтверждения и сам
+    /// доводит до собранной «Главной».
+    ///
+    /// Сначала снимаем СЕБЯ со стека, потом кладём слой: хост держит ОДИН контент, и слой, положенный
+    /// поверх, вернул бы пользователя на эту же страницу по завершении потока. Порядок безопасен —
+    /// входная анимация нового подэкрана отменяет выходную предыдущего, и снятая страница не успевает
+    /// стереть новый контент.
+    /// </summary>
     private void OnTelegramClick(object? sender, RoutedEventArgs e)
     {
         SetLoginError(string.Empty);
-        Execute(_vm?.LoginTelegramCmd);
-    }
-
-    /// <summary>«Начать заново»: новая попытка входа через Telegram со свежим deep link.</summary>
-    private void OnRestartClick(object? sender, RoutedEventArgs e)
-    {
-        SetLoginError(string.Empty);
-        Execute(_vm?.LoginTelegramCmd);
-    }
-
-    /// <summary>
-    /// «Другой способ входа» (§7): CancelLogin останавливает ≤3-мин опрос и сбрасывает состояние в Idle
-    /// (только если не вошли) → ApplyLoginState(Idle) → SetAwaiting(false) → обратный кроссфейд к
-    /// MethodBlock В СТРАНИЦЕ, не покидая экран. Отличается от «Начать заново» (перезапуск Telegram).
-    /// </summary>
-    private void OnChooseAnotherClick(object? sender, RoutedEventArgs e)
-    {
-        SetLoginError(string.Empty);
-        _vm?.CancelLogin();
+        var host = TopLevel.GetTopLevel(this) as MainWindow;
+        if (host is null)
+        {
+            Execute(_vm?.LoginTelegramCmd);
+            return;
+        }
+        BackRequested?.Invoke(this, EventArgs.Empty);
+        AccountSyncView.OpenFlow(host, AccountSyncView.FlowKind.Telegram, null, driveLogin: true);
     }
 
     /// <summary>«Отправить снова» на пред-экране — повторяет запрос ПО ВИДУ состояния (verify/magic/reset).</summary>

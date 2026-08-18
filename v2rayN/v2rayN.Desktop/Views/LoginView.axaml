@@ -52,9 +52,13 @@
         <!--  Кнопка «назад» тулбара — глобальный Button.BackNav. Линк-действие (LinkAction),
               тональная 48h, Primary/Tall, focus-кольца — тоже глобальные (GlobalStyles).  -->
 
-        <!--  LinkAction hover (P2): текст-действия получают тихий фон-подложку Brush.Hover при
-              наведении (базовый класс — глобальный; дублировать его не нужно).  -->
+        <!--  СВЕЧЕНИЯ ПРИ НАВЕДЕНИИ НЕТ (общее правило приложения): подложка вспыхивала на всю
+              кнопку разом и читалась как моргание. Держим фон прозрачным и под курсором — иначе
+              тема Semi подставит свой светлый токен. Отклик остаётся на нажатии.  -->
         <Style Selector="Button.LinkAction:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="Button.LinkAction:pressed /template/ ContentPresenter#PART_ContentPresenter">
             <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
         </Style>
 
@@ -94,7 +98,11 @@
                 </Transitions>
             </Setter>
         </Style>
+        <!--  Неактивный таб под курсором не заливается — правило то же.  -->
         <Style Selector="Button.SegItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="Button.SegItem:pressed /template/ ContentPresenter#PART_ContentPresenter">
             <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
         </Style>
         <Style Selector="Button.SegItem.segActive">
@@ -193,37 +201,6 @@
             </Style.Animations>
         </Style>
 
-        <!--
-            «Слушающее дыхание» самолётика в ожидании (§3.2, P2): opacity 0.55↔1 + scale 0.94↔1,
-            период 1.6с, симметрично, бесконечно — второй, более медленный ритм поверх вращения дуги
-            (1.1с). Класс .breathing навешивает code-behind ТОЛЬКО пока виден AwaitingBlock и не lite
-            (не тикает за кадром). Второй предохранитель — селектор :is(Window):not(.lite): под lite
-            анимация не аттачится вовсе (самолётик статичен). Центр — origin «50%,50%» на PathIcon.
-        -->
-        <Style Selector=":is(Window):not(.lite) PathIcon.PlaneBreathe.breathing">
-            <Style.Animations>
-                <Animation
-                    Easing="{StaticResource Ease.Standard}"
-                    IterationCount="Infinite"
-                    Duration="0:0:1.6">
-                    <KeyFrame Cue="0%">
-                        <Setter Property="Opacity" Value="1.0" />
-                        <Setter Property="ScaleTransform.ScaleX" Value="1.0" />
-                        <Setter Property="ScaleTransform.ScaleY" Value="1.0" />
-                    </KeyFrame>
-                    <KeyFrame Cue="50%">
-                        <Setter Property="Opacity" Value="0.55" />
-                        <Setter Property="ScaleTransform.ScaleX" Value="0.94" />
-                        <Setter Property="ScaleTransform.ScaleY" Value="0.94" />
-                    </KeyFrame>
-                    <KeyFrame Cue="100%">
-                        <Setter Property="Opacity" Value="1.0" />
-                        <Setter Property="ScaleTransform.ScaleX" Value="1.0" />
-                        <Setter Property="ScaleTransform.ScaleY" Value="1.0" />
-                    </KeyFrame>
-                </Animation>
-            </Style.Animations>
-        </Style>
     </UserControl.Styles>
 
     <!--  Фон = радиальный Brush.HomeGradient (тот же, что у Онбординга): убирает шов «градиент→плоскость»
@@ -736,125 +713,16 @@
                             TextWrapping="Wrap" />
                     </StackPanel>
 
-                    <!--  ==================== AwaitingBlock: ожидание подтверждения в Telegram ====================
-                          Сфокусированный экран: на время опроса ЗАМЕНЯЕТ MethodBlock (кроссфейд, code-behind).
-                          Кольцо (трек + дуга) + «дышащий» самолётик, статус, «Открыть Telegram»,
-                          «Начать заново» и «Другой способ входа». AwaitingRingFull/AwaitingCheck скрыты —
-                          проявляются в success-моменте (дуга→полное кольцо, самолётик→галочка).  -->
-                    <StackPanel
-                        x:Name="AwaitingBlock"
-                        Margin="0,40,0,0"
-                        VerticalAlignment="Top"
-                        HorizontalAlignment="Stretch"
-                        IsVisible="False"
-                        RenderTransformOrigin="50%,50%">
-                        <!--  64 кольцо: статичный трек + вращающаяся дуга (Accent) + самолётик.  -->
-                        <Panel
-                            Width="64"
-                            Height="64"
-                            HorizontalAlignment="Center">
-                            <Ellipse
-                                Width="64"
-                                Height="64"
-                                Stroke="{DynamicResource Brush.OutlineVariant}"
-                                StrokeThickness="3" />
-                            <!--  Полное кольцо для success-момента (проявляется, дуга гаснет).  -->
-                            <Ellipse
-                                x:Name="AwaitingRingFull"
-                                Width="64"
-                                Height="64"
-                                Opacity="0"
-                                Stroke="{DynamicResource Brush.Accent}"
-                                StrokeThickness="3" />
-                            <Ellipse
-                                x:Name="AwaitingSpinner"
-                                Width="64"
-                                Height="64"
-                                Classes="Spinner"
-                                RenderTransformOrigin="50%,50%"
-                                Stroke="{DynamicResource Brush.Accent}"
-                                StrokeDashArray="16.75,50.25"
-                                StrokeLineCap="Round"
-                                StrokeThickness="3" />
-                            <PathIcon
-                                x:Name="AwaitingPlane"
-                                Width="26"
-                                Height="26"
-                                Classes="PlaneBreathe"
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Center"
-                                Data="{StaticResource Geo.Login.Telegram}"
-                                Foreground="{DynamicResource Brush.Accent}"
-                                RenderTransformOrigin="50%,50%" />
-                            <!--  Галочка success (проявляется в success-моменте, scale 0.9→1).  -->
-                            <PathIcon
-                                x:Name="AwaitingCheck"
-                                Width="30"
-                                Height="30"
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Center"
-                                Data="{StaticResource Geo.Check}"
-                                Foreground="{DynamicResource Brush.Accent}"
-                                Opacity="0"
-                                RenderTransformOrigin="50%,50%" />
-                        </Panel>
-                        <!--  Заголовок ожидания = Headline (24): сфокусированный момент якорится так же
-                              сильно, как idle-герой (§3.2, P1).  -->
-                        <TextBlock
-                            Margin="0,20,0,0"
-                            HorizontalAlignment="Stretch"
-                            Classes="Headline"
-                            Text="{loc:T Login_WaitingConfirm}"
-                            TextAlignment="Center"
-                            TextWrapping="Wrap" />
-                        <TextBlock
-                            Margin="0,8,0,0"
-                            HorizontalAlignment="Stretch"
-                            Classes="Body"
-                            Foreground="{DynamicResource Brush.OnSurfaceVariant}"
-                            Text="{loc:T Login_TelegramConfirmHint}"
-                            TextAlignment="Center"
-                            TextWrapping="Wrap" />
-                        <Button
-                            x:Name="OpenTelegramButton"
-                            Margin="0,24,0,0"
-                            HorizontalAlignment="Stretch"
-                            HorizontalContentAlignment="Center"
-                            VerticalContentAlignment="Center"
-                            Classes="Primary Tall">
-                            <StackPanel
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Center"
-                                Orientation="Horizontal"
-                                Spacing="8">
-                                <!--  Без явного Foreground: Button.Primary — КОНТУРНАЯ пилюля (решение
-                                      владельца «фона не должно быть синего вообще»), её содержимое
-                                      наследует акцентный цвет самой кнопки. Прибитый OnAccent писал
-                                      бы белым по белому в светлой теме — глиф просто исчезал.  -->
-                                <PathIcon
-                                    Width="20"
-                                    Height="20"
-                                    Data="{StaticResource Geo.Login.Telegram}" />
-                                <TextBlock VerticalAlignment="Center" Text="{loc:T Login_OpenTelegram}" />
-                            </StackPanel>
-                        </Button>
-                        <!--  «Начать заново» — новый Telegram deep link (перезапуск того же способа).  -->
-                        <Button
-                            x:Name="RestartButton"
-                            Margin="0,8,0,0"
-                            HorizontalAlignment="Center"
-                            Classes="LinkAction"
-                            Content="{loc:T Login_StartOver}" />
-                        <!--  «Другой способ входа» (§7, P1) — CancelLogin → возврат к MethodBlock В СТРАНИЦЕ
-                              (не покидая экран), закрывает единственный навигационный тупик ожидания.  -->
-                        <Button
-                            x:Name="ChooseAnotherButton"
-                            Margin="0,4,0,0"
-                            HorizontalAlignment="Center"
-                            Classes="LinkAction"
-                            Content="{loc:T Login_ChooseAnother}"
-                            Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
-                    </StackPanel>
+                    <!--  ==================== ЭКРАНА ОЖИДАНИЯ ЗДЕСЬ БОЛЬШЕ НЕТ ====================
+                          Был AwaitingBlock: «Ожидаем подтверждения в Telegram» + кольцо с самолётиком +
+                          «Открыть Telegram» / «Начать заново» / «Другой способ входа». Владелец его
+                          убрал: на одно действие приходилось два ожидания подряд, причём второе — по
+                          старому лекалу. Теперь «Войти через Telegram» СРАЗУ открывает экран прогрузки
+                          (AccountSyncView), и ждёт подтверждения он — шагом 0 «Открываем Telegram ·
+                          Подтвердите вход в приложении», ровно как в пакете (shots/H_tg_step0).
+                          Сам ОПРОС никуда не делся и не изменился: его ведёт AuthManager (2 с между
+                          запросами, 3 минуты предела, переходный сбой пережидается, 410/401
+                          останавливают сразу, поздний ответ не входит за спиной у закрытого окна).  -->
 
                     <!--  ==================== EmailPendingBlock: письмо отправлено ====================
                           Общий пред-экран трёх пассворлесс-состояний (подтвердите почту · magic-ссылка

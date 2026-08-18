@@ -107,7 +107,7 @@
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderBrush" Value="{DynamicResource Brush.Outline}" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Cursor" Value="Arrow" />
             <Setter Property="Transitions">
                 <Transitions>
                     <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.2" Easing="{StaticResource Ease.OutQuart}" />
@@ -120,11 +120,44 @@
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill32}" />
         </Style>
+        <!--  СВЕЧЕНИЯ ПРИ НАВЕДЕНИИ НЕТ (общее правило приложения): заливка вспыхивала на всю
+              кнопку разом и читалась как моргание. Отклик остаётся на нажатии.  -->
         <Style Selector="Button.BalanceChip:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="Button.BalanceChip:pressed /template/ ContentPresenter#PART_ContentPresenter">
             <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
         </Style>
         <Style Selector="Button.BalanceChip:pressed">
             <Setter Property="RenderTransform" Value="scale(0.975)" />
+        </Style>
+
+        <!--  ============ CTA шторки пополнения («Продолжить») ============
+              Подпись обязана быть СВЕТЛОЙ-акцентной, как на «Пополнить» рядом. Класс Primary даёт
+              контурную геометрию, но цвет содержимого он прибивает ТОЛЬКО в покое; в состояниях
+              (:pointerover, :pressed, :disabled) внутрь шаблона лезет тема Semi со своими токенами —
+              и слово уходило в тёмный. Прибиваем цвет во ВСЕХ четырёх состояниях прямо здесь: это
+              единственное место, где кнопка живёт внутри флайаута, а Assets/GlobalStyles.axaml —
+              не наш файл (правку туда см. в отчёте).
+              Foreground берём и на кнопке, и на презентере: для строкового Content подпись рисует
+              сгенерированный TextBlock презентера, для составного — наследование от кнопки.  -->
+        <Style Selector="Button.FlyoutCta">
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+        </Style>
+        <Style Selector="Button.FlyoutCta /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+        </Style>
+        <Style Selector="Button.FlyoutCta:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+        </Style>
+        <Style Selector="Button.FlyoutCta:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+        </Style>
+        <!--  Выключенная кнопка приглушается ТОЛЬКО прозрачностью (0.38 от Button.Primary) — цвет
+              остаётся тем же. Иначе «Продолжить» до ввода суммы читается как чужой тёмный текст, а
+              не как та же кнопка в ожидании.  -->
+        <Style Selector="Button.FlyoutCta:disabled /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
         </Style>
 
         <!--  ============ Кольцо трафика ============
@@ -184,7 +217,7 @@
             <Setter Property="FontSize" Value="14" />
             <Setter Property="HorizontalContentAlignment" Value="Center" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
-            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Cursor" Value="Arrow" />
             <Setter Property="Transitions">
                 <Transitions>
                     <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" Easing="{StaticResource Ease.OutQuart}" />
@@ -198,7 +231,11 @@
             <Setter Property="BorderThickness" Value="1.5" />
             <Setter Property="CornerRadius" Value="{StaticResource Radius.Chip}" />
         </Style>
+        <!--  То же правило: под курсором чип не заливается, отвечает нажатием.  -->
         <Style Selector="Button.MethodChip:not(.selected):pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="Button.MethodChip:not(.selected):pressed /template/ ContentPresenter#PART_ContentPresenter">
             <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
         </Style>
         <Style Selector="Button.MethodChip:pressed">
@@ -360,6 +397,9 @@
                         MinWidth="200"
                         VerticalAlignment="Center">
 
+                        <!--  LineHeight числом НЕ задаём: строка гротеска = 1.276em, то есть 24.2
+                              при кегле 19, и прежние 22.8 подпирали её — «p» в «departament vpn»
+                              и все нижние выносные русского имени срезало бы по нижней кромке.  -->
                         <TextBlock
                             x:Name="PlanTitle"
                             FontFamily="{DynamicResource Font.Grotesk}"
@@ -367,7 +407,6 @@
                             FontWeight="Bold"
                             Foreground="{DynamicResource Brush.OnSurface}"
                             LetterSpacing="-0.19"
-                            LineHeight="22.8"
                             Text="departament vpn" />
 
                         <!--  Бейдж тарифа и срок на одной строке; оба появляются только когда
@@ -467,7 +506,7 @@
                                             <Button
                                                 HorizontalAlignment="Stretch"
                                                 HorizontalContentAlignment="Center"
-                                                Classes="Primary"
+                                                Classes="Primary FlyoutCta"
                                                 Command="{Binding TopUpCmd}"
                                                 Content="{loc:T Account_Continue}"
                                                 IsEnabled="{Binding CanTopUp}" />
@@ -773,10 +812,12 @@
                                                         Text="{loc:T Account_EmailLinkHint}"
                                                         TextWrapping="Wrap" />
                                                     <TextBox Text="{Binding LinkEmailInput, Mode=TwoWay}" Watermark="{loc:T Login_Email}" />
+                                                    <!--  Тот же класс, что у «Продолжить»: вторая шторка —
+                                                          та же кнопка в том же окружении.  -->
                                                     <Button
                                                         HorizontalAlignment="Stretch"
                                                         HorizontalContentAlignment="Center"
-                                                        Classes="Primary"
+                                                        Classes="Primary FlyoutCta"
                                                         Command="{Binding LinkEmailCmd}"
                                                         Content="{loc:T Account_Send}" />
                                                 </StackPanel>
@@ -880,11 +921,17 @@
                                 Orientation="Horizontal"
                                 Spacing="10"
                                 VerticalAlignment="Center">
+                                <!--  Foreground берём У САМОЙ КНОПКИ, а не токеном: у PathIcon
+                                      собственный цвет из темы Semi, и он побеждал наследование —
+                                      подпись выходила акцентной, а глиф рядом серым. Привязка
+                                      верна во всех трёх темах, потому что тянет ровно тот цвет,
+                                      который классу назначен.  -->
                                 <PathIcon
                                     Width="20"
                                     Height="20"
                                     VerticalAlignment="Center"
-                                    Data="{StaticResource Geo.Acc.Telegram}" />
+                                    Data="{StaticResource Geo.Acc.Telegram}"
+                                    Foreground="{Binding $parent[Button].Foreground}" />
                                 <TextBlock
                                     VerticalAlignment="Center"
                                     Text="{loc:T Common_SignInTelegram}" />

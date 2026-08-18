@@ -5,6 +5,7 @@ using Avalonia.Animation.Easings;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Media.Transformation;
+using v2rayN.Desktop.Account;
 using v2rayN.Desktop.Common;
 using v2rayN.Desktop.ViewModels;
 
@@ -42,7 +43,7 @@ namespace v2rayN.Desktop.Views;
 /// на «Не удалось синхронизировать» с «Повторить» / «Войти заново». Без неё упавший импорт дал бы
 /// вечный экран прогрузки.
 /// </summary>
-public partial class AccountSyncView : UserControl
+public partial class AccountSyncView : UserControl, ISubPage
 {
     /// <summary>Набор текстов потока (screens.md, таблица «Экран прогрузки»).</summary>
     public enum FlowKind
@@ -71,6 +72,10 @@ public partial class AccountSyncView : UserControl
 
     private static readonly ITransform _scale1 = TransformOperations.Parse("scale(1)");
     private static readonly ITransform _scale106 = TransformOperations.Parse("scale(1.06)");
+    private static readonly ITransform _scale06 = TransformOperations.Parse("scale(0.6)");
+    private static readonly ITransform _scale155 = TransformOperations.Parse("scale(1.55)");
+    private static readonly ITransform _lift16 = TransformOperations.Parse("translateY(16px)");
+    private static readonly ITransform _lift0 = TransformOperations.Parse("translateY(0px)");
 
     private static readonly double[] _progress = [0.18, 0.54, 0.86, 1.00];
 
@@ -78,10 +83,12 @@ public partial class AccountSyncView : UserControl
     private readonly CompositeDisposable _subs = new();
 
     private CancellationTokenSource? _flowCts;      // весь поток целиком
-    private CancellationTokenSource? _sonarAnim;
-    private CancellationTokenSource? _checkAnim;
-    private CancellationTokenSource? _toastAnim;
     private CancellationTokenSource? _columnAnim;
+
+    // Поколение подтверждающих движений (сонар / галочка / тост / уход слоя). Они идут ПЕРЕХОДАМИ,
+    // а переход не отменяется токеном — отменяется его «хвост». Сброс визуалов поднимает счётчик, и
+    // все отложенные хвосты прошлого проигрыша становятся неактуальными по сравнению.
+    private int _confirmGen;
 
     private FlowKind _kind = FlowKind.Telegram;
     private int _step = -1;
@@ -89,8 +96,40 @@ public partial class AccountSyncView : UserControl
     private bool _workDone;
     private bool _prevSyncing;
 
+    // Экран ВЕДЁТ вход через Telegram сам: сначала держит шаг 0 («Открываем Telegram · Подтвердите
+    // вход в приложении»), пока пользователь подтверждает, и только потом идёт дальше. Промежуточной
+    // страницы ожидания больше нет — ждут здесь.
+    private bool _drivingLogin;
+
+    // Что именно упало — от этого зависит, что делают две кнопки ветки ошибки.
+    private FailureKind _failure = FailureKind.None;
+
     // Сигнал «работа кончилась», которого ждёт шаг 3. Заводится на каждый поток заново.
     private TaskCompletionSource? _work;
+
+    // Сигнал «вход подтверждён», которого ждёт переход с шага 0 на шаг 1.
+    private TaskCompletionSource? _login;
+
+    /// <summary>
+    /// Кто СЕЙЧАС играет поток. Экземпляров экрана в приложении два: статический в шелле (его
+    /// поднимают сигналы импорта) и тот, что кладут на стек подэкранов три двери начального экрана.
+    /// Без этой отметки вход через Telegram запускал бы ОБА: шелловый увидел бы
+    /// <c>IsImportingAccount</c> и начал бы свой поток за кадром, а по снятию подэкрана шелл показал
+    /// бы его недоигранным поверх уже собранной «Главной».
+    /// </summary>
+    private static AccountSyncView? _activeFlow;
+
+    /// <summary>Ветка ошибки объясняет РАЗНОЕ и предлагает разное — от того, где именно оборвалось.</summary>
+    private enum FailureKind
+    {
+        None,
+
+        /// <summary>Синхронизация аккаунта (импорт/подписки) — «Повторить» / «Войти заново».</summary>
+        Sync,
+
+        /// <summary>Вход через Telegram не дошёл (истекли 3 минуты, 410, 401) — «Повторить» / «Назад».</summary>
+        Login,
+    }
 
     /// <summary>Поток идёт (от <see cref="RunFlow"/> до снятия слоя). MainWindow держит оверлей поднятым, пока это true.</summary>
     public bool FlowRunning { get; private set; }
@@ -101,6 +140,13 @@ public partial class AccountSyncView : UserControl
     /// пред-состояние сборки, показать шелл и запустить стаггер.
     /// </summary>
     public event EventHandler? ShellHandoffRequested;
+
+    /// <summary>
+    /// <see cref="ISubPage"/>: экран снимает сам себя со стека подэкранов. Поднимается, когда поток
+    /// доигран (вместо <see cref="ShellHandoffRequested"/>, если слой живёт подэкраном, а не
+    /// поверхностью шелла) и когда поток буфера упал — иначе полноэкранный слой стал бы тупиком.
+    /// </summary>
+    public event EventHandler? BackRequested;
 
     public AccountSyncView()
     {
@@ -145,18 +191,94 @@ public partial class AccountSyncView : UserControl
                 {
                     SignalWorkFailed();
                 }
-                else if (_showingError)
+                else if (_showingError && _failure == FailureKind.Sync)
                 {
-                    // «Повторить» — возвращаемся к потоку с начала.
+                    // «Повторить» синхронизации — возвращаемся к потоку с начала.
                     RunFlow(_kind, null);
                 }
             }));
+
+        // ==================== Вход через Telegram ЖИВЁТ ЗДЕСЬ ====================
+        // Опрос ведёт AuthManager (те же 2 с между запросами, те же 3 минуты, те же правила:
+        // переходный сбой пережидается, 410/401 останавливают сразу, ответ после отмены не входит
+        // за спиной). Сюда переехало только ОЖИДАНИЕ: раньше его показывала отдельная страница
+        // «Ожидаем подтверждения в Telegram», теперь — шаг 0 этого экрана.
+        _subs.Add(_vm.WhenAnyValue(x => x.CurrentLoginState)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .Subscribe(OnLoginStateChanged));
+
+        // Кнопки ветки ошибки ведут РАЗНОЕ в зависимости от того, что упало (см. FailureKind),
+        // поэтому команды навешаны кодом, а не биндингом в разметке: биндинг знал бы только один
+        // из двух случаев и в другом вёл бы не туда.
+        RetryButton.Click += (_, _) => OnErrorRetry();
+        ReLoginButton.Click += (_, _) => OnErrorSecondary();
 
         DetachedFromVisualTree += (_, _) =>
         {
             CancelFlow();
             _subs.Dispose();
         };
+    }
+
+    // ==================== Ветка ошибки: две кнопки, два смысла ====================
+
+    private void OnErrorRetry()
+    {
+        if (_failure == FailureKind.Login)
+        {
+            // Тот же поток с начала — вместе с новым токеном входа: прежний уже потрачен.
+            RunFlow(FlowKind.Telegram, null, driveLogin: true);
+            return;
+        }
+        _vm?.SyncRetryCmd.Execute().Subscribe();
+    }
+
+    private void OnErrorSecondary()
+    {
+        if (_failure == FailureKind.Login)
+        {
+            // «Назад» — на начальный экран. «Войти заново» здесь было бы не про то: аккаунта ещё нет.
+            _vm?.CancelLogin();
+            LeaveFlow();
+            return;
+        }
+        _vm?.SyncReLoginCmd.Execute().Subscribe();
+    }
+
+    // Уводит слой с экрана: подэкраном — снимает себя со стека, поверхностью шелла — прячется и
+    // отдаёт кадр штатному гейту.
+    private void LeaveFlow()
+    {
+        CancelFlow();
+        _showingError = false;
+        _failure = FailureKind.None;
+        var back = BackRequested;
+        if (back is not null)
+        {
+            back(this, EventArgs.Empty);
+            return;
+        }
+        IsVisible = false;
+    }
+
+    // Состояния входа приходят и когда поток ведём мы, и когда его ведёт кто-то другой (гейт входа
+    // «Аккаунта»). Реагируем ТОЛЬКО на свой.
+    private void OnLoginStateChanged(LoginState? state)
+    {
+        if (!_drivingLogin || state is null)
+        {
+            return;
+        }
+        switch (state)
+        {
+            case LoginState.Success:
+                _login?.TrySetResult();
+                break;
+
+            case LoginState.Error:
+                SignalLoginFailed();
+                break;
+        }
     }
 
     // ==================== Публичный вход ====================
@@ -170,7 +292,12 @@ public partial class AccountSyncView : UserControl
     /// <c>null</c> — работу ведёт не вызывающий (вход через Telegram доводит AccountViewModel), и
     /// сигналом служат его же флаги импорта.
     /// </param>
-    public void RunFlow(FlowKind kind, Task? work)
+    /// <param name="driveLogin">
+    /// Экран сам запускает вход через Telegram и сам его ЖДЁТ на шаге 0. Так работают все три двери
+    /// начального экрана и CTA входа во вкладке «Аккаунт»: нажал — сразу этот экран, дальше он
+    /// доводит до конца. Отдельной страницы ожидания больше нет.
+    /// </param>
+    public void RunFlow(FlowKind kind, Task? work, bool driveLogin = false)
     {
         CancelFlow();
 
@@ -178,7 +305,10 @@ public partial class AccountSyncView : UserControl
         _step = -1;
         _workDone = false;
         _showingError = false;
+        _failure = FailureKind.None;
+        _drivingLogin = driveLogin;
         FlowRunning = true;
+        _activeFlow = this;
 
         ShowFlowColumn(animate: false);
         ResetFlowVisuals();
@@ -189,9 +319,65 @@ public partial class AccountSyncView : UserControl
             _ = TrackWork(work);
         }
 
+        _login = new TaskCompletionSource();
+        if (driveLogin)
+        {
+            if (_vm is { IsLoggedIn: true })
+            {
+                // Уже вошли (например, «Повторить» после сбоя синхронизации) — ждать нечего.
+                _login.TrySetResult();
+            }
+            else
+            {
+                // Порядок важен: кадр экрана уже стоит, и только потом уходит сетевой запрос —
+                // между нажатием и первым шагом нет ни одного кадра без объяснения.
+                _vm?.LoginTelegramCmd.Execute().Subscribe();
+            }
+        }
+
         var cts = new CancellationTokenSource();
         _flowCts = cts;
         _ = RunSchedule(cts.Token);
+    }
+
+    /// <summary>
+    /// ОДИН вход в поток для всех дверей: «Войти через Telegram» и «Добавить из буфера обмена» на
+    /// начальном экране, кнопка внутри карточки найденной ссылки и CTA входа во вкладке «Аккаунт».
+    /// Нажал — экран прогрузки стоит СРАЗУ, дальше он сам ждёт подтверждения и сам доводит до
+    /// собранной «Главной». Промежуточных страниц по дороге нет.
+    ///
+    /// Слой кладётся на стек ПОДЭКРАНОВ (публичный <see cref="MainWindow.OpenSubPage"/>): пока стек
+    /// не пуст, MainWindow гасит все три поверхности шелла и не пересчитывает их видимость — значит
+    /// пришедшие во время импорта сервера не сдёрнут кадр с недоигранного потока. Сняв себя со
+    /// стека, слой возвращает кадр штатному гейту, и тот показывает уже заполненную «Главную».
+    /// </summary>
+    /// <returns>Поднятый слой либо <c>null</c>, если хоста нет (превью/дизайн).</returns>
+    public static AccountSyncView? OpenFlow(Visual anchor, FlowKind kind, Task? work, bool driveLogin)
+    {
+        if (TopLevel.GetTopLevel(anchor) is not MainWindow window)
+        {
+            return null;
+        }
+        var flow = new AccountSyncView();
+        window.OpenSubPage(flow);   // подписывает BackRequested на снятие со стека
+        flow.RunFlow(kind, work, driveLogin);
+        return flow;
+    }
+
+    /// <summary>Вход не дошёл (3 минуты молчания, 410, 401) — ветка ошибки с «Повторить» / «Назад».</summary>
+    public void SignalLoginFailed()
+    {
+        if (_showingError)
+        {
+            return;
+        }
+        CancelFlow();
+        FlowRunning = false;
+        SetComet(false);
+        _showingError = true;
+        _failure = FailureKind.Login;
+        ApplyErrorTexts();
+        ShowErrorColumn(animate: !IsReducedMotion() && IsVisible);
     }
 
     /// <summary>Реальная работа завершилась успешно — шаг 3 разрешён (не раньше 4600 мс от старта).</summary>
@@ -210,8 +396,21 @@ public partial class AccountSyncView : UserControl
         }
         CancelFlow();
         FlowRunning = false;
-        _showingError = true;
         SetComet(false);
+
+        // Ветка ошибки — про синхронизацию АККАУНТА: «Повторить» и «Войти заново» ведут в него.
+        // Для потока БУФЕРА она была бы не про то, а слой-подэкран без тулбара стал бы тупиком —
+        // выходим на начальный экран. Причину падения импорта пишет сам движок (Logging).
+        if (_kind == FlowKind.Clipboard && BackRequested is not null)
+        {
+            _showingError = false;
+            BackRequested(this, EventArgs.Empty);
+            return;
+        }
+
+        _showingError = true;
+        _failure = FailureKind.Sync;
+        ApplyErrorTexts();
         ShowErrorColumn(animate: !IsReducedMotion() && IsVisible);
     }
 
@@ -236,6 +435,17 @@ public partial class AccountSyncView : UserControl
         {
             SetStep(0);
             await Task.Delay(_stepAt1, ct);
+
+            // Пол шага 0 пройден — но пока вход не подтверждён, «Проверяем вход» было бы враньём:
+            // пользователь ещё в Telegram. Экран честно стоит на «Открываем Telegram · Подтвердите
+            // вход в приложении» столько, сколько нужно (опрос сам оборвётся через 3 минуты и
+            // приведёт сюда ветку ошибки). Ритм пакета при этом сохраняется: как только вход прошёл,
+            // дальше идут те же 1800 и 1600 мс между шагами.
+            if (_drivingLogin && _login is not null)
+            {
+                await _login.Task.WaitAsync(ct);
+            }
+
             SetStep(1);
             await Task.Delay(_stepAt2 - _stepAt1, ct);
             SetStep(2);
@@ -272,21 +482,42 @@ public partial class AccountSyncView : UserControl
     {
         FlowRunning = false;
         _flowCts = null;
+        if (ReferenceEquals(_activeFlow, this))
+        {
+            _activeFlow = null;
+        }
 
-        // Готовим себя к следующему разу ДО передачи кадра — после неё мы уже не на экране.
         SetComet(false);
-        FlowRoot.Opacity = 1;
-        FlowRoot.RenderTransform = null;
+        _confirmGen++;
+        FlowRoot.Transitions = null;
 
         var handler = ShellHandoffRequested;
-        if (handler is null)
+        if (handler is not null)
         {
-            // Никто не слушает (проводка в MainWindow ещё не сделана): просто уходим, дальше кадр
-            // ведёт штатный 3-way гейт шелла. Хореографии сборки в этом случае не будет.
-            IsVisible = false;
+            // Готовим себя к следующему разу ДО передачи кадра — после неё мы уже не на экране.
+            FlowRoot.Opacity = 1;
+            FlowRoot.RenderTransform = null;
+            handler(this, EventArgs.Empty);
             return;
         }
-        handler(this, EventArgs.Empty);
+
+        // Проводки в MainWindow нет. Слой живёт ПОДЭКРАНОМ (его положил OnboardingView через
+        // MainWindow.OpenSubPage) — снимаем себя со стека: хост ВЕРНЁТ ШЕЛЛ ДО выходной анимации
+        // (ApplySubPageShellGate), то есть заполненная «Главная» уже стоит на месте в том же кадре.
+        // Хореографии сборки в этом случае не будет — она принадлежит MainWindow и включится, как
+        // только там появится подписка на ShellHandoffRequested.
+        //
+        // Прозрачность НЕ восстанавливаем: слой только что растворился в 0, и возврат единицы дал бы
+        // вспышку под выходной анимацией хоста.
+        var back = BackRequested;
+        if (back is not null)
+        {
+            back(this, EventArgs.Empty);
+            return;
+        }
+        FlowRoot.Opacity = 1;
+        FlowRoot.RenderTransform = null;
+        IsVisible = false;
     }
 
     private void CancelFlow()
@@ -295,10 +526,14 @@ public partial class AccountSyncView : UserControl
         _flowCts = null;
         _work?.TrySetCanceled();
         _work = null;
-        _sonarAnim?.Cancel();
-        _checkAnim?.Cancel();
-        _toastAnim?.Cancel();
+        _login?.TrySetCanceled();
+        _login = null;
+        _confirmGen++;   // хвосты подтверждающих переходов больше не наши
         FlowRunning = false;
+        if (ReferenceEquals(_activeFlow, this))
+        {
+            _activeFlow = null;
+        }
     }
 
     // ==================== Шаги ====================
@@ -319,6 +554,20 @@ public partial class AccountSyncView : UserControl
         // Глиф Telegram объясняет ожидание на шагах 0–2 потока входа; в потоке буфера кольцо
         // остаётся пустым — там объясняет текст, а не глиф.
         TelegramGlyph.IsVisible = busy && _kind == FlowKind.Telegram;
+    }
+
+    /// <summary>
+    /// Колонка ошибки одна, а объяснений два. Сбой СИНХРОНИЗАЦИИ — аккаунт уже наш, но данные не
+    /// доехали: «Повторить» пробует ещё раз, «Войти заново» сбрасывает сессию. Не дошедший ВХОД —
+    /// аккаунта ещё нет: «Войти заново» тут не про что, вторая кнопка ведёт назад на начальный экран.
+    /// </summary>
+    private void ApplyErrorTexts()
+    {
+        var login = _failure == FailureKind.Login;
+        ErrorTitle.Text = L.T(login ? "Flow_LoginErrorTitle" : "Account_SyncErrorTitle");
+        ErrorHint.Text = L.T(login ? "Flow_LoginErrorHint" : "Account_SyncErrorHint");
+        RetryButton.Content = L.T("Account_SyncRetry");
+        ReLoginButton.Content = L.T(login ? "Common_Back" : "Account_SyncReLogin");
     }
 
     private void SetStepTexts(int step)
@@ -366,160 +615,176 @@ public partial class AccountSyncView : UserControl
         if (IsReducedMotion())
         {
             CheckGlyph.Opacity = 1;
+            CheckGlyph.RenderTransform = null;
             FlowToast.Opacity = 1;
+            FlowToast.RenderTransform = null;
             return;
         }
 
-        _ = PlaySonar();
-        _ = PlayCheckPop();
-        _ = PlayToast();
+        PlaySonar();
+        PlayCheckPop();
+        PlayToast();
+    }
+
+    // ==================== Почему ПЕРЕХОДЫ, а не ключевые кадры ====================
+    // Все движения ниже раньше были Animation с KeyFrame по Visual.RenderTransform. Такого
+    // аниматора в Avalonia НЕТ: Animation.RunAsync срывается на первом же кадре («No animator
+    // registered for the property RenderTransform»), а падение уходило в try/catch и в
+    // UnobservedTaskException — то есть в тишину. Со стороны это выглядело как «подтверждение и
+    // уход слоя просто не играют»: сонар/галочка/тост оказывались на месте мгновенно, а слой
+    // пропадал без растворения. Тот же корень уже вылечен в LoginView и MainWindow тем же приёмом —
+    // TransformOperationsTransition + DoubleTransition. Анимации по Opacity ключевыми кадрами
+    // работают и остаются как есть (кроссфейд колонок ниже).
+    //
+    // Переход отменяется не токеном, а снятием самих Transitions, поэтому «хвост» каждого проигрыша
+    // сверяет поколение _confirmGen: сброс визуалов его поднимает, и опоздавший хвост ничего не
+    // трогает.
+
+    /// <summary>
+    /// Один проигрыш «из → в» переходами: трансформ и прозрачность за одну длительность.
+    /// Порядок обязателен: исходное состояние ставится БЕЗ переходов (иначе первая же установка
+    /// сама поехала бы), переходы вешаются следом, целевое — только следующим оборотом диспетчера.
+    /// </summary>
+    private void PlayTransition(
+        Control el,
+        ITransform from,
+        ITransform to,
+        double fromOpacity,
+        double toOpacity,
+        TimeSpan duration,
+        Easing easing,
+        Action? onDone = null)
+    {
+        var gen = _confirmGen;
+
+        el.Transitions = null;
+        el.Opacity = fromOpacity;
+        el.RenderTransform = from;
+
+        el.Transitions =
+        [
+            new TransformOperationsTransition
+            {
+                Property = Visual.RenderTransformProperty,
+                Duration = duration,
+                Easing = easing,
+            },
+            new DoubleTransition
+            {
+                Property = Visual.OpacityProperty,
+                Duration = duration,
+                Easing = easing,
+            },
+        ];
+
+        Dispatcher.UIThread.Post(
+            () =>
+            {
+                if (gen != _confirmGen)
+                {
+                    return;
+                }
+                el.Opacity = toOpacity;
+                el.RenderTransform = to;
+            },
+            DispatcherPriority.Background);
+
+        DispatcherTimer.RunOnce(
+            () =>
+            {
+                if (gen != _confirmGen)
+                {
+                    return;
+                }
+                el.Transitions = null;
+                onDone?.Invoke();
+            },
+            duration + TimeSpan.FromMilliseconds(80));
     }
 
     // Сонар: кольцо расходится до 1.55× и гаснет, 600 мс, ОДИН раз (motion.md «Сонар»).
-    private async Task PlaySonar()
+    private void PlaySonar()
     {
-        _sonarAnim?.Cancel();
-        var cts = new CancellationTokenSource();
-        _sonarAnim = cts;
-
         Sonar.IsVisible = true;
-        var anim = new Animation
-        {
-            Duration = Motion.Dur.Emphasis,
-            Easing = Motion.Ease.OutQuint,
-            FillMode = FillMode.Forward,
-            Children =
+        PlayTransition(
+            Sonar,
+            _scale1,
+            _scale155,
+            1d,
+            0d,
+            Motion.Dur.Emphasis,
+            Motion.Ease.OutQuint,
+            () =>
             {
-                new KeyFrame
-                {
-                    Cue = new Cue(0d),
-                    Setters =
-                    {
-                        new Setter(Visual.OpacityProperty, 1d),
-                        new Setter(Visual.RenderTransformProperty, _scale1),
-                    },
-                },
-                new KeyFrame
-                {
-                    Cue = new Cue(1d),
-                    Setters =
-                    {
-                        new Setter(Visual.OpacityProperty, 0d),
-                        new Setter(Visual.RenderTransformProperty, TransformOperations.Parse("scale(1.55)")),
-                    },
-                },
-            },
-        };
-        try { await anim.RunAsync(Sonar, cts.Token); }
-        catch { }
-        if (!cts.IsCancellationRequested)
-        {
-            Sonar.IsVisible = false;
-            Sonar.Opacity = 0;
-            Sonar.RenderTransform = null;
-        }
+                Sonar.IsVisible = false;
+                Sonar.Opacity = 0;
+                Sonar.RenderTransform = null;
+            });
     }
 
-    // Галочка: pop 0.6 → 1.06 (70%) → 1 + проявление, 320 мс ease-out-quart.
-    private async Task PlayCheckPop()
+    // Галочка: pop 0.6 → 1.06 (70% пути) → 1 плюс проявление, 320 мс ease-out-quart.
+    // Два перехода подряд: ключевого кадра «на 70%» у перехода нет, поэтому pop разложен на
+    // разгон 224 мс (0.6 → 1.06, туда же проявление) и осадку 96 мс (1.06 → 1).
+    private void PlayCheckPop()
     {
-        _checkAnim?.Cancel();
-        var cts = new CancellationTokenSource();
-        _checkAnim = cts;
+        var gen = _confirmGen;
+        var rise = TimeSpan.FromMilliseconds(224);
+        var settle = TimeSpan.FromMilliseconds(96);
 
-        var anim = new Animation
-        {
-            Duration = TimeSpan.FromMilliseconds(320),
-            Easing = Motion.Ease.OutQuart,
-            FillMode = FillMode.Forward,
-            Children =
+        PlayTransition(
+            CheckGlyph,
+            _scale06,
+            _scale106,
+            0d,
+            1d,
+            rise,
+            Motion.Ease.OutQuart,
+            () =>
             {
-                new KeyFrame
+                if (gen != _confirmGen)
                 {
-                    Cue = new Cue(0d),
-                    Setters =
+                    return;
+                }
+                PlayTransition(
+                    CheckGlyph,
+                    _scale106,
+                    _scale1,
+                    1d,
+                    1d,
+                    settle,
+                    Motion.Ease.OutQuart,
+                    () =>
                     {
-                        new Setter(Visual.OpacityProperty, 0d),
-                        new Setter(Visual.RenderTransformProperty, TransformOperations.Parse("scale(0.6)")),
-                    },
-                },
-                new KeyFrame
-                {
-                    Cue = new Cue(0.7d),
-                    Setters =
-                    {
-                        new Setter(Visual.OpacityProperty, 1d),
-                        new Setter(Visual.RenderTransformProperty, _scale106),
-                    },
-                },
-                new KeyFrame
-                {
-                    Cue = new Cue(1d),
-                    Setters =
-                    {
-                        new Setter(Visual.OpacityProperty, 1d),
-                        new Setter(Visual.RenderTransformProperty, _scale1),
-                    },
-                },
-            },
-        };
-        try { await anim.RunAsync(CheckGlyph, cts.Token); }
-        catch { }
-        if (!cts.IsCancellationRequested)
-        {
-            CheckGlyph.Opacity = 1;
-            CheckGlyph.RenderTransform = null;
-        }
+                        CheckGlyph.Opacity = 1;
+                        CheckGlyph.RenderTransform = null;
+                    });
+            });
     }
 
     // Тост выезжает снизу 280 мс (motion.md «Тост»). Сам он не уходит: через 550 мс после него
     // растворяется весь оверлей — отдельное затухание тоста было бы вторым, лишним движением.
-    private async Task PlayToast()
+    private void PlayToast()
     {
-        _toastAnim?.Cancel();
-        var cts = new CancellationTokenSource();
-        _toastAnim = cts;
-
-        var anim = new Animation
-        {
-            Duration = TimeSpan.FromMilliseconds(280),
-            Easing = Motion.Ease.OutQuint,
-            FillMode = FillMode.Forward,
-            Children =
+        PlayTransition(
+            FlowToast,
+            _lift16,
+            _lift0,
+            0d,
+            1d,
+            TimeSpan.FromMilliseconds(280),
+            Motion.Ease.OutQuint,
+            () =>
             {
-                new KeyFrame
-                {
-                    Cue = new Cue(0d),
-                    Setters =
-                    {
-                        new Setter(Visual.OpacityProperty, 0d),
-                        new Setter(Visual.RenderTransformProperty, TransformOperations.Parse("translateY(16px)")),
-                    },
-                },
-                new KeyFrame
-                {
-                    Cue = new Cue(1d),
-                    Setters =
-                    {
-                        new Setter(Visual.OpacityProperty, 1d),
-                        new Setter(Visual.RenderTransformProperty, TransformOperations.Parse("translateY(0px)")),
-                    },
-                },
-            },
-        };
-        try { await anim.RunAsync(FlowToast, cts.Token); }
-        catch { }
-        if (!cts.IsCancellationRequested)
-        {
-            FlowToast.Opacity = 1;
-            FlowToast.RenderTransform = null;
-        }
+                FlowToast.Opacity = 1;
+                FlowToast.RenderTransform = null;
+            });
     }
 
     // ==================== Уход оверлея ====================
 
     // Прозрачность в 0 (520 мс) плюс отдаление до 1.06 (600 мс), кривая «смена экрана».
-    // РАЗМЫТИЯ НЕТ — motion.md запрещает прямым текстом.
+    // РАЗМЫТИЯ НЕТ — motion.md запрещает прямым текстом. Длительности РАЗНЫЕ, поэтому это два
+    // перехода с разными Duration на одном элементе, а не один общий.
     private void StartDissolve()
     {
         if (IsReducedMotion())
@@ -528,30 +793,39 @@ public partial class AccountSyncView : UserControl
             return;
         }
 
-        var fade = new Animation
-        {
-            Duration = _dissolveOpacity,
-            Easing = _screenEase,
-            FillMode = FillMode.Forward,
-            Children =
+        var gen = _confirmGen;
+
+        FlowRoot.Transitions = null;
+        FlowRoot.Opacity = 1;
+        FlowRoot.RenderTransform = _scale1;
+
+        FlowRoot.Transitions =
+        [
+            new DoubleTransition
             {
-                new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(Visual.OpacityProperty, 1d) } },
-                new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(Visual.OpacityProperty, 0d) } },
+                Property = Visual.OpacityProperty,
+                Duration = _dissolveOpacity,
+                Easing = _screenEase,
             },
-        };
-        var zoom = new Animation
-        {
-            Duration = _dissolveScale,
-            Easing = _screenEase,
-            FillMode = FillMode.Forward,
-            Children =
+            new TransformOperationsTransition
             {
-                new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(Visual.RenderTransformProperty, _scale1) } },
-                new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(Visual.RenderTransformProperty, _scale106) } },
+                Property = Visual.RenderTransformProperty,
+                Duration = _dissolveScale,
+                Easing = _screenEase,
             },
-        };
-        _ = fade.RunAsync(FlowRoot);
-        _ = zoom.RunAsync(FlowRoot);
+        ];
+
+        Dispatcher.UIThread.Post(
+            () =>
+            {
+                if (gen != _confirmGen)
+                {
+                    return;
+                }
+                FlowRoot.Opacity = 0;
+                FlowRoot.RenderTransform = _scale106;
+            },
+            DispatcherPriority.Background);
     }
 
     // ==================== Комета ====================
@@ -663,7 +937,10 @@ public partial class AccountSyncView : UserControl
 
         if (syncing)
         {
-            if (!FlowRunning)
+            // Поток уже играет — свой или чужой (экран прогрузки, поднятый начальным экраном на
+            // стек подэкранов). Второй запуск дал бы два расписания на одно событие: наш ушёл бы
+            // тикать за кадром и всплыл бы недоигранным поверх уже собранной «Главной».
+            if (!FlowRunning && (_activeFlow is null || ReferenceEquals(_activeFlow, this)))
             {
                 RunFlow(FlowKind.Telegram, null);
             }
@@ -707,9 +984,13 @@ public partial class AccountSyncView : UserControl
 
     private void ResetFlowVisuals()
     {
-        _sonarAnim?.Cancel();
-        _checkAnim?.Cancel();
-        _toastAnim?.Cancel();
+        // Поколение вперёд — отложенные хвосты прошлого проигрыша перестают что-либо трогать.
+        // Переходы снимаются ДО присвоений, иначе сброс сам поехал бы анимацией.
+        _confirmGen++;
+        Sonar.Transitions = null;
+        CheckGlyph.Transitions = null;
+        FlowToast.Transitions = null;
+        FlowRoot.Transitions = null;
 
         Sonar.IsVisible = false;
         Sonar.Opacity = 0;

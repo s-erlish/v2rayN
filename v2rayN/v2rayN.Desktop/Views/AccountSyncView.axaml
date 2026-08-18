@@ -162,7 +162,13 @@
                             RenderTransformOrigin="50%,50%" />
                     </Panel>
 
-                    <!--  Заголовок шага 20/700.  -->
+                    <!--  Заголовок шага 20/700.
+                          LineHeight НЕ задаём числом. Строка гротеска по метрикам гарнитуры = 1.276em,
+                          то есть 25.5 при кегле 20; прежние «25» подпирали её снизу, и у «Добавляем
+                          подписку» срезало глифы. Текст здесь всегда русский, а кириллицы в Space
+                          Grotesk нет — строку рисует запасной Roboto с ДРУГИМИ вертикальными
+                          метриками, поэтому любое подобранное на глаз число снова разошлось бы с
+                          гарнитурой. Натуральная высота строки верна для обеих.  -->
                     <TextBlock
                         x:Name="FlowTitle"
                         Margin="0,26,0,0"
@@ -171,7 +177,6 @@
                         FontSize="20"
                         FontWeight="Bold"
                         Foreground="{DynamicResource Brush.OnSurface}"
-                        LineHeight="25"
                         TextAlignment="Center"
                         TextWrapping="Wrap" />
 
@@ -244,23 +249,27 @@
                             Foreground="{DynamicResource Brush.Red}" />
                     </Panel>
 
+                    <!--  Тот же заголовочный уровень, что у колонки потока, — и так же без
+                          числовой высоты строки: она срезала бы глифы (см. выше).  -->
+                    <!--  Тексты и подписи кнопок ставит code-behind: колонка одна, а объяснений два —
+                          оборвалась синхронизация аккаунта или не дошёл вход через Telegram.  -->
                     <TextBlock
+                        x:Name="ErrorTitle"
                         Margin="0,26,0,0"
                         HorizontalAlignment="Stretch"
                         FontFamily="{DynamicResource Font.Grotesk}"
                         FontSize="20"
                         FontWeight="Bold"
                         Foreground="{DynamicResource Brush.OnSurface}"
-                        LineHeight="25"
                         Text="{loc:T Account_SyncErrorTitle}"
                         TextAlignment="Center"
                         TextWrapping="Wrap" />
                     <TextBlock
+                        x:Name="ErrorHint"
                         Margin="0,8,0,0"
                         HorizontalAlignment="Stretch"
                         FontSize="13"
                         Foreground="{DynamicResource Brush.OnSurfaceVariant}"
-                        LineHeight="19"
                         Text="{loc:T Account_SyncErrorHint}"
                         TextAlignment="Center"
                         TextWrapping="Wrap" />
@@ -274,13 +283,11 @@
                             x:Name="RetryButton"
                             HorizontalAlignment="Stretch"
                             Classes="Primary"
-                            Command="{Binding SyncRetryCmd}"
                             Content="{loc:T Account_SyncRetry}" />
                         <Button
                             x:Name="ReLoginButton"
                             HorizontalAlignment="Stretch"
                             Classes="Tonal"
-                            Command="{Binding SyncReLoginCmd}"
                             Content="{loc:T Account_SyncReLogin}" />
                     </StackPanel>
                 </StackPanel>

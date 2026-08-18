@@ -86,6 +86,9 @@
             <Setter Property="HorizontalAlignment" Value="Stretch" />
             <Setter Property="HorizontalContentAlignment" Value="Center" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
+            <!--  Курсор ВЕЗДЕ обычная стрелка — решение владельца на всё приложение: «руки» нет ни у
+                  одной кнопки, ни у одной строки, ни у одной карточки. Нажимаемость показывают форма
+                  и прогиб, а не указатель.  -->
             <Setter Property="Cursor" Value="Arrow" />
             <Setter Property="cm:PressFeedback.Composited" Value="True" />
             <Setter Property="RenderTransform" Value="scale(1)" />
@@ -121,51 +124,32 @@
             <Setter Property="BorderBrush" Value="{DynamicResource Brush.ButtonOutline}" />
         </Style>
 
-        <!--  Карточка найденной ссылки: та же лестница отклика (карточка 0.975), но геометрия
-              карточки — Surface, рамка 1, скругление 16, паддинг 14, высота по содержимому.
-              Отдельный класс, а не StartPill с переопределениями: пилюля жёстко 50 в высоту, и
-              карточка, «поправленная» локальным Height=NaN, была бы миной для следующего правщика.  -->
-        <!--  Карточка «Ссылка в буфере обмена» — ВЫВЕСКА, а не кнопка: нажимается кнопка внутри
-              неё («Добавить подписку»). Поэтому обычная стрелка вместо «руки» и никакого отклика
-              на наведение — владелец: «не так, будто я могу нажать».  -->
-        <Style Selector="Button.StartCard">
-            <Setter Property="RenderTransformOrigin" Value="50%,50%" />
+        <!--  ==================== Карточка найденной ссылки — ВЫВЕСКА ====================
+              Не кнопка и не орган управления: она показывает, ЧТО нашли в буфере, а нажимается
+              кнопка ВНУТРИ неё — «Добавить подписку». Поэтому это Border, а не Button: обычная
+              стрелка под курсором, никакого отклика на наведение, никакого прогиба и — главное —
+              НИ ОДНОГО невидимого обработчика. Две двери в одно действие, одна из них без ручки,
+              — это и читалось как «карточка вроде нажимается, а курсор обычный».
+              Геометрия карточки: Surface, рамка 1, скругление 16, паддинг 14, высота по содержимому.  -->
+        <Style Selector="Border.StartCard">
             <Setter Property="Background" Value="{DynamicResource Brush.Surface}" />
             <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineVariant}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius" Value="16" />
             <Setter Property="Padding" Value="14" />
-            <Setter Property="MinHeight" Value="0" />
-            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
-            <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="cm:PressFeedback.Composited" Value="True" />
-            <Setter Property="RenderTransform" Value="scale(1)" />
-            <Setter Property="Transitions">
-                <Transitions>
-                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.2" Easing="{StaticResource Ease.PressBack}" />
-                </Transitions>
-            </Setter>
         </Style>
-        <Style Selector="Button.StartCard:pressed">
-            <Setter Property="RenderTransform" Value="scale(1)" />
-            <Setter Property="Transitions">
-                <Transitions>
-                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.07" Easing="{StaticResource Ease.PressIn}" />
-                </Transitions>
-            </Setter>
-        </Style>
-        <Style Selector="Button.StartCard /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="{DynamicResource Brush.Surface}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineVariant}" />
-        </Style>
-        <Style Selector="Button.StartCard:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="{DynamicResource Brush.Surface}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineVariant}" />
-        </Style>
-        <Style Selector="Button.StartCard:pressed /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="{DynamicResource Brush.Surface}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineVariant}" />
+
+        <!--  CTA карточки: контурная акцентная пилюля 44 (screens.md), подпись 12.5/700 акцентом.
+              Базовый архетип — глобальный Button.OutlinedAccent (у него уже верные покой, ховер
+              без свечения и прогиб на нажатии); здесь только размер, скругление пилюли и кегль.  -->
+        <Style Selector="Button.StartCardCta">
+            <Setter Property="Height" Value="44" />
+            <Setter Property="BorderThickness" Value="1.5" />
+            <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill44}" />
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="Cursor" Value="Arrow" />
         </Style>
 
         <!--  «Другие способы» — текстовая кнопка 40 без рамки и без фона в покое: она не третья
@@ -179,7 +163,7 @@
             <Setter Property="Padding" Value="16,0" />
             <Setter Property="HorizontalContentAlignment" Value="Center" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
-            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Cursor" Value="Arrow" />
             <Setter Property="cm:PressFeedback.Composited" Value="True" />
             <Setter Property="RenderTransform" Value="scale(1)" />
             <Setter Property="Transitions">
@@ -256,13 +240,25 @@
     </UserControl.Styles>
 
     <Border Background="{DynamicResource Brush.HomeGradient}">
-        <!--  Скролл: на низком окне колонка не обрезается. MinHeight = высоте вьюпорта → когда
-              контент влезает, колонка ЦЕНТРИРУЕТСЯ по всему окну; когда нет — появляется скролл.  -->
+        <!--  Скролл: на низком окне колонка не обрезается, на высоком — стоит по центру.
+              Высоту вьюпорта сюда БОЛЬШЕ НЕ ПРОКИДЫВАЕМ. Раньше на панели стояло
+              MinHeight="{Binding #Scroll.Bounds.Height}" — и это ровно тот дефект, из-за которого
+              экран открывался НЕ ПО ЦЕНТРУ и вставал на место только после прокрутки: Bounds
+              заполняются ПОСЛЕ раскладки, поэтому первый проход считал центровку по чужой (нулевой
+              или ещё не отмасштабированной корневым LayoutTransformControl) высоте, а второй проход
+              приходил уже после первого кадра. Любая прокрутка запускала пересчёт — и «оно вставало
+              как надо».
+              Хост скролла и так растягивает содержимое до вьюпорта, когда оно меньше: колонке
+              достаточно VerticalAlignment=Center, чтобы стоять по центру С ПЕРВОГО кадра, и она
+              честно уезжает вверх с прокруткой, когда не влезает. Проверено замером на живом окне:
+              контент 502 пикселя в 815-пиксельном вьюпорте — центр колонки 457 при центре вьюпорта
+              452 (расхождение — верхний отступ 24 против нижнего), а на окне 560 колонка
+              прокручивается целиком.  -->
         <ScrollViewer
             x:Name="Scroll"
             HorizontalScrollBarVisibility="Disabled"
             VerticalScrollBarVisibility="Auto">
-            <Panel Margin="16,0" MinHeight="{Binding #Scroll.Bounds.Height}">
+            <Panel Margin="16,0">
                 <StackPanel
                     x:Name="Column"
                     Margin="0,24"
@@ -347,8 +343,8 @@
                         Height="0"
                         Classes="StartReveal"
                         Opacity="0">
-                        <Button
-                            x:Name="ClipCardButton"
+                        <Border
+                            x:Name="ClipCard"
                             Margin="0,24,0,0"
                             HorizontalAlignment="Stretch"
                             VerticalAlignment="Top"
@@ -368,12 +364,17 @@
                                             Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
                                     </Border>
                                     <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                        <!--  LineHeight числом НЕ задаём: строка гротеска по
+                                              метрикам гарнитуры = 1.276em, то есть 19.14 при кегле
+                                              15, и прежние «19» срезали «Подписке» нижние выносные.
+                                              Текст русский, кириллицы в Space Grotesk нет — рисует
+                                              запасной Roboto с ДРУГИМИ метриками, поэтому подобранное
+                                              на глаз число снова разошлось бы с гарнитурой.  -->
                                         <TextBlock
                                             FontFamily="{DynamicResource Font.Grotesk}"
                                             FontSize="15"
                                             FontWeight="Bold"
                                             Foreground="{DynamicResource Brush.OnSurface}"
-                                            LineHeight="19"
                                             Text="{loc:T Start_ClipCardTitle}"
                                             TextAlignment="Left" />
                                         <TextBlock
@@ -385,25 +386,18 @@
                                             TextTrimming="CharacterEllipsis" />
                                     </StackPanel>
                                 </Grid>
-                                <!--  CTA карточки: контур акцента 44/22, подпись 12.5/700 акцентом.
-                                      Не кнопка, а часть кликабельной карточки — иначе внутри кнопки
-                                      оказалась бы вторая кнопка с собственным хит-тестом.  -->
-                                <Border
-                                    Height="44"
+                                <!--  CTA карточки — ЕДИНСТВЕННОЕ, что здесь нажимается. Раньше это
+                                      был Border «внутри кликабельной карточки»: настоящая кнопка
+                                      была снаружи и невидима, а видимая — не нажималась. Теперь
+                                      наоборот. Цвет подписи и рамки несёт класс OutlinedAccent —
+                                      руками их здесь не задаём.  -->
+                                <Button
+                                    x:Name="ClipCardButton"
                                     Margin="0,12,0,0"
-                                    BorderBrush="{DynamicResource Brush.Accent}"
-                                    BorderThickness="1.5"
-                                    CornerRadius="22">
-                                    <TextBlock
-                                        HorizontalAlignment="Center"
-                                        VerticalAlignment="Center"
-                                        FontSize="12.5"
-                                        FontWeight="Bold"
-                                        Foreground="{DynamicResource Brush.Accent}"
-                                        Text="{loc:T Common_AddSubscription}" />
-                                </Border>
+                                    Classes="OutlinedAccent StartCardCta"
+                                    Content="{loc:T Common_AddSubscription}" />
                             </StackPanel>
-                        </Button>
+                        </Border>
                     </Border>
 
                     <!--  ==================== (5) Блок кнопок ====================
@@ -500,7 +494,7 @@
                                     x:Name="QrRow"
                                     MinHeight="46"
                                     Classes="Row"
-                                    Cursor="Hand"
+                                    Cursor="Arrow"
                                     cm:PressFeedback.Scale="0.985">
                                     <Grid ColumnDefinitions="Auto,12,*,Auto">
                                         <PathIcon
@@ -530,7 +524,7 @@
                                     x:Name="SiteRow"
                                     MinHeight="46"
                                     Classes="Row"
-                                    Cursor="Hand"
+                                    Cursor="Arrow"
                                     cm:PressFeedback.Scale="0.985">
                                     <Grid ColumnDefinitions="Auto,12,*,Auto">
                                         <PathIcon

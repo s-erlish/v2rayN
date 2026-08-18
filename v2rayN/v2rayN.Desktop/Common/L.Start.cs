@@ -64,5 +64,13 @@ public sealed partial class L
         // Тост шага 3 — свой на поток.
         Add("Flow_ToastTg", "Аккаунт привязан", "Account linked");
         Add("Flow_ToastClip", "Подписка добавлена", "Subscription added");
+
+        // Вход не дошёл: истекли три минуты ожидания, ссылка входа устарела (410) или сервер её не
+        // принял (401). Это НЕ «не удалось синхронизировать» — аккаунта ещё нет, и «Войти заново»
+        // было бы не про что; вторая кнопка ветки в этом случае ведёт назад, на начальный экран.
+        Add("Flow_LoginErrorTitle", "Не удалось войти", "Sign-in didn't finish");
+        Add("Flow_LoginErrorHint",
+            "Подтверждение из Telegram так и не пришло. Попробуйте ещё раз.",
+            "The confirmation from Telegram never arrived. Try again.");
     }
 }

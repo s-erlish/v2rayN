@@ -55,6 +55,11 @@ public partial class OnboardingView : UserControl
     private bool _clipCardShown;
     private bool _clipboardProbeRunning;
 
+    // Экран прогрузки, который мы подняли сами (см. RaiseFlowOverlay). Пока он на стеке, второй
+    // поток не запускаем: второй Push сменил бы содержимое хоста, оторвал первый слой от дерева
+    // (и убил его поток), а в стеке осталось бы две страницы — одно «назад» вернуло бы мёртвый слой.
+    private AccountSyncView? _flowOverlay;
+
     /// <summary>Поток добавления подписки, который выбрал пользователь на начальном экране.</summary>
     public enum StartFlow
     {
@@ -93,6 +98,7 @@ public partial class OnboardingView : UserControl
         TelegramButton.Click += OnTelegram;
         ClipboardButton.Click += OnClipboard;
         MoreButton.Click += OnToggleMore;
+        // По самой карточке обработчика НЕТ: она вывеска. Нажимается только её CTA.
         ClipCardButton.Click += OnClipboard;
         QrRow.PointerReleased += (_, _) => OnQr();
         SiteRow.PointerReleased += (_, _) => OnSite();
@@ -305,7 +311,7 @@ public partial class OnboardingView : UserControl
         }
         _clipCardShown = show;
         ActionsBlock.Margin = show ? _actionsGapWithCard : _actionsGapPlain;
-        SetReveal(ClipRevealHost, ClipCardButton, show);
+        SetReveal(ClipRevealHost, ClipCard, show);
     }
 
     // ==================== «Другие способы» ====================
@@ -372,17 +378,21 @@ public partial class OnboardingView : UserControl
 
     // ==================== Действия ====================
 
-    // «Войти через Telegram». Реальную авторизацию доводит AccountViewModel через LoginView
-    // (подтверждение в приложении, повтор, «другой способ» — оверлей прогрузки этих ветвей не
-    // несёт), поэтому здесь Work=null: экран прогрузки ждёт сигналов VM, а не нашей задачи.
+    // «Войти через Telegram». Экран прогрузки поднимается ПЕРВЫМ и сам запускает авторизацию:
+    // он же её и ждёт на шаге 0 («Открываем Telegram · Подтвердите вход в приложении»), он же
+    // продолжается прогрузкой аккаунта и подписки. Страницы «Ожидаем подтверждения в Telegram»
+    // между нажатием и этим экраном больше нет — ждут здесь.
+    //
+    // Порядок обязателен: сперва слой на стеке, потом старт входа. Наоборот — и первый кадр ушёл бы
+    // на сетевой запрос, то есть нажатие снова «ничего не делало» бы полсекунды.
     private void OnTelegram(object? sender, RoutedEventArgs e)
     {
         FlowRequested?.Invoke(this, new StartFlowRequest(StartFlow.Telegram, null));
-        (TopLevel.GetTopLevel(this) as MainWindow)?.OpenLoginTelegram();
+        RaiseFlowOverlay(AccountSyncView.FlowKind.Telegram, null, driveLogin: true);
     }
 
-    // «Добавить из буфера обмена» (и тап по карточке найденной ссылки). Задачу импорта отдаём
-    // экрану прогрузки: он держит хореографию до её завершения, а не до истечения таймера.
+    // «Добавить из буфера обмена» (и кнопка внутри карточки найденной ссылки). Задачу импорта
+    // отдаём экрану прогрузки: он держит хореографию до её завершения, а не до истечения таймера.
     private void OnClipboard(object? sender, RoutedEventArgs e)
     {
         if (DataContext is not HomeViewModel vm)
@@ -390,8 +400,37 @@ public partial class OnboardingView : UserControl
             return;
         }
         var work = vm.AddViaClipboard();
-        FlowRequested?.Invoke(this, new StartFlowRequest(StartFlow.Clipboard, work));
         Observe(work, "Onboarding.AddViaClipboard");
+        FlowRequested?.Invoke(this, new StartFlowRequest(StartFlow.Clipboard, work));
+        RaiseFlowOverlay(AccountSyncView.FlowKind.Clipboard, work);
+    }
+
+    /// <summary>
+    /// Поднимает экран прогрузки.
+    ///
+    /// Без этого нажатие не давало НИ ОДНОГО кадра прогрузки: <see cref="FlowRequested"/> уходило
+    /// в пустоту (в MainWindow подписки нет), импорт молча шёл фоном, и начальный экран просто
+    /// стоял на месте, пока его не сменяла собранная «Главная». Проверено кликом по живому окну —
+    /// между кадрами до и после нажатия менялась ровно подсветка кнопки под курсором.
+    ///
+    /// Куда именно кладётся слой и почему — см. <see cref="AccountSyncView.OpenFlow"/>.
+    /// Событие продолжаем поднимать: появится в MainWindow подписка (с хореографией «Сборки
+    /// главной» из motion.md, которой отсюда не сделать) — она отработает поверх этого, а слой
+    /// останется одним и тем же, потому что второй запуск отсекает <c>_flowOverlay</c>.
+    /// </summary>
+    private void RaiseFlowOverlay(AccountSyncView.FlowKind kind, Task? work, bool driveLogin = false)
+    {
+        if (_flowOverlay is not null)
+        {
+            return;
+        }
+        var flow = AccountSyncView.OpenFlow(this, kind, work, driveLogin);
+        if (flow is null)
+        {
+            return;
+        }
+        _flowOverlay = flow;
+        flow.BackRequested += (_, _) => _flowOverlay = null;
     }
 
     /// <summary>
@@ -425,7 +464,8 @@ public partial class OnboardingView : UserControl
         }
     }
 
-    // «Войти через сайт» — браузер-хэндофф; дальше тот же терминальный путь, что у Telegram.
+    // «Войти через сайт» — браузер-хэндофф; дальше тот же терминальный путь, что у Telegram
+    // (и та же причина не поднимать слой самим — страница входа занимает хост подэкранов).
     private void OnSite()
     {
         FlowRequested?.Invoke(this, new StartFlowRequest(StartFlow.Telegram, null));

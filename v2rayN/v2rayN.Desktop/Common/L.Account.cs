@@ -31,9 +31,11 @@ public sealed partial class L
             "Pick a plan — pay in rubles, connect right away.");
         Add("Account_Devices", "Устройства", "Devices");
         Add("Account_SignOut", "Выйти", "Sign out");
-        Add("Account_SignInTitle", "Войди в departament", "Sign in to departament");
+        // На «вы», как весь остальной интерфейс. Эти две строки были единственными на «ты» во всём
+        // приложении — от них гейт входа в «Аккаунте» и читался как экран из прошлой версии.
+        Add("Account_SignInTitle", "Войдите в departament", "Sign in to departament");
         Add("Account_SignInHint",
-            "Через Telegram — быстро, без пароля. Или войди по почте на сайте.",
+            "Через Telegram — быстро, без пароля. Или войдите по почте на сайте.",
             "With Telegram — fast, no password. Or sign in by email on the website.");
 
         // ── Account view-model (imperative / computed) ──
@@ -156,15 +158,9 @@ public sealed partial class L
         Add("Login_CodeIs6", "Код состоит из 6 цифр", "The code is 6 digits");
         Add("Login_Confirm", "Подтвердить", "Confirm");
         Add("Login_SignUp", "Регистрация на сайте", "Sign up on the website");
-        Add("Login_WaitingConfirm",
-            "Ожидаем подтверждения в Telegram",
-            "Waiting for Telegram confirmation");
-        Add("Login_TelegramConfirmHint",
-            "Подтвердите вход в открывшемся приложении и вернитесь сюда — остальное сделаем сами.",
-            "Confirm the sign-in in the app that opened, then come back here — we'll take care of the rest.");
-        Add("Login_OpenTelegram", "Открыть Telegram", "Open Telegram");
-        Add("Login_StartOver", "Начать заново", "Start over");
-        Add("Login_ChooseAnother", "Другой способ входа", "Use another method");
+        // Строк экрана ожидания Telegram здесь больше нет («Ожидаем подтверждения в Telegram»,
+        // «Открыть Telegram», «Начать заново», «Другой способ входа»): владелец убрал сам экран —
+        // ждать подтверждения теперь шаг 0 экрана прогрузки (Flow_TgTitle0/Flow_TgNote0).
 
         // ── Start-page auth: sign-in ⇄ register segment, providers, passwordless links ──
         Add("Login_TabSignIn", "Вход", "Sign in");
