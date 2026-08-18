@@ -1069,12 +1069,16 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         //  верил этому «пусто» и на холодном старте показывал вошедшему владельцу экран входа, а через
         //  мгновение перекидывал на Главную — владелец: «было стартовое окно, где входы, а потом уже
         //  перекинуло». Держим кадр пустым: фон окна уже нарисован, мелькать нечему.
-        if (!_profilesResolved && !_isSyncing && !_isStartupLoading)
+        if (!_profilesResolved && !_isSyncing)
         {
             return;
         }
 
-        Control target = (_isSyncing || _isStartupLoading)
+        //  _isStartupLoading (восстановление сессии при запуске) БОЛЬШЕ НЕ поднимает оверлей: он
+        //  рисует шаги входа, а при запуске никто не входит — владелец видел «Открываем Telegram»
+        //  на перезапуске уже вошедшим. Роль этого признака — не дать мелькнуть гейту входа — теперь
+        //  выполняет _profilesResolved выше: до первого ответа о составе кадр держится пустым.
+        Control target = _isSyncing
             ? accountSyncView
             : (_isEmpty && !_isLoggedIn) ? onboardingView : bodyRoot;
         CrossfadeShellTo(target);

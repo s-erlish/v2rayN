@@ -178,7 +178,12 @@ public partial class AccountSyncView : UserControl, ISubPage
         // Поток можно ЗАПУСТИТЬ извне (RunFlow с начального экрана), а можно не запускать вовсе —
         // тогда экран сам поднимается на сигналах VM: пост-логин импорт и холодный старт с
         // сохранённой сессией это тот же «Войти через Telegram», только пользователь его не нажимал.
-        _subs.Add(_vm!.WhenAnyValue(x => x.IsImportingAccount, x => x.IsStartupLoading, (a, b) => a || b)
+        //  ТОЛЬКО пост-логин импорт. Раньше сюда же входил IsStartupLoading — восстановление
+        //  аккаунта при запуске, — и экран поднимался на холодном старте, рисуя шаг «Открываем
+        //  Telegram · Подтвердите вход в приложении». Владелец перезапускал уже вошедшим и видел
+        //  экран ухода в Telegram, которого не просил, а следом Главную. Восстановление — не вход:
+        //  показывать его нечем и незачем, оболочка просто ждёт готовности и открывает Главную.
+        _subs.Add(_vm!.WhenAnyValue(x => x.IsImportingAccount)
             .DistinctUntilChanged()
             .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(OnSyncingChanged));
