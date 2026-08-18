@@ -67,6 +67,11 @@ public sealed class AuthManager
     /// Telegram login: create a login token, emit <see cref="LoginState.AwaitingTelegram"/> (so the UI
     /// opens the deep link), then poll every ~2s (capped at ~3 min) until the user confirms in Telegram.
     /// On confirmation the session is persisted before <see cref="LoginState.Success"/>.
+    ///
+    /// The poll rides out transient failures rather than ending on the first one, and re-checks
+    /// <paramref name="cancellationToken"/> after each request so a window closed mid-flight cannot be
+    /// signed in behind the user's back. Cancelling always ends the flow silently — there is no error to
+    /// report when the user is the one who stopped.
     /// </summary>
     public async Task BeginTelegramLogin(Action<LoginState> emit, CancellationToken cancellationToken)
     {
@@ -98,6 +103,7 @@ public sealed class AuthManager
 
         var pollInterval = TimeSpan.FromSeconds(2);
         var deadline = DateTime.UtcNow.AddMinutes(3);
+        var transientFailures = 0;
 
         while (DateTime.UtcNow < deadline)
         {
@@ -114,10 +120,31 @@ public sealed class AuthManager
             try
             {
                 result = await _api.CheckTelegramLogin(tokenDto.Token);
+                transientFailures = 0;
             }
             catch (ApiError e)
             {
-                emit(new LoginState.Error(e));
+                // A single failed poll is not a failed login. The user is in Telegram right now, and
+                // this is exactly when the machine's connectivity is least stable — the browser handing
+                // off to the Telegram client, a VPN toggling, a DNS resolver still warming up. Killing
+                // the whole flow on the first blip stranded them: they confirmed in Telegram and came
+                // back to an error card, with the login token already spent, so the only way forward was
+                // to start over. Transient failures are re-tried against the SAME token until the 3-min
+                // deadline; only a definitive answer stops the flow (see IsTransient).
+                if (!IsTransient(e) || ++transientFailures > MaxTransientPollFailures)
+                {
+                    emit(new LoginState.Error(e));
+                    return;
+                }
+                continue;
+            }
+
+            // The window may have been closed (or another attempt started) while that request was in
+            // flight. Cancellation is only observed by the Delay above, so without this check a reply
+            // that arrived after the user backed out still persisted a session and pushed Success into
+            // a UI that had already moved on — signing them back in right after they signed out.
+            if (cancellationToken.IsCancellationRequested)
+            {
                 return;
             }
 
@@ -138,6 +165,28 @@ public sealed class AuthManager
 
         emit(new LoginState.Error(new ApiError.TimeoutError()));
     }
+
+    /// <summary>
+    /// How many polls in a row may fail transiently before the login gives up. Bounded so a backend
+    /// that is genuinely down still reports within ~10s instead of leaving the user watching a spinner
+    /// for the full three minutes; the counter resets on every poll that gets through.
+    /// </summary>
+    private const int MaxTransientPollFailures = 5;
+
+    /// <summary>
+    /// True for failures that say nothing about the login itself — the request never reached a verdict.
+    /// Everything else (unauthorized, gone/expired token, unparseable reply, backend not configured) is
+    /// an answer, and answers stop the flow.
+    /// </summary>
+    private static bool IsTransient(ApiError e) => e switch
+    {
+        ApiError.NetworkError => true,
+        ApiError.TimeoutError => true,
+        ApiError.RateLimited => true,
+        ApiError.ServiceUnavailable => true,
+        ApiError.Server srv => srv.Code >= 500,
+        _ => false,
+    };
 
     /// <summary>
     /// Site login with email/password. On <see cref="LoginResult.Success"/> the session is persisted;
@@ -171,6 +220,13 @@ public sealed class AuthManager
             throw new ApiError.NotConfiguredError();
         }
         var auth = await _api.ConsumeAppHandoff(code);
+        // AuthResult deserializes straight from the body, so a 200 that carries no token yields a blank
+        // one. Handing that to OnAuthenticated used to flip the UI to "signed in" over a session store
+        // that stayed empty. Treat it as what it is: a reply we could not use.
+        if (auth.Token.IsNullOrEmpty())
+        {
+            throw new ApiError.Parse();
+        }
         AccountSession.OnAuthenticated(auth.Token, auth.Client);
         return auth.Client;
     }
@@ -183,6 +239,11 @@ public sealed class AuthManager
             throw new ApiError.NotConfiguredError();
         }
         var auth = await _api.Login2Fa(tempToken, code);
+        // Same guard as ConsumeAppHandoff: a 200 without a token is not a session.
+        if (auth.Token.IsNullOrEmpty())
+        {
+            throw new ApiError.Parse();
+        }
         AccountSession.OnAuthenticated(auth.Token, auth.Client);
         return auth.Client;
     }
@@ -261,6 +322,11 @@ public sealed class AuthManager
             {
                 // Not verified yet (401/403) or a transient blip — keep polling.
                 continue;
+            }
+
+            if (cancellationToken.IsCancellationRequested)
+            {
+                return;
             }
 
             if (result is LoginResult.Success success)
