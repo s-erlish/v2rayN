@@ -130,22 +130,23 @@
                                 Loaded="OnGroupRevealLoaded"
                                 Unloaded="OnGroupRevealUnloaded">
                             <ItemsControl ItemsSource="{Binding Servers}">
-                                <!--  RAM: virtualize the per-group server rows. Avalonia's
-                                      VirtualizingStackPanel realizes containers off the EFFECTIVE
-                                      VIEWPORT (the visible window propagated down through the
-                                      ScrollViewer / PageScroll clip + this reveal's ClipToBounds),
-                                      NOT off a direct-ScrollViewer-child relationship — so it
-                                      virtualizes even though the rows are nested (reveal Border →
-                                      outer StackPanel → ScrollViewer). Only ~on-screen rows are
-                                      realized+retained; off-screen rows recycle, dropping the
-                                      dominant list RAM cost. The panel still reports the ESTIMATED
-                                      FULL extent (rows are uniform height) as its DesiredSize, so the
-                                      reveal's height measure, the scroll extent and the trailing
-                                      spacer (last-row reachability) all stay correct; a collapsed
-                                      group (Height 0 / IsVisible=false) realizes no rows at all.  -->
+                                <!--  БЕЗ ВИРТУАЛИЗАЦИИ — намеренно. Здесь стоял VirtualizingStackPanel,
+                                      и на больших экранах список ломался: строки появлялись по мере
+                                      прокрутки, последние не показывались вовсе, картинка мерцала.
+                                      Причина в том, что виртуализирующая панель сообщает ОЦЕНОЧНУЮ
+                                      полную высоту, а не измеренную. Оценка живёт поверх трёх слоёв,
+                                      каждый из которых на неё влияет: аккордеон группы (Border с
+                                      ClipToBounds, у которого высота то фиксируется в пикселях, то
+                                      отпускается в Auto), внешний StackPanel и ScrollViewer. Пока
+                                      панель до-реализовывала строки, её оценка менялась, вместе с ней
+                                      прыгал предел прокрутки — отсюда и мерцание, и недосягаемый хвост.
+                                      Список короткий по природе: подписка даёт десяток-другой строк, а
+                                      не тысячи. Обычная панель меряет ВСЕ строки честно — предел
+                                      прокрутки постоянен, хвост на месте, мерцать нечему. Экономия
+                                      памяти на таком списке не стоит сломанного отображения.  -->
                                 <ItemsControl.ItemsPanel>
                                     <ItemsPanelTemplate>
-                                        <VirtualizingStackPanel Orientation="Vertical" />
+                                        <StackPanel Orientation="Vertical" />
                                     </ItemsPanelTemplate>
                                 </ItemsControl.ItemsPanel>
                                 <ItemsControl.ItemTemplate>
