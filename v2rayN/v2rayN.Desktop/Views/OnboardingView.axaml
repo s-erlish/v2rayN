@@ -109,15 +109,11 @@
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderBrush" Value="{DynamicResource Brush.ButtonOutline}" />
         </Style>
-        <Style Selector=":is(Window):not(.lite) Button.StartPill /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Transitions">
-                <Transitions>
-                    <BrushTransition Property="Background" Duration="0:0:0.14" Easing="{StaticResource Ease.Standard}" />
-                </Transitions>
-            </Setter>
-        </Style>
+        <!--  СВЕЧЕНИЯ ПРИ НАВЕДЕНИИ НЕТ. Плавный кроссфейд фона давал вспышку ДВАЖДЫ за проход —
+              на входе курсора и на выходе, — и владелец видел это как моргание кнопки. Убран и сам
+              ховер-фон, и переход, которому теперь нечего вести. Кнопка отвечает нажатием.  -->
         <Style Selector="Button.StartPill:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
+            <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderBrush" Value="{DynamicResource Brush.ButtonOutline}" />
         </Style>
         <Style Selector="Button.StartPill:pressed /template/ ContentPresenter#PART_ContentPresenter">
@@ -201,7 +197,7 @@
             <Setter Property="Background" Value="Transparent" />
         </Style>
         <Style Selector="Button.StartMore:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
+            <Setter Property="Background" Value="Transparent" />
         </Style>
         <Style Selector="Button.StartMore:pressed /template/ ContentPresenter#PART_ContentPresenter">
             <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />

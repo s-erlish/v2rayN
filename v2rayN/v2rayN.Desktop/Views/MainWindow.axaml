@@ -351,8 +351,11 @@
                 <!--  Тождественный старт; фактический фактор ставит code-behind (ApplyUiScaleToWindow).  -->
                 <ScaleTransform ScaleX="1" ScaleY="1" />
             </LayoutTransformControl.LayoutTransform>
+            <!--  Без чёрной подложки вокруг диалога (владелец: «чёрный фон вокруг этого надо убрать»).
+                  Диалог и так отделён от фона своей карточкой; затемнение всего окна поверх
+                  радиального градиента читалось грязным пятном, а не глубиной.  -->
             <dialogHost:DialogHost
-                Background="#B3000000"
+                Background="Transparent"
                 CloseOnClickAway="True"
                 DisableOpeningAnimation="True">
         <Panel>

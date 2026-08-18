@@ -70,28 +70,40 @@
     <Style Selector="Button.SubBack">
         <Setter Property="Width" Value="40" />
         <Setter Property="Height" Value="40" />
-        <!--  КРУГ, а не квадрат: подложка под наведением/нажатием была прямоугольной (владелец:
-              «где кнопки назад, там сделай круг, а не квадрат на фоне»). Бокс 40×40 → радиус 20.  -->
-        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill40}" />
-    </Style>
-    <!--  Глиф стрелки — 14, а не 22: PathIcon заливает чернилами весь бокс, и 22 давали стрелку
-          вдвое крупнее эталона (замер: 9×14 в кадре против 14×22 живьём). Задаём ЗДЕСЬ, одним
-          правилом на все одиннадцать подэкранов, чтобы стрелка не «прыгала» между экранами.  -->
-    <Style Selector="Button.SubBack PathIcon">
-        <Setter Property="Width" Value="14" />
-        <Setter Property="Height" Value="14" />
         <Setter Property="Margin" Value="-8,0,0,0" />
         <Setter Property="Padding" Value="0" />
         <Setter Property="VerticalAlignment" Value="Center" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Cursor" Value="Arrow" />
+        <!--  Круг, а не квадрат: бокс 40×40 → радиус 20.  -->
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill40}" />
         <Setter Property="RenderTransformOrigin" Value="50%,50%" />
         <Setter Property="Transitions">
             <Transitions>
                 <TransformOperationsTransition Duration="0:0:0.09" Property="RenderTransform" />
             </Transitions>
         </Setter>
+    </Style>
+    <!--  Никакой подложки НИ В ОДНОМ состоянии: у кнопок свечения при наведении нет вовсе.
+          Раньше подложку рисовала тема Semi, и она же оставалась видна постоянно.  -->
+    <Style Selector="Button.SubBack /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.SubBack:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.SubBack:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <!--  Глиф стрелки — 14, а не 22: PathIcon заливает чернилами весь бокс, и 22 давали стрелку
+          вдвое крупнее эталона (замер: 9×14 в кадре против 14×22 живьём). Одним правилом на все
+          одиннадцать подэкранов, чтобы стрелка не «прыгала» между экранами.  -->
+    <Style Selector="Button.SubBack PathIcon">
+        <Setter Property="Width" Value="14" />
+        <Setter Property="Height" Value="14" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
     <Style Selector="Button.SubBack:pressed">
         <Setter Property="RenderTransform" Value="scale(0.90)" />

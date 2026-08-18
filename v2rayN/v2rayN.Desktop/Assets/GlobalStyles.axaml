@@ -480,7 +480,7 @@
     <Style Selector=":is(Window):not(.lite) Button.Primary /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Transitions">
             <Transitions>
-                <BrushTransition Property="Background" Duration="0:0:0.15" Easing="{StaticResource Ease.Standard}" />
+                    <!--  Кроссфейд фона убран: свечения при наведении нет, вести нечего.  -->
             </Transitions>
         </Setter>
     </Style>
@@ -554,7 +554,7 @@
     <Style Selector=":is(Window):not(.lite) Button.Tonal /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Transitions">
             <Transitions>
-                <BrushTransition Property="Background" Duration="0:0:0.15" Easing="{StaticResource Ease.Standard}" />
+                    <!--  Кроссфейд фона убран: свечения при наведении нет, вести нечего.  -->
             </Transitions>
         </Setter>
     </Style>
@@ -563,10 +563,14 @@
           Brush.Hover, что несут все прочие ховеры Incy (Row/IconButton/BackNav) —
           полупрозрачное затемнение, единое в dark/light/mono, НИКОГДА не светление и
           не акцент-флип. Текст (OnSurface) и press-scale 0.975 не трогаем.  -->
+    <!--  Рамку прибиваем к цвету самой кнопки: без этого тема Semi на ховере уводила её в свой
+          цвет, и у контурной «Поддержки» синяя обводка просто ПРОПАДАЛА под курсором.  -->
     <Style Selector="Button.Tonal:pointerover /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="{Binding $parent[Button].BorderBrush}" />
     </Style>
     <Style Selector="Button.Tonal:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="BorderBrush" Value="{Binding $parent[Button].BorderBrush}" />
         <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
     </Style>
 
