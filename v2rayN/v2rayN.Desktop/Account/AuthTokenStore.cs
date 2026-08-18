@@ -141,7 +141,34 @@ public static class AuthTokenStore
         }
     }
 
-    /// <summary>Clears the session (logout / 401). Keeps deviceId; drops managed-sub references.</summary>
+    /// <summary>
+    /// Ends the session but keeps the account's local footprint: the token, its expiry and the cached
+    /// profile go, the uuid-&gt;guid map STAYS.
+    ///
+    /// This is what an EXPIRED/REVOKED JWT gets (<see cref="AccountSession.EndSession"/>). The 7-day
+    /// token dying says nothing about the user's subscriptions — they are still theirs and must still be
+    /// on the machine when they sign back in. Keeping the map is also what makes that sign-in an UPDATE:
+    /// <see cref="SubscriptionSyncManager"/> reuses the stored guid per uuid, so the same subscription is
+    /// refreshed in place instead of being re-added beside the old one.
+    /// </summary>
+    public static void ClearSession()
+    {
+        lock (_lock)
+        {
+            var data = Data();
+            data.Token = null;
+            data.ExpiresAt = 0L;
+            data.UserJson = null;
+            Persist();
+        }
+    }
+
+    /// <summary>
+    /// Clears the session AND the managed-subscription references — EXPLICIT LOGOUT ONLY. Called after
+    /// <see cref="SubscriptionSyncManager.RemoveAllManaged"/> has actually removed those subscriptions,
+    /// so the map is dropped once it describes nothing. Keeps deviceId. A dead JWT takes
+    /// <see cref="ClearSession"/> instead — see the note there.
+    /// </summary>
     public static void Clear()
     {
         lock (_lock)
@@ -185,13 +212,24 @@ public static class AuthTokenStore
         }
     }
 
+    /// <summary>
+    /// Writes the blob ATOMICALLY: a full temp file first, then a single rename over the live one.
+    /// A plain in-place write is not atomic — a crash, a power cut or a full disk part-way through
+    /// leaves a truncated blob that no longer decrypts, and <see cref="Load"/> can only read that as a
+    /// blank store: the user is silently signed out AND the uuid-&gt;guid map is gone, so the next
+    /// import re-adds every account subscription beside the ones already on the machine. The rename is
+    /// atomic on both NTFS and ext4, so the file on disk is always either the old blob or the new one.
+    /// </summary>
     private static void Persist()
     {
         try
         {
             var json = JsonSerializer.Serialize(_data ?? new StoreData());
             var blob = Encrypt(json);
-            File.WriteAllBytes(Utils.GetConfigPath(FileName), blob);
+            var path = Utils.GetConfigPath(FileName);
+            var temp = path + ".tmp";
+            File.WriteAllBytes(temp, blob);
+            File.Move(temp, path, true);
         }
         catch (Exception ex)
         {

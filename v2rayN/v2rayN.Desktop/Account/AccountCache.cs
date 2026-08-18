@@ -5,8 +5,10 @@ namespace v2rayN.Desktop.Account;
 /// <summary>
 /// Process-lifetime, in-memory cache for recently fetched account data, so re-entering a screen
 /// renders instantly from memory instead of re-hitting the network. Entries expire after a TTL
-/// (default 1 hour). Tied to the logged-in session: every read first checks
-/// <see cref="AccountSession.IsLoggedIn"/>; logging out drops the whole cache on the next access.
+/// (default 1 hour). Tied to the logged-in session: reads AND writes both check
+/// <see cref="AccountSession.IsLoggedIn"/>, and <see cref="AccountSession.Wipe"/> /
+/// <see cref="AccountSession.EndSession"/> clear it eagerly — a lazy evict on the next read was not
+/// enough, because signing straight back in as somebody else performs no read while signed out.
 /// Port of V2rayNG auth/AccountCache.kt (monotonic time via Environment.TickCount64).
 /// </summary>
 public static class AccountCache
@@ -19,10 +21,21 @@ public static class AccountCache
     private static readonly Dictionary<string, Entry> _entries = new();
     private static readonly object _lock = new();
 
+    /// <summary>
+    /// Stores <paramref name="value"/> under <paramref name="key"/>, stamped with the current monotonic
+    /// time. Ignored while signed out: a request started before a logout can land after it, and seeding
+    /// the cache from it would hand the previous account's data to whoever signs in next (the payments
+    /// entry is keyed globally, not per user).
+    /// </summary>
     public static void Put(string key, object? value)
     {
         lock (_lock)
         {
+            if (!AccountSession.IsLoggedIn())
+            {
+                _entries.Clear();
+                return;
+            }
             _entries[key] = new Entry(value, Environment.TickCount64);
         }
     }

@@ -1213,13 +1213,22 @@ public class AccountViewModel : MyReactiveObject
 
     /// <summary>
     /// Sync-error «Войти заново»: clears the failed session and returns the shell to the login/onboarding
-    /// gate. Runs the full logout teardown FIRST (wipes the persisted session → IsLoggedIn=false) while the
+    /// gate. Runs the session teardown FIRST (ends the persisted session → IsLoggedIn=false) while the
     /// overlay is still up (IsImportingAccount stays true, so no Home flash), THEN drops the sync gates so
     /// the shell crossfades straight to onboarding/login.
+    ///
+    /// Ends the session WITHOUT deleting the account-imported subscriptions and their servers
+    /// (<see cref="AccountSession.EndSession"/>, not Wipe). This button is offered on a FAILED sync — the
+    /// most common cause is no network — and the user clicking it is trying to recover, not asking to
+    /// remove their data: running the destructive logout here deleted every server while offline, leaving
+    /// nothing to re-import until connectivity returned. The kept uuid→guid map makes the re-login an
+    /// in-place refresh; signing into a DIFFERENT account still reconciles the old rows away
+    /// (SubscriptionSyncManager.Import prunes managed guids absent from the authoritative answer).
+    /// Explicit «Выйти» in the Account tab remains the one action that deletes.
     /// </summary>
     private async Task SyncReLogin()
     {
-        await Logout();
+        await EndAccount(removeAccountData: false);
         RunOnUi(() =>
         {
             SyncFailed = false;
@@ -1268,7 +1277,14 @@ public class AccountViewModel : MyReactiveObject
         });
     }
 
-    private async Task Logout()
+    private Task Logout() => EndAccount(removeAccountData: true);
+
+    /// <summary>
+    /// Shared session teardown. <paramref name="removeAccountData"/> true = explicit user logout
+    /// (Wipe: stops the VPN, deletes the account-imported subscriptions + their servers); false =
+    /// end the session only (dead/broken JWT semantics — data stays, see <see cref="SyncReLogin"/>).
+    /// </summary>
+    private async Task EndAccount(bool removeAccountData)
     {
         _telegramCts?.Cancel();
         _registerCts?.Cancel();
@@ -1276,11 +1292,18 @@ public class AccountViewModel : MyReactiveObject
         _renewPollCts?.Cancel();
         _cardActionPollCts?.Cancel();
         _linkPollCts?.Cancel();
-        // Wipe stops the VPN and DELETES the account-imported subscriptions + their servers (tracked by
-        // AuthTokenStore.ManagedGuids — a user's OWN manually-added subs are never in that set, so they
-        // survive logout). Refresh the Home server list afterwards so the removed servers disappear and
-        // Home returns to its empty/onboarding state instead of showing the stale (e.g. «Base») group.
-        await AccountSession.Wipe();
+        if (removeAccountData)
+        {
+            // Wipe stops the VPN and DELETES the account-imported subscriptions + their servers (tracked by
+            // AuthTokenStore.ManagedGuids — a user's OWN manually-added subs are never in that set, so they
+            // survive logout). Refresh the Home server list afterwards so the removed servers disappear and
+            // Home returns to its empty/onboarding state instead of showing the stale (e.g. «Base») group.
+            await AccountSession.Wipe();
+        }
+        else
+        {
+            AccountSession.EndSession();
+        }
         AccountCache.InvalidateAll();
         RequestHomeServerRefresh();
         RunOnUi(() =>

@@ -84,9 +84,24 @@ public static class AccountSession
 
     #endregion chip identity
 
-    /// <summary>Persist a freshly issued session and flip to LoggedIn.</summary>
+    /// <summary>
+    /// Persist a freshly issued session and flip to LoggedIn.
+    ///
+    /// A BLANK jwt is rejected outright. <see cref="IsLoggedIn"/> asks the token store while
+    /// <see cref="State"/> answers from memory, so persisting an empty token and flipping the state
+    /// anyway left the two permanently disagreeing: the shell rendered the account screen (state says
+    /// LoggedIn) while every request went out unauthenticated and every gate that asks
+    /// <c>IsLoggedIn()</c> — the cache, the shell's login gate, the sync — read "signed out". The
+    /// endpoints that can produce it are the ones whose reply is not pre-validated: 2FA login and the
+    /// site→app handoff both deserialize into <see cref="AuthResult"/>, whose Token defaults to "" when
+    /// the backend answers 200 without one. Callers already handle <see cref="ApiError"/>.
+    /// </summary>
     public static void OnAuthenticated(string jwt, UserProfileDto profile)
     {
+        if (jwt.IsNullOrEmpty())
+        {
+            throw new ApiError.Parse();
+        }
         AuthTokenStore.SaveSession(jwt, user: profile);
         SetState(new AccountState.LoggedIn(profile));
     }
@@ -102,9 +117,10 @@ public static class AccountSession
     }
 
     /// <summary>
-    /// Clear session + managed subscriptions and flip to LoggedOut. Called ONLY on an explicit user
-    /// logout, or when the identity endpoint (getMe) confirms the JWT is dead with a 401. It must never
-    /// be triggered by a 403 or by a 401 on any other endpoint.
+    /// Clear session + managed subscriptions and flip to LoggedOut. EXPLICIT USER LOGOUT ONLY — this
+    /// is the one path allowed to delete the account's subscriptions and their servers. A dead JWT
+    /// takes <see cref="EndSession"/>; a 403, or a 401 on any endpoint other than the identity one,
+    /// must not end the session at all.
     /// </summary>
     public static async Task Wipe()
     {
@@ -113,6 +129,32 @@ public static class AccountSession
         await StopEngine();
         await _subs.RemoveAllManaged();
         AuthTokenStore.Clear();
+        // Drop the in-memory account data with the account itself. AccountCache only evicts lazily, on
+        // a READ taken while signed out — so signing straight back in as somebody else (no read in
+        // between) handed the new account the previous one's cached data, and the payments entry is
+        // keyed globally, not per user. Clearing here closes that window for every exit path.
+        AccountCache.InvalidateAll();
+        SetState(new AccountState.LoggedOut());
+    }
+
+    /// <summary>
+    /// Ends the session WITHOUT touching the user's subscriptions — what a dead 7-day JWT gets
+    /// (a 401 from the identity endpoint, via <see cref="AccountRepository.RefreshProfile"/>).
+    ///
+    /// An expired token is not the user asking to give up their subscriptions. Routing that case
+    /// through <see cref="Wipe"/> ran <see cref="SubscriptionSyncManager.RemoveAllManaged"/> →
+    /// <c>ConfigHandler.DeleteSubItem</c> → <c>RemoveServersViaSubid</c>, which deleted every
+    /// account-imported subscription AND every server behind it, permanently, the first time the
+    /// Account tab or the Devices screen noticed the token had aged out. Nothing on the machine could
+    /// bring them back. The servers keep working (their own credentials are unrelated to the JWT), so
+    /// the engine is left running too; the user simply has to sign in again, and because
+    /// <see cref="AuthTokenStore.ClearSession"/> keeps the uuid-&gt;guid map that sign-in refreshes the
+    /// same subscriptions in place instead of duplicating them.
+    /// </summary>
+    public static void EndSession()
+    {
+        AuthTokenStore.ClearSession();
+        AccountCache.InvalidateAll();
         SetState(new AccountState.LoggedOut());
     }
 

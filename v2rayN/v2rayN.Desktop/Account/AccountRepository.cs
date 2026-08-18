@@ -7,10 +7,11 @@ namespace v2rayN.Desktop.Account;
 /// throwing, maps every failure to an <see cref="ApiError"/>, and performs the higher-level account
 /// operations the UI needs. Port of V2rayNG auth/AccountRepository.kt.
 ///
-/// The local session is wiped via <see cref="AccountSession.Wipe"/> ONLY when the identity endpoint
-/// (<see cref="IDepartamentApiClient.GetMe"/>, via <see cref="RefreshProfile"/>) returns 401 — the
-/// single reliable "the 7-day JWT is dead" signal. A 401/403 on any OTHER endpoint surfaces as a plain
-/// error and NEVER touches the session; only an explicit user logout does.
+/// The local session is ENDED via <see cref="AccountSession.EndSession"/> ONLY when the identity
+/// endpoint (<see cref="IDepartamentApiClient.GetMe"/>, via <see cref="RefreshProfile"/>) returns 401 —
+/// the single reliable "the 7-day JWT is dead" signal. That path deliberately deletes nothing: only an
+/// explicit user logout runs <see cref="AccountSession.Wipe"/>. A 401/403 on any OTHER endpoint
+/// surfaces as a plain error and never touches the session.
 /// </summary>
 public sealed class AccountRepository
 {
@@ -54,8 +55,16 @@ public sealed class AccountRepository
     // Profile
     //
     // GetMe() is the authoritative identity check: it is the ONLY endpoint whose 401 reliably means the
-    // JWT is dead. A 401 here — and only here — wipes the local session so an expired 7-day token
+    // JWT is dead. A 401 here — and only here — ENDS the local session so an expired 7-day token
     // self-heals into a logged-out state. Every other failure leaves the session intact.
+    //
+    // EndSession, NOT Wipe. Wipe is the explicit-logout teardown: it stops the engine and runs
+    // RemoveAllManaged, which deletes every account-imported subscription and — through
+    // DeleteSubItem -> RemoveServersViaSubid — every server behind it, with nothing on the machine able
+    // to restore them. Calling it from here handed that teardown to a token that had merely aged past
+    // its seven days: the user opened the Account tab (StartupLoad -> RefreshProfile) or the Devices
+    // screen, the 401 came back, and their whole server list vanished. An expired token is not a
+    // request to give up the subscriptions, so the session ends and the subscriptions stay.
     public async Task<ApiResult<UserProfileDto>> RefreshProfile()
     {
         try
@@ -66,7 +75,7 @@ public sealed class AccountRepository
         }
         catch (ApiError.Unauthorized e)
         {
-            await AccountSession.Wipe();
+            AccountSession.EndSession();
             return ApiResult<UserProfileDto>.Failure(e);
         }
         catch (ApiError e)

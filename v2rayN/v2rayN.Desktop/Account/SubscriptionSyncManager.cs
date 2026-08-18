@@ -31,6 +31,20 @@ public sealed class SubscriptionSyncManager
     /// </summary>
     private const string AccountSubscriptionUserAgent = Global.SubscriptionUserAgent;
 
+    /// <summary>
+    /// One import at a time, process-wide. Two syncs can legitimately be asked for at once — the
+    /// startup sync (AccountViewModel.StartupLoad) and a purchase settling (BuyViewModel) are separate
+    /// call chains — and they raced on shared state: both read the uuid-&gt;guid map and the SubItem list
+    /// BEFORE either had written, so neither found the other's row, both handed
+    /// <c>ConfigHandler.AddSubItem</c> a SubItem with a blank Id, and AddSubItem assigns a fresh guid to
+    /// any blank Id (it does not de-duplicate by URL — that check exists only on the paste/clipboard
+    /// overload). The result was TWO rows for one subscription, the same servers imported twice under
+    /// two subids, and whichever sync wrote the map last orphaned the other row: no longer managed, so
+    /// never reconciled and never removable by logout. Serialising costs one short wait and makes the
+    /// second run see the first one's rows, which is exactly what the reuse-by-guid path needs.
+    /// </summary>
+    private static readonly SemaphoreSlim _importGate = new(1, 1);
+
     private readonly IDepartamentApiClient _api;
 
     public SubscriptionSyncManager(IDepartamentApiClient? api = null)
@@ -44,6 +58,19 @@ public sealed class SubscriptionSyncManager
     /// guids of the current managed set (so the caller can reload its server list).
     /// </summary>
     public async Task<List<string>> ImportAll()
+    {
+        await _importGate.WaitAsync();
+        try
+        {
+            return await ImportAllCore();
+        }
+        finally
+        {
+            _importGate.Release();
+        }
+    }
+
+    private async Task<List<string>> ImportAllCore()
     {
         // The PRIMARY summary is the authoritative source of the real connect URL. A "no active
         // subscription" account returns a 200 with an empty subscription (not an error), so the
@@ -76,6 +103,19 @@ public sealed class SubscriptionSyncManager
         catch (ApiError)
         {
             all = new List<SubInfoDto>();
+            authoritative = false;
+        }
+
+        // A 200 is not by itself an answer we can reconcile against. The prune below reads "no
+        // candidate for this guid" as "gone from the account", and the ONLY payload entitled to say
+        // that is one that reports no active subscription at all. When the primary summary says the
+        // account HAS an active subscription but we cannot read a connect URL out of it — an envelope
+        // shape this build does not know, a record still being provisioned, a truncated proxy reply —
+        // the candidate list comes out empty for want of a URL, not because the subscription ended.
+        // Reconciling on that deleted the subscription and, through DeleteSubItem ->
+        // RemoveServersViaSubid, every server behind it. We learned nothing here, so we change nothing.
+        if (primary?.HasActiveSubscription() == true && primary.Raw()?.SubscriptionUrl.IsNullOrEmpty() != false)
+        {
             authoritative = false;
         }
 
@@ -213,8 +253,10 @@ public sealed class SubscriptionSyncManager
 
     /// <summary>
     /// Removes every managed subscription and its servers. Invoked only from
-    /// <see cref="AccountSession.Wipe"/> (explicit logout, or a confirmed-dead JWT on the identity
-    /// endpoint).
+    /// <see cref="AccountSession.Wipe"/> — EXPLICIT USER LOGOUT. A dead JWT deliberately does not come
+    /// through here: an expired 7-day token is not the user asking to give up their subscriptions, and
+    /// treating it as one deleted every server on the machine the first time the Account tab noticed.
+    /// That path is <see cref="AccountSession.EndSession"/>.
     /// </summary>
     public async Task RemoveAllManaged()
     {
