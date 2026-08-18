@@ -261,7 +261,7 @@
         <Setter Property="CornerRadius" Value="8" />
     </Style>
     <Style Selector="Button.IconButton:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-        <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
+        <Setter Property="Background" Value="Transparent" />
     </Style>
     <Style Selector="Button.IconButton:pressed /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
@@ -467,6 +467,11 @@
           «Пополнить» (TopUpButton), теперь ГЛОБАЛЬНО. Покой (Brush.Accent) и текст
           (Brush.OnAccent) не трогаем; press-scale 0.97 остаётся выше. Едино в dark/
           light/mono (значения — прямой затемнённый акцент, не тема-зависимы).  -->
+    <!--  СВЕЧЕНИЯ ПРИ НАВЕДЕНИИ У КНОПОК НЕТ. Владелец: «просто убери свечение при наведении на
+          кнопку» — подсветка вспыхивала на всю кнопку разом и читалась как моргание, особенно когда
+          курсор быстро идёт между соседними кнопками. Кнопка отвечает нажатием (прогиб по лестнице
+          motion.md), а не заливкой. Кроссфейд ниже оставлен: он теперь ведёт прозрачное в прозрачное
+          и гасит собственный ховер темы Semi, который иначе всплыл бы своим светлым токеном.  -->
     <!--  Ховер-тинт CTA: плавный кроссфейд фона 150мс Ease.Standard (был жёсткий флип #4C8DFF→#3D7EF0).
           Только цвет PART_ContentPresenter — press-затемнение (#3877E0) читается поверх. Аттачится
           ТОЛЬКО не под .lite (селектор :not(.lite), приём скроллбара/спиннера): под lite ховер
@@ -487,7 +492,7 @@
         <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
     </Style>
     <Style Selector="Button.Primary:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-        <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
+        <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
     </Style>
     <Style Selector="Button.Primary:pressed /template/ ContentPresenter#PART_ContentPresenter">
@@ -559,7 +564,7 @@
           полупрозрачное затемнение, единое в dark/light/mono, НИКОГДА не светление и
           не акцент-флип. Текст (OnSurface) и press-scale 0.975 не трогаем.  -->
     <Style Selector="Button.Tonal:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-        <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
+        <Setter Property="Background" Value="Transparent" />
     </Style>
     <Style Selector="Button.Tonal:pressed /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
@@ -616,7 +621,7 @@
           мягкий затемняющий тинт внутри контура, без светления/акцент-флипа, dark/
           light/mono едино.  -->
     <Style Selector="Button.OutlinedAccent:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-        <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
+        <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
     </Style>
     <Style Selector="Button.OutlinedAccent:pressed /template/ ContentPresenter#PART_ContentPresenter">
@@ -1032,7 +1037,7 @@
         <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill}" />
     </Style>
     <Style Selector="Button.IconButton40:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-        <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
+        <Setter Property="Background" Value="Transparent" />
     </Style>
     <Style Selector="Button.IconButton40:pressed /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
@@ -1111,7 +1116,7 @@
         <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill}" />
     </Style>
     <Style Selector="Button.BackNav:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-        <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
+        <Setter Property="Background" Value="Transparent" />
     </Style>
     <Style Selector="Button.BackNav:pressed /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
@@ -1214,7 +1219,7 @@
         <Setter Property="Foreground" Value="White" />
     </Style>
     <Style Selector="Button.Destructive:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-        <Setter Property="Background" Value="{DynamicResource Brush.RedPressed}" />
+        <Setter Property="Background" Value="Transparent" />
         <Setter Property="Foreground" Value="White" />
     </Style>
     <Style Selector="Button.Destructive:pressed /template/ ContentPresenter#PART_ContentPresenter">
@@ -1471,7 +1476,7 @@
         <Setter Property="CornerRadius" Value="{DynamicResource Radius.Chip}" />
     </Style>
     <Style Selector="ToggleButton.Segment:not(:checked):pointerover /template/ ContentPresenter#PART_ContentPresenter">
-        <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
+        <Setter Property="Background" Value="Transparent" />
     </Style>
     <Style Selector="ToggleButton.Segment:pressed">
         <Setter Property="RenderTransform" Value="scale(0.975)" />
