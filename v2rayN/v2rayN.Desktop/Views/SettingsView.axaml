@@ -817,10 +817,6 @@
 
                     <Border Classes="SettingDivider" />
 
-                    <!--  Проверить обновления → подэкран, справа текущая версия  -->
-
-                    <Border Classes="SettingDivider" />
-
                     <!--  Резервное копирование → подэкран  -->
                     <Border x:Name="RowBackup" Classes="SettingRow">
                         <Grid ColumnDefinitions="Auto,*,Auto">
@@ -878,6 +874,10 @@
                                 Data="{StaticResource Geo.Set.Chevron}" />
                         </Grid>
                     </Border>
+
+                    <Border Classes="SettingDivider" />
+
+                    <!--  О приложении → подэкран  -->
                     <Border x:Name="RowAbout" Classes="SettingRow">
                         <Grid ColumnDefinitions="Auto,*,Auto">
                             <Border Grid.Column="0" Classes="SetTile">
