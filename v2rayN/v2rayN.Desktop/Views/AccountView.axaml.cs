@@ -32,6 +32,34 @@ public partial class AccountView : UserControl
     /// <summary>CTA входа (logged-out) — хост открывает суб-страницу «Вход».</summary>
     public event EventHandler? LoginRequested;
 
+    /// <summary>
+    /// CTA «Войти через Telegram» на гейте входа (logged-out).
+    ///
+    /// Ведёт РОВНО туда же, куда та же кнопка начального экрана: открывает суб-страницу «Вход» и тем же
+    /// вызовом запускает Telegram-авторизацию, поэтому подтверждения ждут на ЕЁ экране ожидания
+    /// («Ожидаем подтверждения в Telegram» + «Открыть Telegram» + «Начать заново» + «Другой способ
+    /// входа»). Второй такой экран не рисуется — он один на оба входа.
+    ///
+    /// Раньше кнопка была привязана прямо к <c>LoginTelegramCmd</c>: авторизация уходила в фон, кадр не
+    /// менялся вовсе, и пользователь оставался на погасшей кнопке — ни ссылки «Открыть Telegram», ни
+    /// повтора, ни выхода. Опрос при этом тикал до трёх минут за спиной у экрана, который о нём молчал.
+    ///
+    /// Зовётся ТОТ ЖЕ вход хоста, что и с начального экрана (<see cref="MainWindow.OpenLoginTelegram"/>),
+    /// поэтому порядок «сначала показать страницу, потом стартовать» и отмена опроса при закрытии
+    /// страницы живут в одном месте на оба пути. Команду сюда дублировать нельзя: <c>OpenLoginTelegram</c>
+    /// выполняет её сам, а второй запуск отменил бы первый вместе с уже выданным deep link.
+    /// </summary>
+    private void OnLoginTelegram()
+    {
+        if (TopLevel.GetTopLevel(this) is MainWindow window)
+        {
+            window.OpenLoginTelegram();
+            return;
+        }
+        // Хоста нет (превью/дизайн-режим) — по крайней мере не молчим: тот же путь, что и у прочих CTA.
+        LoginRequested?.Invoke(this, EventArgs.Empty);
+    }
+
     private AccountViewModel? _vm;
 
     public AccountView()
@@ -47,6 +75,7 @@ public partial class AccountView : UserControl
         BuyRow.Tapped += (_, _) => BuyRequested?.Invoke(this, EventArgs.Empty);
         DevicesRow.Tapped += (_, _) => DevicesRequested?.Invoke(this, EventArgs.Empty);
         HistoryRow.Tapped += (_, _) => HistoryRequested?.Invoke(this, EventArgs.Empty);
+        LoginTelegramButton.Click += (_, _) => OnLoginTelegram();
         LoginSiteButton.Click += (_, _) => LoginRequested?.Invoke(this, EventArgs.Empty);
         LogoutRow.Tapped += (_, _) => (DataContext as AccountViewModel)?.LogoutCmd.Execute().Subscribe();
 

@@ -862,11 +862,14 @@
                     </StackPanel>
 
                     <StackPanel Spacing="12">
+                        <!--  Ведёт на ТУ ЖЕ подстраницу «Вход», что и кнопка начального экрана: подтверждение
+                              в Telegram ждётся на её экране ожидания. Команда сюда НЕ привязана — авторизацию
+                              запускает code-behind сразу после открытия подстраницы (иначе она стартовала бы
+                              дважды), см. LoginTelegramButton.Click.  -->
                         <Button
                             x:Name="LoginTelegramButton"
                             HorizontalAlignment="Stretch"
-                            Classes="Primary Tall"
-                            Command="{Binding LoginTelegramCmd}">
+                            Classes="Primary Tall">
                             <StackPanel
                                 HorizontalAlignment="Center"
                                 Orientation="Horizontal"
