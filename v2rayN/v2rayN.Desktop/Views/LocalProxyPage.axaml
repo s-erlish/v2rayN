@@ -224,6 +224,34 @@
                                 Theme="{DynamicResource ToggleSwitch.iOS}" />
                         </Grid>
                     </Border>
+
+                    <!--  «Скрыть значок в трее» стоит ИМЕННО ЗДЕСЬ — так в пакете (screens.md,
+                          «Локальный прокси», группа «Доступ»), и по смыслу это верно: без значка
+                          приложение работает как обычный локальный прокси для программ, что и
+                          объясняет подпись. Сначала я завёл её во вкладке настроек рядом с
+                          автозапуском — перенёс.  -->
+                    <Border x:Name="RowHideTray" Classes="SubRow tap">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <Border Grid.Column="0" Classes="SubTile">
+                                <PathIcon Data="{DynamicResource Geo.Sub.Device}" />
+                            </Border>
+                            <StackPanel
+                                Grid.Column="1"
+                                Margin="16,0,12,0"
+                                VerticalAlignment="Center">
+                                <TextBlock Classes="SubName" Text="{loc:T LocalProxy_HideTray}" />
+                                <TextBlock
+                                    Classes="SubSub"
+                                    Text="{loc:T LocalProxy_HideTrayHint}"
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ToggleSwitch
+                                x:Name="switchHideTray"
+                                Grid.Column="2"
+                                VerticalAlignment="Center"
+                                Theme="{DynamicResource ToggleSwitch.iOS}" />
+                        </Grid>
+                    </Border>
                 </StackPanel>
             </Border>
 

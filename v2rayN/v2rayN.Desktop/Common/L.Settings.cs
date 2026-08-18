@@ -56,8 +56,6 @@ public sealed partial class L
         Add("Settings_UiScale", "Масштаб интерфейса", "Interface scale");
         Add("Settings_Autostart", "Запуск с системой", "Launch with the system");
         Add("Settings_AutostartHint", "Открывать при входе в систему", "Open when you sign in");
-        Add("Settings_HideTray", "Скрыть значок в трее", "Hide the tray icon");
-        Add("Settings_HideTrayHint", "Не показывать значок в области уведомлений", "Keep the icon out of the notification area");
 
         Add("Settings_SecSubscription", "Подписка", "Subscription");
         Add("Settings_SubAutoUpdate", "Автообновление подписки", "Auto-update subscription");
@@ -206,6 +204,8 @@ public sealed partial class L
         Add("LocalProxy_Password", "Пароль", "Password");
         Add("LocalProxy_BlockUdp", "Блокировать UDP", "Block UDP");
         Add("LocalProxy_BlockUdpHint", "Запретить UDP через прокси", "Disallow UDP through the proxy");
+        Add("LocalProxy_HideTray", "Скрыть значок в трее", "Hide the tray icon");
+        Add("LocalProxy_HideTrayHint", "Работать только как локальный прокси", "Run as a local proxy only");
         Add("LocalProxy_Foot", "Порты меняются только при отключённом туннеле.", "Ports can only be changed while the tunnel is off.");
         Add("LocalProxy_FootLive", "Туннель включён — порт менять нельзя. Отключитесь, чтобы изменить его.", "The tunnel is on — the port can't be changed. Disconnect to change it.");
 

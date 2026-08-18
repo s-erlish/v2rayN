@@ -111,7 +111,6 @@ public class SettingsViewModel : MyReactiveObject
     [Reactive] public bool MuxEnabled { get; set; }
     [Reactive] public bool FragmentEnabled { get; set; }
     [Reactive] public bool AutoStart { get; set; }
-    [Reactive] public bool HideTrayIcon { get; set; }
 
     /// <summary>Owner-custom «Облегчённый режим». Backed by the SHARED persisted
     /// <see cref="UIItem.LiteMode"/> flag — survives restart and is the same field the desktop
@@ -224,7 +223,6 @@ public class SettingsViewModel : MyReactiveObject
             MuxEnabled = _config.Mux4SboxItem.Protocol.IsNotEmpty();
             FragmentEnabled = _config.CoreBasicItem.EnableFragment;
             AutoStart = _config.GuiItem.AutoRun;
-            HideTrayIcon = _config.UiItem.HideTrayIcon;
             LiteMode = _config.UiItem.LiteMode;
 
             PerAppText = ResolvePerAppText();
@@ -299,7 +297,6 @@ public class SettingsViewModel : MyReactiveObject
         this.WhenAnyValue(x => x.MuxEnabled).Subscribe(async v => await OnMuxChanged(v));
         this.WhenAnyValue(x => x.FragmentEnabled).Subscribe(async v => await OnFragmentChanged(v));
         this.WhenAnyValue(x => x.AutoStart).Subscribe(async v => await OnAutoStartChanged(v));
-        this.WhenAnyValue(x => x.HideTrayIcon).Subscribe(async v => await OnHideTrayIconChanged(v));
         this.WhenAnyValue(x => x.LiteMode).Subscribe(async v => await OnLiteModeChanged(v));
 
         //  Строки-окошки: индекс — единственная точка записи. _loading гасит первичную эмиссию и
@@ -353,19 +350,6 @@ public class SettingsViewModel : MyReactiveObject
         }
         _config.CoreBasicItem.EnableFragment = v;
         await PersistAndMaybeReload();
-    }
-
-    //  Значок в трее прячется/возвращается СРАЗУ, без перезапуска: строка настроек описывает
-    //  наблюдаемое состояние, а не намерение на следующий запуск.
-    private async Task OnHideTrayIconChanged(bool v)
-    {
-        if (_designMode || _config.UiItem.HideTrayIcon == v)
-        {
-            return;
-        }
-        _config.UiItem.HideTrayIcon = v;
-        await ConfigHandler.SaveConfig(_config);
-        v2rayN.Desktop.App.ApplyTrayIconVisibility(v);
     }
 
     private async Task OnAutoStartChanged(bool v)
