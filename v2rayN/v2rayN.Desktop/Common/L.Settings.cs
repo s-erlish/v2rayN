@@ -93,7 +93,6 @@ public sealed partial class L
         Add("Dns_AdvancedHint", "Ускоряет соединение, отвечая на DNS-запросы локально (sing-box)", "Speeds up connections by answering DNS queries locally (sing-box)");
 
         // ── RoutingSubView ──
-        Add("Routing_Intro", "Правила proxy, direct и block", "The proxy, direct, and block rules");
         Add("Routing_RuleSets", "Наборы правил", "Rule sets");
         Add("Routing_RulesCount", "{0} правил", "{0} rules");
         Add("Routing_Active", "Активен", "Active");
@@ -103,7 +102,6 @@ public sealed partial class L
         Add("Routing_Maintenance", "Обслуживание", "Maintenance");
         Add("Routing_DefaultRules", "Стандартные правила", "Default rules");
         Add("Routing_DefaultRulesHint", "Пересоздать встроенные наборы правил", "Rebuild the built-in rule sets");
-        Add("Routing_Reset", "Сбросить", "Reset");
         Add("Routing_DsAsIs", "Как есть", "As is");
         Add("Routing_DsIpIfNonMatch", "IP при несовпадении", "IP if no match");
         Add("Routing_DsIpOnDemand", "IP по запросу", "IP on demand");
@@ -111,9 +109,6 @@ public sealed partial class L
         // ── PerAppProxyPage ──
         Add("PerApp_SplitTunnel", "Раздельное туннелирование", "Split tunneling");
         Add("PerApp_SplitTunnelHint", "Выберите, какие программы идут через VPN", "Choose which apps go through the VPN");
-        Add("PerApp_BypassHint", "Кроме выбранных — идут напрямую, минуя VPN", "Except selected — they go direct, bypassing the VPN");
-        Add("PerApp_OnlyHint", "Только выбранные — через VPN идут лишь они", "Only selected — just these go through the VPN");
-        Add("PerApp_Apps", "Приложения", "Apps");
         Add("PerApp_AddExe", "Добавить .exe", "Add .exe");
         Add("PerApp_TunHint", "Работает в режиме TUN (sing-box). Правила применяются при следующем подключении.", "Works in TUN mode (sing-box). Rules apply on the next connection.");
         Add("PerApp_ProgramFileType", "Программа", "Program");
@@ -129,8 +124,6 @@ public sealed partial class L
         Add("Ping_Real", "Реальная", "Real");
 
         // ── GeoFilesPage ──
-        Add("Geo_Intro", "Geo-базы для маршрутизации", "Geo databases for routing");
-        Add("Geo_UpdateNow", "Обновить сейчас", "Update now");
         Add("Geo_NotDownloaded", "Не загружен", "Not downloaded");
         Add("Geo_SizeUpdated", "{0} МБ · обновлён {1}", "{0} MB · updated {1}");
         Add("Geo_Updating", "Обновление…", "Updating…");
@@ -139,23 +132,11 @@ public sealed partial class L
         Add("Geo_Failed", "Не удалось обновить: ", "Update failed: ");
 
         // ── AboutPage ──
-        Add("About_Version", "Версия —", "Version —");
-        Add("About_VersionValue", "Версия {0}", "Version {0}");
         Add("About_TitleVersion", "departament · Версия {0}", "departament · Version {0}");
-        Add("About_OpenSite", "Открыть сайт", "Open website");
-        Add("About_TelegramBot", "Telegram-бот", "Telegram bot");
-        Add("About_Details", "Сведения", "Details");
-        Add("About_CopyDetails", "Копировать сведения", "Copy details");
         Add("About_SystemInfo", "ОС: {0}\nАрхитектура: {1}\n.NET: {2}", "OS: {0}\nArchitecture: {1}\n.NET: {2}");
 
         // ── BackupPage ──
         Add("Backup_Intro", "Файл с серверами и настройками", "A file with your servers and settings");
-        Add("Backup_Export", "Экспорт", "Export");
-        Add("Backup_ExportHint", "Сохранить копию в файл", "Save a backup to a file");
-        Add("Backup_Save", "Сохранить…", "Save…");
-        Add("Backup_Import", "Импорт", "Import");
-        Add("Backup_ImportHint", "Восстановить из файла — приложение перезапустится", "Restore from a file — the app will restart");
-        Add("Backup_Restore", "Восстановить…", "Restore…");
         Add("Backup_Saving", "Сохранение…", "Saving…");
         Add("Backup_Saved", "Копия сохранена: {0}", "Backup saved: {0}");
         Add("Backup_SaveFailed", "Не удалось сохранить копию.", "Couldn't save the backup.");
@@ -165,21 +146,15 @@ public sealed partial class L
 
         // ── UrlSchemesPage ──
         Add("UrlSchemes_Registration", "Регистрация схемы depv://", "depv:// scheme registration");
-        Add("UrlSchemes_Register", "Зарегистрировать", "Register");
-        Add("UrlSchemes_Remove", "Убрать", "Remove");
-        Add("UrlSchemes_Hint", "Нажмите на схему, чтобы скопировать. Используйте их в ярлыках, скриптах или других приложениях.", "Tap a scheme to copy it. Use them in shortcuts, scripts, or other apps.");
-        Add("UrlSchemes_StartTunnel", "Запустить туннель", "Start the tunnel");
         Add("UrlSchemes_OpenApp", "Открыть приложение", "Open the app");
         Add("UrlSchemes_Stop", "Остановить соединение", "Stop the connection");
         Add("UrlSchemes_Toggle", "Переключить соединение", "Toggle the connection");
         Add("UrlSchemes_Import", "Импорт (автоопределение типа)", "Import (auto-detect type)");
-        Add("UrlSchemes_AddByUrl", "Добавить по URL", "Add by URL");
         Add("UrlSchemes_WindowsOnly", "Регистрация схемы доступна только на Windows.", "Scheme registration is available on Windows only.");
         Add("UrlSchemes_Registered", "Схема зарегистрирована — ссылки depv:// открывают departament.", "Scheme registered — depv:// links open departament.");
         Add("UrlSchemes_NotRegistered", "Схема не зарегистрирована.", "Scheme not registered.");
         Add("UrlSchemes_NoPath", "Не удалось определить путь к программе.", "Couldn't determine the app's path.");
         Add("UrlSchemes_RegisterFailed", "Не удалось зарегистрировать: ", "Registration failed: ");
-        Add("UrlSchemes_RemovedOk", "Схема удалена.", "Scheme removed.");
         Add("UrlSchemes_RemoveFailed", "Не удалось удалить: ", "Removal failed: ");
 
         // ── ProviderSettingsPage ──
@@ -233,8 +208,9 @@ public sealed partial class L
         Add("LocalProxy_FootLive", "Туннель включён — порт менять нельзя. Отключитесь, чтобы изменить его.", "The tunnel is on — the port can't be changed. Disconnect to change it.");
 
         // ── Маршрутизация ──
-        Add("Routing_Rules", "Правила", "Rules");
-        Add("Routing_AddRule", "Добавить правило", "Add a rule");
+        // Ключей редактора правил («Правила», «Добавить правило», «Сбросить») тут нет намеренно:
+        // редактора в приложении не существует, и владелец решил его не заводить. Строка, которой
+        // некуда вести, не станет живее оттого, что у неё есть перевод.
         Add("Routing_NoRules", "Правил пока нет", "No rules yet");
         Add("Routing_Resetting", "Пересоздаём…", "Rebuilding…");
 
@@ -246,7 +222,6 @@ public sealed partial class L
 
         // ── Журнал ──
         Add("Log_Title", "Журнал", "Log");
-        Add("Log_Intro", "Лог ядра за текущий сеанс", "The core log for the current session");
         Add("Log_Search", "Поиск по журналу", "Search the log");
         Add("Log_EmptyTitle", "Записей пока нет", "No entries yet");
         Add("Log_EmptyText", "Журнал заполнится при следующем подключении.", "The log will fill up on the next connection.");
@@ -294,19 +269,17 @@ public sealed partial class L
         Add("UrlSchemes_DisconnectHint", "Отключиться", "Disconnect");
         Add("UrlSchemes_SubHint", "Добавить подписку по ссылке", "Add a subscription by link");
         Add("UrlSchemes_Copied", "Схема скопирована", "Scheme copied");
-        Add("UrlSchemes_Commands", "Команды", "Commands");
         Add("UrlSchemes_RegisterRow", "Открывать ссылки depv://", "Open depv:// links");
 
         // ── О приложении ──
+        // Только три рабочие ссылки (сайт · обратная связь · обновления). Ключей под «Исходный код»,
+        // «Лицензии открытого ПО», «Канал в Telegram» и «Политику конфиденциальности» тут нет: адресов
+        // под них не существует, и владелец решил эти строки не заводить. «Идентификатор» заменён
+        // «Системой» — андроидного идентификатора пакета на ПК нет.
         Add("About_SecApp", "Приложение", "Application");
         Add("About_VersionRow", "Версия", "Version");
-        Add("About_Identifier", "Идентификатор", "Identifier");
         Add("About_SecLinks", "Ссылки и документы", "Links and documents");
-        Add("About_SourceCode", "Исходный код", "Source code");
-        Add("About_Licenses", "Лицензии открытого ПО", "Open-source licenses");
         Add("About_Feedback", "Обратная связь", "Feedback");
-        Add("About_TelegramChannel", "Канал в Telegram", "Telegram channel");
-        Add("About_Privacy", "Политика конфиденциальности", "Privacy policy");
         Add("About_CheckUpdates", "Проверить обновления", "Check for updates");
         Add("About_Copied", "Скопировано", "Copied");
         Add("About_Site", "Сайт departament", "departament website");
