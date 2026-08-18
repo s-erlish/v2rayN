@@ -16,7 +16,7 @@
 
           1. Строка профиля      — аватар 34 · ник · контурный чип баланса с «+».
           2. Кольцо трафика 164  — и рядом блок: «departament vpn» 19/700 · бейдж тарифа · срок.
-          3. Две кнопки 44       — «Пополнить» (с глифом «+») и «Продлить», равной ширины, контурные.
+          3. Две кнопки 42       — «Пополнить» и «Продлить», равной ширины, контурные акцентом.
           4. Автопродление       — строка-карточка с подписью и тумблером справа.
           5. «Управление»        — три строки: купить · устройства · история.
           6. «Способы входа»     — две строки: Telegram · Сайт.
@@ -61,18 +61,25 @@
 
         <!--  ============ Пара кнопок полосы 3 ============
               Грамматика Button.OutlinedAccent (контур акцента, press 0.975 с аппаратным слоем под
-              текстом), но геометрия из screens.md: высота 44, радиус 22 = пилюля, подпись 12.5/700.  -->
+              текстом), геометрия — с эталонных кадров: высота 42, контур 1.5, пилюля, подпись 12.5/700.
+              Глифа «+» у «Пополнить» нет: на кадрах и в прототипе у кнопки только подпись, а «+»
+              живёт в чипе баланса (screens.md называет глиф у обоих — кадр разрешает спор).  -->
         <Style Selector="Button.PairCta">
-            <Setter Property="Height" Value="44" />
-            <Setter Property="MinHeight" Value="44" />
-            <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill}" />
+            <Setter Property="Height" Value="42" />
+            <Setter Property="MinHeight" Value="42" />
+            <Setter Property="BorderThickness" Value="1.5" />
+            <!--  Пилюля = ПОЛОВИНА высоты: Avalonia подрезает радиус по каждой оси отдельно,
+                  и Radius.Pill на кнопке 340×42 дал бы rx=20/ry=21 — эллипс, а не пилюлю.
+                  Шкала Radius.Pill* идёт через 4 (44·40·36…), высоты 42 в ней нет.  -->
+            <Setter Property="CornerRadius" Value="21" />
             <Setter Property="Padding" Value="12,0" />
             <Setter Property="FontSize" Value="12.5" />
             <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
             <Setter Property="HorizontalAlignment" Value="Stretch" />
         </Style>
         <Style Selector="Button.PairCta /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill}" />
+            <Setter Property="CornerRadius" Value="21" />
         </Style>
         <!--  Фокус-кольцо концентрично пилюле (у общего правила радиус 18 — для 16-радиусных CTA).  -->
         <Style Selector="Button.PairCta">
@@ -82,7 +89,7 @@
                         Margin="-2"
                         BorderBrush="{DynamicResource Brush.Accent}"
                         BorderThickness="2"
-                        CornerRadius="24" />
+                        CornerRadius="23" />
                 </FocusAdornerTemplate>
             </Setter>
         </Style>
@@ -96,7 +103,7 @@
             <Setter Property="Height" Value="32" />
             <Setter Property="MinHeight" Value="0" />
             <Setter Property="Padding" Value="14,0" />
-            <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill}" />
+            <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill32}" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderBrush" Value="{DynamicResource Brush.Outline}" />
             <Setter Property="BorderThickness" Value="1" />
@@ -109,7 +116,9 @@
         </Style>
         <Style Selector="Button.BalanceChip /template/ ContentPresenter#PART_ContentPresenter">
             <Setter Property="Background" Value="Transparent" />
-            <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Outline}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill32}" />
         </Style>
         <Style Selector="Button.BalanceChip:pointerover /template/ ContentPresenter#PART_ContentPresenter">
             <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
@@ -185,6 +194,9 @@
         </Style>
         <Style Selector="Button.MethodChip /template/ ContentPresenter#PART_ContentPresenter">
             <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineVariant}" />
+            <Setter Property="BorderThickness" Value="1.5" />
+            <Setter Property="CornerRadius" Value="{StaticResource Radius.Chip}" />
         </Style>
         <Style Selector="Button.MethodChip:not(.selected):pointerover /template/ ContentPresenter#PART_ContentPresenter">
             <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
@@ -198,6 +210,7 @@
         </Style>
         <Style Selector="Button.MethodChip.selected /template/ ContentPresenter#PART_ContentPresenter">
             <Setter Property="Background" Value="{DynamicResource Brush.SelectedFill}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
         </Style>
     </UserControl.Styles>
 
@@ -212,8 +225,11 @@
             IsVisible="{Binding IsLoggedIn}"
             VerticalScrollBarVisibility="Auto">
 
-            <!--  Колонка 760 по центру (tokens.md), gutter 16 — единый на всё приложение.  -->
-            <StackPanel MaxWidth="760" Margin="16,14,16,20">
+            <!--  Колонка 760 с гуттером 20 — ровно как на вкладке «Настройки» и на подэкранах
+                  (одна колонка на всё приложение). На эталонных кадрах карточка 720, то есть 760
+                  ВКЛЮЧАЯ гуттер; сводить надо ВСЕ пятнадцать экранов сразу, а не четыре моих —
+                  иначе «Аккаунт» и «Настройки» разъедутся на 40. Вынесено в отчёт.  -->
+            <StackPanel MaxWidth="760" Margin="20,14,20,20">
 
                 <!-- ============ 1 · Строка профиля ============ -->
                 <Grid
@@ -284,6 +300,7 @@
                 <!--  Полоса держит место и на время первой загрузки (ShowPlanBand), чтобы «Управление»
                       не подпрыгивало вверх-вниз; без подписки её нет вовсе — кольцо без данных врало бы.  -->
                 <Grid
+                    x:Name="PlanBand"
                     Margin="4,18,4,0"
                     ColumnDefinitions="Auto,*"
                     IsVisible="{Binding ShowPlanBand}">
@@ -299,13 +316,17 @@
                         RenderTransformOrigin="50%,50%"
                         VerticalAlignment="Center">
                         <Ellipse
-                            Width="164"
-                            Height="164"
+                            Width="158"
+                            Height="158"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
                             Stroke="{DynamicResource Brush.SurfaceVariant}"
                             StrokeThickness="6" />
                         <shapes:Arc
-                            Width="164"
-                            Height="164"
+                            Width="158"
+                            Height="158"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
                             Classes="TrafficRing"
                             StartAngle="-90"
                             Stroke="{DynamicResource Brush.Accent}"
@@ -341,26 +362,31 @@
                         VerticalAlignment="Center">
 
                         <TextBlock
+                            x:Name="PlanTitle"
                             FontFamily="{DynamicResource Font.Grotesk}"
                             FontSize="19"
                             FontWeight="Bold"
                             Foreground="{DynamicResource Brush.OnSurface}"
                             LetterSpacing="-0.19"
+                            LineHeight="22.8"
                             Text="departament vpn" />
 
                         <!--  Бейдж тарифа и срок на одной строке; оба появляются только когда
                               подписка реально известна — плейсхолдеров экран не рисует.  -->
                         <StackPanel
+                            x:Name="PlanMetaRow"
                             Margin="0,9,0,0"
                             Orientation="Horizontal"
                             Spacing="9">
                             <Border
-                                Padding="9,3"
+                                Height="19"
+                                Padding="9,0"
                                 VerticalAlignment="Center"
                                 Background="{DynamicResource Brush.AccentContainer}"
-                                CornerRadius="{DynamicResource Radius.Pill}"
+                                CornerRadius="9.5"
                                 IsVisible="{Binding HasTariffBadge}">
                                 <TextBlock
+                                    VerticalAlignment="Center"
                                     FontFamily="{DynamicResource Font.Grotesk}"
                                     FontSize="10.5"
                                     FontWeight="Medium"
@@ -382,23 +408,9 @@
                             <Button
                                 x:Name="TopUpButton"
                                 Grid.Column="0"
-                                Classes="OutlinedAccent PairCta">
-                                <StackPanel
-                                    HorizontalAlignment="Center"
-                                    Orientation="Horizontal"
-                                    Spacing="6"
-                                    VerticalAlignment="Center">
-                                    <PathIcon
-                                        Width="14"
-                                        Height="14"
-                                        VerticalAlignment="Center"
-                                        Data="{StaticResource Geo.Acc.Add}"
-                                        Foreground="{DynamicResource Brush.Accent}" />
-                                    <TextBlock
-                                        VerticalAlignment="Center"
-                                        Foreground="{DynamicResource Brush.Accent}"
-                                        Text="{loc:T Account_TopUp}" />
-                                </StackPanel>
+                                Classes="OutlinedAccent PairCta"
+                                Content="{loc:T Account_TopUp}"
+                                Foreground="{DynamicResource Brush.Accent}">
                                 <Button.Flyout>
                                     <!--  Флайаут пополнения: сумма → инлайн-валидация → способ оплаты
                                           (чипы при 2+ методах / подпись при одном) → «Продолжить»

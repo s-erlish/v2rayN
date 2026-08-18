@@ -300,7 +300,7 @@
                 Background="{DynamicResource Brush.Toast.Bg}"
                 BorderBrush="{DynamicResource Brush.OutlineVariant}"
                 BorderThickness="1"
-                CornerRadius="{DynamicResource Radius.Pill}"
+                CornerRadius="{DynamicResource Radius.Pill36}"
                 IsHitTestVisible="False"
                 IsVisible="False"
                 Opacity="0">

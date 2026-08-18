@@ -1,4 +1,5 @@
 using Avalonia.Animation;
+using Avalonia.Layout;
 using v2rayN.Desktop.Common;
 using v2rayN.Desktop.ViewModels;
 
@@ -55,6 +56,60 @@ public partial class AccountView : UserControl
 
         DataContextChanged += (_, _) => HookVm();
         HookVm();
+
+        // Полоса 2 складывается в столбик, когда колонка перестаёт вмещать кольцо и блок рядом.
+        this.GetObservable(BoundsProperty).Subscribe(b => ApplyBandLayout(b.Width));
+    }
+
+    // ==================== узкая раскладка полосы 2 ====================
+
+    //  Ширина КОЛОНКИ (не окна): gutter 20 с двух сторон, потолок 720. Кольцо 164 + зазор 32 +
+    //  минимальная ширина блока тарифа 260 = 456 — ниже этого блок пришлось бы сжимать, поэтому
+    //  кольцо уезжает НАД блоком, а сам блок центрируется (узкий кадр прототипа).
+    private const double BandStackBelow = 456.0;
+
+    private bool _bandStacked;
+    private bool _bandLayoutSeeded;
+
+    private void ApplyBandLayout(double viewWidth)
+    {
+        if (viewWidth <= 0)
+        {
+            return;
+        }
+
+        var column = Math.Min(720.0, viewWidth - 40.0);
+        var stacked = column < BandStackBelow;
+        if (_bandLayoutSeeded && stacked == _bandStacked)
+        {
+            return;
+        }
+
+        _bandStacked = stacked;
+        _bandLayoutSeeded = true;
+
+        if (stacked)
+        {
+            PlanBand.ColumnDefinitions = new ColumnDefinitions("*");
+            PlanBand.RowDefinitions = new RowDefinitions("Auto,Auto");
+            Grid.SetColumn(PlanBlock, 0);
+            Grid.SetRow(PlanBlock, 1);
+            TrafficRing.HorizontalAlignment = HorizontalAlignment.Center;
+            PlanBlock.Margin = new Thickness(0, 18, 0, 0);
+            PlanTitle.TextAlignment = TextAlignment.Center;
+            PlanMetaRow.HorizontalAlignment = HorizontalAlignment.Center;
+        }
+        else
+        {
+            PlanBand.RowDefinitions = new RowDefinitions("*");
+            PlanBand.ColumnDefinitions = new ColumnDefinitions("Auto,*");
+            Grid.SetRow(PlanBlock, 0);
+            Grid.SetColumn(PlanBlock, 1);
+            TrafficRing.HorizontalAlignment = HorizontalAlignment.Left;
+            PlanBlock.Margin = new Thickness(32, 0, 0, 0);
+            PlanTitle.TextAlignment = TextAlignment.Left;
+            PlanMetaRow.HorizontalAlignment = HorizontalAlignment.Left;
+        }
     }
 
     // ==================== VM wiring ====================
