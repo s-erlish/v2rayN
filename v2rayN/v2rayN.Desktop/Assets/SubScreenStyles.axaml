@@ -336,7 +336,7 @@
 
     <!--  ==================== Поле поиска ====================
           Высота 46, скругление 14, контур 1 (tokens.md «поле поиска и мелкая карточка 14»).
-          Глиф лупы 18 слева, приглушённый.  -->
+          БЕЗ глифа лупы: в кадрах прототипа (B_log, B_perapp) поле поиска — только плейсхолдер.  -->
     <Style Selector="Border.SubSearch">
         <Setter Property="Height" Value="46" />
         <Setter Property="CornerRadius" Value="14" />
@@ -356,13 +356,18 @@
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
         <Setter Property="CaretBrush" Value="{DynamicResource Brush.Accent}" />
     </Style>
-    <Style Selector="Border.SubSearch > Grid > TextBox:focus /template/ Border#PART_BorderElement">
+    <!--  Часть шаблона у Semi зовётся PART_ContentPresenterBorder (PART_BorderElement — имя из
+          наших ControlTheme TextBox.Incy*). Селектор с чужим именем не совпадал ни с чем, и Semi
+          рисовал под курсором серую подложку внутри поля.  -->
+    <Style Selector="Border.SubSearch > Grid > TextBox:focus /template/ Border#PART_ContentPresenterBorder">
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
     </Style>
-    <Style Selector="Border.SubSearch > Grid > TextBox:pointerover /template/ Border#PART_BorderElement">
+    <Style Selector="Border.SubSearch > Grid > TextBox:pointerover /template/ Border#PART_ContentPresenterBorder">
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
     </Style>
 
     <!--  ==================== Поле-значение внутри строки ====================
@@ -383,15 +388,15 @@
         <Setter Property="CaretBrush" Value="{DynamicResource Brush.Accent}" />
         <Setter Property="CornerRadius" Value="8" />
     </Style>
-    <Style Selector="TextBox.SubField /template/ Border#PART_BorderElement">
+    <Style Selector="TextBox.SubField /template/ Border#PART_ContentPresenterBorder">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
     </Style>
-    <Style Selector="TextBox.SubField:pointerover /template/ Border#PART_BorderElement">
+    <Style Selector="TextBox.SubField:pointerover /template/ Border#PART_ContentPresenterBorder">
         <Setter Property="Background" Value="{DynamicResource Brush.PressBg}" />
         <Setter Property="BorderThickness" Value="0" />
     </Style>
-    <Style Selector="TextBox.SubField:focus /template/ Border#PART_BorderElement">
+    <Style Selector="TextBox.SubField:focus /template/ Border#PART_ContentPresenterBorder">
         <Setter Property="Background" Value="{DynamicResource Brush.PressBg}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
         <Setter Property="BorderThickness" Value="1" />

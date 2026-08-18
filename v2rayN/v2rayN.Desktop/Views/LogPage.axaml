@@ -46,18 +46,11 @@
 
             <!--  ==================== Поиск ====================  -->
             <Border Classes="SubSearch" Margin="0,14,0,0">
-                <Grid ColumnDefinitions="Auto,*">
-                    <PathIcon
-                        Grid.Column="0"
-                        Width="18"
-                        Height="18"
-                        Margin="0,0,10,0"
-                        VerticalAlignment="Center"
-                        Data="{DynamicResource Geo.Sub.Search}"
-                        Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+                <!--  Грид оставлен ради селектора стиля Border.SubSearch > Grid > TextBox;
+                      лупы в поле нет — в прототипе поиск обозначен только плейсхолдером.  -->
+                <Grid ColumnDefinitions="*">
                     <TextBox
                         x:Name="txtFilter"
-                        Grid.Column="1"
                         PlaceholderText="{loc:T Log_Search}" />
                 </Grid>
             </Border>
