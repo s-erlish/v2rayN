@@ -453,7 +453,7 @@
                                 Classes="Spinner"
                                 IsVisible="False"
                                 RenderTransformOrigin="50%,50%"
-                                Stroke="{DynamicResource Brush.OnAccent}"
+                                Stroke="{DynamicResource Brush.Accent}"
                                 StrokeDashArray="6.9,20.8"
                                 StrokeLineCap="Round"
                                 StrokeThickness="2.5" />
@@ -484,7 +484,7 @@
                                 Classes="Spinner"
                                 IsVisible="False"
                                 RenderTransformOrigin="50%,50%"
-                                Stroke="{DynamicResource Brush.OnAccent}"
+                                Stroke="{DynamicResource Brush.Accent}"
                                 StrokeDashArray="6.9,20.8"
                                 StrokeLineCap="Round"
                                 StrokeThickness="2.5" />
@@ -720,7 +720,7 @@
                                     Classes="Spinner"
                                     IsVisible="False"
                                     RenderTransformOrigin="50%,50%"
-                                    Stroke="{DynamicResource Brush.OnAccent}"
+                                    Stroke="{DynamicResource Brush.Accent}"
                                     StrokeDashArray="6.9,20.8"
                                     StrokeLineCap="Round"
                                     StrokeThickness="2.5" />
@@ -830,11 +830,14 @@
                                 VerticalAlignment="Center"
                                 Orientation="Horizontal"
                                 Spacing="8">
+                                <!--  Без явного Foreground: Button.Primary — КОНТУРНАЯ пилюля (решение
+                                      владельца «фона не должно быть синего вообще»), её содержимое
+                                      наследует акцентный цвет самой кнопки. Прибитый OnAccent писал
+                                      бы белым по белому в светлой теме — глиф просто исчезал.  -->
                                 <PathIcon
                                     Width="20"
                                     Height="20"
-                                    Data="{StaticResource Geo.Login.Telegram}"
-                                    Foreground="{DynamicResource Brush.OnAccent}" />
+                                    Data="{StaticResource Geo.Login.Telegram}" />
                                 <TextBlock VerticalAlignment="Center" Text="{loc:T Login_OpenTelegram}" />
                             </StackPanel>
                         </Button>

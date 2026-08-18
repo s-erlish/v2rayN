@@ -870,6 +870,12 @@
                             x:Name="LoginTelegramButton"
                             HorizontalAlignment="Stretch"
                             Classes="Primary Tall">
+                            <!--  Ни глиф, ни подпись НЕ красятся вручную: Button.Primary — КОНТУРНАЯ
+                                  пилюля (решение владельца «фона не должно быть синего вообще»), и её
+                                  содержимое наследует акцентный цвет самой кнопки, единый во всех трёх
+                                  темах. Прибитый сюда OnAccent — цвет для заливки, которой больше нет:
+                                  в светлой теме он писал белым по белому, и кнопка входа выглядела
+                                  пустой рамкой без надписи и без глифа.  -->
                             <StackPanel
                                 HorizontalAlignment="Center"
                                 Orientation="Horizontal"
@@ -879,11 +885,9 @@
                                     Width="20"
                                     Height="20"
                                     VerticalAlignment="Center"
-                                    Data="{StaticResource Geo.Acc.Telegram}"
-                                    Foreground="{DynamicResource Brush.OnAccent}" />
+                                    Data="{StaticResource Geo.Acc.Telegram}" />
                                 <TextBlock
                                     VerticalAlignment="Center"
-                                    Foreground="{DynamicResource Brush.OnAccent}"
                                     Text="{loc:T Common_SignInTelegram}" />
                             </StackPanel>
                         </Button>
