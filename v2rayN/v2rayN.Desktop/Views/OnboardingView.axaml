@@ -86,7 +86,7 @@
             <Setter Property="HorizontalAlignment" Value="Stretch" />
             <Setter Property="HorizontalContentAlignment" Value="Center" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
-            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Cursor" Value="Arrow" />
             <Setter Property="cm:PressFeedback.Composited" Value="True" />
             <Setter Property="RenderTransform" Value="scale(1)" />
             <Setter Property="Transitions">
@@ -125,6 +125,9 @@
               карточки — Surface, рамка 1, скругление 16, паддинг 14, высота по содержимому.
               Отдельный класс, а не StartPill с переопределениями: пилюля жёстко 50 в высоту, и
               карточка, «поправленная» локальным Height=NaN, была бы миной для следующего правщика.  -->
+        <!--  Карточка «Ссылка в буфере обмена» — ВЫВЕСКА, а не кнопка: нажимается кнопка внутри
+              неё («Добавить подписку»). Поэтому обычная стрелка вместо «руки» и никакого отклика
+              на наведение — владелец: «не так, будто я могу нажать».  -->
         <Style Selector="Button.StartCard">
             <Setter Property="RenderTransformOrigin" Value="50%,50%" />
             <Setter Property="Background" Value="{DynamicResource Brush.Surface}" />
@@ -145,7 +148,7 @@
             </Setter>
         </Style>
         <Style Selector="Button.StartCard:pressed">
-            <Setter Property="RenderTransform" Value="scale(0.975)" />
+            <Setter Property="RenderTransform" Value="scale(1)" />
             <Setter Property="Transitions">
                 <Transitions>
                     <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.07" Easing="{StaticResource Ease.PressIn}" />
@@ -157,11 +160,11 @@
             <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineVariant}" />
         </Style>
         <Style Selector="Button.StartCard:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
+            <Setter Property="Background" Value="{DynamicResource Brush.Surface}" />
             <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineVariant}" />
         </Style>
         <Style Selector="Button.StartCard:pressed /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
+            <Setter Property="Background" Value="{DynamicResource Brush.Surface}" />
             <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineVariant}" />
         </Style>
 

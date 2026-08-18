@@ -5,11 +5,12 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:resx="clr-namespace:ServiceLib.Resx;assembly=ServiceLib"
-    Background="{DynamicResource Brush.Bg}"
+    Background="Transparent"
     CanResize="False"
     FontFamily="{DynamicResource Font.Grotesk}"
     ShowInTaskbar="False"
     SizeToContent="WidthAndHeight"
+    TransparencyLevelHint="Transparent"
     WindowDecorations="None"
     WindowStartupLocation="CenterOwner"
     mc:Ignorable="d">
@@ -18,9 +19,11 @@
         Incy-подтверждение (замена стокового OS/v2rayN-диалога). ОБЩИЙ для всех yes/no
         (удаление сервера/подписки/правил и пр.), поэтому оформлен глобально-и-безопасно
         токенами Incy. Хрома OS-заголовка нет (WindowDecorations=None), поэтому «v2rayN» из
-        заголовка исчезает — сам вопрос ЕСТЬ заголовок. Фон окна = Brush.Bg (Incy-подложка,
-        надёжно во всех темах и без зависимости от прозрачности композитора), поверх — карточка
-        Surface: radius_card 20, 1px OutlineVariant, мягкая тень (читается плавающей на подложке).
+        заголовка исчезает — сам вопрос ЕСТЬ заголовок. Окно ПРОЗРАЧНО (Background=Transparent +
+        TransparencyLevelHint=Transparent) — раньше здесь стоял непрозрачный Brush.Bg, и он рисовал
+        за скруглённой карточкой ЧЁРНЫЙ ПРЯМОУГОЛЬНИК с прямыми углами: его владелец и видел вокруг
+        диалога. Тот же приём уже держит главное окно. Видимое — только карточка Surface:
+        radius_card 20, 1px OutlineVariant, мягкая тень (читается плавающей).
         Утвердительная — акцентная Primary (годится и для не-деструктивных подтверждений),
         «Отмена» — тональная. Тема (тёмная/светлая/mono) соблюдается через DynamicResource.
     -->
