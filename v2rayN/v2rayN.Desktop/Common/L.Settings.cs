@@ -96,7 +96,7 @@ public sealed partial class L
         Add("Routing_RuleSets", "Наборы правил", "Rule sets");
         Add("Routing_RulesCount", "{0} правил", "{0} rules");
         Add("Routing_Active", "Активен", "Active");
-        Add("Routing_DomainStrategy", "Стратегия доменов", "Domain strategy");
+        Add("Routing_DomainStrategy", "Доменная стратегия", "Domain strategy");
         Add("Routing_DomainResolution", "Разрешение доменов", "Domain resolution");
         Add("Routing_DomainHint", "Как ядро сопоставляет домены с правилами", "How the core matches domains against rules");
         Add("Routing_Maintenance", "Обслуживание", "Maintenance");

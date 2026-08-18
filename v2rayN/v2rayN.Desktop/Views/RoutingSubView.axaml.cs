@@ -49,6 +49,11 @@ public partial class RoutingSubView : UserControl, ISubPage
 
         RefreshRuleSets();
 
+        // Модель наполняет RoutingItems асинхронно (fire-and-forget Init в её конструкторе), и к
+        // моменту первого RefreshRuleSets коллекция ещё пуста — снимок без подписки оставлял экран
+        // с «Правил пока нет» НАВСЕГДА. Подписка перечитывает список, когда данные реально пришли.
+        _vm.RoutingItems.CollectionChanged += (_, _) => Dispatcher.UIThread.Post(RefreshRuleSets);
+
         // --- Доменная стратегия: общее окошко у значения ---
         StrategyPopup.Options = StrategyOptions.Select(x => L.T(x.LabelKey)).ToList();
         var curIdx = Array.FindIndex(StrategyOptions, x => x.Value == _vm.DomainStrategy);
@@ -118,8 +123,19 @@ public partial class RoutingSubView : UserControl, ISubPage
         SetResetBusy(true);
         try
         {
-            // Пересоздаёт встроенные наборы правил и обновляет список (движковая команда).
-            await _vm.RoutingAdvancedImportRulesCmd.Execute();
+            // «Пересоздать» означает пересоздать, а не добавить: движковая команда импорта
+            // (InitRouting с blImportAdvancedRules=true) всегда ДОПИСЫВАЕТ встроенные наборы, и
+            // каждый тап удваивал список. Поэтому сначала убираем прежние встроенные («V4-» —
+            // версия-префикс из ConfigHandler.InitBuiltinRouting), не трогая наборы пользователя,
+            // и лишь затем просим движок создать их заново (он же назначит набор по умолчанию).
+            var items = await AppManager.Instance.RoutingItems();
+            foreach (var item in items.Where(t => t.Remarks.StartsWith("V4-")))
+            {
+                await ConfigHandler.RemoveRoutingItem(item);
+            }
+            await ConfigHandler.InitRouting(_config);
+            await _vm.RefreshRoutingItems();
+            _vm.IsModified = true;
         }
         finally
         {
