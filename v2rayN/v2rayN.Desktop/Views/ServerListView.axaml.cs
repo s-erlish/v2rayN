@@ -913,7 +913,7 @@ public sealed class DelayDisplayConverter : IValueConverter
         var s = value?.ToString();
         if (int.TryParse(s, out var ms) && ms <= 0)
         {
-            //  Недоступен — «n/a» серым (см. DelayInkConverter), не число и не латентность.
+            //  Недоступен — «n/a» КРАСНЫМ (см. DelayInkConverter), не число и не латентность.
             return L.T("Servers_PingNa");
         }
         return $"{s} {L.T("Servers_Ms")}";
