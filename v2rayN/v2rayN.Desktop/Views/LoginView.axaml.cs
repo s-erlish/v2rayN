@@ -508,11 +508,17 @@ public partial class LoginView : UserControl
         try
         {
             await Task.WhenAll(
-                BuildScaleFade(0d, 1d, _scale098, _scale1).RunAsync(incoming, cts.Token),
-                BuildScaleFade(1d, 0d, _scale1, _scale098).RunAsync(outgoing, cts.Token));
+                PlayMotion(incoming, 0d, 1d, _scale098, _scale1, Motion.Dur.State, Motion.Ease.Standard, token: cts.Token),
+                PlayMotion(outgoing, 1d, 0d, _scale1, _scale098, Motion.Dur.State, Motion.Ease.Standard, token: cts.Token, keepTransform: true));
         }
         catch (OperationCanceledException)
         {
+        }
+        catch (Exception ex)
+        {
+            // Движение — не причина потерять экран входа. Ниже кадр всё равно доводится до финального
+            // состояния, поэтому пользователь видит нужный блок даже когда переход не сыграл.
+            Logging.SaveLog("LoginView.CrossfadeBlocks", ex);
         }
 
         if (cts.IsCancellationRequested)
@@ -1225,45 +1231,24 @@ public partial class LoginView : UserControl
     };
 
     /// <summary>Раскрывает элемент: opacity 0→1 + RenderTransform from→to, 300мс OutQuint, с задержкой
-    /// бита. FillMode.None + восстановление базы — чтобы не затенять :pressed-scale кнопок.</summary>
+    /// бита. База возвращается по окончании — чтобы не затенять :pressed-scale кнопок.</summary>
     private static async Task PlayReveal(Control el, int delayMs, ITransform from, ITransform to)
     {
-        el.Opacity = 0;
-        var anim = new Animation
-        {
-            Duration = Motion.Dur.Reveal,
-            Delay = TimeSpan.FromMilliseconds(delayMs),
-            Easing = Motion.Ease.OutQuint,
-            FillMode = FillMode.None,
-            Children =
-            {
-                new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(Visual.OpacityProperty, 0d), new Setter(Visual.RenderTransformProperty, from) } },
-                new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(Visual.OpacityProperty, 1d), new Setter(Visual.RenderTransformProperty, to) } },
-            },
-        };
-
-        var cts = new CancellationTokenSource();
-        var safety = DispatcherTimer.RunOnce(
-            () =>
-            {
-                cts.Cancel();
-                el.Opacity = 1;
-                el.RenderTransform = null;
-            },
-            TimeSpan.FromMilliseconds(delayMs + Motion.Dur.Reveal.TotalMilliseconds + 250));
         try
         {
-            await anim.RunAsync(el, cts.Token);
+            await PlayMotion(el, 0d, 1d, from, to, Motion.Dur.Reveal, Motion.Ease.OutQuint, TimeSpan.FromMilliseconds(delayMs));
         }
-        catch (OperationCanceledException)
+        catch (Exception ex)
         {
+            Logging.SaveLog("LoginView.PlayReveal", ex);
         }
         finally
         {
-            safety.Dispose();
+            // Появление УЛУЧШАЕТ уже видимый дефолт, а не создаёт его: чем бы ни кончилось движение,
+            // элемент остаётся видимым и без остаточного трансформа.
+            el.Transitions = null;
             el.Opacity = 1;
             el.RenderTransform = null;
-            cts.Dispose();
         }
     }
 
@@ -1279,39 +1264,105 @@ public partial class LoginView : UserControl
 
     // ── Помощники движения ──────────────────────────────────────────────────
 
-    /// <summary>opacity + scale в одной анимации (кроссфейд блоков). FillMode.Forward держит финал.</summary>
-    private static Animation BuildScaleFade(double fromO, double toO, ITransform fromT, ITransform toT) =>
-        new()
-        {
-            Duration = Motion.Dur.State,
-            Easing = Motion.Ease.Standard,
-            FillMode = FillMode.Forward,
-            Children =
+    /// <summary>
+    /// Прозрачность + трансформ одним движением. Ведут ПЕРЕХОДЫ (Transitions), а не Animation.
+    ///
+    /// ЭТО НЕ СТИЛИСТИЧЕСКИЙ ВЫБОР. Ключевые кадры по <see cref="Visual.RenderTransformProperty"/>
+    /// в Avalonia не проигрываются вовсе: <c>Animation.RunAsync</c> бросает СРАЗУ, на разборе кадров —
+    /// «No animator registered for the property RenderTransform». Всё, что здесь двигалось этим
+    /// способом, на живом окне не двигалось никогда, а кроссфейд блоков (единственное место, где
+    /// исключение не было проглочено) уносил ВСЁ ПРИЛОЖЕНИЕ: <c>async void</c> плюс
+    /// <c>catch (OperationCanceledException)</c> — и падение уходило в необработанные. Достаточно было
+    /// на странице «Вход» нажать «Войти через Telegram» или «Другой способ входа»: вместо экрана
+    /// ожидания окно просто исчезало. Тот же диагноз и тот же вывод уже записаны в шапке
+    /// <see cref="OnboardingView"/> — TransformOperationsTransition работает, на нём стоит вся
+    /// лестница :pressed в GlobalStyles.
+    ///
+    /// Порядок обязателен: исходное состояние ставится БЕЗ переходов, переходы вешаются вторым шагом,
+    /// и только следующим оборотом диспетчера ставится целевое — эта установка и анимируется. По
+    /// окончании переходы снимаются, а трансформ обнуляется: он живёт на том же свойстве, что и
+    /// :pressed-прогиб кнопок внутри блока, и оставленная «единица» перебивала бы его.
+    /// </summary>
+    /// <param name="keepTransform">
+    /// Оставить конечный трансформ на элементе (уходящий блок кроссфейда — его тут же прячут).
+    /// По умолчанию база возвращается, чтобы не мешать нажатиям.
+    /// </param>
+    private static async Task PlayMotion(
+        Control el,
+        double fromOpacity,
+        double toOpacity,
+        ITransform? from,
+        ITransform? to,
+        TimeSpan duration,
+        Easing easing,
+        TimeSpan delay = default,
+        CancellationToken token = default,
+        bool keepTransform = false)
+    {
+        el.Transitions = null;
+        el.Opacity = fromOpacity;
+        el.RenderTransform = from;
+
+        el.Transitions =
+        [
+            new TransformOperationsTransition
             {
-                new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(Visual.OpacityProperty, fromO), new Setter(Visual.RenderTransformProperty, fromT) } },
-                new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(Visual.OpacityProperty, toO), new Setter(Visual.RenderTransformProperty, toT) } },
+                Property = Visual.RenderTransformProperty,
+                Duration = duration,
+                Delay = delay,
+                Easing = easing,
             },
-        };
+            new DoubleTransition
+            {
+                Property = Visual.OpacityProperty,
+                Duration = duration,
+                Delay = delay,
+                Easing = easing,
+            },
+        ];
+
+        // Отдельный оборот на фоновом приоритете: раскладка/отрисовка успевают увидеть исходное
+        // состояние, иначе переходу нечего интерполировать и кадр «перепрыгивает».
+        await Dispatcher.UIThread.InvokeAsync(
+            () =>
+            {
+                el.Opacity = toOpacity;
+                el.RenderTransform = to;
+            },
+            DispatcherPriority.Background);
+
+        try
+        {
+            await Task.Delay(delay + duration + TimeSpan.FromMilliseconds(40), token);
+        }
+        finally
+        {
+            el.Transitions = null;
+            if (!token.IsCancellationRequested)
+            {
+                el.Opacity = toOpacity;
+                el.RenderTransform = keepTransform ? to : null;
+            }
+        }
+    }
 
     /// <summary>Reveal: opacity 0→1 + translateY(from)→0, затем сброс базы.</summary>
     private static async Task RevealFrom(Control el, ITransform from, TimeSpan dur, Easing easing)
     {
-        el.Opacity = 0;
-        el.RenderTransform = from;
-        var anim = new Animation
+        try
         {
-            Duration = dur,
-            Easing = easing,
-            FillMode = FillMode.Forward,
-            Children =
-            {
-                new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(Visual.OpacityProperty, 0d), new Setter(Visual.RenderTransformProperty, from) } },
-                new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(Visual.OpacityProperty, 1d), new Setter(Visual.RenderTransformProperty, _rise0) } },
-            },
-        };
-        await anim.RunAsync(el, CancellationToken.None);
-        el.Opacity = 1;
-        el.RenderTransform = null;
+            await PlayMotion(el, 0d, 1d, from, _rise0, dur, easing);
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog("LoginView.RevealFrom", ex);
+        }
+        finally
+        {
+            el.Transitions = null;
+            el.Opacity = 1;
+            el.RenderTransform = null;
+        }
     }
 
     /// <summary>Чистый fade между двумя значениями opacity.</summary>
@@ -1332,21 +1383,8 @@ public partial class LoginView : UserControl
     }
 
     /// <summary>opacity 0→1 + scale 0.9→1 (галочка success / плашка).</summary>
-    private static Task ScaleFadeIn(Visual el, TimeSpan dur, Easing easing)
-    {
-        var anim = new Animation
-        {
-            Duration = dur,
-            Easing = easing,
-            FillMode = FillMode.Forward,
-            Children =
-            {
-                new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(Visual.OpacityProperty, 0d), new Setter(Visual.RenderTransformProperty, _scale090) } },
-                new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(Visual.OpacityProperty, 1d), new Setter(Visual.RenderTransformProperty, _scale1) } },
-            },
-        };
-        return anim.RunAsync(el, CancellationToken.None);
-    }
+    private static Task ScaleFadeIn(Control el, TimeSpan dur, Easing easing)
+        => PlayMotion(el, 0d, 1d, _scale090, _scale1, dur, easing);
 
     /// <summary>reduced-motion: превью-хук (PREVIEW_VIEW), дизайн-режим ИЛИ live lite (MotionState).</summary>
     private static bool IsReducedMotion()
