@@ -69,7 +69,18 @@ public class MsgViewModel : MyReactiveObject
                 sb.Append(line);
             }
 
-            await DispatcherShowMsgInteraction.Handle(sb.ToString());
+            try
+            {
+                await DispatcherShowMsgInteraction.Handle(sb.ToString());
+            }
+            catch (UnhandledInteractionException<string, Unit>)
+            {
+                // No handler is registered: this shell builds no MsgView on the Home/Account layout
+                // (only sub-screens that host one register it). The batch has nowhere to render and is
+                // dropped — same net effect as before — but WITHOUT the throw: it used to escape from
+                // this fire-and-forget task as a TaskScheduler UnobservedTaskException on EVERY
+                // subscription sync/update message (observed twice per cold start in guiLogs).
+            }
         }
         finally
         {
