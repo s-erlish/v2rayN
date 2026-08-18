@@ -207,6 +207,13 @@
     <x:Double x:Key="Dot.Active">8</x:Double>
     <x:Double x:Key="Dot.Gap">8</x:Double>
 
+    <!--  ДВЕ гарнитуры, как требует tokens.md: «Заголовки — гротеск, текст — Roboto».
+          Раньше MainWindow ставил гротеск на КОРЕНЬ окна, и его наследовал весь текст —
+          заголовки и подписи были одной гарнитурой. Теперь корень несёт Font.Body, а гротеск
+          стоит явно на заголовках (SubTitle, SubGroupLabel и ~18 мест в GlobalStyles).  -->
+    <!--  Текст: Roboto (переменный, все веса 100–900 в одном файле)  -->
+    <FontFamily x:Key="Font.Body">avares://departament/Assets/Fonts/Roboto-Var.ttf#Roboto</FontFamily>
+
     <!--  Шрифт: Space Grotesk (переменный)  -->
     <FontFamily x:Key="Font.Grotesk">avares://departament/Assets/Fonts/SpaceGrotesk.ttf#Space Grotesk</FontFamily>
 

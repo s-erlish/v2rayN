@@ -268,7 +268,12 @@
     </Style>
 
     <!-- ==================================================================== -->
-    <!--  ОДИН шрифт на ВСЁ приложение — Space Grotesk (Android-паритет).        -->
+    <!--  ДВЕ гарнитуры, как в tokens.md: «Заголовки — гротеск, текст — Roboto». -->
+    <!--  Раньше здесь стоял один Grotesk на всё (Android-паритет), но десктопный-->
+    <!--  пакет и прототип различают их: гротеск несут заголовки, разделы, чипы, -->
+    <!--  пилюли, инициалы плиток и цифры; всё остальное — Roboto. Базовые       -->
+    <!--  селекторы ниже задают ТЕКСТОВУЮ гарнитуру по умолчанию, а гротеск      -->
+    <!--  остаётся явным на типографских классах.                                -->
     <!--  MainWindow ставит FontFamily только на своём корне; каждый отдельный   -->
     <!--  визуальный корень (легаси суб-окна AddServer/Option/Routing/DNS/...,   -->
     <!--  диалоги) и всплывашки в своём TopLevel (ContextMenu/MenuFlyout,        -->
@@ -278,13 +283,13 @@
     <!--  веса/размеры остаются за типографскими классами ниже.                  -->
     <!-- ==================================================================== -->
     <Style Selector="TopLevel">
-        <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Body}" />
     </Style>
     <Style Selector="TextBlock">
-        <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Body}" />
     </Style>
     <Style Selector="TemplatedControl">
-        <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Body}" />
     </Style>
 
     <!-- ==================================================================== -->
@@ -413,7 +418,7 @@
         <Setter Property="CornerRadius" Value="{DynamicResource Radius.Button}" />
         <Setter Property="Height" Value="48" />
         <Setter Property="Padding" Value="24,0" />
-        <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Body}" />
         <Setter Property="FontWeight" Value="Bold" />
         <Setter Property="FontSize" Value="15" />
         <Setter Property="HorizontalContentAlignment" Value="Center" />
@@ -491,7 +496,7 @@
         <Setter Property="CornerRadius" Value="{DynamicResource Radius.Button}" />
         <Setter Property="Height" Value="48" />
         <Setter Property="Padding" Value="24,0" />
-        <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Body}" />
         <Setter Property="FontWeight" Value="Medium" />
         <Setter Property="FontSize" Value="15" />
         <Setter Property="HorizontalContentAlignment" Value="Center" />
@@ -557,7 +562,7 @@
         <Setter Property="CornerRadius" Value="{DynamicResource Radius.Button}" />
         <Setter Property="Height" Value="48" />
         <Setter Property="Padding" Value="24,0" />
-        <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Body}" />
         <Setter Property="FontWeight" Value="Medium" />
         <Setter Property="FontSize" Value="15" />
         <Setter Property="HorizontalContentAlignment" Value="Center" />
@@ -1120,7 +1125,7 @@
         <Setter Property="CornerRadius" Value="{DynamicResource Radius.Chip}" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
-        <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Body}" />
         <Setter Property="FontWeight" Value="Medium" />
         <Setter Property="FontSize" Value="14" />
         <Setter Property="HorizontalContentAlignment" Value="Center" />
@@ -1168,7 +1173,7 @@
         <Setter Property="CornerRadius" Value="{DynamicResource Radius.Button}" />
         <Setter Property="Height" Value="48" />
         <Setter Property="Padding" Value="24,0" />
-        <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Body}" />
         <Setter Property="FontWeight" Value="Bold" />
         <Setter Property="FontSize" Value="15" />
         <Setter Property="HorizontalContentAlignment" Value="Center" />
