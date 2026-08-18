@@ -29,6 +29,58 @@ public static class ApiJson
         options.Converters.Add(new NullTolerantStringConverter());
         return options;
     }
+
+    /// <summary>
+    /// The first list that actually has entries, else an empty list (never null). Used by the DTOs that
+    /// accept several envelope spellings for the same collection: resolving at read time instead of
+    /// funnelling during parsing makes the result independent of the order the keys arrive in, and lets
+    /// a populated list win over an empty one when a payload carries both.
+    /// </summary>
+    public static List<T> FirstNonEmpty<T>(params List<T>?[] candidates)
+    {
+        foreach (var c in candidates)
+        {
+            if (c is { Count: > 0 })
+            {
+                return c;
+            }
+        }
+        return new List<T>();
+    }
+
+    /// <summary>
+    /// Reads a list out of a raw envelope node that is EITHER the array itself (<c>{ data: [...] }</c>)
+    /// or an object wrapping it under one of <paramref name="keys"/> (<c>{ data: { items: [...] } }</c>).
+    /// Returns null when the node is absent or holds neither shape — a node we cannot read must not
+    /// become a parse failure for the whole response, which is why it is taken as a raw
+    /// <see cref="JsonElement"/> rather than bound to a concrete type.
+    /// </summary>
+    public static List<T>? ListFrom<T>(JsonElement node, params string[] keys)
+    {
+        try
+        {
+            if (node.ValueKind == JsonValueKind.Array)
+            {
+                return node.Deserialize<List<T>>(Options);
+            }
+            if (node.ValueKind != JsonValueKind.Object)
+            {
+                return null;
+            }
+            foreach (var key in keys)
+            {
+                if (node.TryGetProperty(key, out var el) && el.ValueKind == JsonValueKind.Array)
+                {
+                    return el.Deserialize<List<T>>(Options);
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            // A node shaped like a list but holding something else is simply not our list.
+        }
+        return null;
+    }
 }
 
 /// <summary>

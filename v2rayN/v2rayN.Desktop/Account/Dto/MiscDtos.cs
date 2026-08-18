@@ -24,6 +24,14 @@ public sealed class UpgradeQuoteDto
 /// GET /client/devices — tolerant to the different HWID-list shapes the backend / Remnawave proxy
 /// may return (flat `items`/`devices`/`hwidDevices`, or nested `response.devices`).
 /// <see cref="Devices"/> normalizes all of them.
+///
+/// The alternates declare a getter on purpose. System.Text.Json SILENTLY SKIPS a set-only property
+/// whose type is a collection — the setter is never invoked, so `devices` and `hwidDevices` were
+/// declared, documented, and dead: only `items` and the nested `response.devices` ever bound, and a
+/// backend answering with `{"devices":[…]}` produced the empty Devices screen this class exists to
+/// prevent. (Set-only STRING funnels, as used for the field alternates below, DO bind — which is why
+/// the gap went unnoticed.) A getter makes the property writable in the serializer's eyes; returning
+/// null keeps it out of any serialized output and stops it being treated as a collection to populate.
 /// </summary>
 public sealed class DevicesDto
 {
@@ -31,10 +39,10 @@ public sealed class DevicesDto
     public List<DeviceDto> Items { get; set; } = new();
 
     [JsonPropertyName("devices")]
-    public List<DeviceDto>? ItemsAltDevices { set => FunnelItems(value); }
+    public List<DeviceDto>? ItemsAltDevices { get => null; set => FunnelItems(value); }
 
     [JsonPropertyName("hwidDevices")]
-    public List<DeviceDto>? ItemsAltHwid { set => FunnelItems(value); }
+    public List<DeviceDto>? ItemsAltHwid { get => null; set => FunnelItems(value); }
 
     // Remnawave HWID endpoint shape: { response: { total, devices: [...] } }
     public DevicesWrapperDto? Response { get; set; }
@@ -69,10 +77,10 @@ public sealed class DevicesWrapperDto
     public List<DeviceDto> Devices { get; set; } = new();
 
     [JsonPropertyName("items")]
-    public List<DeviceDto>? DevicesAltItems { set => Funnel(value); }
+    public List<DeviceDto>? DevicesAltItems { get => null; set => Funnel(value); }
 
     [JsonPropertyName("hwidDevices")]
-    public List<DeviceDto>? DevicesAltHwid { set => Funnel(value); }
+    public List<DeviceDto>? DevicesAltHwid { get => null; set => Funnel(value); }
 
     public int Total { get; set; }
 
