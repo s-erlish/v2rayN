@@ -14,24 +14,6 @@
 
     <UserControl.Styles>
         <StyleInclude Source="avares://departament/Assets/SubScreenStyles.axaml" />
-
-        <!--  Каретка строки «Режим»: поворот на 180° за 300 мс, пока окошко открыто (motion.md).  -->
-        <Style Selector="PathIcon.ModeCaret">
-            <Setter Property="RenderTransformOrigin" Value="50%,50%" />
-            <Setter Property="Transitions">
-                <Transitions>
-                    <TransformOperationsTransition Duration="0:0:0.30" Property="RenderTransform" />
-                </Transitions>
-            </Setter>
-        </Style>
-        <Style Selector="PathIcon.ModeCaret.open">
-            <Setter Property="RenderTransform" Value="rotate(180deg)" />
-        </Style>
-        <!--  Значение гаснет до приглушённого, пока окошко открыто (motion.md).  -->
-        <Style Selector="TextBlock.ModeValue.open">
-            <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
-            <Setter Property="FontWeight" Value="Normal" />
-        </Style>
     </UserControl.Styles>
 
     <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
@@ -47,7 +29,13 @@
             Margin="20,10,20,20"
             HorizontalAlignment="Stretch">
 
-            <StackPanel Orientation="Horizontal" Spacing="10">
+            <!--  Отступ 2 сверху — из прототипа (`padding:2px 0 0` у строки заголовка поверх
+                  `padding:10px 0 20px` у самой прокрутки). Без него шапка садится на 2 выше эталона:
+                  замер по кадру — центр стрелки «назад» 69.5 вместо 71.5.  -->
+            <StackPanel
+                Margin="0,2,0,0"
+                Orientation="Horizontal"
+                Spacing="10">
                 <Button
                     x:Name="btnBack"
                     Classes="SubBack"
@@ -75,8 +63,11 @@
                         Classes="SubRow tap"
                         CornerRadius="15,15,0,0">
                         <Grid ColumnDefinitions="Auto,*,Auto">
+                            <!--  Развилка маршрута, а не сетка приложений: сетка в эталоне стоит у
+                                  готовых наборов, и три одинаковых глифа в одной карточке перестали бы
+                                  что-либо различать.  -->
                             <Border Grid.Column="0" Classes="SubTile">
-                                <PathIcon Data="{DynamicResource Geo.Sub.Grid}" />
+                                <PathIcon Data="{DynamicResource Geo.Sub.Routing}" />
                             </Border>
                             <StackPanel
                                 Grid.Column="1"
@@ -101,11 +92,8 @@
                     <!--  «Режим» — каретка и окошко у значения, НЕ переключатель по кругу: два
                           варианта, которые меняются местами по тапу, не дают увидеть набор целиком
                           и требуют угадывать, что будет дальше. Окошко — ОБЩИЙ компонент ValuePopup.  -->
-                    <Border
-                        x:Name="RowMode"
-                        Classes="SubRow tap"
-                        CornerRadius="0,0,15,15">
-                        <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                    <Border x:Name="RowMode" Classes="SubRow tap">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
                             <Border Grid.Column="0" Classes="SubTile">
                                 <PathIcon Data="{DynamicResource Geo.Sub.Globe}" />
                             </Border>
@@ -115,23 +103,75 @@
                                 VerticalAlignment="Center"
                                 Classes="SubName"
                                 Text="{loc:T PerApp_Mode}" />
-                            <TextBlock
-                                x:Name="txtModeValue"
+                            <!--  Правая половина строки — ОБЩИЙ ValuePicker (значение + каретка + окошко),
+                                  тот же, что у восьми строк-окошек вкладки настроек. Своей копии тут больше
+                                  нет: она давала значению вес 500 вместо 12.5/400 из tokens.md и второй
+                                  экземпляр поворота каретки и приглушения значения.  -->
+                            <v:ValuePicker
+                                x:Name="ModePicker"
                                 Grid.Column="2"
-                                Classes="SubValue strong ModeValue" />
-                            <PathIcon
-                                x:Name="ModeCaret"
-                                Grid.Column="3"
-                                Classes="SubChevron ModeCaret"
-                                Data="{DynamicResource Geo.Sub.Caret}" />
-
-                            <!--  Компонент занимает 0×0 и не двигает раскладку строки.  -->
-                            <v:ValuePopup
-                                x:Name="ModePopup"
-                                Grid.Column="3"
+                                VerticalAlignment="Center"
                                 Anchor="{Binding #RowMode}"
-                                PopupWidth="196"
-                                Trigger="{Binding #RowMode}" />
+                                PopupWidth="196" />
+                        </Grid>
+                    </Border>
+
+                    <!--  ==================== Готовые наборы ====================
+                          Именованные, обратимые, выключенные по умолчанию (AppPresets). Тумблер
+                          добавляет только то, чего в выборе ещё нет, и запоминает ИМЕННО ЭТО:
+                          обратный ход возвращает ровно добавленное и не трогает процессы, которые
+                          человек отметил сам. Состав набора виден сразу — его строки появляются в
+                          списке ниже отмеченными и снимаются поштучно, поэтому это набор, а не
+                          скрытый список. В карточке они стоят там же, где в эталоне: сразу под
+                          «Режимом».  -->
+                    <Border Classes="SubDivider" />
+                    <Border x:Name="RowPresetGames" Classes="SubRow tap">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <Border Grid.Column="0" Classes="SubTile">
+                                <PathIcon Data="{DynamicResource Geo.Sub.Grid}" />
+                            </Border>
+                            <StackPanel
+                                Grid.Column="1"
+                                Margin="16,0,12,0"
+                                VerticalAlignment="Center">
+                                <TextBlock x:Name="txtPresetGames" Classes="SubName" />
+                                <TextBlock
+                                    x:Name="txtPresetGamesHint"
+                                    Classes="SubSub"
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ToggleSwitch
+                                x:Name="switchPresetGames"
+                                Grid.Column="2"
+                                VerticalAlignment="Center"
+                                Theme="{DynamicResource ToggleSwitch.iOS}" />
+                        </Grid>
+                    </Border>
+
+                    <Border Classes="SubDivider" />
+                    <Border
+                        x:Name="RowPresetLaunchers"
+                        Classes="SubRow tap"
+                        CornerRadius="0,0,15,15">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <Border Grid.Column="0" Classes="SubTile">
+                                <PathIcon Data="{DynamicResource Geo.Sub.Grid}" />
+                            </Border>
+                            <StackPanel
+                                Grid.Column="1"
+                                Margin="16,0,12,0"
+                                VerticalAlignment="Center">
+                                <TextBlock x:Name="txtPresetLaunchers" Classes="SubName" />
+                                <TextBlock
+                                    x:Name="txtPresetLaunchersHint"
+                                    Classes="SubSub"
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ToggleSwitch
+                                x:Name="switchPresetLaunchers"
+                                Grid.Column="2"
+                                VerticalAlignment="Center"
+                                Theme="{DynamicResource ToggleSwitch.iOS}" />
                         </Grid>
                     </Border>
                 </StackPanel>

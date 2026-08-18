@@ -19,16 +19,17 @@ namespace v2rayN.Desktop.Views;
 /// Две вещи, которым научил тот же экран на Android-стороне продукта:
 ///   1. Строка «Режим» НЕ переключается по кругу. Значение, которое меняется местами по тапу, не
 ///      показывает набор целиком и заставляет угадывать следующий шаг. Здесь у строки каретка, и она
-///      открывает ОБЩЕЕ «окошко у значения» (<see cref="ValuePopup"/>) — второй реализации выбора
+///      открывает ОБЩЕЕ «окошко у значения» (<see cref="ValuePicker"/>) — второй реализации выбора
 ///      в приложении не заводится.
 ///   2. Подпись строки не обрезается на полуслове. Обрезается ЗНАЧЕНИЕ справа (у него свой лимит),
 ///      а имя программы и имя файла живут в собственной колонке и переносятся/усекаются по своим
 ///      правилам.
 ///
-/// Чего на экране НЕТ и почему: в прототипе есть тумблеры «Игры» и «Лаунчеры» (готовые наборы
-/// программ). В ветке такого понятия не существует — ни списка категорий, ни признака у процесса.
-/// Выдумывать их значило бы нарисовать переключатель, который ничего не делает, поэтому строки не
-/// добавлены (вопрос вынесен в отчёт).
+/// Готовые наборы «Игры» и «Игровые лаунчеры» (эталонный кадр, screens.md) — <see cref="AppPresets"/>:
+/// именованные, обратимые, выключенные по умолчанию. Один тумблер применяет набор и тем же тумблером
+/// снимает ровно то, что применил; состав виден в списке ниже отмеченными строками и правится
+/// поштучно. Два набора, а не один: задержка и магазин — разные решения, и решение про цены не должно
+/// ехать на тумблере, который чинит пинг.
 ///
 /// Уход со страницы (стрелка «назад») сохраняет и применяет, затем поднимает <see cref="BackRequested"/>.
 /// </summary>
@@ -61,36 +62,128 @@ public partial class PerAppProxyPage : UserControl, ISubPage
         txtFilter.GetObservable(TextBox.TextProperty).Subscribe(_ => ApplyFilter());
 
         switchEnabled.IsChecked = _config.UiItem.PerAppProxyEnabled;
-        RowEnabled.Tapped += (_, e) =>
+        WireRowToggle(RowEnabled, switchEnabled);
+
+        // ── Режим через общий ValuePicker ──
+        // Значение, каретка и окошко живут в одном компоненте: он же ведёт поворот каретки и
+        // приглушение значения от СОСТОЯНИЯ окошка (оно умеет закрыться само — Esc, клик мимо,
+        // уход со страницы), поэтому здесь остаётся только список вариантов и текущий выбор.
+        ModePicker.Options = new[] { L.T("PerApp_ModeExcept"), L.T("PerApp_ModeOnly") };
+        ModePicker.SelectedIndex = _config.UiItem.PerAppProxyBypass ? ModeExcept : ModeOnly;
+        // Тап ВНУТРИ раскрытого окошка — это выбор пункта, а не повторное нажатие на строку.
+        // Окошко лежит В ДЕРЕВЕ строки (иначе оно выпадает из in-app зума), поэтому его собственный
+        // Click доходит сюда вторым событием: без этой проверки выбор пункта закрывал окошко и тут же
+        // открывал его обратно — оно оставалось висеть на экране после выбора.
+        RowMode.Tapped += (_, e) =>
         {
-            if (SubPageUtil.OriginatedIn<ToggleSwitch>(e.Source))
+            if (!SubPageUtil.OriginatedIn<ValuePopup>(e.Source))
             {
-                return;
+                ModePicker.Toggle();
             }
-            switchEnabled.IsChecked = !(switchEnabled.IsChecked ?? false);
         };
 
-        // ── Режим через общее «окошко у значения» ──
-        ModePopup.Options = new[] { L.T("PerApp_ModeExcept"), L.T("PerApp_ModeOnly") };
-        ModePopup.SelectedIndex = _config.UiItem.PerAppProxyBypass ? ModeExcept : ModeOnly;
-        ModePopup.Picked += (_, _) => UpdateModeValue();
-        // Каретка и приглушение значения ведутся ОТ состояния окошка, а не от тапа: окошко умеет
-        // закрыться само (Esc, клик мимо, уход со страницы), и строка обязана это отражать.
-        ModePopup.GetObservable(ValuePopup.IsOpenProperty).Subscribe(open =>
-        {
-            SubPageUtil.SetClass(ModeCaret, "open", open);
-            SubPageUtil.SetClass(txtModeValue, "open", open);
-        });
-        RowMode.Tapped += (_, _) => ModePopup.Toggle();
-        UpdateModeValue();
+        // ── Готовые наборы ──
+        // Тумблер отражает ЗАПИСАННОЕ владение (AppPresets.IsApplied), а не «отмечены ли все процессы
+        // набора»: набор, чьи процессы человек отметил руками, не должен выглядеть применённым —
+        // иначе выключение отняло бы его собственный выбор.
+        txtPresetGames.Text = AppPresets.Games.Title;
+        txtPresetGamesHint.Text = AppPresets.Games.Hint;
+        txtPresetLaunchers.Text = AppPresets.Launchers.Title;
+        txtPresetLaunchersHint.Text = AppPresets.Launchers.Hint;
+        switchPresetGames.IsChecked = AppPresets.IsApplied(AppPresets.Games);
+        switchPresetLaunchers.IsChecked = AppPresets.IsApplied(AppPresets.Launchers);
+        switchPresetGames.IsCheckedChanged += (_, _) =>
+            TogglePreset(AppPresets.Games, switchPresetGames.IsChecked == true);
+        switchPresetLaunchers.IsCheckedChanged += (_, _) =>
+            TogglePreset(AppPresets.Launchers, switchPresetLaunchers.IsChecked == true);
+        WireRowToggle(RowPresetGames, switchPresetGames);
+        WireRowToggle(RowPresetLaunchers, switchPresetLaunchers);
 
         LoadProcesses();
     }
 
-    private void UpdateModeValue() =>
-        txtModeValue.Text = ModePopup.SelectedIndex == ModeOnly
-            ? L.T("PerApp_ModeOnly")
-            : L.T("PerApp_ModeExcept");
+    /// <summary>Тап по строке переключает её тумблер — кроме случая, когда тапнули сам тумблер
+    /// (он уже переключился, и второе переключение вернуло бы всё назад).</summary>
+    private static void WireRowToggle(Border row, ToggleSwitch sw) =>
+        row.Tapped += (_, e) =>
+        {
+            if (!SubPageUtil.OriginatedIn<ToggleSwitch>(e.Source))
+            {
+                sw.IsChecked = !(sw.IsChecked ?? false);
+            }
+        };
+
+    /// <summary>
+    /// Включение/выключение набора — ТОЛЬКО в памяти страницы. Ни одной записи в конфиг и ни одного
+    /// перезапуска ядра здесь нет: решает общий путь выхода (<see cref="SaveAndBackAsync"/>). Включить
+    /// набор и тут же выключить — ноль записей.
+    ///
+    /// Добавляется только то, чего в выборе ещё НЕТ, и запоминается именно добавленное
+    /// (<see cref="AppPresets.Apply"/>); выключение возвращает ровно его. Процесс, отмеченный
+    /// человеком до применения набора, набору не принадлежит и остаётся отмеченным.
+    /// </summary>
+    private void TogglePreset(AppPreset preset, bool on)
+    {
+        EnsureRows(preset);
+        if (on)
+        {
+            var current = new HashSet<string>(
+                _all.Where(x => x.IsChecked && x.Identifier.IsNotEmpty()).Select(x => x.Identifier),
+                StringComparer.OrdinalIgnoreCase);
+            var added = new HashSet<string>(AppPresets.Apply(preset, current), StringComparer.OrdinalIgnoreCase);
+            foreach (var item in _all.Where(x => added.Contains(x.Identifier)))
+            {
+                item.IsChecked = true;
+            }
+        }
+        else
+        {
+            var owned = new HashSet<string>(AppPresets.Release(preset), StringComparer.OrdinalIgnoreCase);
+            foreach (var item in _all.Where(x => owned.Contains(x.Identifier)))
+            {
+                item.IsChecked = false;
+            }
+        }
+        // Набор трогает сразу десятки строк, и без пересортировки его действие видно только по
+        // счётчику: два десятка игр, которых на этой машине не запущено, легли бы в конец списка.
+        // Пересортировка здесь и НИГДЕ БОЛЬШЕ — после ручной галочки строка уехала бы из-под курсора.
+        SortByChosen();
+        ApplyFilter();
+    }
+
+    /// <summary>Отмеченные — наверх, дальше по алфавиту. Тот же порядок, что задаёт LoadProcesses.</summary>
+    private void SortByChosen()
+    {
+        var ordered = _all
+            .OrderByDescending(x => x.IsChecked)
+            .ThenBy(x => x.Display, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        _all.Clear();
+        foreach (var item in ordered)
+        {
+            _all.Add(item);
+        }
+    }
+
+    /// <summary>
+    /// Гарантирует строку в списке для каждого процесса набора. Игры при настройке НЕ ЗАПУЩЕНЫ — а
+    /// список собирается из живых процессов, — поэтому без этого набор «применялся» бы к пустоте и не
+    /// показывал бы ничего. Строки добавляются невыбранными; выбор ставит вызывающий. Ровно это и
+    /// делает набор набором, а не скрытым списком: его состав виден в списке ниже и снимается поштучно.
+    /// </summary>
+    private void EnsureRows(AppPreset preset)
+    {
+        var known = new HashSet<string>(
+            _all.Where(x => x.Identifier.IsNotEmpty()).Select(x => x.Identifier),
+            StringComparer.OrdinalIgnoreCase);
+        foreach (var process in preset.Processes)
+        {
+            if (known.Add(process))
+            {
+                _all.Add(new AppItem { Identifier = process, Display = process });
+            }
+        }
+    }
 
     private void LoadProcesses()
     {
@@ -215,7 +308,7 @@ public partial class PerAppProxyPage : UserControl, ISubPage
         _saved = true;
 
         var enabled = switchEnabled.IsChecked == true;
-        var bypass = ModePopup.SelectedIndex != ModeOnly;
+        var bypass = ModePicker.SelectedIndex != ModeOnly;
         var chosen = _all.Where(x => x.IsChecked && x.Identifier.IsNotEmpty())
                          .Select(x => x.Identifier!)
                          .Distinct(StringComparer.OrdinalIgnoreCase)
