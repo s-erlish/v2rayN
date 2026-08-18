@@ -1201,6 +1201,24 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         onboardingView.DataContext = _homeViewModel;
         BindActiveHome();
 
+        //  Передача кадра с экрана прогрузки на Главную (motion.md «Сборка главной после потока»).
+        //  Экран прогрузки поднимает это событие СИНХРОННО, в том же обороте UI-потока, в котором
+        //  снимает себя, — чтобы между «подписка добавлена» и живой Главной не было пустого кадра.
+        //  Раньше событие никто не слушал: слой просто растворялся, и Главная проявлялась штатным
+        //  кроссфейдом шелла — без обещанного пакетом стаггера. Теперь снимаем слой со стека и
+        //  проигрываем тот же вход регионов, что и при обычной смене вкладки.
+        //  ВАЖНО: на FlowRequested не подписываемся намеренно — начальный экран поднимает слой САМ
+        //  (RaiseFlowOverlay), и вторая подписка открыла бы его дважды.
+        accountSyncView.ShellHandoffRequested += (_, _) =>
+        {
+            if (_subStack.LastOrDefault() is AccountSyncView)
+            {
+                PopSubPage();
+            }
+            ShowTab(AppTab.Home);
+            PlayTabEntrance(IsNarrow ? _compactHome : _homeView);
+        };
+
         // Индикатор рейла: серый в покое, синий при подключении И в процессе подключения (P1-3).
         // Цвет ведёт класс .on (C5): BrushTransition OnSurfaceVariant↔Accent из тема-токенов.
         _homeViewModel.WhenAnyValue(x => x.IsConnected, x => x.IsConnecting, (connected, connecting) => connected || connecting)

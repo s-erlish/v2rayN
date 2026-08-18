@@ -458,6 +458,12 @@
     <Style Selector="Button.Primary:disabled">
         <Setter Property="Opacity" Value="0.38" />
     </Style>
+    <!--  Цвет содержимого прибит и в ВЫКЛЮЧЕННОМ состоянии: гасит его Opacity выше, а не подмена
+          цвета темой Semi — иначе выключенная кнопка меняла бы не только яркость, но и оттенок.  -->
+    <Style Selector="Button.Primary:disabled /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+    </Style>
     <!--  ГЛОБАЛЬНЫЙ фикс ховера. Без переопределения дефолтная тема Semi ({x:Type
           Button}) на :pointerover ПОДМЕНЯЕТ фон PART_ContentPresenter своим токеном
           ButtonDefaultPointeroverBackground (акцент-ховер ~#5F9AFF — СВЕТЛЕЕ покоя),
@@ -498,6 +504,7 @@
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
         <Setter Property="BorderThickness" Value="1.5" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
     </Style>
     <Style Selector="Button.Primary:pressed /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
