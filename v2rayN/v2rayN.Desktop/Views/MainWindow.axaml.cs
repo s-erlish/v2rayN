@@ -59,29 +59,42 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     private const double CompactHeroMinWidth = 232.0;
     private const double TwoColumnMinWidth = RailWidth + CompactLeftColumn + 1.0 + CompactHeroMinWidth;
 
-    private LayoutMode _layout = LayoutMode.Wide;   // старт широкий (дефолт окна 1366×768)
+    private LayoutMode _layout = LayoutMode.Compact;  // старт компактный (дефолт окна 900×860); ctor уточняет
     private bool _boundsSeeded;                      // первый живой Bounds-тик — без кроссфейда морфинга
 
     /// <summary>Узкая раскладка: нижняя навигация + одностолбцовая «Главная» (CompactHomeView).</summary>
     private bool IsNarrow => _layout == LayoutMode.Narrow;
 
     // Целевые размеры тумблера раскладки (двойной клик по навигации / drag-to-edge) — ровно пресеты
-    // пакета. Не широкая → широкая 1366×768; широкая → компактная 900×860. Узкая (420×860) достижима
-    // ресайзом до минимума окна (MinWidth = 420), поэтому в тумблере её нет. Оба клампятся в WorkingArea.
+    // пакета, в ЛОГИЧЕСКИХ единицах. Не широкая → широкая 1366×768; широкая → компактная 900×860. Узкая
+    // (420×860) достижима ресайзом до минимума окна (MinWidth = 420), поэтому в тумблере её нет. Все цели
+    // домножаются на _uiScale и клампятся в WorkingArea.
     private const double WideToggleWidth = 1366.0;
     private const double WideToggleHeight = 768.0;
     private const double CompactToggleWidth = 900.0;
     private const double CompactToggleHeight = 860.0;
 
-    // ==================== In-app UI-масштаб (zoom всего интерфейса, независимо от OS DPI) ====================
-    // Фактор zoom применяется к КОРНЮ контента через LayoutTransformControl (uiScaleHost/uiScaleTransform):
-    // на 4K-мониторе при 100% OS-масштабе всё физически крошечное — этот слой даёт пользователю увеличить
-    // интерфейс целиком (Ctrl +/Ctrl −/Ctrl 0 и строка настроек), НЕ трогая OS DPI. Базовые MinWidth/MinHeight
-    // (из XAML) масштабируются под фактор — иначе на высоком zoom контенту не хватает места и он клиппится.
-    // Значение живёт в UiScaleState (мгновенный обмен с настройками/клавишами) и персистится в UiItem.UiScale.
+    // Доля рабочей области, которую занимает СТАРТОВОЕ окно, если пресет в неё не влезает. Компактный
+    // пресет почти квадратный (900×860), а мониторы 16:9 — на 1920×1080 при факторе 1.40 ему нужно 1204
+    // пикселя по высоте при 1080 доступных. Без этой доли безрамочное окно вставало бы ровно по краям
+    // рабочей области и читалось как сломанный «развёрнутый» режим. 0.92 = видимый зазор со всех сторон.
+    private const double StartupWorkAreaFill = 0.92;
+
+    // ==================== Масштаб интерфейса: подбор под монитор × выбор пользователя ====================
+    // Фактор применяется к КОРНЮ контента через LayoutTransformControl (uiScaleHost) и складывается из ДВУХ:
+    //
+    //   • подбор под МОНИТОР (UiScaleState.Auto) — считается на старте из разрешения экрана и СИСТЕМНОГО
+    //     масштаба ОС так, чтобы логическая раскладка держалась около 1366×768 (tokens.md): 1366 → 1.00,
+    //     1920 → 1.40, 2560 → 1.85. Системный масштаб при этом делится, а не умножается второй раз;
+    //   • «Масштаб интерфейса» ПОЛЬЗОВАТЕЛЯ (UiScaleState.Current) — 100/110/125/150% из настроек и
+    //     Ctrl +/Ctrl −/Ctrl 0. Только он персистится (UiItem.UiScale) и переживает перезапуск; подбор
+    //     под монитор пересчитывается каждый раз заново, потому что монитор может быть другим.
+    //
+    // _uiScale = UiScaleState.Effective = Auto × Current. Базовые MinWidth/MinHeight (из XAML) и стартовый
+    // размер окна масштабируются им же — иначе на высоком факторе контенту не хватает места и он клиппится.
     private double _uiScale = 1.0;
-    private double _baseMinWidth;   // == MinWidth в XAML при zoom 1.0 (снимается в ctor до правок мин-размера)
-    private double _baseMinHeight;  // == MinHeight в XAML при zoom 1.0
+    private double _baseMinWidth;   // == MinWidth в XAML при факторе 1.0 (снимается в ctor до правок мин-размера)
+    private double _baseMinHeight;  // == MinHeight в XAML при факторе 1.0
 
     // Драг-к-краю: когда пользователь тащит компактное окно к верхнему/боковому краю рабочей
     // области — разворачиваем в широкую. Порог в физ. пикселях; _edgeSnapSuspended гасит ложные
@@ -147,17 +160,19 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
 
         _config = AppManager.Instance.Config;
 
-        // ==================== Масштаб интерфейса (in-app zoom) ====================
-        // Снимаем базовые мин-размеры из XAML (340×560) ДО каких-либо правок, затем засеваем фактор из
-        // конфига (клампится) и применяем его к корневому ScaleTransform + мин-размерам окна. Подписка на
-        // UiScaleState.Changed держит трансформ, мин-размер и брейкпоинт раскладки в синхроне при изменении
-        // масштаба из настроек ИЛИ по горячим клавишам (единый путь применения — OnUiScaleChanged/ApplyUiScale).
+        // ==================== Масштаб интерфейса (подбор под монитор × выбор пользователя) ====================
+        // Снимаем базовые мин-размеры из XAML (420×560) ДО каких-либо правок, затем засеваем ПОЛЬЗОВАТЕЛЬСКИЙ
+        // фактор из конфига (клампится) и подбираем фактор под монитор. Итог (Auto × Current) идёт в корневой
+        // ScaleTransform и в мин-размеры окна. Подписка на UiScaleState.Changed держит трансформ, мин-размер и
+        // брейкпоинт раскладки в синхроне при изменении масштаба из настроек ИЛИ по горячим клавишам (единый
+        // путь применения — OnUiScaleChanged/ApplyUiScale).
         _baseMinWidth = MinWidth;
         _baseMinHeight = MinHeight;
         UiScaleState.Initialize(_config.UiItem.UiScale);
-        _uiScale = UiScaleState.Current;
+        RefreshAutoScale();       // экран в ctor может быть ещё недоступен — OnLoaded пересчитает
+        _uiScale = UiScaleState.Effective;
         UiScaleState.Changed += OnUiScaleChanged;
-        ApplyUiScaleToWindow();   // трансформ + мин-размеры на старте (WindowBase.OnLoaded затем клампит окно)
+        ApplyUiScaleToWindow();   // трансформ + мин-размеры на старте (OnLoaded затем впишет окно в экран)
 
         // Ресайз-грипы безрамочного окна: 8 зон → BeginResizeDrag. Видимость грипов = только Normal-состояние.
         WireResizeGrips();
@@ -257,6 +272,10 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
 
         // Первичная раскладка + вотчер ширины окна. Наблюдаем Bounds окна (ширина клиентской
         // области); при пересечении брейкпоинта раскладка меняется РОВНО один раз (гистерезис).
+        // Режим на старте берём из ЛОГИЧЕСКОЙ ширины, с которой окно откроется (сохранённый размер или
+        // компактный пресет), а не из «широкой по умолчанию»: иначе первый же Bounds-тик перекладывал бы
+        // шелл широкая→компактная и первый кадр показывал бы чужую раскладку.
+        _layout = ResolveLayout(StartupLogicalWidth());
         ApplyLayoutMode(_layout);
         // Пороги раскладки живут в КООРДИНАТАХ КОНТЕНТА (после UI-zoom): LayoutTransformControl
         // масштабирует контент на _uiScale, поэтому контент видит ширину Bounds.Width/_uiScale. Делим здесь,
@@ -1733,7 +1752,10 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
 
     private void ApplyUiScale(double scale)
     {
-        _uiScale = UiScaleState.Clamp(scale);
+        // Аргумент — ПОЛЬЗОВАТЕЛЬСКИЙ фактор (его уже принял UiScaleState); в окно идёт итоговый,
+        // с подбором под монитор.
+        _ = scale;
+        _uiScale = UiScaleState.Effective;
         ApplyUiScaleToWindow();
 
         // Окно могло стать меньше нового мин-размера (zoom вырос) — переклампим текущий размер в экран
@@ -1785,13 +1807,89 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         MinHeight = minH;
     }
 
+    // ==================== Подбор масштаба под монитор ====================
+    // Читаем экран, на котором ОТКРЫВАЕТСЯ окно (или основной, пока окна ещё нет), и отдаём его пиксельный
+    // размер + СИСТЕМНЫЙ масштаб в UiScaleState.ResolveAuto. Там системный масштаб делится, а не умножается
+    // повторно, поэтому 2560×1440 даёт 1.85 при 100% ОС и 1.25 при 150% ОС (итог по пикселям тот же).
+    // Возвращает true, если фактор изменился — вызывающий решает, что переприменять.
+    private bool RefreshAutoScale()
+    {
+        try
+        {
+            var screen = Screens.ScreenFromWindow(this) ?? Screens.Primary;
+            if (screen is null)
+            {
+                return false;
+            }
+            var bounds = screen.Bounds;
+            if (bounds.Width <= 0 || bounds.Height <= 0)
+            {
+                return false;
+            }
+            return UiScaleState.SetAuto(UiScaleState.ResolveAuto(bounds.Width, bounds.Height, screen.Scaling));
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    // Логическая ширина, с которой окно откроется: сохранённый физический размер, переведённый в координаты
+    // контента, либо компактный пресет. Нужна ДО первого layout, чтобы засеять раскладку правильным режимом.
+    private double StartupLogicalWidth()
+    {
+        try
+        {
+            var saved = ConfigHandler.GetWindowSizeItem(_config, GetType().Name);
+            if (saved is not null && saved.Width > 0 && _uiScale > 0)
+            {
+                return saved.Width / _uiScale;
+            }
+        }
+        catch { }
+        return CompactToggleWidth;
+    }
+
+    // Стартовый размер окна = КОМПАКТНЫЙ пресет 900×860 в логических единицах, домноженный на итоговый
+    // фактор. Ставим его ДО WindowBase.OnLoaded: тот берёт сохранённый размер, а при его отсутствии —
+    // текущие Width/Height, и уже сам центрирует и вписывает окно в рабочую область. Высоту дополнительно
+    // ограничиваем долей рабочей области: компактный пресет почти квадратный и на 16:9 в неё не влезает,
+    // а безрамочное окно впритык к краям читается как сломанный «развёрнутый» режим.
+    private void ApplyStartupSize()
+    {
+        try
+        {
+            if (ConfigHandler.GetWindowSizeItem(_config, GetType().Name) is not null)
+            {
+                return;   // сохранённый размер важнее пресета — его восстановит WindowBase.OnLoaded
+            }
+
+            var width = CompactToggleWidth * _uiScale;
+            var height = CompactToggleHeight * _uiScale;
+
+            var screen = Screens.ScreenFromWindow(this) ?? Screens.Primary;
+            if (screen is not null)
+            {
+                var scaling = screen.Scaling > 0 ? screen.Scaling : 1.0;
+                width = Math.Min(width, screen.WorkingArea.Width / scaling * StartupWorkAreaFill);
+                height = Math.Min(height, screen.WorkingArea.Height / scaling * StartupWorkAreaFill);
+            }
+
+            Width = width;
+            Height = height;
+        }
+        catch { }
+    }
+
     // Горячие клавиши: сдвиг на шаг (Ctrl +/Ctrl −) и установка точного значения (Ctrl 0 = сброс).
-    private void NudgeUiScale(double delta) => SetUiScale(_uiScale + delta);
+    // Двигаем ПОЛЬЗОВАТЕЛЬСКИЙ фактор (то же, что строка настроек), а не итоговый: иначе первый же Ctrl+
+    // на 4K-мониторе схлопнул бы подбор под монитор в пользовательский диапазон 0.8…2.0.
+    private void NudgeUiScale(double delta) => SetUiScale(UiScaleState.Current + delta);
 
     private void SetUiScale(double scale)
     {
         var clamped = UiScaleState.Clamp(scale);
-        if (Math.Abs(clamped - _uiScale) < 0.0001)
+        if (Math.Abs(clamped - UiScaleState.Current) < 0.0001)
         {
             return;   // уже на границе — незачем писать конфиг/дёргать применение
         }
@@ -2227,10 +2325,28 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
 
     protected override void OnLoaded(object? sender, RoutedEventArgs e)
     {
-        base.OnLoaded(sender, e);
-        // Экран теперь доступен — переклампим мин-размеры под UI-масштаб корректно (в ctor Screens мог быть
-        // ещё не готов). base.OnLoaded уже вписал стартовый размер окна в рабочую область.
+        // Порядок здесь важен и обратен прежнему:
+        //   1. экран уже доступен (в ctor Screens мог быть ещё не готов) — подбираем масштаб под МОНИТОР,
+        //      на котором окно реально открылось, и переприменяем трансформ + мин-размеры;
+        //   2. ставим стартовый размер = компактный пресет × фактор (если сохранённого размера нет);
+        //   3. только теперь base.OnLoaded — он берёт сохранённый размер ИЛИ текущие Width/Height, клампит
+        //      их в рабочую область и центрирует окно.
+        // Если звать base первым, он клампил бы ещё не отмасштабированные 900×860 и подбор под монитор
+        // на размер окна не влиял бы вовсе.
+        if (RefreshAutoScale())
+        {
+            _uiScale = UiScaleState.Effective;
+        }
         ApplyUiScaleToWindow();
+        ApplyStartupSize();
+        base.OnLoaded(sender, e);
+
+        // Раскладка следует за живой шириной: после клампа окна в экран логическая ширина могла измениться.
+        if (Bounds.Width > 0)
+        {
+            UpdateLayoutMode(Bounds.Width / _uiScale);
+        }
+
         if (_config.UiItem.AutoHideStartup)
         {
             ShowHideWindow(false);
