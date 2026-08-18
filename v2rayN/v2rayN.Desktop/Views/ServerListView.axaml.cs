@@ -923,39 +923,26 @@ public sealed class DelayDisplayConverter : IValueConverter
 }
 
 /// <summary>
-/// Чернила пинга (screens.md): «зелёный до 150, жёлтый до 350, дальше красный; недоступный — серый
-/// n/a». Три токена — <c>Brush.Green</c> / <c>Brush.Yellow</c> / <c>Brush.RedText</c> — а не три
-/// литерала: в «Чёрно-белой» mono-оверлей сводит их к белому и серому, поэтому шкала сама
-/// обесцвечивается и «синего (и вообще цвета) не остаётся». Тема резолвится по активному
+/// Чернила пинга: ЛЮБОЙ измеренный результат — зелёный, «n/a» — красный. Решение владельца, оно
+/// заменило прежнюю трёхступенчатую шкалу «зелёный до 150 · жёлтый до 350 · дальше красный» из
+/// screens.md: в списке она давала пёструю колонку из трёх цветов, в которой глазу не за что
+/// зацепиться, а разница между 88 и 156 миллисекундами всё равно ничего не решает. Значимо ровно
+/// одно — сервер ответил или нет.
+/// Токены, а не литералы: в «Чёрно-белой» mono-оверлей сводит их к белому и серому, поэтому пара
+/// сама обесцвечивается и цвета в теме не остаётся. Тема резолвится по активному
 /// <see cref="ThemeVariant"/>, литеральные фолбэки нужны лишь чтобы биндинг не оборвался.
 /// </summary>
 public sealed class DelayInkConverter : IValueConverter
 {
-    private static readonly IBrush _mutedFallback = new SolidColorBrush(Color.Parse("#9BA1AD")); // Brush.OnSurfaceVariant
     private static readonly IBrush _greenFallback = new SolidColorBrush(Color.Parse("#22C55E"));  // Brush.Green
-    private static readonly IBrush _yellowFallback = new SolidColorBrush(Color.Parse("#EAB308")); // Brush.Yellow
     private static readonly IBrush _redFallback = new SolidColorBrush(Color.Parse("#FF6069"));    // Brush.RedText
-
-    //  Пороги screens.md. Держим здесь, а не в разметке: одна шкала на список и на любой будущий
-    //  потребитель замера.
-    private const int GoodMs = 150;
-    private const int FairMs = 350;
 
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
-        //  Недоступен / таймаут → серый «n/a»: это не задержка, а её отсутствие.
-        if (value is not int ms || ms <= 0)
-        {
-            return Resolve("Brush.OnSurfaceVariant", _mutedFallback);
-        }
-
-        if (ms <= GoodMs)
-        {
-            return Resolve("Brush.Green", _greenFallback);
-        }
-
-        return ms <= FairMs
-            ? Resolve("Brush.Yellow", _yellowFallback)
+        //  Недоступен / таймаут → КРАСНЫЙ «n/a»: это не медленный сервер, а молчащий.
+        //  Всё остальное — зелёное, независимо от числа.
+        return value is int ms && ms > 0
+            ? Resolve("Brush.Green", _greenFallback)
             : Resolve("Brush.RedText", _redFallback);
     }
 

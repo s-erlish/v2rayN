@@ -168,10 +168,13 @@
                                                   которая приклеена к верхней кромке строки. Шаг списка 58+2 = 60,
                                                   как в эталоне; карточка подписки отдала эти 2 из своего нижнего
                                                   отступа (10 → 8), поэтому зазор карточка↔первая строка остался 10.  -->
+                                            <!--  Высота 54, а не 58: владелец просил строки чуть ниже. Отступы 12×7 —
+                                                  симметрично, чтобы блок «имя + чип» вставал ровно по центру строки, а
+                                                  не подпирал верхнюю кромку.  -->
                                             <Border
-                                                MinHeight="58"
+                                                MinHeight="54"
                                                 Margin="0,2,0,0"
-                                                Padding="12,8"
+                                                Padding="12,7"
                                                 Classes="ServerRow"
                                                 Classes.selected="{Binding IsActive}"
                                                 ContextRequested="OnRowContextRequested"
@@ -235,7 +238,7 @@
                                                             Text="{Binding Remarks, Converter={StaticResource StripLeadingFlag}}"
                                                             TextTrimming="CharacterEllipsis" />
                                                         <StackPanel
-                                                            Margin="0,5,0,0"
+                                                            Margin="0,4,0,0"
                                                             VerticalAlignment="Center"
                                                             Orientation="Horizontal">
                                                             <Border Classes="ProtocolChip">
@@ -262,10 +265,12 @@
                                                           indeterminate spinner (NO «Testing…» text); when the result lands, show
                                                           the coloured ms value (green good / red bad). The two states are mutually
                                                           exclusive, share this Auto column, and are right-aligned on one vertical.  -->
+                                                    <!--  По ЦЕНТРУ строки, а не по нижней кромке: раньше значение пинга
+                                                          висело внизу и тянуло взгляд вниз, ломая общее центрирование.  -->
                                                     <Panel
                                                         Grid.Column="2"
-                                                        Margin="12,0,0,1"
-                                                        VerticalAlignment="Bottom">
+                                                        Margin="12,0,0,0"
+                                                        VerticalAlignment="Center">
                                                         <!--  In-flight: 15px arc spinner (reuses the global Ellipse.Spinner.spinning).  -->
                                                         <!--  Видимость дуги НЕ биндим напрямую: базово скрыта, а класс .spinning
                                                               (по DelayTesting) вместе с :is(Window):not(.lite) в UserControl.Styles

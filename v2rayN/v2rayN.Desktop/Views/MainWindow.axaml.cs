@@ -640,42 +640,45 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         _indicatorAnim?.Cancel();
         if (instant)
         {
+            ClearIndicatorTransition();
             _railIndicatorTransform.Y = targetY;
             _railIndicatorSeeded = true;
             return;
         }
 
-        var cts = new CancellationTokenSource();
-        _indicatorAnim = cts;
-        AnimateRailIndicator(fromY, targetY, cts.Token);
+        //  Переезд делает ПЕРЕХОД на самом трансформе, а не императивный Animation.RunAsync:
+        //  запуск отрабатывал (замер: instant=False), но полоска всё равно оказывалась в конечной
+        //  точке за один кадр — промежуточных положений не было ни на одном из 16 снятых кадров.
+        //  Переходы в этом приложении работают везде, поэтому едем ими: ставим Y, а DoubleTransition
+        //  доводит его за Motion.Dur.Nav по OutQuart.
+        EnsureIndicatorTransition();
+        _railIndicatorTransform.Y = targetY;
     }
 
-    private async void AnimateRailIndicator(double from, double targetY, CancellationToken ct)
+    //  Переход живёт на трансформе и ставится один раз. В мгновенной ветке его СНИМАЕМ, иначе
+    //  «мгновенно» тоже поехало бы (первый показ, lite, свёрнутое окно, своп раскладки).
+    private void EnsureIndicatorTransition()
     {
         if (_railIndicatorTransform is null)
         {
             return;
         }
-        //  motion.md «Навигация»: переезд 280мс ease-out-quart — ровно то же значение, что у полоски
-        //  нижней панели (BottomNavBar.AnimateIndicator). Одна навигация, один темп.
-        var anim = new Animation
+        if (_railIndicatorTransform.Transitions is null)
         {
-            Duration = Motion.Dur.Nav,
-            Easing = Motion.Ease.OutQuart,
-            FillMode = FillMode.Forward,
-            Children =
+            _railIndicatorTransform.Transitions = new Transitions();
+        }
+        if (_railIndicatorTransform.Transitions.Count == 0)
+        {
+            _railIndicatorTransform.Transitions.Add(new DoubleTransition
             {
-                new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(TranslateTransform.YProperty, from) } },
-                new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(TranslateTransform.YProperty, targetY) } },
-            },
-        };
-        try { await anim.RunAsync(_railIndicatorTransform, ct); }
-        catch { }
-        if (!ct.IsCancellationRequested)
-        {
-            _railIndicatorTransform.Y = targetY;
+                Property = TranslateTransform.YProperty,
+                Duration = Motion.Dur.Nav,
+                Easing = Motion.Ease.OutQuart,
+            });
         }
     }
+
+    private void ClearIndicatorTransition() => _railIndicatorTransform?.Transitions?.Clear();
 
     // ==================== Per-tab region stagger (P1-1) ====================
     // На активации вкладки её КРУПНЫЕ регионы (≤3) приезжают со сдвигом 40мс (opacity 0→1 + translateY

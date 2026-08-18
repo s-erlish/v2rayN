@@ -342,6 +342,7 @@
     <Border
         x:Name="windowShell"
         Background="{DynamicResource Brush.HomeGradient}"
+        TextOptions.TextRenderingMode="Antialias"
         ClipToBounds="True"
         CornerRadius="14">
     <Panel x:Name="windowRoot">

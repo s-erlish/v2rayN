@@ -242,6 +242,18 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         var changed = indexId != _config?.IndexId;
         var wasConnected = IsConnected;
 
+        //  ВЫБОР — ЭТО НЕ ПОДКЛЮЧЕНИЕ. Владелец: «при нажатии на локацию не должен впн включаться,
+        //  а просто выбираться сервер». Пока туннель выключен, тап по строке только назначает сервер
+        //  активным и ничего не запускает — включение остаётся за щитом. Если туннель УЖЕ поднят,
+        //  выбор другой локации по-прежнему переключает на неё: пользователь и так подключён, и
+        //  оставить его на прежнем сервере значило бы проигнорировать тап.
+        if (!wasConnected)
+        {
+            await Profiles.SetDefaultServer(indexId);
+            SyncState();
+            return;
+        }
+
         // Drive the SAME Connecting spin a shield tap does whenever this pick will RELOAD or CONNECT
         // (A5). Two cases qualify: a CHANGED default (SetDefaultServer's Reload tears the core down
         // and restarts it — a genuine reconnect, even from a live connection), and ANY pick while

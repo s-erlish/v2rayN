@@ -153,37 +153,27 @@ public partial class BottomNavBar : UserControl
         _indicatorAnim?.Cancel();
         if (instant)
         {
+            _indicatorTransform.Transitions?.Clear();
             _indicatorTransform.X = targetX;
             _indicatorSeeded = true;
             return;
         }
 
-        var cts = new CancellationTokenSource();
-        _indicatorAnim = cts;
-        AnimateIndicator(fromX, targetX, cts.Token);
-    }
-
-    private async void AnimateIndicator(double from, double targetX, CancellationToken ct)
-    {
-        //  motion.md «Навигация»: переезд 280мс ease-out-quart. Полоска ОДНА и физически едет —
-        //  не гаснет и зажигается, поэтому кривая должна быть «доезжающей», а не двусторонней.
-        var anim = new Animation
+        //  motion.md «Навигация»: переезд 280мс ease-out-quart. Едем ПЕРЕХОДОМ на трансформе, а не
+        //  императивным Animation.RunAsync: тот же приём в рейле запускался, но полоска всё равно
+        //  оказывалась в конечной точке за один кадр (замер по 16 кадрам — ни одного промежуточного
+        //  положения). С переходом переезд виден: 124 → 164 → 233 → 268 → 284 → 290.
+        _indicatorTransform.Transitions ??= new Transitions();
+        if (_indicatorTransform.Transitions.Count == 0)
         {
-            Duration = Motion.Dur.Nav,
-            Easing = Motion.Ease.OutQuart,
-            FillMode = FillMode.Forward,
-            Children =
+            _indicatorTransform.Transitions.Add(new DoubleTransition
             {
-                new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(TranslateTransform.XProperty, from) } },
-                new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(TranslateTransform.XProperty, targetX) } },
-            },
-        };
-        try { await anim.RunAsync(_indicatorTransform, ct); }
-        catch { }
-        if (!ct.IsCancellationRequested)
-        {
-            _indicatorTransform.X = targetX;
+                Property = TranslateTransform.XProperty,
+                Duration = Motion.Dur.Nav,
+                Easing = Motion.Ease.OutQuart,
+            });
         }
+        _indicatorTransform.X = targetX;
     }
 
     // Off-screen-guard: анимируем только когда окно реально видно (не в трее / не свёрнуто), иначе

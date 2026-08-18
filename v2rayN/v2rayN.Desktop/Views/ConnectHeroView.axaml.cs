@@ -1004,16 +1004,17 @@ public partial class ConnectHeroView : UserControl
         _glyphScale.ScaleX = _glyphScale.ScaleY = 1.0;
     }
 
-    // ── Hover диска (P0-1): surface-lift + ring-brighten + (в Idle) glyph-warm ──────────────
+    // ── Hover диска (P0-1): surface-lift + (в Idle) glyph-warm ─────────────────────────────
     //  Desktop-герой обязан отвечать на указатель. Отклик — БЕЗ scale и БЕЗ glow (glow зарезервирован
     //  под connected-payoff): диск поднимается на шаг поверхности (Brush.SurfaceHigh→Highest через
-    //  класс .hover, тема-реактивно), внешнее кольцо ярче (накладной RingHoverGlow), а в Idle глиф
-    //  теплеет к чернилам (OnSurfaceVariant→OnSurface — НЕ к акценту). Переходы 120мс (0мс в lite).
+    //  класс .hover, тема-реактивно), а в Idle глиф теплеет к чернилам (OnSurfaceVariant→OnSurface —
+    //  НЕ к акценту). Переходы 120мс (0мс в lite).
+    //  КОЛЬЦА НА НАВЕДЕНИЕ НЕ РЕАГИРУЮТ (владелец: «не надо, чтобы светились кольца, а только сама
+    //  кнопочка»): накладной RingHoverGlow больше не проявляется, отвечает только диск.
     private void OnDiscPointerEntered(object? sender, PointerEventArgs e)
     {
         _hovering = true;
         ConnectDisc.Classes.Add("hover");
-        RingHoverGlow.Opacity = 0.5;
 
         //  Glyph-warm имеет смысл только в Idle (в остальных состояниях Fill щита ведёт state-машина
         //  и re-assert перекроет hover); при отсутствии сервера не «приглашаем» (щит приглушён).
