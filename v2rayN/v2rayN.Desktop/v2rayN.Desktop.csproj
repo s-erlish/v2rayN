@@ -58,12 +58,6 @@
 		<Compile Update="Views\FullConfigTemplateWindow.axaml.cs">
 		  <DependentUpon>FullConfigTemplateWindow.axaml</DependentUpon>
 		</Compile>
-		<None Update="v2rayN.png">
-			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
-		</None>
-		<None Update="v2rayN.icns">
-			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
-		</None>
 	</ItemGroup>
 
 </Project>
