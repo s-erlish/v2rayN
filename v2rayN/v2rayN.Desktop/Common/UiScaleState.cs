@@ -40,7 +40,8 @@ public static class UiScaleState
     // масштабе контенту не хватает места и он клиппится.
 
     /// <summary>Границы ПОЛЬЗОВАТЕЛЬСКОГО фактора. Шаг — для горячих клавиш Ctrl +/Ctrl −.</summary>
-    public const double Min = 0.8;
+    //  0.7, чтобы в списке помещалась ступень 75%.
+    public const double Min = 0.7;
 
     public const double Max = 2.0;
     public const double Step = 0.1;
@@ -49,8 +50,12 @@ public static class UiScaleState
     // ==================== Подбор под монитор ====================
     // Целевая логическая раскладка (tokens.md). Ниже 1.0 не опускаемся НИКОГДА: на маленьком экране
     // раскладка и так уходит в компактную/узкую по живой ширине окна, а мельчить текст — только вредить.
-    private const double TargetLogicalWidth = 1366.0;
-    private const double TargetLogicalHeight = 768.0;
+    //  База автоподбора подобрана так, чтобы САМЫЙ ХОДОВОЙ монитор — 1920×1080 — дал ровно 1.20:
+    //  1920/1.2 = 1600, 1080/1.2 = 900. Раньше базой стояли 1366×768, и FullHD получал 1.40 —
+    //  владелец сказал, что это крупно, и попросил 120%. Мониторы крупнее получают больше
+    //  пропорционально (2560×1440 → 1.60, 4K → 2.40), мельче — упираются в нижнюю границу.
+    private const double TargetLogicalWidth = 1600.0;
+    private const double TargetLogicalHeight = 900.0;
 
     /// <summary>Шаг округления подбора: 0.05 — это ровно 1.40 на 1920 и 1.85 на 2560 из tokens.md.</summary>
     private const double AutoStep = 0.05;

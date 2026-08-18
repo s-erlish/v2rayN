@@ -499,7 +499,7 @@
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
                         Classes="ConnectDisc"
-                        Cursor="Hand"
+                        Cursor="Arrow"
                         RenderTransformOrigin="0.5,0.5">
                         <Panel>
                             <!--  Press-«колодец» (P1-2): чёрный скрим 0→~12% при нажатии — диск темнеет

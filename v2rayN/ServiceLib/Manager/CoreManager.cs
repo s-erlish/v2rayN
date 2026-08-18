@@ -1135,7 +1135,17 @@ public class CoreManager
 
     public async Task<ProcessService?> LoadCoreConfigSpeedtest(List<ServerTestItem> selecteds)
     {
-        var coreType = selecteds.FirstOrDefault()?.CoreType == ECoreType.sing_box ? ECoreType.sing_box : ECoreType.Xray;
+        //  Ядро на ВЕСЬ пакет выбиралось по ПЕРВОМУ серверу в списке. Для departament это ломало
+        //  пинг целиком: подписка хранит каждый сервер как CUSTOM — сырой xray-json провайдера, — а
+        //  привить такие узлы в пакетный конфиг умеет только ветка Xray (InjectCustomSpeedtestNodes).
+        //  Стоило первому в списке оказаться sing_box, и весь замер уходил в sing_box, где CUSTOM
+        //  пропускается: у таких строк AllowTest оставался false, тест их молча обходил и в списке
+        //  появлялось «n/a». Владелец видел это как «другие proxy из json не берутся в пинг».
+        //  Теперь sing_box берётся, только если ВЕСЬ пакет — sing_box и в нём нет ни одного CUSTOM.
+        //  Иначе Xray: он и умеет прививать сырые json-узлы, и сами эти конфиги написаны под него.
+        var anyCustom = selecteds.Any(it => it.ConfigType == EConfigType.Custom);
+        var allSingbox = selecteds.Count > 0 && selecteds.All(it => it.CoreType == ECoreType.sing_box);
+        var coreType = allSingbox && !anyCustom ? ECoreType.sing_box : ECoreType.Xray;
         var fileName = string.Format(Global.CoreSpeedtestConfigFileName, Utils.GetGuid(false));
         var configPath = Utils.GetBinConfigPath(fileName);
         var result = await CoreConfigHandler.GenerateClientSpeedtestConfig(_config, configPath, selecteds, coreType);

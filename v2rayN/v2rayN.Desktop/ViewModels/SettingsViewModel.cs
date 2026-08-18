@@ -56,10 +56,12 @@ public class SettingsViewModel : MyReactiveObject
     //  Число соединений Mux — набор из screens.md (4 · 8 · 16 · 32).
     private static readonly int[] MuxCounts = [4, 8, 16, 32];
 
-    //  Масштаб интерфейса — пресеты из screens.md (100% · 110% · 125% · 150%). Ctrl +/− ходят шагом
-    //  0.1 по всему диапазону UiScaleState.Min..Max, поэтому текущее значение может не совпасть
-    //  ни с одним пресетом — тогда оно добавляется в набор (см. MergeOption).
-    private static readonly double[] UiScalePresets = [1.0, 1.1, 1.25, 1.5];
+    //  Масштаб интерфейса. К пресетам из screens.md (100 · 110 · 125 · 150) добавлены ступени ВНИЗ —
+    //  75, 80, 90: владелец просил «доп выбор 80 процентов, 75 и т.д., тк их нету», и без них с
+    //  экрана нельзя было выбрать ничего мельче исходного. Ctrl +/− по-прежнему ходят шагом 0.1 по
+    //  всему диапазону UiScaleState.Min..Max, поэтому текущее значение может не совпасть ни с одним
+    //  пресетом — тогда оно добавляется в набор (см. MergeOption).
+    private static readonly double[] UiScalePresets = [0.75, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5];
 
     //  Язык: пусто = «Системный» (L.Instance разрешает его в культуру ОС при загрузке).
     private static readonly string[] LanguageCodes = ["", "ru", "en"];

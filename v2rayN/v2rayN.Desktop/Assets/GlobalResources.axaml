@@ -418,7 +418,7 @@
     <!--  off=SurfaceHighest, on=Accent, белый кнопок, плавный сдвиг 220мс.        -->
     <!-- ====================================================================== -->
     <ControlTheme x:Key="ToggleSwitch.iOS" TargetType="ToggleSwitch">
-        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Cursor" Value="Arrow" />
         <Setter Property="HorizontalAlignment" Value="Left" />
         <Setter Property="Template">
             <ControlTemplate>

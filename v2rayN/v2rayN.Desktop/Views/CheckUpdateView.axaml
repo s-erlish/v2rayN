@@ -46,7 +46,7 @@
               состоянием (цвета, размер и ход бегунка), задаётся ТОЛЬКО селекторами: значение,
               записанное в шаблоне, стало бы локальным и перебило бы стиль :checked.  -->
         <ControlTheme x:Key="ToggleSwitch.Row" TargetType="ToggleSwitch">
-            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Cursor" Value="Arrow" />
             <Setter Property="HorizontalAlignment" Value="Left" />
             <Setter Property="MinWidth" Value="0" />
             <Setter Property="MinHeight" Value="0" />

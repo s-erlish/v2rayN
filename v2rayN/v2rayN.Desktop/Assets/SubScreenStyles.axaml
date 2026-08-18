@@ -182,7 +182,7 @@
     <!--  Ховер только у СТРОК-ДЕЙСТВИЙ (.tap): строка без действия не должна подсвечиваться —
           это ложный аффорданс (ровно то же правило, что у .segmentRow в GlobalStyles).  -->
     <Style Selector="Border.SubRow.tap">
-        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Cursor" Value="Arrow" />
     </Style>
     <Style Selector="Border.SubRow.tap:pointerover">
         <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />

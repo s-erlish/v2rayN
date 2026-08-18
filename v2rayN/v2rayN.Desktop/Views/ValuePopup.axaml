@@ -87,7 +87,7 @@
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
             <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
-            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Cursor" Value="Arrow" />
         </Style>
 
         <!--  Ховер / press ставятся на PART_ContentPresenter, а не на саму кнопку: тема Semi

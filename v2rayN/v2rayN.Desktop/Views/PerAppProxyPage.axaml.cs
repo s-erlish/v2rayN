@@ -314,6 +314,21 @@ public partial class PerAppProxyPage : UserControl, ISubPage
                          .Distinct(StringComparer.OrdinalIgnoreCase)
                          .ToList();
 
+        //  НИЧЕГО НЕ ИЗМЕНИЛОСЬ — НИЧЕГО И НЕ ДЕЛАЕМ. Раньше уход со страницы всегда сохранял,
+        //  переписывал правила маршрутизации и публиковал перезагрузку ядра. Перезагрузка — это
+        //  разрыв и повторное поднятие туннеля: владелец заходил посмотреть список программ, выходил
+        //  и видел, что VPN отключился. Заглянуть в настройку не должно стоить соединения.
+        var oldList = _config.UiItem.PerAppProxyList ?? new List<string>();
+        var unchanged = enabled == _config.UiItem.PerAppProxyEnabled
+            && bypass == _config.UiItem.PerAppProxyBypass
+            && oldList.Count == chosen.Count
+            && !oldList.Except(chosen, StringComparer.OrdinalIgnoreCase).Any();
+        if (unchanged)
+        {
+            BackRequested?.Invoke(this, EventArgs.Empty);
+            return;
+        }
+
         _config.UiItem.PerAppProxyEnabled = enabled;
         _config.UiItem.PerAppProxyBypass = bypass;
         _config.UiItem.PerAppProxyList = chosen;

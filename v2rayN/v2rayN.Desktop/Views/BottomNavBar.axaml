@@ -44,7 +44,7 @@
             <Setter Property="MinHeight" Value="0" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
-            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Cursor" Value="Arrow" />
             <!--  Возврат нажатия у ПУНКТА НАВИГАЦИИ — 160мс ease-out-quart, БЕЗ отскока: так задан
                   «.nav» в прототипе (у кнопок и строк там 200мс с перелётом, у навигации — нет).
                   Значение общее с Button.NavRailItem в GlobalStyles: обе навигации ходят одинаково.  -->
