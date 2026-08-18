@@ -101,6 +101,9 @@
             <SolidColorBrush x:Key="Brush.AccentContainer" Color="#142C52" />
             <SolidColorBrush x:Key="Brush.OnAccentContainer" Color="#C7DBFF" />
             <SolidColorBrush x:Key="Brush.Green" Color="#22C55E" />
+            <!--  Зелёный ДЛЯ ТЕКСТА (значение пинга). Отдельно от Brush.Green, которым красятся
+                  плашки и индикаторы: #22C55E на строке даёт 7.95, но у цифр 12.5 Medium штрихи тонкие и цвет читается тускло; #4ADE80 даёт 10.4 и выглядит живым.  -->
+            <SolidColorBrush x:Key="Brush.GreenText" Color="#4ADE80" />
             <SolidColorBrush x:Key="Brush.Red" Color="#F04452" />
             <!--  Красный ТЕКСТ на тёмных поверхностях (ошибки входа/синхронизации). Ярче заливки
                   Brush.Red ради контраста ≥4.5:1: #FF6069 = 6.7:1 на Bg #0A0B0D, ~5.9:1 на Surface
@@ -154,6 +157,9 @@
             <SolidColorBrush x:Key="Brush.AccentContainer" Color="#D8E4FF" />
             <SolidColorBrush x:Key="Brush.OnAccentContainer" Color="#123C82" />
             <SolidColorBrush x:Key="Brush.Green" Color="#0B7D4A" />
+            <!--  Зелёный ДЛЯ ТЕКСТА (значение пинга). Отдельно от Brush.Green, которым красятся
+                  плашки и индикаторы: на белой карточке тёмно-зелёный и так контрастен — 5.9.  -->
+            <SolidColorBrush x:Key="Brush.GreenText" Color="#0B7D4A" />
             <SolidColorBrush x:Key="Brush.Red" Color="#C42B32" />
             <!--  Красный ТЕКСТ на светлых поверхностях. #C42B32 = 5.2:1 на Bg #F4F7FC, 5.6:1 на
                   Surface #FFFFFF (оба ≥4.5:1) — совпадает с Brush.Red (на светлой он уже тёмный,

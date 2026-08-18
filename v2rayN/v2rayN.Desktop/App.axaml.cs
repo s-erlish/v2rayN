@@ -626,6 +626,8 @@ public partial class App : Application
             ["Brush.KnobOn"] = Solid(onAccent),
             //  В чёрно-белой акцент сам белый — он же и акцентный текст.
             ["Brush.AccentText"] = Solid(accent),
+            //  В чёрно-белой зелёного нет — значение пинга белое, как и весь текст.
+            ["Brush.GreenText"] = Solid(accent),
             ["Brush.AccentContainer"] = Solid(accentContainer),
             ["Brush.OnAccentContainer"] = Solid(onAccentContainer),
             // Semi-тема тянет primary по DynamicResource — тоже в серый, иначе синие фокусы/кнопки.

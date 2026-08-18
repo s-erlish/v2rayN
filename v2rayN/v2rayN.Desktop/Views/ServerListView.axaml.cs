@@ -934,7 +934,7 @@ public sealed class DelayDisplayConverter : IValueConverter
 /// </summary>
 public sealed class DelayInkConverter : IValueConverter
 {
-    private static readonly IBrush _greenFallback = new SolidColorBrush(Color.Parse("#22C55E"));  // Brush.Green
+    private static readonly IBrush _greenFallback = new SolidColorBrush(Color.Parse("#4ADE80"));  // Brush.GreenText
     private static readonly IBrush _redFallback = new SolidColorBrush(Color.Parse("#FF6069"));    // Brush.RedText
 
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
@@ -942,7 +942,7 @@ public sealed class DelayInkConverter : IValueConverter
         //  Недоступен / таймаут → КРАСНЫЙ «n/a»: это не медленный сервер, а молчащий.
         //  Всё остальное — зелёное, независимо от числа.
         return value is int ms && ms > 0
-            ? Resolve("Brush.Green", _greenFallback)
+            ? Resolve("Brush.GreenText", _greenFallback)
             : Resolve("Brush.RedText", _redFallback);
     }
 
