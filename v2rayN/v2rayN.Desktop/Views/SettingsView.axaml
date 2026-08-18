@@ -9,6 +9,7 @@
     xmlns:vms="clr-namespace:v2rayN.Desktop.ViewModels"
     x:DataType="vms:SettingsViewModel"
     Design.DataContext="{x:Static vms:SettingsViewModel.Design}"
+    TextOptions.TextRenderingMode="Antialias"
     mc:Ignorable="d">
 
     <!--
