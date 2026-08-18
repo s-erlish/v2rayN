@@ -111,7 +111,7 @@
                   Отдельного правила отсюда не открыть — редактор правил был отдельным окном, а
                   отдельных окон в приложении больше нет (вопрос владельцу).  -->
             <TextBlock Classes="SubGroupLabel" Text="{loc:T Routing_RuleSets}" />
-            <Border Classes="SubCard">
+            <Border x:Name="RulesCard" Classes="SubCard">
                 <ItemsControl x:Name="listRoutings">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:CompileBindings="False">

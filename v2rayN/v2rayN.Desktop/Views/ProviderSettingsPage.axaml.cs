@@ -24,6 +24,9 @@ public partial class ProviderSettingsPage : UserControl, ISubPage
     private static readonly int[] IntervalOptions = { 6, 12, 24, 48 };
     private const int DefaultInterval = 24;
 
+    // Скругление карточки лекала (Border.SubCard). Строки скругляются от него, минус контур.
+    private const double CardRadius = 16;
+
     private readonly Config _config;
     private bool _saved;
 
@@ -75,8 +78,15 @@ public partial class ProviderSettingsPage : UserControl, ISubPage
         txtIntervalValue.Text = i >= 0 && i < IntervalOptions.Length ? L.F("Common_HoursShort", IntervalOptions[i]) : string.Empty;
     }
 
-    /// <summary>Строка интервала существует только при включённом автообновлении. Закрываем окошко
-    /// при скрытии: иначе оно осталось бы висеть над исчезнувшей строкой.</summary>
+    /// <summary>
+    /// Строка интервала существует только при включённом автообновлении. Закрываем окошко при
+    /// скрытии: иначе оно осталось бы висеть над исчезнувшей строкой.
+    ///
+    /// И пересчитываем скругления. Карточка здесь НЕ обрезает содержимое (иначе окошко последней
+    /// строки срезается её нижней кромкой), поэтому углы маскируют сами крайние строки — а какая
+    /// строка крайняя, зависит от тумблера. Без пересчёта у выключенного автообновления карточка
+    /// оставалась бы с квадратным низом. Расчёт общий для всех потребителей компонента.
+    /// </summary>
     private void SetIntervalVisible(bool on)
     {
         if (!on)
@@ -84,6 +94,10 @@ public partial class ProviderSettingsPage : UserControl, ISubPage
             IntervalPopup.Close();
         }
         intervalRow.IsVisible = on;
+
+        var count = on ? 2 : 1;
+        RowAutoUpdate.CornerRadius = ValuePopup.RowCorners(0, count, CardRadius);
+        RowInterval.CornerRadius = ValuePopup.RowCorners(1, 2, CardRadius);
     }
 
     private async Task SaveAndBackAsync()

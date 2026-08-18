@@ -59,7 +59,7 @@
                             <TextBox
                                 x:Name="txtWebDavUrl"
                                 Grid.Column="2"
-                                MinWidth="260"
+                                MinWidth="220"
                                 Classes="SubField" />
                         </Grid>
                     </Border>

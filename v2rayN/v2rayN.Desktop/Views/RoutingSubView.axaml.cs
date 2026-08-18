@@ -88,9 +88,10 @@ public partial class RoutingSubView : UserControl, ISubPage
         var rows = _vm.RoutingItems.Select((item, i) => new RuleSetRow(item, i > 0)).ToList();
         listRoutings.ItemsSource = rows;
 
-        // Пустая карточка читается как поломка — вместо неё пустое состояние.
+        // Прячем КАРТОЧКУ, а не список внутри неё: пустая карточка в 2 пикселя высотой читается
+        // как поломка вёрстки. Вместо неё — пустое состояние.
         var any = rows.Count > 0;
-        listRoutings.IsVisible = any;
+        RulesCard.IsVisible = any;
         RulesEmpty.IsVisible = !any;
     }
 
