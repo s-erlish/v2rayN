@@ -2462,6 +2462,13 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
 
     #region UI
 
+    //  Геометрия, с которой окно ушло в трей. Windows при повторном показе иногда отдаёт окно
+    //  развёрнутым — владелец: «скрываю в трей и открываю из трея, а он в полный экран».
+    //  Поэтому не полагаемся на систему: запоминаем размер, положение и состояние сами и
+    //  возвращаем их при показе. Запоминаем ТОЛЬКО обычное состояние — развёрнутое/свёрнутое
+    //  восстанавливать нечего.
+    private (PixelPoint Pos, double W, double H)? _trayGeometry;
+
     public void ShowHideWindow(bool? blShow)
     {
         var bl = blShow ??
@@ -2471,15 +2478,29 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         if (bl)
         {
             Show();
-            if (WindowState == WindowState.Minimized)
+            if (WindowState != WindowState.Normal)
             {
                 WindowState = WindowState.Normal;
+            }
+            //  Возвращаем ровно то, с чем уходили: сначала размер, потом положение (иначе система
+            //  успевает переставить окно под новый размер и оно уезжает).
+            if (_trayGeometry is { } g)
+            {
+                Width = g.W;
+                Height = g.H;
+                Position = g.Pos;
+                _trayGeometry = null;
             }
             Activate();
             Focus();
         }
         else
         {
+            if (WindowState == WindowState.Normal)
+            {
+                _trayGeometry = (Position, Width, Height);
+            }
+
             if (Utils.IsLinux() && _config.UiItem.Hide2TrayWhenClose == false)
             {
                 WindowState = WindowState.Minimized;
