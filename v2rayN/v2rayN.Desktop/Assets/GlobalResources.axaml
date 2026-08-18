@@ -68,6 +68,10 @@
         <ResourceDictionary x:Key="Dark">
             <SolidColorBrush x:Key="Brush.Bg" Color="#0E1119" />
             <SolidColorBrush x:Key="Brush.OnAccent" Color="#001433" />
+            <!--  Бегунок тумблера. Белый на тёмной и светлой (tokens.md «бегунок белый»);
+                  в чёрно-белой акцент сам белый, поэтому там бегунок ЧЁРНЫЙ — иначе он сливается
+                  с треком и тумблер не читается (владелец: «почти не видно кнопку переключения»).  -->
+            <SolidColorBrush x:Key="Brush.KnobOn" Color="#FFFFFF" />
             <!--  Контур КНОПКИ отличается от контура карточки (tokens.md «Контур кнопки»).  -->
             <SolidColorBrush x:Key="Brush.ButtonOutline" Color="#3A4150" />
             <!--  Диск под щитом темнее карточки — кольца лежат на нём.  -->
@@ -116,6 +120,10 @@
         <ResourceDictionary x:Key="Light">
             <SolidColorBrush x:Key="Brush.Bg" Color="#F4F7FC" />
             <SolidColorBrush x:Key="Brush.OnAccent" Color="#FFFFFF" />
+            <!--  Бегунок тумблера. Белый на тёмной и светлой (tokens.md «бегунок белый»);
+                  в чёрно-белой акцент сам белый, поэтому там бегунок ЧЁРНЫЙ — иначе он сливается
+                  с треком и тумблер не читается (владелец: «почти не видно кнопку переключения»).  -->
+            <SolidColorBrush x:Key="Brush.KnobOn" Color="#FFFFFF" />
             <SolidColorBrush x:Key="Brush.ButtonOutline" Color="#C3CCDC" />
             <SolidColorBrush x:Key="Brush.ConnectDisc" Color="#FFFFFF" />
             <SolidColorBrush x:Key="Brush.ShieldOff" Color="#AEB8C8" />
@@ -431,7 +439,7 @@
                             <Ellipse x:Name="knobFill"
                                      Width="26"
                                      Height="26"
-                                     Fill="White"
+                                     Fill="{DynamicResource Brush.KnobOn}"
                                      RenderTransformOrigin="50%,50%"
                                      Stroke="#22000000"
                                      StrokeThickness="0.5">

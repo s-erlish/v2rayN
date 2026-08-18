@@ -303,8 +303,10 @@
         <!--  Шеврон 18 — ТОЛЬКО у строк-навигаций (тап открывает суб-страницу). Каретка строк с
               окошком принадлежит ValuePicker, здесь её нет.  -->
         <Style Selector="PathIcon.Chevron">
-            <Setter Property="Width" Value="18" />
-            <Setter Property="Height" Value="18" />
+            <!--  14, не 18: PathIcon заливает чернилами весь бокс, и 18 читались слишком жирным
+                  шевроном. В прототипе бокс 18, а сам глиф внутри мелкий.  -->
+            <Setter Property="Width" Value="14" />
+            <Setter Property="Height" Value="14" />
             <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="Margin" Value="4,0,0,0" />

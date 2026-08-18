@@ -762,9 +762,12 @@
                 VerticalAlignment="Top"
                 Classes="IconButton40"
                 ToolTip.Tip="{loc:T Common_AddSubscription}">
+                <!--  Глиф 16, а не 22: PathIcon растягивает чернила на весь бокс, и «плюс» выходил
+                      заметно крупнее остальных иконок интерфейса (владелец: «плюсик сделай поменьше»).
+                      Бокс кнопки 40 не трогаем — цель касания остаётся.  -->
                 <PathIcon
-                    Width="22"
-                    Height="22"
+                    Width="16"
+                    Height="16"
                     Data="M11,5 H13 V11 H19 V13 H13 V19 H11 V13 H5 V11 H11 Z"
                     Foreground="{DynamicResource Brush.OnSurface}" />
                 <Button.Flyout>

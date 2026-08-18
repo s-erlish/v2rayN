@@ -1144,11 +1144,14 @@ public partial class ConnectHeroView : UserControl
         //  Всегда снимаем ПЕРЕД условным добавлением → петли не стекают и не утекают.
         RemoveAmbientLoops();
 
-        var idle = state == ConnectVisualState.Idle;
-        var live = state == ConnectVisualState.Connected;
-        //  P0-4: в Idle без активного сервера приглашать нечего → ambient OFF (не тикаем компоновщик,
-        //  когда подключаться не к чему). В Connected сервер очевидно есть, поэтому (live || _hasServer).
-        var show = (idle || live) && !ReducedMotion && !_empty && (live || _hasServer);
+        //  АМБИЕНТ ВЫКЛЮЧЕН НАСОВСЕМ (решение владельца). Два слоя — «дышащее» кольцо и волна —
+        //  жили ПОВЕРХ трёх статических колец и в фазе роста вылезали ЗА кадр: в покое вместо трёх
+        //  колец было видно четыре (замер по кадру: радиусы 120·115·108·97 при кадре 106), а в
+        //  состоянии «подключено» кольцо на глазах «вылетало» из кнопки. Владелец: «убери пульсар
+        //  мигающий, чтобы кольцо не вылетало, смысла нет от этой анимации».
+        //  Слои оставлены в разметке (удалять нечего — это не мусор, а выключенная возможность),
+        //  но не показываются и петель не заводят: компоновщик их больше не тикает вовсе.
+        const bool show = false;
 
         AmbientRing.IsVisible = show;
         AmbientSonar.IsVisible = show;
@@ -1160,18 +1163,6 @@ public partial class ConnectHeroView : UserControl
             return;
         }
 
-        if (idle)
-        {
-            //  Калм: медленный вдох 6с + волна 6.5с, не в фазе → «живое», а не «занятое».
-            AmbientRing.Classes.Add("breathe-idle");
-            AmbientSonar.Classes.Add("rest-idle");
-        }
-        else
-        {
-            //  Connected: чуть ярче/крупнее/быстрее (5 / 5.5с) поверх статичного glow = «активно».
-            AmbientRing.Classes.Add("breathe-live");
-            AmbientSonar.Classes.Add("rest-live");
-        }
     }
 
     //  Снять все ambient-петли (обе фазы обоих слоёв). Идемпотентно — из SetAmbient, паузы окна,

@@ -413,8 +413,14 @@
     <!--  Первичная (акцент). 48h, Grotesk 15 Bold. Ступень «кнопка» — press scale 0.975.  -->
     <Style Selector="Button.Primary">
         <Setter Property="RenderTransformOrigin" Value="50%,50%" />
-        <Setter Property="Background" Value="{DynamicResource Brush.Accent}" />
-        <Setter Property="Foreground" Value="{DynamicResource Brush.OnAccent}" />
+        <!--  БЕЗ СИНЕЙ ЗАЛИВКИ. Владелец: «фона не должно быть синего вообще, возьми реф с кнопки
+              пополнить». «Пополнить» — контурная пилюля: прозрачная внутри, акцентный контур,
+              акцентный текст. Первичная кнопка теперь такая же, поэтому «Продолжить», «Войти»,
+              «Оплатить» и прочие CTA перестают быть синими плашками.  -->
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+        <Setter Property="BorderThickness" Value="1.5" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
         <Setter Property="CornerRadius" Value="{DynamicResource Radius.Button}" />
         <Setter Property="Height" Value="48" />
         <Setter Property="Padding" Value="24,0" />
@@ -473,11 +479,15 @@
             </Transitions>
         </Setter>
     </Style>
+    <!--  Ховер/нажатие как у «Пополнить»: мягкий затемняющий тинт ВНУТРИ контура, контур прибит
+          к акценту (иначе Semi уводит его в свой цвет). Никакого светления и никакого акцент-флипа.  -->
     <Style Selector="Button.Primary:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-        <Setter Property="Background" Value="#3D7EF0" />
+        <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
     </Style>
     <Style Selector="Button.Primary:pressed /template/ ContentPresenter#PART_ContentPresenter">
-        <Setter Property="Background" Value="#3877E0" />
+        <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
     </Style>
 
     <!--  Первичная высокая (CTA форм: Оплатить / Войти / Подтвердить). 52h.

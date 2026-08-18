@@ -53,10 +53,13 @@
             </Setter>
         </Style>
 
-        <!--  Каретка 18 (tokens.md «шеврон 18»), поворот 180° за 300 мс (motion.md).  -->
+        <!--  Каретка 14, поворот 180° за 300 мс (motion.md). В tokens.md стоит «шеврон 18», но там
+              это размер БОКСА: в прототипе внутри него сидит мелкий треугольник. PathIcon же
+              растягивает чернила на весь бокс, поэтому 18 давали «огромную толстую» каретку
+              (владелец). 14 — та же величина, что у прочих глифов действий.  -->
         <Style Selector="PathIcon.PickerCaret">
-            <Setter Property="Width" Value="18" />
-            <Setter Property="Height" Value="18" />
+            <Setter Property="Width" Value="14" />
+            <Setter Property="Height" Value="14" />
             <Setter Property="Margin" Value="4,0,0,0" />
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />

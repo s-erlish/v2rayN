@@ -70,6 +70,9 @@
     <Style Selector="Button.SubBack">
         <Setter Property="Width" Value="40" />
         <Setter Property="Height" Value="40" />
+        <!--  КРУГ, а не квадрат: подложка под наведением/нажатием была прямоугольной (владелец:
+              «где кнопки назад, там сделай круг, а не квадрат на фоне»). Бокс 40×40 → радиус 20.  -->
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill40}" />
         <Setter Property="Margin" Value="-8,0,0,0" />
         <Setter Property="Padding" Value="0" />
         <Setter Property="VerticalAlignment" Value="Center" />

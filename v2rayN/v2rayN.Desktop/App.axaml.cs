@@ -620,6 +620,10 @@ public partial class App : Application
             // ── Акцент → серый (схлопывание #4C8DFF) ──
             ["Brush.Accent"] = Solid(accent),
             ["Brush.OnAccent"] = Solid(onAccent),
+            //  Бегунок тумблера: в чёрно-белой акцент сам белый, и белый бегунок на белом треке
+            //  становился невидимым (владелец: «почти не видно кнопку переключения, сделай там
+            //  просто кружок чёрным»). Берём тот же тон, что и текст на акценте.
+            ["Brush.KnobOn"] = Solid(onAccent),
             ["Brush.AccentContainer"] = Solid(accentContainer),
             ["Brush.OnAccentContainer"] = Solid(onAccentContainer),
             // Semi-тема тянет primary по DynamicResource — тоже в серый, иначе синие фокусы/кнопки.
