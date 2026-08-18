@@ -400,11 +400,11 @@
                         AutomationProperties.Name="{loc:T Common_Back}"
                         Classes="SubBack"
                         Click="OnBackClick">
-                        <PathIcon
-                            Width="22"
-                            Height="22"
-                            Data="{DynamicResource Geo.Sub.Back}"
-                            Foreground="{DynamicResource Brush.OnSurface}" />
+                        <!--  Габарит стрелки НЕ задаём здесь: его держит общее лекало
+                              (SubScreenStyles, Button.SubBack PathIcon = 14). Локальное значение
+                              перебило бы стиль, и стрелка этого экрана была бы крупнее, чем на
+                              остальных одиннадцати подэкранах.  -->
+                        <PathIcon Data="{DynamicResource Geo.Sub.Back}" Foreground="{DynamicResource Brush.OnSurface}" />
                     </Button>
                     <TextBlock Classes="SubTitle" Text="{loc:T Common_BuySubscription}" />
                 </StackPanel>
