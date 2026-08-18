@@ -127,11 +127,17 @@
             <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
         </Style>
 
-        <!--  Название тарифа 16/700 — докрашивается акцентом вместе с рамкой, за те же 240 мс.  -->
+        <!--  Название тарифа 16/700 — докрашивается акцентом вместе с рамкой, за те же 240 мс.
+
+              ВЫСОТА СТРОКИ ЗАДАНА ЯВНО — иначе свёрнутая карточка выше эталона на 7. У браузера
+              `normal` для Space Grotesk = 1.0em (шрифт помечен «использовать typo-метрики»), а
+              Avalonia берёт межстрочный из hhea — это 1.36em, и одна только шапка прибавляла 6.
+              16 = 1.0em; строка всё равно ровно 18 по бейджу «Текущий», который выше.  -->
         <Style Selector="TextBlock.TariffName">
             <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
             <Setter Property="FontWeight" Value="Bold" />
             <Setter Property="FontSize" Value="16" />
+            <Setter Property="LineHeight" Value="16" />
             <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
             <Setter Property="TextTrimming" Value="CharacterEllipsis" />
             <Setter Property="Transitions">
@@ -167,12 +173,15 @@
         <!--  ============ Цена за месяц ============
               15/700 tnum — та же величина, что и название, только справа; докрашивается акцентом
               вместе с рамкой и названием, за те же 240 мс. «в месяц» остаётся приглушённой:
-              это единица измерения, а не второе число.  -->
+              это единица измерения, а не второе число.
+              Высоты строк заданы явно по той же причине, что и у названия (см. TariffName):
+              иначе правый столбец распирает шапку выше левого, и карточка растёт от цены.  -->
         <Style Selector="TextBlock.TariffMonth">
             <Setter Property="FontFamily" Value="{DynamicResource Font.Numeric}" />
             <Setter Property="FontFeatures" Value="tnum,lnum,zero" />
             <Setter Property="FontWeight" Value="Bold" />
             <Setter Property="FontSize" Value="15" />
+            <Setter Property="LineHeight" Value="17" />
             <Setter Property="HorizontalAlignment" Value="Right" />
             <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
             <Setter Property="Transitions">
@@ -186,18 +195,28 @@
         </Style>
         <Style Selector="TextBlock.TariffPer">
             <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="LineHeight" Value="12" />
             <Setter Property="Margin" Value="0,3,0,0" />
             <Setter Property="HorizontalAlignment" Value="Right" />
             <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
         </Style>
 
-        <!--  Каретка 18: поворот на 180° за 300 мс (motion.md «Окошко у значения» — та же лестница).
-              Отступ 10 слева — зазор «величина ↔ голый глиф»: широкий отступ уже забрала цена.  -->
+        <!--  ============ Каретка ============
+              Слот 18 с отступами 10 слева / 4 сверху — как в прототипе (svg 18 в строке, выровненной
+              по верху). Отступ 10 слева — зазор «величина ↔ голый глиф»: широкий отступ уже забрала
+              цена. Поворот на 180° за 300 мс (motion.md «Окошко у значения» — та же лестница).
+
+              РИСУНОК ВНУТРИ СЛОТА — 7.5×3.75, и это НЕ подогнанные числа. PathIcon в Avalonia тянет
+              путь по ГАБАРИТУ ЗНАЧКА, а не по 24-сетке, в которой путь нарисован: треугольник
+              `M7,10l5,5 5,-5z` занимает в сетке 10×5, поэтому в поле 18×18 он раздувался до 18×9 —
+              вдвое против эталонного кадра (замер живого окна: 17×9 против 8×4 в shots/E_buy_dark).
+              7.5×3.75 = 18 × 10/24 и 18 × 5/24 — ровно то, что даёт 24-сетка. Слот держит Panel
+              (ниже), поэтому место каретки в строке не поехало.  -->
         <Style Selector="PathIcon.TariffCaret">
-            <Setter Property="Width" Value="18" />
-            <Setter Property="Height" Value="18" />
-            <Setter Property="Margin" Value="10,4,0,0" />
-            <Setter Property="VerticalAlignment" Value="Top" />
+            <Setter Property="Width" Value="7.5" />
+            <Setter Property="Height" Value="3.75" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
             <Setter Property="RenderTransformOrigin" Value="50%,50%" />
             <Setter Property="RenderTransform" Value="rotate(0deg)" />
@@ -206,6 +225,12 @@
                     <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.3" Easing="{StaticResource Ease.OutQuart}" />
                 </Transitions>
             </Setter>
+        </Style>
+        <Style Selector="Panel.TariffCaretSlot">
+            <Setter Property="Width" Value="18" />
+            <Setter Property="Height" Value="18" />
+            <Setter Property="Margin" Value="10,4,0,0" />
+            <Setter Property="VerticalAlignment" Value="Top" />
         </Style>
         <Style Selector="Border.TariffCard.selected PathIcon.TariffCaret">
             <Setter Property="RenderTransform" Value="rotate(180deg)" />
@@ -374,8 +399,7 @@
                         x:Name="BtnBack"
                         AutomationProperties.Name="{loc:T Common_Back}"
                         Classes="SubBack"
-                        Click="OnBackClick"
-                        ToolTip.Tip="{loc:T Common_Back}">
+                        Click="OnBackClick">
                         <PathIcon
                             Width="22"
                             Height="22"
@@ -486,12 +510,15 @@
                                                                 <TextBlock Text="{loc:T Buy_Current}" />
                                                             </Border>
                                                         </StackPanel>
+                                                        <!--  Мета — ФРАЗА, а не величина: гарнитура обычная (Roboto),
+                                                              как в прототипе (`400 12.5px Roboto`). Гротеск здесь
+                                                              перекрашивал «Устройства: 2 · Трафик: ∞» в заголовочную
+                                                              гарнитуру ради одной цифры.  -->
                                                         <TextBlock
                                                             Margin="0,5,0,0"
                                                             Classes="SubSub"
-                                                            FontFamily="{DynamicResource Font.Numeric}"
-                                                            FontFeatures="tnum,lnum,zero"
                                                             FontSize="12.5"
+                                                            LineHeight="13"
                                                             Text="{Binding Info}" />
                                                     </StackPanel>
 
@@ -506,10 +533,9 @@
                                                         <TextBlock Classes="TariffPer" Text="{loc:T Buy_PerMonth}" />
                                                     </StackPanel>
 
-                                                    <PathIcon
-                                                        Grid.Column="2"
-                                                        Classes="TariffCaret"
-                                                        Data="{StaticResource Geo.Buy.Caret}" />
+                                                    <Panel Grid.Column="2" Classes="TariffCaretSlot">
+                                                        <PathIcon Classes="TariffCaret" Data="{StaticResource Geo.Buy.Caret}" />
+                                                    </Panel>
                                                 </Grid>
                                             </Border>
                                         </Button>
@@ -532,11 +558,10 @@
                                                                         Grid.Column="1"
                                                                         Margin="14,0,12,0"
                                                                         VerticalAlignment="Center">
-                                                                        <TextBlock
-                                                                            Classes="SubName"
-                                                                            FontFamily="{DynamicResource Font.Numeric}"
-                                                                            FontFeatures="tnum,lnum,zero"
-                                                                            Text="{Binding DurationText}" />
+                                                                        <!--  «30 дн.» — тоже фраза (число + единица), и в прототипе
+                                                                              она набрана обычной гарнитурой: `400 13.5px Roboto`.
+                                                                              Гротеск остаётся у ЦЕНЫ справа — там величина без слов.  -->
+                                                                        <TextBlock Classes="SubName" Text="{Binding DurationText}" />
                                                                         <!--  Выгода — ПРИГЛУШЁННО-БЕЛЫМ, не зелёным: это замечание
                                                                               о цене, а не системный статус; зелёный был бы четвёртым
                                                                               смысловым цветом продукта.  -->
@@ -604,8 +629,7 @@
                                         VerticalAlignment="Center"
                                         Classes="Stepper"
                                         Command="{Binding DevMinusCmd}"
-                                        IsEnabled="{Binding CanDevMinus}"
-                                        ToolTip.Tip="{loc:T Buy_RemoveDevice}">
+                                        IsEnabled="{Binding CanDevMinus}">
                                         <PathIcon Data="{StaticResource Geo.Buy.Minus}" />
                                     </Button>
                                     <TextBlock
@@ -625,8 +649,7 @@
                                         VerticalAlignment="Center"
                                         Classes="Stepper"
                                         Command="{Binding DevPlusCmd}"
-                                        IsEnabled="{Binding CanDevPlus}"
-                                        ToolTip.Tip="{loc:T Buy_AddDevice}">
+                                        IsEnabled="{Binding CanDevPlus}">
                                         <PathIcon Data="{StaticResource Geo.Buy.Plus}" />
                                     </Button>
                                 </Grid>
@@ -699,6 +722,12 @@
                                     Orientation="Horizontal"
                                     Spacing="6"
                                     VerticalAlignment="Center">
+                                    <!--  Слово — обычной гарнитурой, СУММА — гротеском с tnum: ровно
+                                          то же число стоит строкой выше в «Итого», и набирать его
+                                          на кнопке другой гарнитурой значило бы показать одну
+                                          величину двумя разными шрифтами в двух строках подряд.
+                                          Прототип «Итого» не знает вовсе и держит всю подпись
+                                          Roboto — здесь расходимся сознательно.  -->
                                     <TextBlock
                                         VerticalAlignment="Center"
                                         Foreground="{DynamicResource Brush.Accent}"
@@ -799,12 +828,14 @@
                                                             IsVisible="{Binding IsCard}" />
                                                     </Panel>
                                                 </Border>
+                                                <!--  «С баланса — 10 ₽» / «СБП» / «Банковская карта» — названия
+                                                      способов, а не величины: обычная гарнитура строки.
+                                                      tnum оставлен ради остатка баланса внутри фразы.  -->
                                                 <TextBlock
                                                     Grid.Column="1"
                                                     Margin="16,0,8,0"
                                                     VerticalAlignment="Center"
                                                     Classes="SubName"
-                                                    FontFamily="{DynamicResource Font.Numeric}"
                                                     FontFeatures="tnum,lnum,zero"
                                                     Text="{Binding Label}" />
                                                 <PathIcon

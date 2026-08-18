@@ -53,8 +53,7 @@
             <Button
                 x:Name="menuProxiesReload"
                 Margin="{StaticResource MarginLr8}"
-                Classes="IconButton Success"
-                ToolTip.Tip="{x:Static resx:ResUI.menuProxiesReload}">
+                Classes="IconButton Success">
                 <Button.Content>
                     <PathIcon Data="{StaticResource SemiIconRefresh}" />
                 </Button.Content>
@@ -63,8 +62,7 @@
             <Button
                 x:Name="menuProxiesDelaytest"
                 Margin="{StaticResource MarginLr8}"
-                Classes="IconButton Success"
-                ToolTip.Tip="{x:Static resx:ResUI.menuProxiesDelaytest}">
+                Classes="IconButton Success">
                 <Button.Content>
                     <PathIcon Data="{StaticResource SemiIconBolt}" />
                 </Button.Content>

@@ -760,8 +760,7 @@
                 Margin="0,12,16,0"
                 HorizontalAlignment="Right"
                 VerticalAlignment="Top"
-                Classes="IconButton40"
-                ToolTip.Tip="{loc:T Common_AddSubscription}">
+                Classes="IconButton40">
                 <!--  Глиф 16, а не 22: PathIcon растягивает чернила на весь бокс, и «плюс» выходил
                       заметно крупнее остальных иконок интерфейса (владелец: «плюсик сделай поменьше»).
                       Бокс кнопки 40 не трогаем — цель касания остаётся.  -->

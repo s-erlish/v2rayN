@@ -220,6 +220,12 @@ public sealed partial class L
         Add("Geo_Files", "Файлы", "Files");
         Add("Geo_Update", "Обновить", "Update");
 
+        //  ── Наборы «Прокси по приложениям» ──
+        Add("PerApp_PresetGames", "Игры", "Games");
+        Add("PerApp_PresetGamesHint", "Соревновательные игры идут мимо VPN — задержка ниже", "Competitive games skip the VPN — lower latency");
+        Add("PerApp_PresetLaunchers", "Игровые лаунчеры", "Game launchers");
+        Add("PerApp_PresetLaunchersHint", "Загрузки быстрее, но магазин увидит ваш настоящий регион", "Faster downloads, but the store sees your real region");
+
         // ── Журнал ──
         Add("Log_Title", "Журнал", "Log");
         Add("Log_Search", "Поиск по журналу", "Search the log");

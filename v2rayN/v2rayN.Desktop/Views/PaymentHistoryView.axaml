@@ -69,8 +69,7 @@
                 <Button
                     AutomationProperties.Name="{loc:T Common_Back}"
                     Classes="SubBack"
-                    Click="OnBackClick"
-                    ToolTip.Tip="{loc:T Common_Back}">
+                    Click="OnBackClick">
                     <PathIcon
                         Width="22"
                         Height="22"

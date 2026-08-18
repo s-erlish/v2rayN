@@ -143,8 +143,7 @@
                     HorizontalAlignment="Right"
                     VerticalAlignment="Top"
                     Classes="IconButton40"
-                    Click="OnAddButtonClick"
-                    ToolTip.Tip="{loc:T Common_AddSubscription}">
+                    Click="OnAddButtonClick">
                     <PathIcon
                         x:Name="AddGlyph"
                         Width="25"

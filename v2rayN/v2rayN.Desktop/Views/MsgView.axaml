@@ -29,8 +29,7 @@
                 x:Name="btnCopy"
                 Margin="{StaticResource MarginLr8}"
                 Classes="IconButton Success"
-                Click="menuMsgViewCopyAll_Click"
-                ToolTip.Tip="{x:Static resx:ResUI.menuMsgViewCopyAll}">
+                Click="menuMsgViewCopyAll_Click">
                 <Button.Content>
                     <PathIcon Data="{StaticResource SemiIconCopy}" />
                 </Button.Content>
@@ -39,8 +38,7 @@
                 x:Name="btnClear"
                 Margin="{StaticResource MarginLr8}"
                 Classes="IconButton Success"
-                Click="menuMsgViewClear_Click"
-                ToolTip.Tip="{x:Static resx:ResUI.menuMsgViewClear}">
+                Click="menuMsgViewClear_Click">
                 <Button.Content>
                     <PathIcon Data="{StaticResource SemiIconDelete}" />
                 </Button.Content>

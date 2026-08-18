@@ -263,13 +263,7 @@ public class PaymentHistoryViewModel : MyReactiveObject
     // RUB-only product (owner directive): RUB/blank/USD/unknown all render as the ruble sign; only
     // genuinely distinct currencies keep their own symbol. Same mapping as AccountViewModel so the
     // history never shows a different sign than the balance for the same backend money.
-    private static string FormatMoney(double amount, string currency)
-    {
-        var n = amount % 1.0 == 0.0
-            ? ((long)amount).ToString(CultureInfo.InvariantCulture)
-            : amount.ToString("0.00", CultureInfo.InvariantCulture);
-        return $"{n} {CurrencySymbol(currency)}";
-    }
+    private static string FormatMoney(double amount, string currency) => v2rayN.Desktop.Common.Money.WithCurrency(amount, currency);
 
     private static string CurrencySymbol(string currency) => currency.Trim().ToUpperInvariant() switch
     {

@@ -30,8 +30,7 @@
             <Button
                 x:Name="btnConnectionCloseAll"
                 Margin="{StaticResource MarginLr8}"
-                Classes="IconButton Success"
-                ToolTip.Tip="{x:Static resx:ResUI.menuConnectionCloseAll}">
+                Classes="IconButton Success">
                 <Button.Content>
                     <PathIcon Data="{StaticResource SemiIconClose}" />
                 </Button.Content>
@@ -40,8 +39,7 @@
             <Button
                 x:Name="btnAutofitColumnWidth"
                 Margin="{StaticResource MarginLr8}"
-                Classes="IconButton Success"
-                ToolTip.Tip="{x:Static resx:ResUI.menuProfileAutofitColumnWidth}">
+                Classes="IconButton Success">
                 <Button.Content>
                     <PathIcon Data="{StaticResource SemiIconExpand}" />
                 </Button.Content>

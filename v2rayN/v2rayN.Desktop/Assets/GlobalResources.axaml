@@ -72,6 +72,10 @@
                   в чёрно-белой акцент сам белый, поэтому там бегунок ЧЁРНЫЙ — иначе он сливается
                   с треком и тумблер не читается (владелец: «почти не видно кнопку переключения»).  -->
             <SolidColorBrush x:Key="Brush.KnobOn" Color="#FFFFFF" />
+            <!--  Акцент ДЛЯ ТЕКСТА. Заливки, контуры и глифы берут Brush.Accent, но акцентная
+                  НАДПИСЬ обязана читаться, а тонкие штрихи букв держат контраст хуже плашки:
+                  тёмная карточка #141619: сам акцент #1F6FF5 даёт 4.01 — ниже нормы 4.5, #4C8DFF даёт 5.66.  -->
+            <SolidColorBrush x:Key="Brush.AccentText" Color="#4C8DFF" />
             <!--  Контур КНОПКИ отличается от контура карточки (tokens.md «Контур кнопки»).  -->
             <SolidColorBrush x:Key="Brush.ButtonOutline" Color="#3A4150" />
             <!--  Диск под щитом темнее карточки — кольца лежат на нём.  -->
@@ -124,6 +128,10 @@
                   в чёрно-белой акцент сам белый, поэтому там бегунок ЧЁРНЫЙ — иначе он сливается
                   с треком и тумблер не читается (владелец: «почти не видно кнопку переключения»).  -->
             <SolidColorBrush x:Key="Brush.KnobOn" Color="#FFFFFF" />
+            <!--  Акцент ДЛЯ ТЕКСТА. Заливки, контуры и глифы берут Brush.Accent, но акцентная
+                  НАДПИСЬ обязана читаться, а тонкие штрихи букв держат контраст хуже плашки:
+                  светлая карточка #FFFFFF: акцент даёт 4.52 — впритык, #1A5FD6 даёт 5.75.  -->
+            <SolidColorBrush x:Key="Brush.AccentText" Color="#1A5FD6" />
             <SolidColorBrush x:Key="Brush.ButtonOutline" Color="#C3CCDC" />
             <SolidColorBrush x:Key="Brush.ConnectDisc" Color="#FFFFFF" />
             <SolidColorBrush x:Key="Brush.ShieldOff" Color="#AEB8C8" />
@@ -408,11 +416,16 @@
         <Setter Property="HorizontalAlignment" Value="Left" />
         <Setter Property="Template">
             <ControlTemplate>
+                <!--  Геометрия из tokens.md «Тумблер»: трек 46×28, радиус 14, обводка 2.
+                      Было 52×32/16 без обводки — крупнее эталона и без кромки, из-за чего в
+                      светлой теме выключенный тумблер сливался с карточкой.  -->
                 <Border x:Name="track"
-                        Width="52"
-                        Height="32"
-                        Background="{DynamicResource Brush.SurfaceHighest}"
-                        CornerRadius="16">
+                        Width="46"
+                        Height="28"
+                        Background="{DynamicResource Brush.SurfaceVariant}"
+                        BorderBrush="{DynamicResource Brush.Outline}"
+                        BorderThickness="2"
+                        CornerRadius="14">
                     <!--  Трек-цвет off↔on = двусторонний кроссфейд Ease.Standard 220мс (был линейный).  -->
                     <Border.Transitions>
                         <Transitions>
@@ -420,10 +433,11 @@
                         </Transitions>
                     </Border.Transitions>
                     <!--  PART_MovingKnobs / PART_SwitchKnob — обязательные части ToggleSwitch (AVLN2205).  -->
-                    <Panel x:Name="PART_MovingKnobs" Margin="3">
+                    <!--  Отступ 5 = ход выключенного бегунка (tokens.md).  -->
+                    <Panel x:Name="PART_MovingKnobs" Margin="5,0,0,0">
                         <Panel x:Name="PART_SwitchKnob"
-                               Width="26"
-                               Height="26"
+                               Width="20"
+                               Height="20"
                                HorizontalAlignment="Left"
                                VerticalAlignment="Center">
                             <!--  Ход кнопки = Ease.OutQuint 220мс (уверенное оседание, без пружины; чуть
@@ -436,10 +450,12 @@
                             <!--  Squash при нажатии масштабирует ТОЛЬКО заливку (knobFill), а не панель с
                                   translateX — так сжатие не конфликтует с ходом кнопки. Волосяная 0.5px
                                   обводка даёт кромку на светлом off-треке. Origin = центр (squash из центра).  -->
+                            <!--  Выключенный бегунок 14 и приглушённого цвета; включённый — 20 и
+                                      белый (в чёрно-белой чёрный). Размер меняет :checked ниже.  -->
                             <Ellipse x:Name="knobFill"
-                                     Width="26"
-                                     Height="26"
-                                     Fill="{DynamicResource Brush.KnobOn}"
+                                     Width="14"
+                                     Height="14"
+                                     Fill="{DynamicResource Brush.OnSurfaceVariant}"
                                      RenderTransformOrigin="50%,50%"
                                      Stroke="#22000000"
                                      StrokeThickness="0.5">
@@ -456,9 +472,15 @@
         </Setter>
         <Style Selector="^:checked /template/ Border#track">
             <Setter Property="Background" Value="{DynamicResource Brush.Accent}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+        </Style>
+        <Style Selector="^:checked /template/ Ellipse#knobFill">
+            <Setter Property="Width" Value="20" />
+            <Setter Property="Height" Value="20" />
+            <Setter Property="Fill" Value="{DynamicResource Brush.KnobOn}" />
         </Style>
         <Style Selector="^:checked /template/ Panel#PART_SwitchKnob">
-            <Setter Property="RenderTransform" Value="translateX(20px)" />
+            <Setter Property="RenderTransform" Value="translateX(17px)" />
         </Style>
         <!--  Press-squash кнопки (масштаб заливки 0.9 из центра) — тактильный отклик. Работает и в
               off, и в on (translateX держит панель-родитель, здесь масштабируется только эллипс).  -->

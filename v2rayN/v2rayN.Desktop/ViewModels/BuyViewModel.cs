@@ -148,6 +148,10 @@ public class BuyViewModel : MyReactiveObject
                 new() { Id = "o-90", DurationDays = 90, Price = 400.0, SortOrder = 2 },
             },
         };
+        // Сроки Plus — из пакета (screens.md «Купить подписку»): 30/260, 90/710, 365/2 600. Раньше
+        // здесь был один срок, и превью не показывало ни второй строки со скидкой, ни того, как
+        // раскрытая карточка выглядит с тремя сроками — то есть ровно тех состояний, ради которых
+        // превью и существует.
         var plusTariff = new TariffDto
         {
             Id = "t-plus",
@@ -159,7 +163,9 @@ public class BuyViewModel : MyReactiveObject
             Currency = "RUB",
             PriceOptions = new List<PriceOptionDto>
             {
-                new() { Id = "o-p30", DurationDays = 30, Price = 300.0, SortOrder = 0 },
+                new() { Id = "o-p30", DurationDays = 30, Price = 260.0, SortOrder = 0 },
+                new() { Id = "o-p90", DurationDays = 90, Price = 710.0, SortOrder = 1 },
+                new() { Id = "o-p365", DurationDays = 365, Price = 2600.0, SortOrder = 2 },
             },
         };
         BuildItems(new List<TariffGroupDto>
@@ -178,9 +184,18 @@ public class BuyViewModel : MyReactiveObject
 
         ShowPending = true;
         PendingText = Common.L.T("Buy_Processing");
+        IsDesign = true;
     }
 
     public static BuyViewModel CreateDesign() => new(true);
+
+    /// <summary>
+    /// Модель собрана образцом каталога (превьювер / скриншот-хук), а не departament-API.
+    /// Нужна ВЬЮ: бейдж «Текущий» приходит не из каталога, а из общего <c>AccountViewModel</c>,
+    /// которого в превью нет вовсе — без этого признака бейдж в превью не показать, и проверить
+    /// его глазами было бы негде. На живом пути флаг остаётся false и ни на что не влияет.
+    /// </summary>
+    public bool IsDesign { get; private set; }
 
     #region load / state machine
 
@@ -287,8 +302,13 @@ public class BuyViewModel : MyReactiveObject
 
     public void SelectTariff(BuyTariffItem item)
     {
+        // ПОВТОРНОЕ нажатие по раскрытому тарифу — сворачивает его (screens.md «Купить подписку»:
+        // «Открыт всегда один тариф; повторное нажатие сворачивает»). Раньше метод на этом месте
+        // молча выходил: каретка обещала «нажми ещё раз — закроется», а карточка не закрывалась,
+        // и вернуть экран в исходный вид (оба тарифа свёрнуты) было нечем.
         if (item.IsSelected)
         {
+            CollapseTariffs();
             return;
         }
 
@@ -315,6 +335,31 @@ public class BuyViewModel : MyReactiveObject
         {
             ShowCheckout = false;
         }
+    }
+
+    /// <summary>
+    /// Сворачивает всё: ни один тариф не раскрыт, срок не выбран, чекаут и кнопка оплаты уходят
+    /// (кнопка НЕСЁТ сумму — без выбранного срока суммы нет). Диагностика прошлой оплаты снимается
+    /// вместе с выбором: она относилась именно к нему.
+    /// </summary>
+    private void CollapseTariffs()
+    {
+        _selectedTariff = null;
+        _selectedOption = null;
+        _extraDevices = 0;
+        ClearPaymentNotice();
+
+        foreach (var t in Tariffs)
+        {
+            t.IsSelected = false;
+            foreach (var o in t.Options)
+            {
+                o.IsSelected = false;
+            }
+        }
+
+        ShowCheckout = false;
+        ShowExtraDevices = false;
     }
 
     public void SelectOption(BuyTariffItem item, BuyOptionItem option)
@@ -701,13 +746,7 @@ public class BuyViewModel : MyReactiveObject
     #region formatting helpers (ported 1:1 from BuyTariffActivity)
 
     /// <summary>Whole amounts render without decimals; a blank currency renders as a bare number.</summary>
-    internal static string FormatMoney(double amount, string currency)
-    {
-        var n = amount % 1.0 == 0.0
-            ? ((long)amount).ToString(CultureInfo.InvariantCulture)
-            : amount.ToString("0.00", CultureInfo.InvariantCulture);
-        return currency.IsNullOrEmpty() ? n : $"{n} {CurrencySymbol(currency)}";
-    }
+    internal static string FormatMoney(double amount, string currency) => v2rayN.Desktop.Common.Money.WithCurrency(amount, currency);
 
     /// <summary>Maps an ISO currency code to a trailing symbol: RUB→₽, USD→$, EUR→€, KZT→₸, UAH→₴.</summary>
     private static string CurrencySymbol(string currency) => currency.Trim().ToUpperInvariant() switch

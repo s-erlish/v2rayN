@@ -185,7 +185,10 @@ public partial class BottomNavBar : UserControl
     // (Главная · Настройки) держали равные половины (Android nav_account weighted collapse).
     private void ApplyAccountVisibility()
     {
-        var logged = AccountSession.IsLoggedIn();
+        //  «Аккаунт» виден ВСЕГДА. Раньше он появлялся только после входа — и в узком окне, где
+        //  рейла нет, войти было НЕГДЕ: единственная дверь к логину пряталась до логина. Комментарий
+        //  в MainWindow это уже утверждал, но нижняя панель жила по своему правилу.
+        const bool logged = true;
         ItemAccount.IsVisible = logged;
         //  «Аккаунт» теперь СРЕДНЯЯ колонка (порядок пакета Главная · Аккаунт · Настройки);
         //  без входа она сворачивается до 0, и Главная с Настройками делят панель пополам.

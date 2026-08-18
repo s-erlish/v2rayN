@@ -58,23 +58,20 @@
                     x:Name="BtnRefresh"
                     Grid.Column="1"
                     Classes="IconButton40"
-                    Command="{Binding RefreshSubscriptionCmd}"
-                    ToolTip.Tip="{loc:T Common_UpdateSubscription}">
+                    Command="{Binding RefreshSubscriptionCmd}">
                     <PathIcon Data="{StaticResource Srv.Refresh}" Foreground="{DynamicResource Brush.Accent}" />
                 </Button>
                 <Button
                     x:Name="BtnPing"
                     Grid.Column="2"
                     Classes="IconButton40"
-                    Command="{Binding Profiles.FastRealPingCmd}"
-                    ToolTip.Tip="{loc:T Common_TestLatency}">
+                    Command="{Binding Profiles.FastRealPingCmd}">
                     <PathIcon Data="{StaticResource Srv.Ping}" Foreground="{DynamicResource Brush.Accent}" />
                 </Button>
                 <Button
                     x:Name="BtnAdd"
                     Grid.Column="3"
-                    Classes="IconButton40 Accent"
-                    ToolTip.Tip="{loc:T Common_Add}">
+                    Classes="IconButton40 Accent">
                     <PathIcon Data="M11,5 H13 V11 H19 V13 H13 V19 H11 V13 H5 V11 H11 Z" />
                     <Button.Flyout>
                         <MenuFlyout Placement="BottomEdgeAlignedRight">

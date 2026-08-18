@@ -684,8 +684,7 @@
                           набор досчитывается фактическим фактором, если он набран клавишами.  -->
                     <Border
                         x:Name="RowUiScale"
-                        Classes="SettingRow"
-                        ToolTip.Tip="Ctrl + / Ctrl − — масштаб, Ctrl 0 — сброс">
+                        Classes="SettingRow">
                         <Grid ColumnDefinitions="Auto,*,Auto">
                             <Border Grid.Column="0" Classes="SetTile">
                                 <PathIcon Data="{StaticResource Geo.Set.Scale}" />

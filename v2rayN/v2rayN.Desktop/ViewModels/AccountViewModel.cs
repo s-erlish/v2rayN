@@ -2574,15 +2574,10 @@ public class AccountViewModel : MyReactiveObject
 
     #region formatting helpers (ported 1:1)
 
-    private static string FormatMoney(double amount, string currency)
-    {
-        return $"{FormatMoneyAmount(amount)} {CurrencySymbol(currency)}";
-    }
+    private static string FormatMoney(double amount, string currency) => Money.WithCurrency(amount, currency);
 
     /// <summary>The bare money amount (whole amounts drop the decimals) — the currency symbol is typeset separately.</summary>
-    private static string FormatMoneyAmount(double amount) => amount % 1.0 == 0.0
-        ? ((long)amount).ToString(CultureInfo.InvariantCulture)
-        : amount.ToString("0.00", CultureInfo.InvariantCulture);
+    private static string FormatMoneyAmount(double amount) => Money.Amount(amount);
 
     // RUB-only product: RUB/blank/USD/unknown all render as the ruble sign; only genuinely distinct
     // currencies keep their own symbol.

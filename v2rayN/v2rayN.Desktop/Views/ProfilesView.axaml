@@ -45,8 +45,7 @@
                     <Button
                         x:Name="btnEditSub"
                         Margin="{StaticResource MarginLr4}"
-                        Classes="IconButton Success"
-                        ToolTip.Tip="{x:Static resx:ResUI.menuSubEdit}">
+                        Classes="IconButton Success">
                         <Button.Content>
                             <PathIcon Data="{StaticResource SemiIconEdit}" />
                         </Button.Content>
@@ -54,8 +53,7 @@
                     <Button
                         x:Name="btnAddSub"
                         Margin="{StaticResource MarginLr4}"
-                        Classes="IconButton Success"
-                        ToolTip.Tip="{x:Static resx:ResUI.menuSubAdd}">
+                        Classes="IconButton Success">
                         <Button.Content>
                             <PathIcon Data="{StaticResource SemiIconPlus}" />
                         </Button.Content>
@@ -71,8 +69,7 @@
                     <Button
                         x:Name="btnAutofitColumnWidth"
                         Margin="{StaticResource MarginLr4}"
-                        Classes="IconButton Success"
-                        ToolTip.Tip="{x:Static resx:ResUI.menuProfileAutofitColumnWidth}">
+                        Classes="IconButton Success">
                         <Button.Content>
                             <PathIcon Data="{StaticResource SemiIconExpand}" />
                         </Button.Content>
@@ -81,8 +78,7 @@
                     <Button
                         x:Name="btnFastRealPing"
                         Margin="{StaticResource MarginLr4}"
-                        Classes="IconButton Success"
-                        ToolTip.Tip="{x:Static resx:ResUI.menuFastRealPing}">
+                        Classes="IconButton Success">
                         <Button.Content>
                             <PathIcon Data="{StaticResource SemiIconBolt}" />
                         </Button.Content>
@@ -90,8 +86,7 @@
                     <Button
                         x:Name="menuMixedTestServer"
                         Margin="{StaticResource MarginLr4}"
-                        Classes="IconButton Success"
-                        ToolTip.Tip="{x:Static resx:ResUI.menuMixedTestServer}">
+                        Classes="IconButton Success">
                         <Button.Content>
                             <PathIcon Data="{StaticResource building_ping}" />
                         </Button.Content>

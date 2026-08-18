@@ -62,8 +62,7 @@
                         <ComboBox
                             x:Name="cmbCoreType"
                             Width="200"
-                            Margin="{StaticResource Margin4}"
-                            ToolTip.Tip="{x:Static resx:ResUI.TbCoreType}" />
+                            Margin="{StaticResource Margin4}" />
                     </StackPanel>
 
                     <TextBlock
@@ -274,8 +273,7 @@
                         Margin="{StaticResource Margin4}"
                         VerticalAlignment="Center"
                         IsVisible="False"
-                        Text="{x:Static resx:ResUI.TbHttpOutboundHeaders}"
-                        ToolTip.Tip="{x:Static resx:ResUI.TipHttpOutboundHeaders}" />
+                        Text="{x:Static resx:ResUI.TbHttpOutboundHeaders}" />
                     <views:JsonEditor
                         x:Name="txtHttpHeadersJson"
                         Grid.Row="3"
@@ -285,8 +283,7 @@
                         Margin="{StaticResource Margin4}"
                         HorizontalAlignment="Stretch"
                         VerticalAlignment="Center"
-                        IsVisible="False"
-                        ToolTip.Tip="{x:Static resx:ResUI.TipHttpOutboundHeaders}" />
+                        IsVisible="False" />
                 </Grid>
                 <Grid
                     x:Name="gridVLESS"

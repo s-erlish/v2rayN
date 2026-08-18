@@ -55,8 +55,7 @@
                 <ComboBox
                     x:Name="cmbSystemProxy"
                     Width="160"
-                    Margin="{StaticResource MarginLr8}"
-                    ToolTip.Tip="{x:Static resx:ResUI.menuSystemproxy}">
+                    Margin="{StaticResource MarginLr8}">
                     <ComboBoxItem Content="{x:Static resx:ResUI.menuSystemProxyClear}" />
                     <ComboBoxItem Content="{x:Static resx:ResUI.menuSystemProxySet}" />
                     <ComboBoxItem Content="{x:Static resx:ResUI.menuSystemProxyNothing}" />
@@ -68,8 +67,7 @@
                     Width="160"
                     Margin="{StaticResource MarginLr8}"
                     DisplayMemberBinding="{Binding Remarks}"
-                    ItemsSource="{Binding RoutingItems}"
-                    ToolTip.Tip="{x:Static resx:ResUI.menuRouting}" />
+                    ItemsSource="{Binding RoutingItems}" />
             </StackPanel>
 
             <StackPanel Margin="{StaticResource MarginLr8}" VerticalAlignment="Center">

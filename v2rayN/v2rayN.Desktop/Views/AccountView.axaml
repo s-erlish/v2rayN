@@ -272,8 +272,7 @@
                         Grid.Column="2"
                         VerticalAlignment="Center"
                         Classes="BalanceChip"
-                        IsVisible="{Binding HasBalance}"
-                        ToolTip.Tip="{loc:T Account_TopUpTitle}">
+                        IsVisible="{Binding HasBalance}">
                         <StackPanel
                             Orientation="Horizontal"
                             Spacing="7"

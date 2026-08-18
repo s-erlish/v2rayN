@@ -624,6 +624,8 @@ public partial class App : Application
             //  становился невидимым (владелец: «почти не видно кнопку переключения, сделай там
             //  просто кружок чёрным»). Берём тот же тон, что и текст на акценте.
             ["Brush.KnobOn"] = Solid(onAccent),
+            //  В чёрно-белой акцент сам белый — он же и акцентный текст.
+            ["Brush.AccentText"] = Solid(accent),
             ["Brush.AccentContainer"] = Solid(accentContainer),
             ["Brush.OnAccentContainer"] = Solid(onAccentContainer),
             // Semi-тема тянет primary по DynamicResource — тоже в серый, иначе синие фокусы/кнопки.

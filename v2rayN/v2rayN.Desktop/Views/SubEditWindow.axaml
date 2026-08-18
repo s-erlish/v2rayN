@@ -172,8 +172,7 @@
                     Grid.Row="6"
                     Grid.Column="1"
                     Width="200"
-                    Margin="{StaticResource Margin4}"
-                    ToolTip.Tip="{x:Static resx:ResUI.LvConvertTargetTip}" />
+                    Margin="{StaticResource Margin4}" />
 
                 <TextBlock
                     Grid.Row="7"
@@ -257,7 +256,6 @@
                     Width="200"
                     Margin="{StaticResource Margin4}"
                     HorizontalAlignment="Left"
-                    ToolTip.Tip="{x:Static resx:ResUI.TipPreSocksPort}"
                     PlaceholderText="{x:Static resx:ResUI.TipPreSocksPort}" />
 
                 <TextBlock

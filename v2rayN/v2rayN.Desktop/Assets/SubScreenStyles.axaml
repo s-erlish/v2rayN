@@ -73,6 +73,13 @@
         <!--  КРУГ, а не квадрат: подложка под наведением/нажатием была прямоугольной (владелец:
               «где кнопки назад, там сделай круг, а не квадрат на фоне»). Бокс 40×40 → радиус 20.  -->
         <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill40}" />
+    </Style>
+    <!--  Глиф стрелки — 14, а не 22: PathIcon заливает чернилами весь бокс, и 22 давали стрелку
+          вдвое крупнее эталона (замер: 9×14 в кадре против 14×22 живьём). Задаём ЗДЕСЬ, одним
+          правилом на все одиннадцать подэкранов, чтобы стрелка не «прыгала» между экранами.  -->
+    <Style Selector="Button.SubBack PathIcon">
+        <Setter Property="Width" Value="14" />
+        <Setter Property="Height" Value="14" />
         <Setter Property="Margin" Value="-8,0,0,0" />
         <Setter Property="Padding" Value="0" />
         <Setter Property="VerticalAlignment" Value="Center" />
@@ -110,7 +117,11 @@
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
     </Style>
     <!--  Заголовок группы: 16/700 sentence-case, отступы 18 сверху / 8 снизу, инсет 4 (прототип).  -->
+    <!--  LineHeight задана явно: без неё высота строки зависит от метрик гарнитуры, и карточка
+          под заголовком вставала то на 6 ниже эталона, то на 8 выше — на разных подэкранах
+          по-разному. Одно правило выправляет ритм всех одиннадцати.  -->
     <Style Selector="TextBlock.SubGroupLabel">
+        <Setter Property="LineHeight" Value="22" />
         <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
         <Setter Property="FontWeight" Value="Bold" />
         <Setter Property="FontSize" Value="16" />

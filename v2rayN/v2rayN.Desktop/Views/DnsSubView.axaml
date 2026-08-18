@@ -33,8 +33,7 @@
             <StackPanel Orientation="Horizontal" Spacing="10">
                 <Button
                     x:Name="btnBack"
-                    Classes="SubBack"
-                    ToolTip.Tip="{loc:T Common_Back}">
+                    Classes="SubBack">
                     <PathIcon
                         Width="22"
                         Height="22"

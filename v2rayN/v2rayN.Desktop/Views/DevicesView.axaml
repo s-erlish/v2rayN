@@ -140,8 +140,7 @@
                     <Button
                         AutomationProperties.Name="{loc:T Common_Back}"
                         Classes="SubBack"
-                        Click="OnBackClick"
-                        ToolTip.Tip="{loc:T Common_Back}">
+                        Click="OnBackClick">
                         <PathIcon
                             Width="22"
                             Height="22"
@@ -193,8 +192,7 @@
                                                 <TextBlock
                                                     Classes="SubSub"
                                                     IsVisible="{Binding HasSub}"
-                                                    Text="{Binding Sub}"
-                                                    ToolTip.Tip="{Binding SubTip}" />
+                                                    Text="{Binding Sub}" />
                                             </StackPanel>
 
                                             <!--  Текущее устройство удалить нельзя — вместо действия надпись

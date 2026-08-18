@@ -27,7 +27,7 @@
         </Style>
     </UserControl.Styles>
 
-    <Button Classes="IconButton40" ToolTip.Tip="{loc:T Settings_Appearance}">
+    <Button Classes="IconButton40">
         <Button.Content>
             <PathIcon Data="{DynamicResource Geo.Nav.Settings}" />
         </Button.Content>

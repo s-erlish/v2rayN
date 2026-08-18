@@ -568,8 +568,7 @@
                                         Classes="ConnDot" />
                                     <Button
                                         x:Name="btnRailToggle"
-                                        Classes="RailToggle"
-                                        ToolTip.Tip="{loc:T Nav_CollapsePanel}">
+                                        Classes="RailToggle">
                                         <Border Classes="WinBtnBg">
                                             <Path
                                                 Width="20"

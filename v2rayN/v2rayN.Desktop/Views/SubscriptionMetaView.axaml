@@ -158,8 +158,7 @@
                           (motion.md «Пинг и обновление подписки»), поэтому вокруг ничего не двигается.  -->
                     <Button
                         x:Name="PingButton"
-                        Classes="IconButton40 Row Accent MetaIcon"
-                        ToolTip.Tip="{loc:T Common_TestLatency}">
+                        Classes="IconButton40 Row Accent MetaIcon">
                         <Panel>
                             <PathIcon
                                 x:Name="PingIcon"
@@ -194,8 +193,7 @@
                           спиннером-дугой (никакого растущего прогресс-бара, ничего вокруг не сдвигается).  -->
                     <Button
                         x:Name="RefreshButton"
-                        Classes="IconButton40 Row Accent MetaIcon"
-                        ToolTip.Tip="{loc:T Common_UpdateSubscription}">
+                        Classes="IconButton40 Row Accent MetaIcon">
                         <Panel>
                             <PathIcon
                                 x:Name="RefreshIcon"
@@ -228,8 +226,7 @@
                     </Button>
                     <Button
                         x:Name="PinButton"
-                        Classes="IconButton40 Row MetaIcon"
-                        ToolTip.Tip="{loc:T Sub_Pin}">
+                        Classes="IconButton40 Row MetaIcon">
                         <!--  Foreground = OnSurfaceVariant (не закреплено) / Accent (закреплено).  -->
                         <PathIcon
                             x:Name="PinIcon"
@@ -244,8 +241,7 @@
                           реальной подписки (как обновить/пин). Деструктивность ясна из диалога-подтверждения.  -->
                     <Button
                         x:Name="DeleteButton"
-                        Classes="IconButton40 Row MetaIcon MetaDanger"
-                        ToolTip.Tip="{loc:T Sub_Delete}">
+                        Classes="IconButton40 Row MetaIcon MetaDanger">
                         <PathIcon
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center"
@@ -362,8 +358,7 @@
                         CornerRadius="{DynamicResource Radius.Pill30}"
                         Classes="Tonal"
                         FontSize="12"
-                        Foreground="{DynamicResource Brush.Accent}"
-                        ToolTip.Tip="{loc:T Sub_OpenSupport}">
+                        Foreground="{DynamicResource Brush.Accent}">
                         <StackPanel
                             VerticalAlignment="Center"
                             Orientation="Horizontal"
@@ -385,8 +380,7 @@
                         x:Name="TelegramButton"
                         Grid.Column="2"
                         Classes="IconButton40 Row MetaIcon"
-                        VerticalAlignment="Center"
-                        ToolTip.Tip="Telegram">
+                        VerticalAlignment="Center">
                         <PathIcon
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center"

@@ -243,8 +243,7 @@
                     x:Name="BackButton"
                     Grid.Column="0"
                     VerticalAlignment="Center"
-                    Classes="IconButton BackNav"
-                    ToolTip.Tip="{loc:T Common_Back}">
+                    Classes="IconButton BackNav">
                     <PathIcon Data="{StaticResource Geo.Login.Back}" />
                 </Button>
                 <TextBlock
@@ -374,8 +373,7 @@
                                     Width="40"
                                     Height="40"
                                     Padding="0"
-                                    Classes="IconButton"
-                                    ToolTip.Tip="{loc:T Login_ShowPassword}">
+                                    Classes="IconButton">
                                     <Panel>
                                         <PathIcon
                                             x:Name="EyeOnIcon"
@@ -620,8 +618,7 @@
                                 HorizontalAlignment="Center"
                                 Classes="LinkAction"
                                 Foreground="{DynamicResource Brush.OnSurfaceVariant}"
-                                IsEnabled="False"
-                                ToolTip.Tip="{loc:T Login_ComingSoon}">
+                                IsEnabled="False">
                                 <StackPanel
                                     HorizontalAlignment="Center"
                                     VerticalAlignment="Center"
