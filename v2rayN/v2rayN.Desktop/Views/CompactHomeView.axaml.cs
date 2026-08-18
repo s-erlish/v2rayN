@@ -62,6 +62,12 @@ public partial class CompactHomeView : UserControl
         //  Compact never shows the corner «+» (widescreen keeps it in the hero corner).
         ConnectHero.SetCornerAddVisible(false);
 
+        //  Кольцо узкой раскладки — 190 / диск 138 / щит 64 (tokens.md «Кольцо подключения»).
+        //  Пресет назначает раскладка-хозяин; здесь хозяин — дерево УЗКОЙ «Главной», и оно узкое ВСЕГДА
+        //  (широкая и компактная показывают HomeView — см. MainWindow.ApplyHomeMetrics). Ставим на каждом attach:
+        //  SetHeroSize идемпотентен (тот же пресет → выход без работы).
+        ConnectHero.SetHeroSize(ConnectHeroView.HeroSize.Narrow);
+
         //  Rewire the shared connect pipeline every time compact Home is shown. Done SYNCHRONOUSLY so
         //  the connected state / speeds are correct on the very first frame (e.g. shrinking from a
         //  connected widescreen straight into compact — no idle→connected flash, no dead shield).

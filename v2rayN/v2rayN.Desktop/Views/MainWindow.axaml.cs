@@ -1,6 +1,7 @@
 using System.Reactive.Disposables;
 using Avalonia.Animation;
 using Avalonia.Animation.Easings;
+using Avalonia.LogicalTree;
 using Avalonia.VisualTree;
 using v2rayN.Desktop.Base;
 using v2rayN.Desktop.Common;
@@ -26,18 +27,51 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     // делят ОДИН HomeViewModel, но каждая держит своё дерево «Главной» — см. ViewFor).
     private readonly CompactHomeView _compactHome = new();
 
-    // Брейкпоинт адаптива: ширина < 760 → компакт, ≥ 760 → широкая. Гистерезис 24 (назад в компакт
-    // только < 736), чтобы окно, «припаркованное» на границе, не мигало между раскладками при драге.
-    private const double CompactBreakpointWidth = 760.0;
-    private const double LayoutHysteresis = 24.0;
-    private bool _compactMode = true;          // старт компактный (дефолт 372×630 < 760)
+    // ==================== ТРИ раскладки (tokens.md «Размеры окна и масштаб») ====================
+    //   Wide    — обычная, логические ~1366×768: рейл слева, две колонки (левая 440).
+    //   Compact — 900×860: РЕЙЛ ОСТАЁТСЯ на месте, колонки жмутся (левая 340, кольцо 212, скорости сжаты).
+    //   Narrow  — 420×860 «как телефон»: навигация уходит ВНИЗ, колонки складываются в ОДИН скролл
+    //             (кольцо сверху, список под ним), кольцо 190.
+    // Порог узкого — 420 (tokens.md) и сравнение НЕСТРОГОЕ: пресет 420×860 обязан быть узким. Ниже он
+    // ещё поднимается до ширины, на которой двум колонкам физически хватает места (TwoColumnMinWidth) —
+    // см. комментарий там же. Порог компактной — 1100 (между пресетами 900 и 1366): 1366/1920/2560
+    // остаются широкими, 1024-й ноутбук — компактным. Гистерезис 24 на ОБА порога: окно, «припаркованное»
+    // на границе, не мигает между раскладками при драге. Сравнения живут в КООРДИНАТАХ КОНТЕНТА
+    // (Bounds.Width / _uiScale, см. подписку в ctor).
+    private enum LayoutMode
+    {
+        Wide,
+        Compact,
+        Narrow,
+    }
 
-    // Целевые размеры тумблера раскладки (двойной клик по навигации / drag-to-edge). Компакт
-    // держит title-bar на маленьком окне; широкая — рабочий десктоп. Оба клампятся в WorkingArea.
-    private const double WideToggleWidth = 1120.0;
-    private const double WideToggleHeight = 760.0;
-    private const double CompactToggleWidth = 372.0;
-    private const double CompactToggleHeight = 630.0;
+    private const double NarrowBreakpointWidth = 420.0;
+    private const double CompactBreakpointWidth = 1100.0;
+    private const double LayoutHysteresis = 24.0;
+
+    // Ширина, УЖЕ которой двухколоночной «Главной» физически не существует: рейл 74 + левая колонка 340
+    // + разделитель 1 + кольцо 212 с боковыми отступами 10 = 647. Пакет описывает три пресета (1366 · 900
+    // · 420) и порог узкого 420, но промежуток 421…647 не описывает никак, а верстать в нём двумя
+    // колонками нечем — правой панели осталось бы несколько пикселей и кольцо вылезло бы на список.
+    // Поэтому узкая раскладка забирает и его: на всех ТРЁХ пресетах поведение ровно по пакету, а
+    // «сломанной» ширины не существует вовсе. См. ВОПРОСЫ в отчёте.
+    private const double RailWidth = 74.0;
+    private const double CompactHeroMinWidth = 232.0;
+    private const double TwoColumnMinWidth = RailWidth + CompactLeftColumn + 1.0 + CompactHeroMinWidth;
+
+    private LayoutMode _layout = LayoutMode.Wide;   // старт широкий (дефолт окна 1366×768)
+    private bool _boundsSeeded;                      // первый живой Bounds-тик — без кроссфейда морфинга
+
+    /// <summary>Узкая раскладка: нижняя навигация + одностолбцовая «Главная» (CompactHomeView).</summary>
+    private bool IsNarrow => _layout == LayoutMode.Narrow;
+
+    // Целевые размеры тумблера раскладки (двойной клик по навигации / drag-to-edge) — ровно пресеты
+    // пакета. Не широкая → широкая 1366×768; широкая → компактная 900×860. Узкая (420×860) достижима
+    // ресайзом до минимума окна (MinWidth = 420), поэтому в тумблере её нет. Оба клампятся в WorkingArea.
+    private const double WideToggleWidth = 1366.0;
+    private const double WideToggleHeight = 768.0;
+    private const double CompactToggleWidth = 900.0;
+    private const double CompactToggleHeight = 860.0;
 
     // ==================== In-app UI-масштаб (zoom всего интерфейса, независимо от OS DPI) ====================
     // Фактор zoom применяется к КОРНЮ контента через LayoutTransformControl (uiScaleHost/uiScaleTransform):
@@ -223,8 +257,8 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
 
         // Первичная раскладка + вотчер ширины окна. Наблюдаем Bounds окна (ширина клиентской
         // области); при пересечении брейкпоинта раскладка меняется РОВНО один раз (гистерезис).
-        ApplyLayoutMode(_compactMode);
-        // Брейкпоинт компакт/широкая живёт в КООРДИНАТАХ КОНТЕНТА (после UI-zoom): LayoutTransformControl
+        ApplyLayoutMode(_layout);
+        // Пороги раскладки живут в КООРДИНАТАХ КОНТЕНТА (после UI-zoom): LayoutTransformControl
         // масштабирует контент на _uiScale, поэтому контент видит ширину Bounds.Width/_uiScale. Делим здесь,
         // чтобы зумнутое окно переключало раскладку осмысленно (при _uiScale=1.0 — прежнее поведение 1:1).
         this.GetObservable(BoundsProperty).Subscribe(b => UpdateLayoutMode(b.Width / _uiScale));
@@ -351,7 +385,7 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     // общие экземпляры, которые ВСЕГДА живут в этом ЕДИНОМ хосте, поэтому смена ширины физически
     // не «перецепляет» живой контрол в другой хост (был краш компакт→Настройки→расширение).
     // «Главная» имеет своё дерево на раскладку (компактное одностолбцовое vs широкое двухколоночное);
-    // ViewFor выбирает нужное по _compactMode. Все вкладки — постоянные keep-alive дети ЕДИНОГО хоста;
+    // ViewFor выбирает нужное по IsNarrow. Все вкладки — постоянные keep-alive дети ЕДИНОГО хоста;
     // смена = переключение ВИДИМОЙ поверхности (SwapContent), без переноса между родителями и без
     // detach/reattach. Отдельной вкладки «Сервера» нет: серверы — часть «Главной».
     private void ShowTab(AppTab tab, bool animate = true)
@@ -467,7 +501,7 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     {
         AppTab.Settings => _settingsView,
         AppTab.Account => _accountView,
-        _ => _compactMode ? _compactHome : _homeView,
+        _ => IsNarrow ? _compactHome : _homeView,
     };
 
     // ==================== Layout-aware Home binding (connect pipeline + RAM release) ====================
@@ -478,7 +512,7 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     // «мёртвой широкой»: активная «Главная» ВСЕГДА получает VM (значит HomeView.BindHero привязывает щит,
     // а строки получают DataContext), а скрытая никогда не перехватывает ввод и не биндит щит.
     // Идемпотентно и layout-верно: зовётся из SetupHome (первичная привязка) и из ApplyLayoutMode (на
-    // каждом свопе 760px). Переактивация раскладки заново ставит DataContext → строки и щит оживают.
+    // каждом свопе раскладки). Переактивация раскладки заново ставит DataContext → строки и щит оживают.
     private void BindActiveHome()
     {
         if (_homeViewModel is null)
@@ -486,7 +520,7 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
             return;   // VM ещё не готов (первый ApplyLayoutMode до SetupHome) — привяжет SetupHome позже
         }
 
-        if (_compactMode)
+        if (IsNarrow)
         {
             if (!ReferenceEquals(_homeView.DataContext, null))
             {
@@ -550,9 +584,9 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         }
 
         var targetY = RailSlotY(tab);
-        //  В компактном режиме рейл СКРЫТ — тап нижнего бара не должен гонять 220мс скольжение на
+        //  В узкой раскладке рейл СКРЫТ — тап нижнего бара не должен гонять 220мс скольжение на
         //  невидимой полосе (лишняя работа компоновщика); на свопе в широкий рейл сядет мгновенно.
-        var instant = !animate || !_railIndicatorSeeded || MotionState.IsLite || !IsWindowLive() || _compactMode;
+        var instant = !animate || !_railIndicatorSeeded || MotionState.IsLite || !IsWindowLive() || IsNarrow;
         //  Текущее Y (в т.ч. на СЕРЕДИНЕ идущего скольжения) ловим ДО Cancel: отмена ревертит свойство к
         //  базе, поэтому чтение внутри аниматора давало «откат-кадр» при быстрых тапах трёх вкладок.
         var fromY = _railIndicatorTransform.Y;
@@ -685,28 +719,54 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     }
 
     // ==================== Адаптивный своп (ширина окна ↔ раскладка) ====================
-    // Гистерезис: из компакта в широкую при ширине ≥ 760, обратно в компакт при < 736.
+    // Три режима, два порога, гистерезис 24 в обе стороны (см. LayoutMode выше).
     private void UpdateLayoutMode(double width)
     {
         if (width <= 0)
         {
             return;
         }
-        var compact = _compactMode
-            ? width < CompactBreakpointWidth
-            : width < CompactBreakpointWidth - LayoutHysteresis;
-        if (compact != _compactMode)
+
+        var mode = ResolveLayout(width);
+        if (mode != _layout)
         {
-            ApplyLayoutMode(compact);
+            //  Стартовый кламп размера окна (WindowBase.OnLoaded ужимает 1366×768 в рабочую область
+            //  маленького экрана) не должен играть кроссфейд морфинга — это ещё не смена раскладки
+            //  пользователем, а первая раскладка как таковая.
+            if (!_boundsSeeded)
+            {
+                _layoutInitialized = false;
+            }
+            ApplyLayoutMode(mode);
         }
+        _boundsSeeded = true;
     }
 
-    // Переклад chrome вокруг ЕДИНОГО contentHost: широкая = [рейл(Auto) | контент(*)], компакт =
-    // [контент(*) / нижняя-нав(Auto)]. Меняем только Grid-раскладку/видимость chrome и Content
-    // хоста — сами контролы НЕ переносятся между деревьями (нет двойного родителя → нет краша).
-    private void ApplyLayoutMode(bool compact)
+    // Порог узкого — max(420, «двум колонкам не хватило места») и включительно: пресет 420×860 обязан
+    // быть узким. Выход из узкого — только за порог+24. Порог компактного — 1100, выход в широкую — за
+    // 1100+24. Пороги читаются в координатах контента, поэтому in-app zoom не «залипает» на чужой раскладке.
+    private LayoutMode ResolveLayout(double width)
     {
-        _compactMode = compact;
+        var narrowBase = Math.Max(NarrowBreakpointWidth, TwoColumnMinWidth);
+        var narrowEdge = IsNarrow ? narrowBase + LayoutHysteresis : narrowBase;
+        if (width <= narrowEdge)
+        {
+            return LayoutMode.Narrow;
+        }
+
+        var compactEdge = _layout == LayoutMode.Compact
+            ? CompactBreakpointWidth + LayoutHysteresis
+            : CompactBreakpointWidth;
+        return width < compactEdge ? LayoutMode.Compact : LayoutMode.Wide;
+    }
+
+    // Переклад chrome вокруг ЕДИНОГО contentHost: широкая/компактная = [рейл(Auto) | контент(*)],
+    // узкая = [контент(*) / нижняя-нав(Auto)]. Меняем только Grid-раскладку/видимость chrome и Content
+    // хоста — сами контролы НЕ переносятся между деревьями (нет двойного родителя → нет краша).
+    private void ApplyLayoutMode(LayoutMode mode)
+    {
+        _layout = mode;
+        var compact = IsNarrow;
 
         if (compact)
         {
@@ -732,10 +792,19 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         railHost.IsVisible = !compact;
         bottomNav.IsVisible = compact;
 
-        // Bug5: мягкий градиент-скрим снизу контента ТОЛЬКО в компакте (в широкой — рейл, нижней
+        // Bug5: мягкий градиент-скрим снизу контента ТОЛЬКО в узкой (в широкой/компактной — рейл, нижней
         // навигации нет). Контент «растворяется» в фон под безрамочной нижней навигацией вместо
         // резкого обрыва. Клик сквозной (IsHitTestVisible=False в разметке).
         navScrim.IsVisible = compact;
+
+        // Классы раскладки НА ОКНЕ — тот же приём, что .lite: любая вью может подстроить метрики
+        // селектором «:is(Window).compact …» / «:is(Window).narrow …», не заводя своих брейкпоинтов
+        // и не дублируя разметку. ОДНА раскладка на все режимы, отличаются только числа.
+        Classes.Set("compact", mode == LayoutMode.Compact);
+        Classes.Set("narrow", mode == LayoutMode.Narrow);
+
+        // Метрики «Главной» под раскладку: кольцо 230/212/190 и левая колонка 440/340.
+        ApplyHomeMetrics();
 
         ApplyShellVisibility();
 
@@ -773,6 +842,63 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
             AnimateLayoutSwap();
         }
         _layoutInitialized = true;
+    }
+
+    // ==================== Метрики «Главной» под раскладку (900×860) ====================
+    // Компактная раскладка отличается от широкой ровно двумя числами: кадр кольца 230 → 212
+    // (tokens.md «Кольцо подключения») и левая колонка 440 → 340 (tokens.md «Главная»). Рейл при этом
+    // ОСТАЁТСЯ на месте — складывается в один скролл только узкая (420), у неё своё дерево.
+    //
+    // Кольцо ставится штатным API: ConnectHeroView.SetHeroSize задуман так, что пресет назначает
+    // «раскладка-хозяин» — то есть эта оболочка, единственная, кто знает ширину окна.
+    //
+    // Ширина колонки живёт в ColumnDefinition (Views/HomeView.axaml: ColumnDefinitions="440,1,*"),
+    // а ColumnDefinition — не контрол, стилем его не задать; поэтому ставим отсюда и ПО ФОРМЕ: три
+    // колонки, первая абсолютная. Форма не совпала — метод молча ничего не делает, сломать чужую
+    // разметку он не может. Исходные значения снимаются с самой разметки (не хардкод), чтобы возврат
+    // в широкую восстанавливал ровно то, что там написано. Постоянное место этих чисел — сам HomeView.
+    private const double CompactLeftColumn = 340.0;
+
+    private double? _homeLeftColumnWidth;   // исходная ширина левой колонки из разметки (440)
+    private double? _homeLeftColumnMin;     // исходный MinWidth левой колонки из разметки (380)
+
+    private void ApplyHomeMetrics()
+    {
+        var compact = _layout == LayoutMode.Compact;
+
+        //  Узкая «Главная» — отдельное дерево (CompactHomeView), кольцо 190 она ставит себе сама.
+        _homeView.FindControl<ConnectHeroView>("ConnectHero")?
+            .SetHeroSize(compact ? ConnectHeroView.HeroSize.Compact : ConnectHeroView.HeroSize.Normal);
+
+        if (IsNarrow)
+        {
+            return;   // широкое дерево не показано — его колонки трогать незачем
+        }
+
+        var columns = _homeView.GetLogicalDescendants()
+            .OfType<Grid>()
+            .FirstOrDefault(g => g.ColumnDefinitions.Count == 3 && g.ColumnDefinitions[0].Width.IsAbsolute);
+        if (columns is null)
+        {
+            return;
+        }
+
+        var left = columns.ColumnDefinitions[0];
+        _homeLeftColumnWidth ??= left.Width.Value;
+        var target = compact ? CompactLeftColumn : _homeLeftColumnWidth.Value;
+        if (Math.Abs(left.Width.Value - target) > 0.5)
+        {
+            left.Width = new GridLength(target, GridUnitType.Pixel);
+        }
+
+        //  MinWidth содержимого колонки перебил бы 340, поэтому опускаем его вместе с колонкой.
+        if (columns.Children.FirstOrDefault(c => Grid.GetColumn(c) == 0) is Control content)
+        {
+            _homeLeftColumnMin ??= content.MinWidth;
+            content.MinWidth = compact
+                ? Math.Min(_homeLeftColumnMin.Value, CompactLeftColumn)
+                : _homeLeftColumnMin.Value;
+        }
     }
 
     private async void AnimateLayoutSwap()
@@ -1147,8 +1273,10 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     // Push (вперёд, вглубь) = входящая translateX 16→0 + opacity 0→1, 300мс Ease.OutQuint.
     // Pop (назад)          = уходящая translateX 0→16 + opacity 1→0, 200мс Ease.Standard (выход
     // быстрее входа). ТОЛЬКО translate+opacity (никаких scale/rotate — страница не «улетает» из угла).
-    // Под .lite — мгновенно (как contentHost). subPageHost перекрывает шелл непрозрачным Brush.Bg,
-    // поэтому «под» уходящей страницей аккуратно проступает шелл/онбординг.
+    // Под .lite — мгновенно (как contentHost). subPageHost ПРОЗРАЧЕН (README «Хром окна»: подэкраны
+    // прозрачные, фон окна непрерывный), а шелл под стеком подэкранов гасит ApplySubPageShellGate —
+    // поэтому сквозь уходящую страницу не видно живую «Главную», а на её месте проступает ровный фон
+    // окна, и лишь по завершении гейт возвращает шелл/онбординг.
     private async void AnimateSubPageIn()
     {
         if (MotionState.IsLite)
@@ -1311,9 +1439,9 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         }
     }
 
-    // ==================== Двойной клик по навигации: тумблер компакт⇄широкая ====================
-    // Компакт → широкая (WideToggle), широкая → компакт (CompactToggle). Смена ширины через
-    // брейкпоинт триггерит ApplyLayoutMode из Bounds-вотчера, так что раскладка следует за размером.
+    // ==================== Двойной клик по навигации: тумблер широкая⇄компактная ====================
+    // Не широкая (компактная/узкая) → широкая 1366×768, широкая → компактная 900×860. Смена ширины
+    // проходит через порог и триггерит ApplyLayoutMode из Bounds-вотчера — раскладка следует за размером.
     private void ToggleLayoutSize()
     {
         if (WindowState != WindowState.Normal)
@@ -1322,8 +1450,8 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         }
         // Цели тумблера — в ФИЗ. размере окна, поэтому масштабируем на _uiScale: тумблер задаёт РАСКЛАДКУ,
         // а брейкпоинт живёт в координатах контента (Bounds/_uiScale). Без умножения на высоком zoom «широкая»
-        // цель в контенте оказалась бы < 760 и раскладка не переключилась бы. ApplySizeCentered клампит в экран.
-        if (_compactMode)
+        // цель в контенте оказалась бы уже порога и раскладка не переключилась бы. ApplySizeCentered клампит в экран.
+        if (_layout != LayoutMode.Wide)
         {
             AnimateWindowSize(WideToggleWidth * _uiScale, WideToggleHeight * _uiScale);
         }
@@ -1417,13 +1545,13 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         }
     }
 
-    // ==================== Drag-to-edge: разворот компакта у края экрана ====================
-    // Тащим компактное окно так, что его верх/левый/правый край касается края рабочей области →
-    // разворачиваем в широкую. Только из компакта и только при реальном drag заголовка (не дёргает
-    // при программных клампах). После разворота _compactMode=false — повторно не срабатывает.
+    // ==================== Drag-to-edge: разворот маленького окна у края экрана ====================
+    // Тащим НЕширокое окно так, что его верх/левый/правый край касается края рабочей области →
+    // разворачиваем в широкую. Только из компактной/узкой и только при реальном drag заголовка (не
+    // дёргает при программных клампах). После разворота раскладка = Wide — повторно не срабатывает.
     private void OnPositionChanged(object? sender, PixelPointEventArgs e)
     {
-        if (_edgeSnapSuspended || !_titleDragging || !_compactMode || WindowState != WindowState.Normal)
+        if (_edgeSnapSuspended || !_titleDragging || _layout == LayoutMode.Wide || WindowState != WindowState.Normal)
         {
             return;
         }
@@ -1513,7 +1641,7 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     //   • title-drag: North-грип лежит ПОВЕРХ верхних 6px title-bar → хит-тест выбирает грип (верхний
     //     z-order), нажатие ниже 6px уходит в titleBar → перенос. Разные зоны, не спорят.
     //   • edge-snap (OnPositionChanged): гейтится _titleDragging, который ресайз НЕ взводит → не мигает.
-    //   • auto-swap 760: ресайз меняет Bounds → Bounds-вотчер живьём переключает раскладку (желаемо).
+    //   • auto-swap по порогам (420 / 1100): ресайз меняет Bounds → вотчер живьём переключает раскладку.
     //   • max-кнопка: грипы видимы только в Normal (WindowStateProperty-вотчер), BeginResize тоже гейтит.
     private void WireResizeGrips()
     {
@@ -1615,7 +1743,7 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
             ResizeClamped(Width, Height);
         }
 
-        // Брейкпоинт компакт/широкая — в координатах контента (Bounds/_uiScale). На старте Bounds=0 → no-op.
+        // Пороги раскладки — в координатах контента (Bounds/_uiScale). На старте Bounds=0 → no-op.
         if (Bounds.Width > 0)
         {
             UpdateLayoutMode(Bounds.Width / _uiScale);

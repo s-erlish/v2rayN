@@ -38,7 +38,9 @@
             <Setter Property="RenderTransformOrigin" Value="50%,50%" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Padding" Value="0,8,0,6" />
+            <!--  Содержимое (глиф + подпись) центрируется в полосе 62 с нижним полем 11 — так пункт
+                  стоит В ВЕРХНИХ ~51px, а нижние 11 остаются полоске (её отступ снизу 5). 1:1 с прототипом.  -->
+            <Setter Property="Padding" Value="0,0,0,11" />
             <Setter Property="MinHeight" Value="0" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
@@ -92,7 +94,8 @@
             <Setter Property="FontSize" Value="11" />
             <Setter Property="FontWeight" Value="Medium" />
             <Setter Property="HorizontalAlignment" Value="Center" />
-            <Setter Property="Margin" Value="0,3,0,0" />
+            <!--  Зазор глиф↔подпись 5 (прототип; та же величина, что в рейле).  -->
+            <Setter Property="Margin" Value="0,5,0,0" />
             <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
             <Setter Property="Transitions">
                 <Transitions>
@@ -185,7 +188,7 @@
                 Grid.ColumnSpan="3"
                 Width="30"
                 Height="3"
-                Margin="0,0,0,6"
+                Margin="0,0,0,5"
                 HorizontalAlignment="Left"
                 VerticalAlignment="Bottom"
                 Background="{DynamicResource Brush.Accent}"

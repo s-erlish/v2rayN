@@ -10,9 +10,9 @@
     xmlns:views="clr-namespace:v2rayN.Desktop.Views"
     xmlns:vms="clr-namespace:ServiceLib.ViewModels;assembly=ServiceLib"
     Title="departament VPN"
-    Width="372"
-    Height="630"
-    MinWidth="340"
+    Width="1366"
+    Height="768"
+    MinWidth="420"
     MinHeight="560"
     x:DataType="vms:MainWindowViewModel"
     Background="Transparent"
@@ -25,6 +25,20 @@
     TransparencyLevelHint="Transparent"
     WindowStartupLocation="CenterScreen"
     mc:Ignorable="d">
+
+    <!--  ==================== Размер окна и три раскладки (tokens.md «Размеры окна и масштаб») ====================
+          Раскладка ОДНА — логические ~1366×768; на больших мониторах её увеличивает системный масштаб
+          (1920 → 1.4 → 1371×771, 2560 → 1.85 → 1384×778), пропорции НЕ пересчитываются. Поэтому стартовый
+          размер окна = основной пресет 1366×768 (раньше стояли 372×630 — приложение открывалось «телефоном»,
+          и основная раскладка не показывалась вообще).
+
+          Пресеты пакета: обычный 1366×768 · компактный 900×860 (рейл на месте, колонки жмутся) ·
+          узкий 420×860 (навигация уходит вниз, колонки складываются в один скролл).
+
+          MinWidth = 420 — ровно порог узкого режима: уже него окно не ужать, поэтому «сломанной» ширины
+          между узкой и компактной раскладками не существует, а самый маленький размер окна = узкий пресет.
+          MinHeight остаётся 560 (высота 860 из пресетов — рекомендация, а не минимум: на ноутбуке 768
+          рабочая область ниже, и WindowBase всё равно клампит минимум в неё).  -->
 
     <!--  ==================== Скруглённые углы безрамочного окна (14) ====================
           Само окно ПРОЗРАЧНО (Background=Transparent + TransparencyLevelHint=Transparent); видимую
@@ -167,7 +181,9 @@
               нет BrushTransition фона, который мог бы осциллировать/мигать.  -->
         <Style Selector="Button.RailToggle Border.WinBtnBg">
             <Setter Property="Background" Value="Transparent" />
-            <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill}" />
+            <!--  Пилюля в Avalonia = ПОЛОВИНА ВЫСОТЫ (радиус клампится по каждой оси отдельно, поэтому
+                  «сотня из CSS» на невысоком боксе даёт эллипс). Подложка 30×30 → Radius.Pill30 = 15.  -->
+            <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill30}" />
             <Setter Property="RenderTransformOrigin" Value="50%,50%" />
             <Setter Property="Transitions">
                 <Transitions>
