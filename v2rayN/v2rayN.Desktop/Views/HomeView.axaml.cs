@@ -169,11 +169,15 @@ public partial class HomeView : ReactiveUserControl<HomeViewModel>
     {
         //  Натуральную высоту меряем один раз и лениво: до первого раскрытия меню имеет Height=0,
         //  поэтому DesiredSize у него нулевой, а анимировать «в авто» Avalonia не умеет.
+        //  ВЫЧИТАЕМ ОТСТУП. DesiredSize включает собственный Margin элемента, а у меню он «0,42,0,0»
+        //  (тот самый сдвиг под кнопку). Без вычитания меню открывалось на 42 выше нужного: снизу
+        //  оставалась пустая полоса подложки в высоту отступа — на живом окне это видно сразу
+        //  (два пункта × 38 + паддинг 12 = 88, а раскрывалось 130).
         if (_menuHeight <= 0)
         {
             AddMenu.Height = double.NaN;
             AddMenu.Measure(Size.Infinity);
-            _menuHeight = AddMenu.DesiredSize.Height;
+            _menuHeight = Math.Max(0, AddMenu.DesiredSize.Height - AddMenu.Margin.Top - AddMenu.Margin.Bottom);
             AddMenu.Height = 0;
         }
 

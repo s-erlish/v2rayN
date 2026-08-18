@@ -477,7 +477,10 @@
                         </views:CometRing.RenderTransform>
                     </views:CometRing>
 
-                    <!--  (5) диск-кнопка 176 r88 (Border.ConnectDisc, SurfaceHigh, press-scale 0.94).
+                    <!--  (5) диск-кнопка (Border.ConnectDisc, SurfaceHigh). Диаметр и радиус ставит
+                          ApplyHeroGeometry по таблице пресетов (166 / 152 / 138), а ступень прогиба —
+                          константа DiscPressScale в код-behind (0.975, motion.md). Ни размера, ни
+                          глубины нажатия в разметке нет: одно значение — одно место.
                           (6) внутри два щита: контур (idle, серый) + залив (connected, синий).  -->
                     <!--  Фон диска — тема-токен (Brush.SurfaceHigh): тёмный «колодец» на dark-теме,
                           светлая приподнятая плитка на light-теме, и серый на «Чёрно-белой» оверлее.
@@ -565,10 +568,15 @@
                     </Border>
                 </Panel>
 
-                <!--  Пилюля статуса (tokens.md «Пилюля статуса»): высота 30, скругление 100, отступы 17,
-                      текст 14/500. Контурная: серый контур + приглушённый текст пока не подключено,
-                      акцентный контур + акцентный текст когда подключаемся/подключено. Цвета ведёт
-                      код-behind (SetConnectState), переходы — 300 мс ease-out-quart.  -->
+                <!--  Пилюля статуса (tokens.md «Пилюля статуса»): высота 30, скругление «пилюля»,
+                      отступы 17, текст 14/500. Контурная: серый контур + приглушённый текст пока не
+                      подключено, акцентный контур + акцентный текст когда подключаемся/подключено.
+                      Цвета ведёт код-behind (SetConnectState), переходы — 300 мс ease-out-quart.
+
+                      РАДИУС = ПОЛОВИНА ВЫСОТЫ (Radius.Pill30 = 15), а НЕ 100 из tokens.md. В CSS
+                      браузер подрезает border-radius до идеальной пилюли на любой ширине; Avalonia
+                      клампит радиус ПО КАЖДОЙ ОСИ ОТДЕЛЬНО, поэтому 100 на пилюле «Подключаемся…»
+                      (~170×30) дало бы rx=85 / ry=15 — раздутый по бокам эллипс, а не пилюля.  -->
                 <Border
                     x:Name="StatusPill"
                     Height="30"
@@ -577,7 +585,7 @@
                     HorizontalAlignment="Center"
                     BorderBrush="{DynamicResource Brush.ButtonOutline}"
                     BorderThickness="1"
-                    CornerRadius="{DynamicResource Radius.Pill}">
+                    CornerRadius="{DynamicResource Radius.Pill30}">
                     <Border.Transitions>
                         <Transitions>
                             <BrushTransition Property="BorderBrush" Duration="0:0:0.3">
@@ -697,16 +705,22 @@
                         </StackPanel>
                     </StackPanel>
 
-                    <!--  Идентичность сервера: флаг 24 + имя АКЦЕНТОМ (screens.md: «флаг и имя сервера
+                    <!--  Идентичность сервера: флаг + имя АКЦЕНТОМ (screens.md: «флаг и имя сервера
                           акцентом»). Протокол и транспорт живут в строке списка слева — здесь они
-                          дублировались бы, поэтому под кольцом их нет.  -->
+                          дублировались бы, поэтому под кольцом их нет.
+                          Флаг по tokens.md «Строка сервера»: «в строке под кольцом 24 и 14» — круглая
+                          плитка 24 и флаг 14 ВНУТРИ неё, а не флаг во всю плитку. Плитка читается
+                          тонким кольцом вокруг флага и держит один силуэт для любой картинки: узкие
+                          и широкие полотнища, глобус-заглушка и пустой слот занимают ровно один круг.  -->
                     <StackPanel
                         x:Name="ServerInfo"
                         Margin="0,14,0,0"
                         HorizontalAlignment="Center"
                         Orientation="Horizontal"
                         Spacing="9">
-                        <!--  Флаг-чип: круглый клип; заполняется FlagResolver (§5).  -->
+                        <!--  Флаг-чип: круглая плитка 24 (радиус = половина = 12; «100» дало бы тот же
+                              круг только потому, что бокс квадратный — но правило одно: половина
+                              стороны). Внутри флаг 14 (tokens.md), заполняется FlagResolver (§5).  -->
                         <Border
                             x:Name="ServerFlag"
                             Width="24"
@@ -714,8 +728,14 @@
                             VerticalAlignment="Center"
                             Background="{DynamicResource Brush.SurfaceVariant}"
                             ClipToBounds="True"
-                            CornerRadius="100">
-                            <Image x:Name="ServerFlagImage" Stretch="UniformToFill" />
+                            CornerRadius="12">
+                            <Image
+                                x:Name="ServerFlagImage"
+                                Width="14"
+                                Height="14"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Stretch="UniformToFill" />
                         </Border>
                         <TextBlock
                             x:Name="ServerName"

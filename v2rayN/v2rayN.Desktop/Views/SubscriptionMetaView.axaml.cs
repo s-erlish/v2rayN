@@ -160,6 +160,9 @@ public partial class SubscriptionMetaView : UserControl
         }
         _trafficOneRow = oneRow;
 
+        //  Та же ширина решает и судьбу интервала в подписи (screens.md: компакт — без «· 1 ч»).
+        ApplySubtitle(null);
+
         if (oneRow)
         {
             Grid.SetRow(ExpiryText, 0);
@@ -366,10 +369,8 @@ public partial class SubscriptionMetaView : UserControl
         var title = sub.ProfileTitle.IsNotEmpty() ? sub.ProfileTitle : (sub.Remarks ?? string.Empty);
         TitleText.Text = title.IsNotEmpty() ? title : (_group?.Name ?? string.Empty);
 
-        // Subtitle: last-update time + auto-update interval.
-        var subtitle = FormatSubtitle(sub);
-        SubtitleText.Text = subtitle;
-        SubtitleText.IsVisible = subtitle.IsNotEmpty();
+        // Subtitle: last-update time + auto-update interval (интервал уходит на узкой карточке).
+        ApplySubtitle(sub);
 
         // Body + subscription-only actions become available.
         MetaBody.IsVisible = true;
@@ -478,7 +479,16 @@ public partial class SubscriptionMetaView : UserControl
         }
     }
 
-    private static string FormatSubtitle(SubItem sub)
+    /// <summary>
+    /// Подпись карточки: «16.08.2026 20:25 · 1 ч» (screens.md «Главная»). Интервал автообновления
+    /// идёт ГОЛЫМ, без слова «Автообновление —»: подпись живёт в одну строку рядом с четырьмя
+    /// иконками действий, и на живом окне 1366 длинная форма («18.08.2026 01:01 · Автообновление —
+    /// 1 м…») не помещалась и обрезалась многоточием. Точка после даты уже говорит, что дальше —
+    /// её период, а полное объяснение живёт в подэкране автообновления.
+    /// <paramref name="withInterval"/> = false — компактная карточка (screens.md: «в компактном
+    /// режиме без “· 1 ч”»): там та же строка не влезает даже короткой.
+    /// </summary>
+    private static string FormatSubtitle(SubItem sub, bool withInterval)
     {
         var parts = new List<string>();
         if (sub.UpdateTime > 0)
@@ -486,11 +496,26 @@ public partial class SubscriptionMetaView : UserControl
             var dt = DateTimeOffset.FromUnixTimeSeconds(sub.UpdateTime).LocalDateTime;
             parts.Add(dt.ToString("dd.MM.yyyy HH:mm"));
         }
-        if (sub.AutoUpdateInterval > 0)
+        if (withInterval && sub.AutoUpdateInterval > 0)
         {
-            parts.Add(L.F("Sub_AutoUpdate", FormatInterval(sub.AutoUpdateInterval)));
+            parts.Add(FormatInterval(sub.AutoUpdateInterval));
         }
         return string.Join(" · ", parts);
+    }
+
+    /// <summary>Пере-собирает подпись под текущую ширину карточки. Дёргается и при привязке
+    /// подписки, и при смене ширины — в обоих случаях источник один.</summary>
+    private void ApplySubtitle(SubItem? sub)
+    {
+        sub ??= _boundSub;
+        if (sub is null)
+        {
+            return;
+        }
+
+        var subtitle = FormatSubtitle(sub, withInterval: _trafficOneRow);
+        SubtitleText.Text = subtitle;
+        SubtitleText.IsVisible = subtitle.IsNotEmpty();
     }
 
     private static string FormatInterval(int minutes)

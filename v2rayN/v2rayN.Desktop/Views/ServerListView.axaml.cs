@@ -344,18 +344,25 @@ public partial class ServerListView : UserControl
         _ = PlayRowReveal(row, index * StaggerMs);
     }
 
-    //  Rise expressed as TransformOperations (translateY), the SAME transform vocabulary the row's
-    //  own press-scale uses (Border.ServerRow `scale(0.96)` + TransformOperationsTransition). Driving
-    //  RenderTransform with TransformOperations composes cleanly with that subsystem — a raw
-    //  TranslateTransform would clash with the style's TransformOperationsTransition on RenderTransform.
-    private static readonly ITransform _riseFrom = TransformOperations.Parse("translateY(12px)");
-    private static readonly ITransform _riseTo = TransformOperations.Parse("translateY(0px)");
+    //  ПОДЪЁМ СНЯТ — остался стаггер по прозрачности. Почему: кадры ставили Visual.RenderTransform
+    //  (сначала значением TransformOperations, потом через TranslateTransform.Y — Avalonia сводит
+    //  подсвойство трансформы к тому же RenderTransform), а аниматора на RenderTransform в этой
+    //  сборке НЕТ: каждая строка роняла из RunAsync
+    //  «No animator registered for the property RenderTransform». Вызов fire-and-forget, поэтому
+    //  исключение уходило в UnobservedTaskException — на живом окне под Xvfb одна заливка списка
+    //  давала ровно 8 таких ошибок (по числу стаггер-строк), а подъём НЕ проигрывался НИ РАЗУ:
+    //  finally тут же возвращал строку в покой. То есть код обещал движение, которого не было.
+    //
+    //  Осталась честная версия того же приёма: строки проявляются по очереди (i×40мс, ~300мс
+    //  OutQuint) — тот же ритм, без единого исключения. Смещение можно вернуть только через
+    //  трансформу, которую переход стиля Border.ServerRow (TransformOperationsTransition на
+    //  RenderTransform) не перехватывает; это отдельное решение владельца — вынесено в отчёт.
 
     private async Task PlayRowReveal(Border row, int delayMs)
     {
         // Transient hidden start — set ONLY as part of running the reveal (never a persistent gate).
         // During the stagger delay the animation has not started, so this base Opacity holds the row
-        // hidden (no pre-delay flash) until its turn; the rise is carried entirely by the keyframes.
+        // hidden (no pre-delay flash) until its turn.
         row.Opacity = 0;
 
         var anim = new Animation
@@ -364,29 +371,21 @@ public partial class ServerListView : UserControl
             Delay = TimeSpan.FromMilliseconds(delayMs),
             //  Ease.OutQuint (0.22,1,0.36,1) — the confident-reveal curve (matches GlobalResources).
             Easing = new SplineEasing { X1 = 0.22, Y1 = 1, X2 = 0.36, Y2 = 1 },
-            //  None (NOT Forward): on completion the animation RELEASES RenderTransform / Opacity back
-            //  to the control's base — so it never keeps ownership at Animation priority and can't
-            //  shadow the row's `:pressed` scale-0.96. RestoreRow then defines the visible rest.
+            //  None (NOT Forward): on completion the animation RELEASES Opacity back to the control's
+            //  base — so it never keeps ownership at Animation priority. RestoreRow then defines the
+            //  visible rest (и заодно снимает любую трансформу, если её кто-то оставил).
             FillMode = FillMode.None,
             Children =
             {
                 new KeyFrame
                 {
                     Cue = new Cue(0d),
-                    Setters =
-                    {
-                        new Setter(Visual.OpacityProperty, 0d),
-                        new Setter(Visual.RenderTransformProperty, _riseFrom),
-                    },
+                    Setters = { new Setter(Visual.OpacityProperty, 0d) },
                 },
                 new KeyFrame
                 {
                     Cue = new Cue(1d),
-                    Setters =
-                    {
-                        new Setter(Visual.OpacityProperty, 1d),
-                        new Setter(Visual.RenderTransformProperty, _riseTo),
-                    },
+                    Setters = { new Setter(Visual.OpacityProperty, 1d) },
                 },
             },
         };

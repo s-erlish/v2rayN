@@ -14,7 +14,8 @@ namespace v2rayN.Desktop.Views;
 /// вызывает эти методы/подписывается на события — трогать XAML не нужно.
 ///
 /// Хореография движения (§1.4 DESIGN_PLAN):
-///   • press диска — scale 0.94: quart-in 90мс / quint-out 160мс (императивно через ScaleTransform);
+///   • press диска — scale 0.975 (DiscPressScale, motion.md «Кнопка подключения»): quart-in 90мс /
+///                    quint-out 160мс, императивно через ScaleTransform;
 ///   • connecting — дуга крутится + glow «дышит» (850мс), tint щита серый→синий;
 ///   • connected  — crossfade контур→залив + tint→СИНИЙ (220мс), glow-reveal (300мс) и ОДИН сонар
 ///                  (1.0→1.6 + fade, 600мс);
@@ -128,6 +129,7 @@ public partial class ConnectHeroView : UserControl
     private Window? _heroWindow;
     private IDisposable? _winStateSub;
     private IDisposable? _winVisibleSub;
+    private IDisposable? _winBoundsSub;
 
     //  Last hasServer passed to SetConnectState — remembered so a runtime lite toggle can re-apply
     //  the CURRENT visual state (jump to its end-look) without the presenter re-driving it.
@@ -137,6 +139,24 @@ public partial class ConnectHeroView : UserControl
     //  петля не должна крутить компоновщик под скрытым слоем. SetAmbient уважает этот флаг.
     private bool _empty;
 
+    /// <summary>
+    /// Ступень прогиба кнопки подключения — ОДНО число на весь экран (motion.md «Отклик на нажатие»:
+    /// «Кнопка подключения — 0.975»). Раньше значение жило в ДВУХ местах и в двух разных вариантах:
+    /// императивные 0.94 здесь и сеттер <c>Border.ConnectDisc.pressed → scale(0.94)</c> в
+    /// GlobalStyles. Сеттер был МЁРТВЫМ — класс «pressed» диску не навешивает никто (диск ведёт
+    /// press сам, собственным self-centering ScaleTransform), поэтому правка стиля не давала
+    /// эффекта и разъезд двух чисел было нечем заметить. Теперь глубина живёт ЗДЕСЬ и только здесь.
+    /// Мёртвый сеттер в GlobalStyles.axaml — не мой файл, вынесен в отчёт владельцу.
+    /// </summary>
+    private const double DiscPressScale = 0.975;
+
+    /// <summary>
+    /// Глиф щита проседает на ступень ГЛУБЖЕ диска — «вдав» читается объёмом, а не одним размером.
+    /// Держим ту же разницу, что была при 0.94/0.97 (полступени), но считаем ОТ ступени диска, а не
+    /// вторым магическим числом: сменится ступень — parallax поедет за ней сам.
+    /// </summary>
+    private const double GlyphPressScale = DiscPressScale - ((1.0 - DiscPressScale) / 2.0);
+
     //  Press-scale диска: собственный ScaleTransform, чей ScaleX/Y анимируем через его же
     //  переходы — длительность+кривую перекл. по направлению (quart-in 90 / quint-out 160).
     //  ЭТОТ ЖЕ ScaleTransform ведёт connect-bloom (1.0→1.04→1.0) и error-contract (1.0→0.98→1.0):
@@ -145,8 +165,9 @@ public partial class ConnectHeroView : UserControl
     private readonly DoubleTransition _discScaleX = new() { Property = ScaleTransform.ScaleXProperty, Duration = TimeSpan.FromMilliseconds(160) };
     private readonly DoubleTransition _discScaleY = new() { Property = ScaleTransform.ScaleYProperty, Duration = TimeSpan.FromMilliseconds(160) };
 
-    //  Глиф-щит parallax-dip на press (1.0→0.97): вложенный self-centering ScaleTransform на Viewbox —
-    //  глиф «вдавливается» в диск чуть глубже самого диска (0.94). Тайминг зеркалит press-scale (90/160).
+    //  Глиф-щит parallax-dip на press: вложенный self-centering ScaleTransform на Viewbox — глиф
+    //  «вдавливается» в диск на полступени глубже самого диска (см. GlyphPressScale, оно считается
+    //  от DiscPressScale). Тайминг зеркалит press-scale (90/160).
     private readonly ScaleTransform _glyphScale = new(1, 1);
     private readonly DoubleTransition _glyphScaleX = new() { Property = ScaleTransform.ScaleXProperty, Duration = TimeSpan.FromMilliseconds(160) };
     private readonly DoubleTransition _glyphScaleY = new() { Property = ScaleTransform.ScaleYProperty, Duration = TimeSpan.FromMilliseconds(160) };
@@ -217,15 +238,26 @@ public partial class ConnectHeroView : UserControl
         _ => (230, 166, 80),
     };
 
+    //  Номинальная ширина окна каждого пресета — та же таблица tokens.md «Размеры окна и масштаб»
+    //  (1366 · Компактное 900 · Узкое 420). Выбор идёт по БЛИЖАЙШЕЙ номинальной ширине, поэтому
+    //  порогов как отдельных чисел не существует: они падают из этой же таблицы (границы —
+    //  середины между соседями, 1133 и 660). Сменится таблица — сменятся и пороги.
+    private static readonly (HeroSize size, double nominalWindowWidth)[] SizeLadder =
+    [
+        (HeroSize.Narrow, 420),
+        (HeroSize.Compact, 900),
+        (HeroSize.Normal, 1366),
+    ];
+
     private HeroSize _heroSize = HeroSize.Normal;
 
     /// <summary>Половина диска — центр press-scale (ставится вместе с геометрией).</summary>
     private double _discHalf = 83;
 
     /// <summary>
-    /// Задаёт пресет размера кольца. Раскладка-хозяин (широкая / компактная / узкая) вызывает это
-    /// один раз; всё остальное — кадр, три кольца, комета, сонар, ambient, диск и щит — пересчитывается
-    /// отсюда.
+    /// Задаёт пресет размера кольца. Всё остальное — кадр, три кольца, комета, сонар, ambient, диск
+    /// и щит — пересчитывается отсюда. Публично, чтобы раскладка-хозяин могла навязать пресет; в
+    /// обычной жизни его выбирает сам герой (<see cref="SyncHeroSizeToWindow"/>).
     /// </summary>
     public void SetHeroSize(HeroSize size)
     {
@@ -236,6 +268,46 @@ public partial class ConnectHeroView : UserControl
 
         _heroSize = size;
         ApplyHeroGeometry();
+    }
+
+    /// <summary>
+    /// Выбирает пресет по ширине окна САМ. Раньше <see cref="SetHeroSize"/> не звал никто, и
+    /// компактный с узким пресетом были мёртвой таблицей: герой рисовал кадр 230 и в окне 1366, и
+    /// в телефонном 372 — кольца упирались в края.
+    ///
+    /// Меряем ширину в КООРДИНАТАХ КОНТЕНТА (<c>Bounds.Width / UiScaleState.Current</c>) — ровно
+    /// так же, как MainWindow считает свой брейкпоинт раскладки: корень окна зумится
+    /// LayoutTransform-ом, поэтому физическая ширина при zoom 1.4 врёт в полтора раза. Отсюда же
+    /// «на 1920 и 2560 пропорции совпадают с 1366×768, только крупнее»: там растёт масштаб, а
+    /// логическая ширина остаётся ~1371/1384 — тот же пресет 230.
+    ///
+    /// Пресет — БЛИЖАЙШИЙ по номинальной ширине из <see cref="SizeLadder"/>, а не результат
+    /// отдельной лесенки порогов: два списка чисел неизбежно разъехались бы.
+    /// </summary>
+    private void SyncHeroSizeToWindow()
+    {
+        if (_heroWindow is null)
+        {
+            return;
+        }
+
+        var scale = UiScaleState.Current;
+        var width = _heroWindow.Bounds.Width / (scale > 0 ? scale : 1.0);
+        if (width <= 0)
+        {
+            return; // окно ещё не разложено — придёт следующая эмиссия Bounds
+        }
+
+        var best = SizeLadder[0];
+        foreach (var candidate in SizeLadder)
+        {
+            if (Math.Abs(width - candidate.nominalWindowWidth) < Math.Abs(width - best.nominalWindowWidth))
+            {
+                best = candidate;
+            }
+        }
+
+        SetHeroSize(best.size);
     }
 
     /// <summary>
@@ -699,8 +771,18 @@ public partial class ConnectHeroView : UserControl
         {
             _winStateSub = _heroWindow.GetObservable(Window.WindowStateProperty).Subscribe(_ => UpdateVisibilityPause());
             _winVisibleSub = _heroWindow.GetObservable(Visual.IsVisibleProperty).Subscribe(_ => UpdateVisibilityPause());
+
+            //  Пресет кольца следует за шириной окна. GetObservable отдаёт текущее значение сразу,
+            //  поэтому геометрия верна уже на первом кадре — без отдельного «первичного» вызова.
+            _winBoundsSub = _heroWindow.GetObservable(Visual.BoundsProperty).Subscribe(_ => SyncHeroSizeToWindow());
         }
+
+        //  In-app zoom (Ctrl +/−) меняет ЛОГИЧЕСКУЮ ширину, не трогая Bounds окна, — без этой
+        //  подписки пресет застрял бы на значении, снятом при старом масштабе.
+        UiScaleState.Changed += OnUiScaleChanged;
     }
+
+    private void OnUiScaleChanged(object? sender, double scale) => SyncHeroSizeToWindow();
 
     private void OnHeroDetached(object? sender, VisualTreeAttachmentEventArgs e)
     {
@@ -708,10 +790,14 @@ public partial class ConnectHeroView : UserControl
         L.Instance.LanguageChanged -= OnLanguageChanged;
         ActualThemeVariantChanged -= OnThemeVariantChanged;
 
+        UiScaleState.Changed -= OnUiScaleChanged;
+
         _winStateSub?.Dispose();
         _winStateSub = null;
         _winVisibleSub?.Dispose();
         _winVisibleSub = null;
+        _winBoundsSub?.Dispose();
+        _winBoundsSub = null;
         _heroWindow = null;
         //  Сброс флага: следующий attach заново оценит видимость окна (priming-эмиссия наблюдений).
         _animationsPaused = false;
@@ -869,14 +955,14 @@ public partial class ConnectHeroView : UserControl
 
         _discScaleX.Duration = _discScaleY.Duration = TimeSpan.FromMilliseconds(90);
         _discScaleX.Easing = _discScaleY.Easing = EaseOutQuart;
-        _discScale.ScaleX = _discScale.ScaleY = 0.94;
+        _discScale.ScaleX = _discScale.ScaleY = DiscPressScale;
 
-        //  Глубина нажатия (P1-2): скрим-«лунка» темнеет 0→0.12 и глиф чуть глубже диска (→0.97),
-        //  в унисон с press-scale (90мс OutQuart). БЕЗ ripple/glow — только физический «вдав».
+        //  Глубина нажатия (P1-2): скрим-«лунка» темнеет 0→0.12 и глиф садится на полступени глубже
+        //  диска, в унисон с press-scale (90мс OutQuart). БЕЗ ripple/glow — только физический «вдав».
         _scrimOpacity.Duration = _glyphScaleX.Duration = _glyphScaleY.Duration = TimeSpan.FromMilliseconds(90);
         _scrimOpacity.Easing = _glyphScaleX.Easing = _glyphScaleY.Easing = EaseOutQuart;
         PressScrim.Opacity = 0.12;
-        _glyphScale.ScaleX = _glyphScale.ScaleY = 0.97;
+        _glyphScale.ScaleX = _glyphScale.ScaleY = GlyphPressScale;
     }
 
     private void OnDiscPointerReleased(object? sender, PointerReleasedEventArgs e)

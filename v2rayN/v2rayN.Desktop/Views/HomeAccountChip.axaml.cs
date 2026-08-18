@@ -131,8 +131,16 @@ public partial class HomeAccountChip : UserControl
         }
     }
 
-    // Entrance on resolve: fade + 8px rise, delayed ~120ms so it reads as landing AFTER Home paints.
-    // Same language as the tab-swap rise (Motion.Dur.Reveal / OutQuint). Instant under lite / when detached.
+    // Entrance on resolve: проявление, отложенное на ~120мс — чип «приземляется» ПОСЛЕ того, как
+    // Главная нарисовалась. Кривая та же, что у смены вкладки (Motion.Dur.Reveal / OutQuint).
+    // Мгновенно под lite / когда чип вне дерева.
+    //
+    // ПОДЪЁМА 8px БОЛЬШЕ НЕТ, и это не упрощение, а исправление: он ехал через кадры
+    // TranslateTransform.Y, а Avalonia сводит подсвойство трансформы к Visual.RenderTransform, на
+    // который аниматора в этой сборке НЕТ — RunAsync каждый раз бросал
+    // «No animator registered for the property RenderTransform». Здесь исключение глотал catch,
+    // поэтому дефект был невидим: анимация «была» в коде и никогда не играла. Тот же промах жил в
+    // стаггере строк ServerListView, где он к тому же засорял лог (снято на живом окне под Xvfb).
     private void MaybeRunEntrance()
     {
         if (!_attached || MotionState.IsLite)
@@ -156,7 +164,7 @@ public partial class HomeAccountChip : UserControl
         {
             return;
         }
-        try { await RunTranslateFade(this, 8d, 0d, 0d, 1d, Motion.Dur.Reveal, Motion.Ease.OutQuint, ct); }
+        try { await RunFade(this, 0d, 1d, Motion.Dur.Reveal, Motion.Ease.OutQuint, ct); }
         catch { }
         if (!ct.IsCancellationRequested)
         {
@@ -165,8 +173,9 @@ public partial class HomeAccountChip : UserControl
         }
     }
 
-    // TranslateY + fade in parallel (compositor-only), mirrors MainWindow's tab-swap primitive.
-    private static Task RunTranslateFade(Visual target, double fromY, double toY, double fromO, double toO, TimeSpan duration, Easing easing, CancellationToken ct)
+    // Проявление (compositor-only). Opacity — единственное, что здесь анимируется: у него аниматор
+    // есть, поэтому анимация действительно играет (см. комментарий у MaybeRunEntrance).
+    private static Task RunFade(Visual target, double fromO, double toO, TimeSpan duration, Easing easing, CancellationToken ct)
     {
         var fade = new Animation
         {
@@ -179,18 +188,7 @@ public partial class HomeAccountChip : UserControl
                 new KeyFrame { Cue = new Cue(1d), Setters = { new Avalonia.Styling.Setter(Visual.OpacityProperty, toO) } },
             },
         };
-        var slide = new Animation
-        {
-            Duration = duration,
-            Easing = easing,
-            FillMode = FillMode.Forward,
-            Children =
-            {
-                new KeyFrame { Cue = new Cue(0d), Setters = { new Avalonia.Styling.Setter(TranslateTransform.YProperty, fromY) } },
-                new KeyFrame { Cue = new Cue(1d), Setters = { new Avalonia.Styling.Setter(TranslateTransform.YProperty, toY) } },
-            },
-        };
-        return Task.WhenAll(fade.RunAsync(target, ct), slide.RunAsync(target, ct));
+        return fade.RunAsync(target, ct);
     }
 
     private void OnChipKeyDown(object? sender, KeyEventArgs e)

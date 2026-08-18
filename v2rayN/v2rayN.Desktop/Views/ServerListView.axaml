@@ -61,7 +61,13 @@
         <Style Selector="Border.rowHairline">
             <Setter Property="Height" Value="1" />
             <Setter Property="VerticalAlignment" Value="Top" />
-            <Setter Property="Margin" Value="12,0" />
+            <!--  Отрицательный верхний отступ = вертикальный паддинг строки (8): линия садится на
+                  ВЕРХНЮЮ кромку паддинг-бокса, сразу под рамкой, а не на верх содержимого. По
+                  ширине линия совпадает с паддинг-боксом (эталон: строка 88…504 → линия 102…490),
+                  поэтому боковой отступ здесь НУЛЕВОЙ. Раньше тут стояло «12,0», но элемент задавал
+                  свой Margin локально, и сеттер молча проигрывал — два числа, из которых работало
+                  одно. Теперь геометрия линии живёт ровно здесь.  -->
+            <Setter Property="Margin" Value="0,-8,0,0" />
             <Setter Property="IsHitTestVisible" Value="False" />
             <Setter Property="Background" Value="{DynamicResource Brush.OutlineVariant}" />
         </Style>
@@ -110,7 +116,7 @@
                                   сворачивания + удаление). Бесшовно продолжается в свои серверы.
                                   Боковых отступов НЕТ: колонку уже отбивает сама «Главная»
                                   (14/10/14/14), второй gutter здесь дал бы двойной отступ.  -->
-                            <local:SubscriptionMetaView Margin="0,0,0,10" />
+                            <local:SubscriptionMetaView Margin="0,0,0,8" />
 
                             <!--  Group rows reveal (collapse with the group via the meta-bar chevron).
                                   The chevron flips HomeServerGroup.IsExpanded; the code-behind runs a
@@ -156,11 +162,15 @@
                                                   усиливает уже видимый покой (см. code-behind, §A.4).  -->
                                             <!--  Геометрия строки — tokens.md «Строка сервера»: высота от 58,
                                                   паддинг 8×12, скругление 14, рамка 1.5 ВСЕГДА (прозрачная у
-                                                  невыбранных), отступ снизу 2. Ни одно из этих чисел не зависит
-                                                  от выбора — при выборе меняются только цвета.  -->
+                                                  невыбранных), отступ СВЕРХУ 2. Ни одно из этих чисел не зависит
+                                                  от выбора — при выборе меняются только цвета.
+                                                  Отступ именно сверху: он же держит воздух под линией-разделителем,
+                                                  которая приклеена к верхней кромке строки. Шаг списка 58+2 = 60,
+                                                  как в эталоне; карточка подписки отдала эти 2 из своего нижнего
+                                                  отступа (10 → 8), поэтому зазор карточка↔первая строка остался 10.  -->
                                             <Border
                                                 MinHeight="58"
-                                                Margin="0,0,0,2"
+                                                Margin="0,2,0,0"
                                                 Padding="12,8"
                                                 Classes="ServerRow"
                                                 Classes.selected="{Binding IsActive}"
@@ -191,11 +201,14 @@
 
                                                 <Grid VerticalAlignment="Center" ColumnDefinitions="Auto,*,Auto">
 
-                                                    <!--  Флаг: круглая плитка 32 (tokens.md «Строка сервера»). PNG уже круглые
-                                                          с прозрачными углами, поэтому радиус = половина = 16 убирает квадратные
-                                                          углы за диском; нейтральная подложка читается тонким кольцом вокруг флага.
-                                                          RemarkToFlag достаёт страну из Remarks; не-страновые / сводные строки
-                                                          падают на глобус (xx.png) — отдельная, но такая же data-driven эмблема.  -->
+                                                    <!--  Флаг: круглая плитка 32 с флагом 18 ВНУТРИ (tokens.md «Строка
+                                                          сервера»), радиус = половина стороны = 16. Флаг НЕ растягивается
+                                                          на всю плитку: подложка обязана читаться кольцом вокруг него,
+                                                          иначе плитка исчезает под картинкой и строка теряет свой якорь —
+                                                          а у пустого слота и у глобуса-заглушки не остаётся общего силуэта
+                                                          с флагом соседней строки. 18 в 32 держит этот силуэт одинаковым
+                                                          для любой картинки. RemarkToFlag достаёт страну из Remarks;
+                                                          не-страновые / сводные строки падают на глобус (xx.png).  -->
                                                     <Border
                                                         Grid.Column="0"
                                                         Width="32"
@@ -205,7 +218,13 @@
                                                         Background="{DynamicResource Brush.Tile.Neutral}"
                                                         ClipToBounds="True"
                                                         CornerRadius="16">
-                                                        <Image Source="{Binding Remarks, Converter={StaticResource RemarkToFlag}}" Stretch="UniformToFill" />
+                                                        <Image
+                                                            Width="18"
+                                                            Height="18"
+                                                            HorizontalAlignment="Center"
+                                                            VerticalAlignment="Center"
+                                                            Source="{Binding Remarks, Converter={StaticResource RemarkToFlag}}"
+                                                            Stretch="UniformToFill" />
                                                     </Border>
 
                                                     <!--  Имя 14/700 (флаг-эмодзи снят — он и так в плитке) + «чип протокола · транспорт».  -->
@@ -294,7 +313,6 @@
                                                     <Border
                                                         Grid.Column="0"
                                                         Grid.ColumnSpan="3"
-                                                        Margin="0,-8,0,0"
                                                         Classes="rowHairline"
                                                         DataContextChanged="OnRowHairlineRebound"
                                                         Loaded="OnRowHairlineSync" />
