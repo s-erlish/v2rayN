@@ -1303,9 +1303,17 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         {
             accountSyncView.IsVisible = false;
             onboardingView.IsVisible = false;
-            bodyRoot.IsVisible = false;
+            //  Гасим ТОЛЬКО область страниц, но НЕ рейл. Раньше пряталось всё тело разом, и на всех
+            //  двенадцати подэкранах навигация слева исчезала — а на эталонных кадрах (B_*, E_*) она
+            //  стоит на месте с подсвеченным разделом. Подэкран прозрачный, поэтому контент под ним
+            //  обязан быть погашен (иначе просвечивает), а рейл лежит в своей колонке и ничему не
+            //  мешает: он и остаётся.
+            bodyRoot.IsVisible = true;
+            railHost.IsVisible = true;
+            contentArea.IsVisible = false;
             return;
         }
+        contentArea.IsVisible = true;
         ApplyShellVisibility();
     }
 
