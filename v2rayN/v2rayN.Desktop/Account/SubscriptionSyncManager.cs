@@ -1,3 +1,4 @@
+using ServiceLib.Helper;
 using v2rayN.Desktop.Account.Dto;
 
 namespace v2rayN.Desktop.Account;
@@ -143,7 +144,17 @@ public sealed class SubscriptionSyncManager
             item ??= existing.FirstOrDefault(s => s.Url == candidate.Url);
             item ??= new SubItem { Id = string.Empty, Url = candidate.Url };
 
-            item.Remarks = candidate.Remarks;
+            // THE SUBSCRIPTION'S OWN NAME — AND NOTHING THAT MERELY LOOKS LIKE ONE.
+            //
+            // Only a name that identifies THIS subscription is stamped (the cabinet nickname; see
+            // BuildCandidates). When there is none the remark is left BLANK on purpose: the fetch two
+            // dozen lines below brings the provider's own `profile-title` («🍀 erlish»), and
+            // AdoptProviderTitle then adopts it. Overwriting a stored real name with a blank would
+            // throw that away on every sync, so a blank candidate never clears an existing name.
+            if (candidate.Remarks.IsNotEmpty() || !IsRealName(item.Remarks, candidate.PlaceholderNames))
+            {
+                item.Remarks = candidate.Remarks;
+            }
             item.Url = candidate.Url;                              // the ACCOUNT subscription URL
             item.Enabled = true;
             // Stamp an explicit v2rayNG-family UA: the departament/Remnawave panel serves its managed
@@ -163,6 +174,11 @@ public sealed class SubscriptionSyncManager
             // FORCES the correct v2rayNG-family User-Agent. This is the whole reason a plain
             // DownloadService call with the branding UA fetched an "app not supported" placeholder.
             await SubscriptionHandler.UpdateProcess(config, guid, false, static (_, _) => Task.CompletedTask);
+
+            // The fetch above stamped the provider's `profile-title` on the row. Adopt it as the name
+            // when nothing else names the subscription — this is also the healing path for rows an
+            // older build left stamped with a tariff name («Base»).
+            await AdoptProviderTitle(guid, candidate);
 
             if (!newMap.ContainsKey(candidate.Uuid))
             {
@@ -232,8 +248,9 @@ public sealed class SubscriptionSyncManager
         if (primary?.HasActiveSubscription() == true && primaryUrl.IsNotEmpty() && seenUrls.Add(primaryUrl!))
         {
             var uuid = FirstNonBlank(profile?.RemnawaveUuid, rootFromAll?.RemnawaveUuid, rootFromAll?.Id, primaryUrl);
-            var remarks = FirstNonBlank(rootFromAll?.DisplayName, primary.TariffDisplayName, rootFromAll?.TariffDisplayName, "Departament VPN");
-            result.Add(new Candidate(uuid, primaryUrl!, remarks));
+            var placeholders = PlaceholdersFor(primary.TariffDisplayName, rootFromAll?.TariffDisplayName);
+            var remarks = FirstRealName(placeholders, rootFromAll?.DisplayName);
+            result.Add(new Candidate(uuid, primaryUrl!, remarks, rootFromAll?.DefaultLabel ?? string.Empty, placeholders));
         }
 
         foreach (var info in all)
@@ -244,12 +261,111 @@ public sealed class SubscriptionSyncManager
                 continue;
             }
             var uuid = FirstNonBlank(info.RemnawaveUuid, info.Id, url);
-            var remarks = FirstNonBlank(info.DisplayName, info.TariffDisplayName, "Departament VPN");
-            result.Add(new Candidate(uuid, url!, remarks));
+            var placeholders = PlaceholdersFor(info.TariffDisplayName);
+            var remarks = FirstRealName(placeholders, info.DisplayName);
+            result.Add(new Candidate(uuid, url!, remarks, info.DefaultLabel ?? string.Empty, placeholders));
         }
 
         return result;
     }
+
+    #region naming
+
+    /// <summary>
+    /// Lower-cased strings that name NO subscription, whatever a payload or an older build put in the
+    /// remark. Same list as Android's <c>SubscriptionNaming.PLACEHOLDERS</c>, plus this app's own two
+    /// historic stamps: <c>import_sub</c> (ConfigHandler's manual-add default) and the brand literal
+    /// this manager itself used to write.
+    ///
+    /// It is not a cosmetic filter. There is no rename anywhere in the app (parity with
+    /// OWNER-DECISION-2026-08-02 §5), so the automatic name is the ONLY name — a placeholder allowed to
+    /// stick would be permanent. Because the adoption below asks this same question, a machine that
+    /// already stored one heals itself on the next sync.
+    /// </summary>
+    private static readonly HashSet<string> _placeholderNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "default", "import sub", "import_sub", "departament", "departament vpn",
+    };
+
+    /// <summary>
+    /// The placeholder set for ONE subscription: the shared list plus the tariff names this payload
+    /// carries. A tariff name («Base», «Plus») names the PLAN, not the subscription — it is the same
+    /// string for every customer on that plan — and it is exactly what an older build stamped on the
+    /// owner's row, which is why the card read «Base» instead of his subscription's real name. Listing
+    /// it here both stops it being written again and heals the rows that already carry it.
+    /// </summary>
+    private static HashSet<string> PlaceholdersFor(params string?[] tariffNames)
+    {
+        var set = new HashSet<string>(_placeholderNames, StringComparer.OrdinalIgnoreCase);
+        foreach (var name in tariffNames)
+        {
+            var trimmed = name?.Trim();
+            if (trimmed.IsNotEmpty())
+            {
+                set.Add(trimmed!);
+            }
+        }
+        return set;
+    }
+
+    /// <summary><paramref name="candidate"/> when it actually names a subscription (not blank, not a placeholder).</summary>
+    private static bool IsRealName(string? candidate, HashSet<string> placeholders)
+    {
+        var trimmed = candidate?.Trim();
+        return trimmed.IsNotEmpty() && !placeholders.Contains(trimmed!);
+    }
+
+    /// <summary>The first candidate that really names a subscription, else blank.</summary>
+    private static string FirstRealName(HashSet<string> placeholders, params string?[] values)
+    {
+        foreach (var v in values)
+        {
+            if (IsRealName(v, placeholders))
+            {
+                return v!.Trim();
+            }
+        }
+        return string.Empty;
+    }
+
+    /// <summary>
+    /// Names the freshly fetched subscription from the provider's own <c>profile-title</c> header
+    /// («🍀 erlish»), which <see cref="SubscriptionHandler"/> has just persisted onto the row — but
+    /// ONLY while nothing else names it. Then, still unnamed, falls back to the backend's per-sub label
+    /// («Подписка #2»): generated rather than chosen, so it ranks below the provider's title. Identical
+    /// ranking to Android's <c>SubscriptionNaming.nameOf</c>: cabinet nickname → profile-title →
+    /// stored remark → default label.
+    ///
+    /// Reads the row back instead of reusing the in-memory one: the fetch wrote to the database, and the
+    /// title is the whole reason for this pass.
+    /// </summary>
+    private static async Task AdoptProviderTitle(string guid, Candidate candidate)
+    {
+        try
+        {
+            var item = await AppManager.Instance.GetSubItem(guid);
+            if (item is null || IsRealName(item.Remarks, candidate.PlaceholderNames))
+            {
+                return;
+            }
+
+            var name = FirstRealName(candidate.PlaceholderNames, item.ProfileTitle, candidate.DefaultLabel);
+            if (name.IsNullOrEmpty() || string.Equals(name, item.Remarks, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            item.Remarks = name;
+            await SQLiteHelper.Instance.UpdateAsync(item);
+        }
+        catch (Exception ex)
+        {
+            // A name is not worth failing an import over — the subscription and its servers are already in.
+            Logging.SaveLog("SubscriptionSyncManager.AdoptProviderTitle", ex);
+        }
+    }
+
+    #endregion naming
 
     /// <summary>
     /// Removes every managed subscription and its servers. Invoked only from
@@ -284,5 +400,8 @@ public sealed class SubscriptionSyncManager
         return string.Empty;
     }
 
-    private readonly record struct Candidate(string Uuid, string Url, string Remarks);
+    /// <param name="Remarks">The subscription's own nickname from the cabinet — blank when it has none.</param>
+    /// <param name="DefaultLabel">The backend's generated per-sub label («Подписка #2»), used last.</param>
+    /// <param name="PlaceholderNames">Strings that name nothing for THIS subscription (see <see cref="PlaceholdersFor"/>).</param>
+    private readonly record struct Candidate(string Uuid, string Url, string Remarks, string DefaultLabel, HashSet<string> PlaceholderNames);
 }
