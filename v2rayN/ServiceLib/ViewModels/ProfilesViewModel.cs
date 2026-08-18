@@ -603,7 +603,14 @@ public class ProfilesViewModel : MyReactiveObject
 
     // Returns TRUE when <paramref name="indexId"/> is the active default and is ready to be
     // connected; FALSE on an invalid / missing / failed pick. See the A5 contract below.
-    public async Task<bool> SetDefaultServer(string? indexId)
+    /// <param name="startWhenIdle">
+    /// Поднимать ли ядро, если туннель СЕЙЧАС выключен. По умолчанию да — так ведут себя старые
+    /// вызовы. «Главная» передаёт false: владелец потребовал, чтобы тап по локации только ВЫБИРАЛ
+    /// сервер, а включение оставалось за щитом. Раньше этого параметра не было, и выбор поднимал
+    /// туннель отсюда, из Reload(), — сколько бы вызывающий ни воздерживался от Connect().
+    /// На ЖИВОЙ туннель это не влияет: там по-прежнему бесшовное переключение.
+    /// </param>
+    public async Task<bool> SetDefaultServer(string? indexId, bool startWhenIdle = true)
     {
         if (indexId.IsNullOrEmpty())
         {
@@ -641,7 +648,7 @@ public class ProfilesViewModel : MyReactiveObject
             {
                 SwitchRequested.Publish();
             }
-            else
+            else if (startWhenIdle)
             {
                 Reload();
             }

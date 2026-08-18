@@ -249,7 +249,10 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         //  оставить его на прежнем сервере значило бы проигнорировать тап.
         if (!wasConnected)
         {
-            await Profiles.SetDefaultServer(indexId);
+            //  startWhenIdle: false — иначе туннель поднимет сам SetDefaultServer через Reload(),
+            //  и воздержаться от Connect() здесь было бы бесполезно (так и было: правка «выбор не
+            //  подключает» не работала, потому что подключал не этот метод).
+            await Profiles.SetDefaultServer(indexId, startWhenIdle: false);
             SyncState();
             return;
         }
