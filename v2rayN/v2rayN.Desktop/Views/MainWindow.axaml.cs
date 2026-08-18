@@ -116,6 +116,11 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     private bool _positionSeeded;              // первичное восстановление сделано → живые переносы можно запоминать
     private AppTab _currentTab = AppTab.Home;   // ОДНО состояние вкладки на обе раскладки
     private bool _isEmpty = true;
+
+    //  Пока НЕ пришёл первый ответ о составе подписок, «пусто» — это «ещё не знаем», а не «нечего
+    //  показывать». Гейт в этот момент не имеет права выбирать онбординг: у вошедшего владельца
+    //  на холодном старте мелькал экран входа, и лишь потом его перекидывало на Главную.
+    private bool _profilesResolved;
     private bool _isSyncing;                     // E3: идёт пост-логин импорт → оверлей синхронизации
     private bool _isStartupLoading;              // Bug4: холодный старт с сохранённой сессией → оверлей загрузки (НЕ гейт входа)
     private bool _isLoggedIn;                    // A1: залогинен ли пользователь → пустое состояние ведёт на Главную, а не на онбординг-вход
@@ -1060,6 +1065,15 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         // пользователь ВОШЁЛ, но подписок/серверов нет (пустой аккаунт), НЕ показываем ему снова экран
         // входа — ведём в оболочку «Главной» (там пустое состояние героя + вкладка «Аккаунт» с «Купить
         // подписку»), а не на онбординг-вход. Онбординг остаётся первым кадром только для logged-out.
+        //  Ждём первого ответа о составе: до него «пусто» означает «ещё не читали базу». Раньше гейт
+        //  верил этому «пусто» и на холодном старте показывал вошедшему владельцу экран входа, а через
+        //  мгновение перекидывал на Главную — владелец: «было стартовое окно, где входы, а потом уже
+        //  перекинуло». Держим кадр пустым: фон окна уже нарисован, мелькать нечему.
+        if (!_profilesResolved && !_isSyncing && !_isStartupLoading)
+        {
+            return;
+        }
+
         Control target = (_isSyncing || _isStartupLoading)
             ? accountSyncView
             : (_isEmpty && !_isLoggedIn) ? onboardingView : bodyRoot;
@@ -1269,6 +1283,8 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
             .Subscribe(empty =>
             {
                 _isEmpty = empty;
+                //  Первый ответ = состав известен. Дальше гейт работает как раньше.
+                _profilesResolved = true;
                 ApplyShellVisibility();
             });
 

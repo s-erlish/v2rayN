@@ -63,8 +63,7 @@ public partial class ServerListView : UserControl
                 var alreadyRevealed = DataContext is { } ctx && _revealedContexts.TryGetValue(ctx, out _);
                 _revealStarted = alreadyRevealed;
                 _revealFinished = alreadyRevealed;
-                _revealIndex = 0;
-            }
+                }
         };
     }
 
@@ -266,13 +265,10 @@ public partial class ServerListView : UserControl
     //  hidden if the animation clock never ticks (headless / inactive render).
 
     private const double RevealMs = 300; //  Dur.Reveal (rise = translateY 12 → 0, see _riseFrom)
-    private const int StaggerMs = 40; //  Dur.Stagger (per-row delay)
-    private const int MaxStaggerRows = 8; //  cap: only the first ≤8 rows stagger in
 
     private object? _revealBoundContext;
     private bool _revealStarted; //  first-population window has opened (rows attaching)
     private bool _revealFinished; //  first population done → no further reveals this bind
-    private int _revealIndex; //  running per-row index within the first-population batch
 
     //  G1: which HomeViewModel instances have already played their one-shot reveal. STATIC so the
     //  guard survives this view being torn down / re-created / re-attached when the Home tab is
@@ -325,7 +321,6 @@ public partial class ServerListView : UserControl
         if (!_revealStarted)
         {
             _revealStarted = true;
-            _revealIndex = 0;
             // Latch this VM as revealed so re-showing / re-attaching Home never replays the stagger (G1).
             MarkContextRevealed();
             // Close the first-population window once this layout batch drains. Loaded callbacks run
@@ -334,14 +329,12 @@ public partial class ServerListView : UserControl
             Dispatcher.UIThread.Post(() => _revealFinished = true, DispatcherPriority.Background);
         }
 
-        var index = _revealIndex++;
-        // Rows past the first 8 just appear — keeps the reveal snappy on long lists.
-        if (index >= MaxStaggerRows)
-        {
-            return;
-        }
-
-        _ = PlayRowReveal(row, index * StaggerMs);
+        //  СТАГГЕРА БОЛЬШЕ НЕТ. Строки проявлялись по очереди (i×40мс), и владелец читал это как
+        //  моргание: «когда сервера появляются, они почему-то моргают и перестают». Ровно так оно и
+        //  выглядит — часть строк уже видна, часть ещё нет, а после виртуализации, снятой ради
+        //  корректного отображения, все строки создаются одним заходом, и разнобой стал заметнее.
+        //  Список появляется целиком: моргать нечему. Задел на возврат движения оставлен в PlayRowReveal.
+        _ = row;
     }
 
     //  ПОДЪЁМ СНЯТ — остался стаггер по прозрачности. Почему: кадры ставили Visual.RenderTransform
@@ -358,75 +351,6 @@ public partial class ServerListView : UserControl
     //  трансформу, которую переход стиля Border.ServerRow (TransformOperationsTransition на
     //  RenderTransform) не перехватывает; это отдельное решение владельца — вынесено в отчёт.
 
-    private async Task PlayRowReveal(Border row, int delayMs)
-    {
-        // Transient hidden start — set ONLY as part of running the reveal (never a persistent gate).
-        // During the stagger delay the animation has not started, so this base Opacity holds the row
-        // hidden (no pre-delay flash) until its turn.
-        row.Opacity = 0;
-
-        var anim = new Animation
-        {
-            Duration = TimeSpan.FromMilliseconds(RevealMs),
-            Delay = TimeSpan.FromMilliseconds(delayMs),
-            //  Ease.OutQuint (0.22,1,0.36,1) — the confident-reveal curve (matches GlobalResources).
-            Easing = new SplineEasing { X1 = 0.22, Y1 = 1, X2 = 0.36, Y2 = 1 },
-            //  None (NOT Forward): on completion the animation RELEASES Opacity back to the control's
-            //  base — so it never keeps ownership at Animation priority. RestoreRow then defines the
-            //  visible rest (и заодно снимает любую трансформу, если её кто-то оставил).
-            FillMode = FillMode.None,
-            Children =
-            {
-                new KeyFrame
-                {
-                    Cue = new Cue(0d),
-                    Setters = { new Setter(Visual.OpacityProperty, 0d) },
-                },
-                new KeyFrame
-                {
-                    Cue = new Cue(1d),
-                    Setters = { new Setter(Visual.OpacityProperty, 1d) },
-                },
-            },
-        };
-
-        // SAFETY (mirrors ConnectHeroView's pre-hide + DispatcherTimer.RunOnce EnsureHeroVisible):
-        // guarantee the row reaches visible rest even if the animation clock never advances (headless
-        // / inactive render). Cancelling first makes the (possibly stuck) animation relinquish the
-        // property so the base values RestoreRow writes actually take effect. Margin past delay+dur.
-        var cts = new CancellationTokenSource();
-        var safety = DispatcherTimer.RunOnce(
-            () =>
-            {
-                cts.Cancel();
-                RestoreRow(row);
-            },
-            TimeSpan.FromMilliseconds(delayMs + RevealMs + 250));
-
-        try
-        {
-            await anim.RunAsync(row, cts.Token);
-        }
-        catch (OperationCanceledException)
-        {
-            //  Safety path already restored the row — nothing more to do.
-        }
-        finally
-        {
-            safety.Dispose(); //  cancel the pending safety callback when the reveal ended normally
-            RestoreRow(row);
-            cts.Dispose();
-        }
-    }
-
-    // Idempotent rest = fully visible, no reveal transform. Safe to call from the safety timer and
-    // finally. RenderTransform → null returns the row to the style's identity, so the `:pressed`
-    // scale-0.96 keeps working on later taps.
-    private static void RestoreRow(Control row)
-    {
-        row.Opacity = 1;
-        row.RenderTransform = null;
-    }
 
     // Reduced-motion decision — same signal the rest of the app gates on (ConnectHeroView): the
     // live `.lite` window class (set from UiItem.LiteMode), the persisted LiteMode flag, and the

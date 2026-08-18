@@ -120,8 +120,29 @@ public partial class SettingsView : UserControl
     private static void WirePicker(Border row, ValuePicker picker, double width)
     {
         picker.PopupWidth = width;
-        WireRow(row, picker.Toggle);
+        //  Тап ВНУТРИ раскрытого окошка — это выбор пункта, а не повторное нажатие на строку.
+        //  Окошко лежит В ДЕРЕВЕ строки (иначе оно выпадает из масштабирования интерфейса), поэтому
+        //  его собственный Tapped всплывает СЮДА вторым событием: без этой проверки выбор пункта
+        //  закрывал окошко и тут же открывал обратно — владелец видел, что «меню открывается заново».
+        row.Focusable = true;
+        row.IsTabStop = true;
+        row.Tapped += (_, e) =>
+        {
+            if (!SubPageUtil.OriginatedIn<ValuePopup>(e.Source))
+            {
+                picker.Toggle();
+            }
+        };
+        row.KeyDown += (_, e) =>
+        {
+            if (e.Key is Key.Enter or Key.Space)
+            {
+                picker.Toggle();
+                e.Handled = true;
+            }
+        };
     }
+
 
     /// <summary>Тумблер-строка: тап по всей строке (guard OriginatedInToggle гасит двойной ход, когда
     /// источник — сам тумблер) + Enter/Space переключают привязанный тумблер. Строка — единственный
