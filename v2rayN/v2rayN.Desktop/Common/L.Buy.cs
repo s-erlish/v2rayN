@@ -17,6 +17,9 @@ public sealed partial class L
         Add("Buy_Paid", "Подписка оплачена", "Subscription paid");
         Add("Buy_PaidSubtitle", "Серверы уже добавлены — можно подключаться", "Servers are already added — you can connect");
         Add("Buy_ChoosePlan", "Выберите тариф", "Choose a plan");
+        // Пояснение под заголовком подэкрана (лекало: заголовок 22/700 → пояснение 13).
+        Add("Buy_Note", "Выберите тариф и срок", "Choose a plan and a term");
+        Add("Buy_ErrTitle", "Тарифы не загрузились", "Plans didn't load");
         Add("Buy_AdditionalDevices", "Дополнительные устройства", "Additional devices");
         Add("Buy_RemoveDevice", "Убрать устройство", "Remove device");
         Add("Buy_AddDevice", "Добавить устройство", "Add device");
@@ -35,17 +38,19 @@ public sealed partial class L
         // ── Devices («Устройства») ──
         Add("Devices_Subtitle", "Устройства, подключённые к вашей подписке", "Devices connected to your subscription");
         Add("Devices_ThisDevice", "Это устройство", "This device");
-        Add("Devices_Unlink", "Отвязать устройство", "Unlink device");
+        Add("Devices_Remove", "Удалить", "Remove");
+        Add("Devices_RemoveConfirm", "Удалить устройство?", "Remove device?");
+        Add("Devices_Foot",
+            "Удалённое устройство отключается от подписки и освобождает слот.",
+            "A removed device is disconnected from your subscription and frees up a slot.");
         Add("Devices_Empty", "Нет подключённых устройств", "No connected devices");
         Add("Devices_EmptyHint", "Устройства появятся здесь после первого подключения к VPN.", "Devices will appear here after your first VPN connection.");
         Add("Devices_NoSub", "Активная подписка не найдена", "No active subscription found");
         Add("Devices_NoSubHint", "Оформите подписку в разделе «Аккаунт», чтобы подключать устройства.", "Get a subscription in the Account section to connect devices.");
         Add("Devices_GoToAccount", "Перейти в аккаунт", "Go to account");
-        Add("Devices_UnlinkConfirm", "Отвязать устройство?", "Unlink device?");
-        Add("Devices_UnlinkShort", "Отвязать", "Unlink");
-        Add("Devices_UnlinkBody", "Устройство «{0}» будет отключено от подписки.", "Device \"{0}\" will be disconnected from your subscription.");
-        Add("Devices_UnlinkFailed", "Не удалось отвязать устройство. Попробуйте позже.", "Couldn't unlink the device. Try again later.");
-        Add("Devices_Unlinked", "Устройство отвязано", "Device unlinked");
+        Add("Devices_UnlinkBody", "Устройство «{0}» отключится от подписки и освободит слот.", "Device \"{0}\" will be disconnected from your subscription and free up a slot.");
+        Add("Devices_UnlinkFailed", "Не удалось удалить устройство. Попробуйте позже.", "Couldn't remove the device. Try again later.");
+        Add("Devices_Unlinked", "Устройство удалено", "Device removed");
         Add("Devices_ErrLoad", "Не удалось загрузить устройства. Попробуйте позже.", "Couldn't load devices. Try again later.");
         Add("Devices_PlatformActive", "{0} · Активно: {1}", "{0} · Active: {1}");
         Add("Devices_Active", "Активно: {0}", "Active: {0}");
@@ -54,6 +59,9 @@ public sealed partial class L
 
         // ── Payment history («История платежей») ──
         Add("History_Empty", "Платежей пока нет", "No payments yet");
+        Add("History_EmptyHint",
+            "Здесь появятся пополнения баланса и оплаты тарифов.",
+            "Balance top-ups and plan payments will show up here.");
         Add("History_ErrLoad", "Не удалось загрузить историю платежей", "Couldn't load payment history");
         Add("History_StatusPaid", "Оплачено", "Paid");
         Add("History_StatusProcessing", "В обработке", "Processing");

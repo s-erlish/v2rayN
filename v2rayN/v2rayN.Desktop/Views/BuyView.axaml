@@ -3,34 +3,40 @@
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:loc="clr-namespace:v2rayN.Desktop.Common"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:vms="clr-namespace:v2rayN.Desktop.ViewModels"
     x:DataType="vms:BuyViewModel"
+    d:DesignWidth="900"
     d:DesignHeight="820"
-    d:DesignWidth="920"
     mc:Ignorable="d">
 
     <!--
-        Экран «Купить подписку» (порт Android activity_buy_tariff.xml + item_buy_tariff.xml +
-        item_buy_option.xml + sheet_payment_method.xml / BuyTariffActivity.kt + PaymentMethodSheet.kt).
-        Incy: pure dark, ОДИН синий акцент, Space Grotesk, токен-отступы/радиусы, sentence-case Russian,
-        0 elevation, 1px OutlineVariant, без вложенных карт/градиентов/эмодзи-хрома (глиф группы скрыт,
-        как и в Android-базе).
+        Подэкран «Купить подписку» (screens.md «Купить подписку · Выберите тариф и срок»).
 
-        DATA-DRIVEN: тарифы, цены, сроки, устройства, трафик, итог и способы оплаты приходят из
-        departament-API через BuyViewModel. Состояния (взаимоисключающие): скелет (пульс, 3 силуэта
-        76/радиус 20) / ошибка (глиф 48 + «Повторить») / пусто / контент / «Подписка оплачена»;
-        плюс post-checkout hint «Платёж обрабатывается…» при ре-поллинге после оплаты в браузере.
-        Шит «Способ оплаты» = оверлей снизу окна: скрим + поверхность 24,24,0,0 + grab-handle,
-        slide-up + fade, закрытие по скриму/Esc.
+        ЕДИНОЕ ЛЕКАЛО подэкранов (Assets/SubScreenStyles.axaml): кнопка назад 40 со смещением −8 →
+        заголовок 22/700 → пояснение 13 → карточки тарифов.
+
+        Тариф ПО УМОЛЧАНИЮ СВЁРНУТ. Свёрнутый: название 16/700, мета «Устройства: 2 · Трафик: ∞»,
+        каретка. Раскрытый: рамка и название акцентом, внутри строки сроков с радио и ценой справа.
+        Открыт всегда один тариф; повторное нажатие сворачивает (это уже поведение BuyViewModel).
+        Кнопка оплаты появляется только при раскрытом тарифе и несёт сумму.
+
+        Что изменилось против прежней версии и ПОЧЕМУ: был бесшовный тулбар с Headline, колонка 560,
+        карта радиуса 20 с заливкой выбранного и ГАЛОЧКОЙ справа. Галочка говорила «выбрано», хотя
+        нажатие РАСКРЫВАЕТ — каретка честнее и совпадает с эталонными кадрами; заливка выбранного
+        убрана (акцентной рамки и акцентного названия достаточно, а заливка + рамка + галочка — три
+        сигнала на одно состояние). Опции срока переведены на радио: срок — это выбор из списка.
+
+        Оставлено то, чего в пакете нет, но в приложении есть (пакет об этом молчит, а не запрещает):
+        докупка устройств степпером, строка «Итого», инлайн-диагностика оплаты и шит «Способ оплаты».
+
+        Фон НЕ задан: подэкран прозрачный, под ним непрерывный фон окна (шелл погашен хостом).
+        DATA-DRIVEN: тарифы, сроки, цены и способы оплаты — из departament-API через BuyViewModel.
     -->
 
     <UserControl.Resources>
-        <!--  Векторные глифы: порт Android drawable (Material 24dp). ic_arrow_back / ic_action_done /
-              ic_dl_info / ic_acc_devices / ic_remove_24dp / ic_add_24dp / ic_acc_wallet / ic_pay_sbp /
-              ic_pay_card / ic_chevron_right.  -->
-        <StreamGeometry x:Key="Geo.Buy.Back">M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z</StreamGeometry>
+        <!--  Векторные глифы (Material 24dp; порт Android drawable).  -->
         <StreamGeometry x:Key="Geo.Buy.Check">M9,16.2L4.8,12l-1.4,1.4L9,19 21,7l-1.4,-1.4L9,16.2z</StreamGeometry>
         <StreamGeometry x:Key="Geo.Buy.Info">M11,7h2v2h-2zM11,11h2v6h-2zM12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2zM12,20c-4.41,0 -8,-3.59 -8,-8s3.59,-8 8,-8 8,3.59 8,8 -3.59,8 -8,8z</StreamGeometry>
         <StreamGeometry x:Key="Geo.Buy.Devices">M4,6h18V4H4c-1.1,0 -2,0.9 -2,2v11H0v3h14v-3H4V6zM23,8h-6c-0.55,0 -1,0.45 -1,1v10c0,0.55 0.45,1 1,1h6c0.55,0 1,-0.45 1,-1V9c0,-0.55 -0.45,-1 -1,-1zM22,18h-4v-8h4v8z</StreamGeometry>
@@ -40,17 +46,15 @@
         <StreamGeometry x:Key="Geo.Buy.Sbp">M3.5,7.2l3.3,5.7v4.4h2.3v-4.4l3.3,-5.7h-2.5l-1.95,3.6 -1.95,-3.6zM13.4,6.8h4.1c1.9,0 3.2,1.2 3.2,3s-1.3,3 -3.2,3h-1.8v4.5h-2.3zM15.7,8.8v2h1.6c0.7,0 1.1,-0.4 1.1,-1s-0.4,-1 -1.1,-1z</StreamGeometry>
         <StreamGeometry x:Key="Geo.Buy.Card">M20,4H4c-1.11,0 -1.99,0.89 -1.99,2L2,18c0,1.11 0.89,2 2,2h16c1.11,0 2,-0.89 2,-2V6c0,-1.11 -0.89,-2 -2,-2zM20,18H4v-6h16v6zM20,8H4V6h16v2z</StreamGeometry>
         <StreamGeometry x:Key="Geo.Buy.Chevron">M8.6,4.6L7.2,6l6,6l-6,6l1.4,1.4L16,12z</StreamGeometry>
+        <!--  Каретка (Material arrow_drop_down) — она же индикатор раскрытия тарифа.  -->
+        <StreamGeometry x:Key="Geo.Buy.Caret">M7,10l5,5 5,-5z</StreamGeometry>
     </UserControl.Resources>
 
     <UserControl.Styles>
+        <StyleInclude Source="avares://departament/Assets/SubScreenStyles.axaml" />
 
-        <!--  ЛОКАЛЬНЫЕ классы (только то, чему нет глобального аналога: TariffCard/TariffHeader,
-              Flat, PayTile.balance, оверлей-шит). Общее — из GlobalStyles: SubToolbar/BackNav,
-              PriceOption, SkelCard/.SkeletonPulse, SheetTop/SheetHandle, EmptyIcon; цвета — токены
-              (Brush.SelectedFill / Brush.Hover / Brush.Scrim), без hex-литералов.  -->
-
-        <!--  Плоская кнопка-хит (шапка тарифа, опция цены, строка шита): без хрома темы,
-              единственный отклик — press scale 0.96 (press_scale). Hover рисует ВНУТРЕННИЙ Border.  -->
+        <!--  Плоская кнопка-хит (шапка тарифа, строка срока, строка шита): без хрома темы.
+              Прогиба у шапки НЕТ — карточка уезжала бы из-под курсора и отменяла жест.  -->
         <Style Selector="Button.Flat">
             <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
             <Setter Property="Padding" Value="0" />
@@ -62,11 +66,6 @@
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="VerticalContentAlignment" Value="Stretch" />
             <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="Transitions">
-                <Transitions>
-                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09" />
-                </Transitions>
-            </Setter>
         </Style>
         <Style Selector="Button.Flat /template/ ContentPresenter#PART_ContentPresenter">
             <Setter Property="Background" Value="Transparent" />
@@ -77,38 +76,29 @@
         <Style Selector="Button.Flat:pressed /template/ ContentPresenter#PART_ContentPresenter">
             <Setter Property="Background" Value="Transparent" />
         </Style>
-        <Style Selector="Button.Flat:pressed">
-            <Setter Property="RenderTransform" Value="scale(0.96)" />
-        </Style>
 
-        <!--  Тулбар (Border.SubToolbar) и back-кнопка (Button.BackNav) — глобальные классы
-              (GlobalStyles): 56h, фон Bg, gutter 16 / 40 круг, hover Brush.Hover, press 0.92.  -->
-
-        <!--  Карта тарифа: грамматика Border.Card (поверхность, радиус 20, без тени), но рамка
-              ПОСТОЯННО 1.5px (§0.6 — выбор не сдвигает раскладку); selected = Brush.SelectedFill + Accent.  -->
+        <!--  ============ Карточка тарифа ============
+              Скругление 16 и рамка 1.5 ВСЕГДА (меняется только цвет) — раскрытие не сдвигает раскладку.  -->
         <Style Selector="Border.TariffCard">
             <Setter Property="Background" Value="{DynamicResource Brush.Surface}" />
-            <Setter Property="CornerRadius" Value="{StaticResource Radius.Card}" />
+            <Setter Property="CornerRadius" Value="16" />
             <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineVariant}" />
             <Setter Property="BorderThickness" Value="1.5" />
             <Setter Property="Padding" Value="0" />
             <Setter Property="ClipToBounds" Value="True" />
             <Setter Property="Transitions">
                 <Transitions>
-                    <BrushTransition Property="Background" Duration="0:0:0.15" />
-                    <BrushTransition Property="BorderBrush" Duration="0:0:0.15" />
+                    <BrushTransition Property="BorderBrush" Duration="0:0:0.24" Easing="{StaticResource Ease.OutQuart}" />
                 </Transitions>
             </Setter>
         </Style>
         <Style Selector="Border.TariffCard.selected">
-            <Setter Property="Background" Value="{DynamicResource Brush.SelectedFill}" />
             <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
         </Style>
 
-        <!--  Шапка-строка тарифа: minHeight 56, паддинг 16, hover ЗАТЕМНЯЕТ (Brush.Hover, клипается картой).  -->
+        <!--  Шапка тарифа: паддинг 16 по горизонтали, 14 по вертикали; ховер затемняет (клипается картой).  -->
         <Style Selector="Border.TariffHeader">
-            <Setter Property="MinHeight" Value="{StaticResource Size.Row}" />
-            <Setter Property="Padding" Value="16" />
+            <Setter Property="Padding" Value="16,14" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="Transitions">
                 <Transitions>
@@ -120,34 +110,92 @@
             <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
         </Style>
 
-        <!--  Галочка выбранного тарифа: место зарезервировано всегда, появление — мягкий fade.  -->
-        <Style Selector="PathIcon.check">
-            <Setter Property="Opacity" Value="0" />
+        <!--  Название тарифа 16/700 — докрашивается акцентом вместе с рамкой, за те же 240 мс.  -->
+        <Style Selector="TextBlock.TariffName">
+            <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
             <Setter Property="Transitions">
                 <Transitions>
-                    <DoubleTransition Property="Opacity" Duration="0:0:0.15" />
+                    <BrushTransition Property="Foreground" Duration="0:0:0.24" Easing="{StaticResource Ease.OutQuart}" />
                 </Transitions>
             </Setter>
         </Style>
-        <Style Selector="PathIcon.check.on">
-            <Setter Property="Opacity" Value="1" />
+        <Style Selector="Border.TariffCard.selected TextBlock.TariffName">
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
         </Style>
 
-        <!--  Опция срока/цены — глобальный Border.PriceOption (радиус 14, minHeight 48, рамка 1.5px;
-              hover ЗАТЕМНЯЕТ Brush.Hover; selected = Brush.SelectedFill + Accent). Локальная копия снята.
-              Скелет — глобальный Border.SkelCard (76/радиус 20/SurfaceVariant) + общий .SkeletonPulse
-              (гасится под lite глобальным селектором). Локальные копии сняты.  -->
+        <!--  Каретка 18: поворот на 180° за 300 мс (motion.md «Окошко у значения» — та же лестница).  -->
+        <Style Selector="PathIcon.TariffCaret">
+            <Setter Property="Width" Value="18" />
+            <Setter Property="Height" Value="18" />
+            <Setter Property="Margin" Value="10,2,0,0" />
+            <Setter Property="VerticalAlignment" Value="Top" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
+            <Setter Property="RenderTransformOrigin" Value="50%,50%" />
+            <Setter Property="RenderTransform" Value="rotate(0deg)" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.3" Easing="{StaticResource Ease.OutQuart}" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Border.TariffCard.selected PathIcon.TariffCaret">
+            <Setter Property="RenderTransform" Value="rotate(180deg)" />
+        </Style>
 
-        <!--  Один рецепт входа состояния (ошибка/пусто/успех/контент): fade 220мс ease-out-quart.
-              Заменяет андроидный cross-fade skeleton→контент без жёсткого «попа».
-              «Облегчённый режим»: под lite-окном fade НЕ аттачится (селектор :is(Window):not(.lite) не
-              совпадает) → состояние появляется мгновенно, без движения (как гасит движение весь lite).  -->
+        <!--  Строка срока: от 54, паддинг 16×9, разделитель сверху у КАЖДОЙ (первая отделяет шапку).  -->
+        <Style Selector="Border.TermRow">
+            <Setter Property="MinHeight" Value="54" />
+            <Setter Property="Padding" Value="16,9" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineVariant}" />
+            <Setter Property="BorderThickness" Value="0,1,0,0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Background" Duration="0:0:0.15" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Border.TermRow:pointerover">
+            <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
+        </Style>
+
+        <!--  Цена срока 14/700 tnum.  -->
+        <Style Selector="TextBlock.TermPrice">
+            <Setter Property="FontFamily" Value="{DynamicResource Font.Numeric}" />
+            <Setter Property="FontFeatures" Value="tnum,lnum,zero" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
+        </Style>
+
+        <!--  Кнопка оплаты: контурная акцентом, 48, радиус = ПОЛОВИНА высоты (в Avalonia радиус
+              подрезается по каждой оси, иначе широкая кнопка выходит эллипсом).  -->
+        <Style Selector="Button.PayCta">
+            <Setter Property="Height" Value="48" />
+            <Setter Property="MinHeight" Value="48" />
+            <Setter Property="BorderThickness" Value="1.5" />
+            <!--  Радиус = ПОЛОВИНА высоты (48/2): шкалы Radius.Pill* с шагом 4 на 48 нет.  -->
+            <Setter Property="CornerRadius" Value="24" />
+            <Setter Property="Padding" Value="16,0" />
+            <Setter Property="FontSize" Value="14.5" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        </Style>
+        <Style Selector="Button.PayCta /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="CornerRadius" Value="24" />
+        </Style>
+
+        <!--  Один рецепт входа состояния (ошибка/пусто/успех/контент): fade 220 мс.
+              Под lite-окном не аттачится → состояние появляется мгновенно.  -->
         <Style Selector=":is(Window):not(.lite) StackPanel.reveal[IsVisible=True]">
             <Style.Animations>
-                <Animation
-                    Duration="0:0:0.22"
-                    Easing="{StaticResource Ease.OutQuart}"
-                    FillMode="Forward">
+                <Animation Duration="0:0:0.22" Easing="{StaticResource Ease.OutQuart}" FillMode="Forward">
                     <KeyFrame Cue="0%">
                         <Setter Property="Opacity" Value="0" />
                     </KeyFrame>
@@ -158,17 +206,16 @@
             </Style.Animations>
         </Style>
 
-        <!--  Раскрытие опций выбранного тарифа: fade + мягкий подъём 6→0 (Reveal 300 OutQuint) вместо
-              жёсткого IsVisible-переключения. Под lite не аттачится (селектор не совпадает) → мгновенно.  -->
+        <!--  Раскрытие сроков: прозрачность 240 мс + подъём 6→0 (motion.md «Раскрытия»).  -->
         <Style Selector=":is(Window):not(.lite) StackPanel.optreveal[IsVisible=True]">
             <Style.Animations>
-                <Animation
-                    Duration="0:0:0.30"
-                    Easing="{StaticResource Ease.OutQuint}"
-                    FillMode="Forward">
+                <Animation Duration="0:0:0.34" Easing="{StaticResource Ease.OutQuart}" FillMode="Forward">
                     <KeyFrame Cue="0%">
                         <Setter Property="Opacity" Value="0" />
-                        <Setter Property="TranslateTransform.Y" Value="6" />
+                        <Setter Property="TranslateTransform.Y" Value="-6" />
+                    </KeyFrame>
+                    <KeyFrame Cue="70%">
+                        <Setter Property="Opacity" Value="1" />
                     </KeyFrame>
                     <KeyFrame Cue="100%">
                         <Setter Property="Opacity" Value="1" />
@@ -178,13 +225,25 @@
             </Style.Animations>
         </Style>
 
-        <!--  Шит «Способ оплаты» — глобальные Border.SheetTop (Surface, радиус 24,24,0,0, 1px верх-rim)
-              + Border.SheetHandle (36×4 SurfaceHighest, pill). Локальные копии сняты; отступ/клип шита
-              заданы на элементе Sheet в разметке.  -->
+        <!--  Появление кнопки оплаты — тем же рецептом, что раскрытие: она следствие раскрытия.  -->
+        <Style Selector=":is(Window):not(.lite) Button.PayCta[IsVisible=True]">
+            <Style.Animations>
+                <Animation Duration="0:0:0.3" Easing="{StaticResource Ease.OutQuart}" FillMode="Forward">
+                    <KeyFrame Cue="0%">
+                        <Setter Property="Opacity" Value="0" />
+                        <Setter Property="TranslateTransform.Y" Value="8" />
+                    </KeyFrame>
+                    <KeyFrame Cue="100%">
+                        <Setter Property="Opacity" Value="1" />
+                        <Setter Property="TranslateTransform.Y" Value="0" />
+                    </KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
 
-        <!--  Плоская строка способа оплаты (не карта-в-шите): minHeight 56, hover ЗАТЕМНЯЕТ (Brush.Hover).  -->
+        <!--  Плоская строка способа оплаты в шите.  -->
         <Style Selector="Border.SheetRow">
-            <Setter Property="MinHeight" Value="{StaticResource Size.Row}" />
+            <Setter Property="MinHeight" Value="56" />
             <Setter Property="Padding" Value="16,12" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="Transitions">
@@ -197,12 +256,7 @@
             <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
         </Style>
 
-        <!--  Тайл способа оплаты: синий по умолчанию; «С баланса» — намеренный зелёный дифференциатор.  -->
-        <Style Selector="Border.PayTile.balance">
-            <Setter Property="Background" Value="{DynamicResource Brush.Tile.Green}" />
-        </Style>
-
-        <!--  Оверлей шита: скрим fade + slide-up поверхности (220мс), закрытие — реверс.  -->
+        <!--  Оверлей шита: скрим fade + slide-up поверхности (220 мс), закрытие — реверс.  -->
         <Style Selector="Border#SheetScrim">
             <Setter Property="Opacity" Value="0" />
             <Setter Property="Transitions">
@@ -230,191 +284,163 @@
         </Style>
     </UserControl.Styles>
 
-    <Panel Background="{DynamicResource Brush.Bg}">
-        <DockPanel>
+    <!--  Прозрачный корень: под подэкраном непрерывный фон окна.  -->
+    <Panel Background="Transparent">
 
-            <!--  ============ Бесшовный тулбар суб-страницы (глобальный Border.SubToolbar) ============  -->
-            <Border Classes="SubToolbar" DockPanel.Dock="Top">
-                <Grid
-                    MaxWidth="560"
-                    ColumnDefinitions="Auto,*">
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+            <!--  Колонка 760 БЕЗ HorizontalAlignment="Center": у Center StackPanel сжимается по
+            содержимому, и экран с короткими строками получает колонку уже соседних. Stretch
+            с MaxWidth даёт ровно 760 и центрируется сам.  -->
+            <StackPanel
+                MaxWidth="760"
+                Margin="20,10,20,20">
+
+                <!--  ==================== Лекало: назад 40 (−8) → заголовок 22/700 → пояснение 13 ====================  -->
+                <StackPanel Orientation="Horizontal" Spacing="10">
                     <Button
                         x:Name="BtnBack"
-                        Grid.Column="0"
-                        VerticalAlignment="Center"
-                        Classes="IconButton BackNav"
+                        AutomationProperties.Name="{loc:T Common_Back}"
+                        Classes="SubBack"
                         Click="OnBackClick"
                         ToolTip.Tip="{loc:T Common_Back}">
-                        <PathIcon Data="{StaticResource Geo.Buy.Back}" />
+                        <PathIcon
+                            Width="22"
+                            Height="22"
+                            Data="{DynamicResource Geo.Sub.Back}"
+                            Foreground="{DynamicResource Brush.OnSurface}" />
                     </Button>
-                    <TextBlock
-                        Grid.Column="1"
-                        Margin="8,0,0,0"
-                        VerticalAlignment="Center"
-                        Classes="Headline"
-                        Text="{loc:T Common_BuySubscription}"
-                        TextTrimming="CharacterEllipsis" />
-                </Grid>
-            </Border>
+                    <TextBlock Classes="SubTitle" Text="{loc:T Common_BuySubscription}" />
+                </StackPanel>
+                <TextBlock
+                    Margin="0,8,0,0"
+                    Classes="SubNote"
+                    Text="{loc:T Buy_Note}" />
 
-            <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-                <StackPanel MaxWidth="560" Margin="16,8,16,24">
+                <!--  ==================== Загрузка ====================  -->
+                <StackPanel
+                    Margin="0,16,0,0"
+                    Classes="SkeletonPulse"
+                    IsVisible="{Binding ShowSkeleton}"
+                    Spacing="10">
+                    <Border Height="76" Classes="SkelCard" />
+                    <Border Height="76" Classes="SkelCard" />
+                </StackPanel>
 
-                    <!--  ============ Состояние СКЕЛЕТ: силуэт и есть сигнал загрузки ============  -->
-                    <StackPanel Classes="SkeletonPulse" IsVisible="{Binding ShowSkeleton}">
-                        <Border Margin="0,0,0,12" Classes="SkelCard" />
-                        <Border Margin="0,0,0,12" Classes="SkelCard" />
-                        <Border Classes="SkelCard" />
-                    </StackPanel>
+                <!--  ==================== Ошибка ====================  -->
+                <StackPanel Classes="reveal" IsVisible="{Binding ShowError}">
+                    <Border Margin="0,14,0,0" Classes="SubEmpty">
+                        <StackPanel VerticalAlignment="Center" Spacing="12">
+                            <Border Classes="SubEmptyTile">
+                                <PathIcon Data="{StaticResource Geo.Buy.Info}" />
+                            </Border>
+                            <TextBlock Classes="SubEmptyTitle" Text="{loc:T Buy_ErrTitle}" />
+                            <TextBlock Classes="SubEmptyText" Text="{Binding ErrorText}" />
+                            <Button
+                                Margin="0,4,0,0"
+                                HorizontalAlignment="Center"
+                                Classes="Tonal"
+                                Command="{Binding RetryCmd}"
+                                Content="{loc:T Common_Retry}" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
 
-                    <!--  ============ Состояние ОШИБКА: hero-тайл 64/радиус 20 + текст + «Повторить» ============  -->
-                    <StackPanel Classes="reveal" IsVisible="{Binding ShowError}">
-                        <Border Margin="0,32,0,0" Classes="EmptyIcon">
-                            <PathIcon Data="{StaticResource Geo.Buy.Info}" />
-                        </Border>
-                        <TextBlock
-                            Margin="0,12,0,0"
-                            Padding="16"
-                            HorizontalAlignment="Center"
-                            Classes="Body"
-                            Foreground="{DynamicResource Brush.OnSurfaceVariant}"
-                            Text="{Binding ErrorText}"
-                            TextAlignment="Center"
-                            TextWrapping="Wrap" />
-                        <Button
-                            Margin="0,4,0,8"
-                            HorizontalAlignment="Center"
-                            Classes="Tonal"
-                            Command="{Binding RetryCmd}"
-                            Content="{loc:T Common_Retry}" />
-                    </StackPanel>
+                <!--  ==================== Пусто ====================  -->
+                <StackPanel Classes="reveal" IsVisible="{Binding ShowEmpty}">
+                    <Border Margin="0,14,0,0" Classes="SubEmpty">
+                        <StackPanel VerticalAlignment="Center" Spacing="12">
+                            <Border Classes="SubEmptyTile">
+                                <PathIcon Data="{StaticResource Geo.Buy.Info}" />
+                            </Border>
+                            <TextBlock Classes="SubEmptyTitle" Text="{loc:T Buy_NoPlans}" />
+                            <TextBlock Classes="SubEmptyText" Text="{Binding EmptyText}" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
 
-                    <!--  ============ Состояние ПУСТО: hero-тайл 64/радиус 20 + текст ============  -->
-                    <StackPanel Classes="reveal" IsVisible="{Binding ShowEmpty}">
-                        <Border Margin="0,32,0,0" Classes="EmptyIcon">
-                            <PathIcon Data="{StaticResource Geo.Buy.Info}" />
-                        </Border>
-                        <TextBlock
-                            Margin="0,12,0,0"
-                            Padding="16"
-                            HorizontalAlignment="Center"
-                            Classes="Body"
-                            Foreground="{DynamicResource Brush.OnSurfaceVariant}"
-                            Text="{Binding EmptyText}"
-                            TextAlignment="Center"
-                            TextWrapping="Wrap" />
-                    </StackPanel>
+                <!--  ==================== Оплачено ====================  -->
+                <StackPanel Classes="reveal" IsVisible="{Binding ShowSuccess}">
+                    <Border Margin="0,14,0,0" Classes="SubEmpty">
+                        <StackPanel VerticalAlignment="Center" Spacing="12">
+                            <Border Classes="SubEmptyTile">
+                                <PathIcon Data="{StaticResource Geo.Buy.Check}" Foreground="{DynamicResource Brush.Accent}" />
+                            </Border>
+                            <TextBlock Classes="SubEmptyTitle" Text="{loc:T Buy_Paid}" />
+                            <TextBlock Classes="SubEmptyText" Text="{loc:T Buy_PaidSubtitle}" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
 
-                    <!--  ============ Состояние УСПЕХ: hero-тайл 64/радиус 20 + «Подписка оплачена» ============  -->
-                    <StackPanel Classes="reveal" IsVisible="{Binding ShowSuccess}">
-                        <Border Margin="0,32,0,0" Classes="EmptyIcon">
-                            <PathIcon Data="{StaticResource Geo.Buy.Check}" />
-                        </Border>
-                        <TextBlock
-                            Margin="0,12,0,0"
-                            HorizontalAlignment="Center"
-                            Classes="Title"
-                            Text="{loc:T Buy_Paid}"
-                            TextAlignment="Center" />
-                        <TextBlock
-                            Margin="0,4,0,0"
-                            HorizontalAlignment="Center"
-                            Classes="Subtitle"
-                            Foreground="{DynamicResource Brush.OnSurfaceVariant}"
-                            Text="{loc:T Buy_PaidSubtitle}"
-                            TextAlignment="Center"
-                            TextWrapping="Wrap" />
-                    </StackPanel>
+                <!--  Оплата ушла в браузер — ждём подтверждения (ре-поллинг).  -->
+                <TextBlock
+                    Margin="0,10,0,0"
+                    Classes="SubNote"
+                    Foreground="{DynamicResource Brush.Accent}"
+                    IsVisible="{Binding ShowPending}"
+                    Text="{Binding PendingText}" />
 
-                    <!--  Post-checkout hint: виден при ре-поллинге после оплаты в браузере.  -->
-                    <TextBlock
-                        Margin="0,8,0,0"
-                        Padding="12"
-                        HorizontalAlignment="Center"
-                        Classes="Body"
-                        Foreground="{DynamicResource Brush.Accent}"
-                        IsVisible="{Binding ShowPending}"
-                        Text="{Binding PendingText}"
-                        TextAlignment="Center" />
+                <!--  ==================== Тарифы ====================  -->
+                <StackPanel Classes="reveal" IsVisible="{Binding ShowContent}">
 
-                    <!--  ============ КОНТЕНТ: заголовок + тарифы + чекаут ============  -->
-                    <StackPanel Classes="reveal" IsVisible="{Binding ShowContent}">
+                    <ItemsControl
+                        x:Name="TariffList"
+                        Margin="0,16,0,0"
+                        ItemsSource="{Binding Tariffs}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vms:BuyTariffItem">
+                                <Border
+                                    Margin="0,0,0,10"
+                                    Classes="TariffCard"
+                                    Classes.selected="{Binding IsSelected}">
+                                    <StackPanel>
 
-                        <TextBlock
-                            Margin="4,0,0,8"
-                            Classes="Title"
-                            Text="{loc:T Buy_ChoosePlan}" />
+                                        <!--  Свёрнутая шапка: название · мета · каретка.  -->
+                                        <Button Classes="Flat" Command="{Binding SelectCmd}">
+                                            <Border Classes="TariffHeader">
+                                                <Grid ColumnDefinitions="*,Auto">
+                                                    <StackPanel Grid.Column="0">
+                                                        <TextBlock Classes="TariffName" Text="{Binding Name}" />
+                                                        <TextBlock
+                                                            Margin="0,5,0,0"
+                                                            Classes="SubSub"
+                                                            FontFamily="{DynamicResource Font.Numeric}"
+                                                            FontFeatures="tnum,lnum,zero"
+                                                            FontSize="12.5"
+                                                            Text="{Binding Info}" />
+                                                    </StackPanel>
+                                                    <PathIcon
+                                                        Grid.Column="1"
+                                                        Classes="TariffCaret"
+                                                        Data="{StaticResource Geo.Buy.Caret}" />
+                                                </Grid>
+                                            </Border>
+                                        </Button>
 
-                        <!--  Карты тарифов: тап по шапке выбирает; выбранная раскрывает опции срока.
-                              Стаггер входа карт (по одной, +40мс) — в code-behind при показе контента.  -->
-                        <ItemsControl x:Name="TariffList" ItemsSource="{Binding Tariffs}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="vms:BuyTariffItem">
-                                    <Border
-                                        Margin="0,0,0,12"
-                                        Classes="TariffCard"
-                                        Classes.selected="{Binding IsSelected}">
-                                        <StackPanel>
-                                            <Button Classes="Flat" Command="{Binding SelectCmd}">
-                                                <Border Classes="TariffHeader">
-                                                    <Grid VerticalAlignment="Center" ColumnDefinitions="*,Auto">
-                                                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                                            <TextBlock
-                                                                Classes="Title"
-                                                                Text="{Binding Name}"
-                                                                TextTrimming="CharacterEllipsis" />
-                                                            <TextBlock
-                                                                Margin="0,4,0,0"
-                                                                Classes="Subtitle"
-                                                                FontFamily="{DynamicResource Font.Numeric}"
-                                                                FontFeatures="tnum,lnum,zero"
-                                                                Text="{Binding Info}"
-                                                                TextTrimming="CharacterEllipsis" />
-                                                        </StackPanel>
-                                                        <PathIcon
-                                                            Grid.Column="1"
-                                                            Width="24"
-                                                            Height="24"
-                                                            Margin="8,0,0,0"
-                                                            VerticalAlignment="Center"
-                                                            Classes="check"
-                                                            Classes.on="{Binding IsSelected}"
-                                                            Data="{StaticResource Geo.Buy.Check}"
-                                                            Foreground="{DynamicResource Brush.Accent}" />
-                                                    </Grid>
-                                                </Border>
-                                            </Button>
-
-                                            <!--  Опции срока/цены: только у выбранного тарифа. Обёрнуты в
-                                                  optreveal-панель — плавное раскрытие вместо жёсткого показа.  -->
-                                            <StackPanel Classes="optreveal" IsVisible="{Binding IsSelected}">
-                                            <ItemsControl
-                                                Margin="16,0,16,16"
-                                                ItemsSource="{Binding Options}">
+                                        <!--  Раскрытые сроки: радио · срок · цена.  -->
+                                        <StackPanel Classes="optreveal" IsVisible="{Binding IsSelected}">
+                                            <ItemsControl ItemsSource="{Binding Options}">
                                                 <ItemsControl.ItemTemplate>
                                                     <DataTemplate x:DataType="vms:BuyOptionItem">
-                                                        <Button
-                                                            Margin="0,8,0,0"
-                                                            Classes="Flat"
-                                                            Command="{Binding SelectCmd}">
-                                                            <Border Classes="PriceOption" Classes.selected="{Binding IsSelected}">
-                                                                <Grid VerticalAlignment="Center" ColumnDefinitions="*,Auto">
-                                                                    <TextBlock
+                                                        <Button Classes="Flat" Command="{Binding SelectCmd}">
+                                                            <Border Classes="TermRow">
+                                                                <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
+                                                                    <Border
                                                                         Grid.Column="0"
-                                                                        VerticalAlignment="Center"
-                                                                        Classes="Body"
-                                                                        FontFamily="{DynamicResource Font.Numeric}"
-                                                                        FontFeatures="tnum,lnum,zero"
-                                                                        Text="{Binding DurationText}" />
+                                                                        Classes="SubRadio"
+                                                                        Classes.on="{Binding IsSelected}">
+                                                                        <Ellipse />
+                                                                    </Border>
                                                                     <TextBlock
                                                                         Grid.Column="1"
-                                                                        Margin="12,0,0,0"
-                                                                        VerticalAlignment="Center"
-                                                                        Classes="Body"
+                                                                        Margin="14,0,12,0"
+                                                                        Classes="SubName"
                                                                         FontFamily="{DynamicResource Font.Numeric}"
                                                                         FontFeatures="tnum,lnum,zero"
-                                                                        FontWeight="Bold"
-                                                                        Foreground="{DynamicResource Brush.Accent}"
+                                                                        VerticalAlignment="Center"
+                                                                        Text="{Binding DurationText}" />
+                                                                    <TextBlock
+                                                                        Grid.Column="2"
+                                                                        Classes="TermPrice"
                                                                         Text="{Binding PriceText}" />
                                                                 </Grid>
                                                             </Border>
@@ -422,45 +448,35 @@
                                                     </DataTemplate>
                                                 </ItemsControl.ItemTemplate>
                                             </ItemsControl>
-                                            </StackPanel>
                                         </StackPanel>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
 
-                        <!--  ============ Карта чекаута: степпер доп-устройств + итого + CTA ============  -->
-                        <Border
-                            Margin="0,8,0,0"
-                            Classes="Card"
-                            IsVisible="{Binding ShowCheckout}">
-                            <StackPanel>
+                    <!--  ============ Чекаут: докупка устройств + «Итого» ============
+                          Виден только при выбранном сроке — как и кнопка оплаты.  -->
+                    <StackPanel IsVisible="{Binding ShowCheckout}">
 
-                                <!--  Степпер доп-устройств: тайл blue 40 + подпись/стоимость + [− N +].  -->
-                                <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" IsVisible="{Binding ShowExtraDevices}">
-                                    <Border
-                                        Grid.Column="0"
-                                        VerticalAlignment="Center"
-                                        Classes="Tile Blue">
-                                        <PathIcon
-                                            Width="22"
-                                            Height="22"
-                                            HorizontalAlignment="Center"
-                                            VerticalAlignment="Center"
-                                            Data="{StaticResource Geo.Buy.Devices}"
-                                            Foreground="{DynamicResource Brush.Accent}" />
+                        <TextBlock
+                            Classes="SubGroupLabel"
+                            IsVisible="{Binding ShowExtraDevices}"
+                            Text="{loc:T Buy_AdditionalDevices}" />
+
+                        <Border Classes="SubCard" IsVisible="{Binding ShowExtraDevices}">
+                            <Border Classes="SubRow">
+                                <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" VerticalAlignment="Center">
+                                    <Border Grid.Column="0" Classes="SubTile">
+                                        <PathIcon Data="{StaticResource Geo.Buy.Devices}" />
                                     </Border>
                                     <StackPanel
                                         Grid.Column="1"
-                                        Margin="12,0,8,0"
+                                        Margin="16,0,8,0"
                                         VerticalAlignment="Center">
+                                        <TextBlock Classes="SubName" Text="{loc:T Buy_AddDevice}" />
                                         <TextBlock
-                                            Classes="Body"
-                                            Text="{loc:T Buy_AdditionalDevices}"
-                                            TextWrapping="Wrap" />
-                                        <TextBlock
-                                            Margin="0,4,0,0"
-                                            Classes="Caption"
+                                            Classes="SubSub"
                                             FontFamily="{DynamicResource Font.Numeric}"
                                             FontFeatures="tnum,lnum,zero"
                                             IsVisible="{Binding HasExtraCost}"
@@ -480,9 +496,11 @@
                                         MinWidth="28"
                                         Margin="4,0"
                                         VerticalAlignment="Center"
-                                        Classes="Title"
                                         FontFamily="{DynamicResource Font.Numeric}"
                                         FontFeatures="tnum,lnum,zero"
+                                        FontSize="15"
+                                        FontWeight="Bold"
+                                        Foreground="{DynamicResource Brush.OnSurface}"
                                         Text="{Binding ExtraCountText}"
                                         TextAlignment="Center" />
                                     <Button
@@ -495,117 +513,111 @@
                                         <PathIcon Data="{StaticResource Geo.Buy.Plus}" />
                                     </Button>
                                 </Grid>
-
-                                <Border
-                                    Height="1"
-                                    Margin="0,16,0,0"
-                                    Background="{DynamicResource Brush.OutlineVariant}"
-                                    IsVisible="{Binding ShowExtraDevices}" />
-
-                                <!--  Итого: подпись muted + сумма набрана как ДЕНЬГИ (та же грамматика, что
-                                      и hero-баланс): сумма Headline Accent (tnum) + приглушённый ₽ на шаг мельче.
-                                      Значения ставит code-behind из TotalText; сумма кроссфейдится при пересчёте.  -->
-                                <Grid Margin="0,12,0,0" ColumnDefinitions="*,Auto">
-                                    <TextBlock
-                                        Grid.Column="0"
-                                        VerticalAlignment="Center"
-                                        Classes="Body"
-                                        Foreground="{DynamicResource Brush.OnSurfaceVariant}"
-                                        Text="{loc:T Buy_Total}" />
-                                    <StackPanel
-                                        Grid.Column="1"
-                                        Orientation="Horizontal"
-                                        VerticalAlignment="Center">
-                                        <TextBlock
-                                            x:Name="TotalAmount"
-                                            Classes="Headline"
-                                            FontFamily="{DynamicResource Font.Numeric}"
-                                            FontFeatures="tnum,lnum,zero"
-                                            Foreground="{DynamicResource Brush.Accent}"
-                                            RenderTransformOrigin="50%,50%"
-                                            VerticalAlignment="Bottom" />
-                                        <TextBlock
-                                            x:Name="TotalCurrency"
-                                            Margin="4,0,0,1"
-                                            Classes="Title"
-                                            Foreground="{DynamicResource Brush.OnSurfaceVariant}"
-                                            VerticalAlignment="Bottom" />
-                                    </StackPanel>
-                                </Grid>
-
-                                <!--  Инлайн-диагностика оплаты («Ошибка оплаты», HTTP-код + деталь бэкенда).  -->
-                                <StackPanel
-                                    Margin="0,12,0,0"
-                                    IsVisible="{Binding HasPaymentNotice}"
-                                    Spacing="4">
-                                    <TextBlock
-                                        Classes="Body"
-                                        FontWeight="Bold"
-                                        Foreground="{DynamicResource Brush.Red}"
-                                        Text="{Binding PaymentNoticeTitle}"
-                                        TextWrapping="Wrap" />
-                                    <TextBlock
-                                        Classes="Subtitle"
-                                        IsVisible="{Binding HasPaymentNoticeBody}"
-                                        Text="{Binding PaymentNoticeBody}"
-                                        TextWrapping="Wrap" />
-                                </StackPanel>
-
-                                <!--  CTA «Оплатить»: Primary.Tall 52 + глиф кошелька (ic_acc_wallet).  -->
-                                <Button
-                                    Margin="0,16,0,0"
-                                    HorizontalAlignment="Stretch"
-                                    Classes="Primary Tall"
-                                    Command="{Binding PayCmd}"
-                                    IsEnabled="{Binding !IsPaying}">
-                                    <StackPanel
-                                        VerticalAlignment="Center"
-                                        Orientation="Horizontal"
-                                        Spacing="8">
-                                        <!--  Пока идёт оплата — глиф кошелька В ТОМ ЖЕ слоте заменяется
-                                              компактным спиннером-дугой (ничего вокруг не сдвигается).
-                                              Под lite дуга не крутится (селектор .spinning гасит вращение).  -->
-                                        <Panel Width="18" Height="18" VerticalAlignment="Center">
-                                            <PathIcon
-                                                Width="18"
-                                                Height="18"
-                                                HorizontalAlignment="Center"
-                                                VerticalAlignment="Center"
-                                                Data="{StaticResource Geo.Buy.Wallet}"
-                                                Foreground="{DynamicResource Brush.OnAccent}"
-                                                IsVisible="{Binding !IsPaying}" />
-                                            <Ellipse
-                                                Width="16"
-                                                Height="16"
-                                                HorizontalAlignment="Center"
-                                                VerticalAlignment="Center"
-                                                Classes="Spinner"
-                                                Classes.spinning="{Binding IsPaying}"
-                                                IsVisible="{Binding IsPaying}"
-                                                Stroke="{DynamicResource Brush.OnAccent}"
-                                                StrokeDashArray="6.3,18.8"
-                                                StrokeLineCap="Round"
-                                                StrokeThickness="2">
-                                                <Ellipse.RenderTransform>
-                                                    <RotateTransform
-                                                        Angle="0"
-                                                        CenterX="8"
-                                                        CenterY="8" />
-                                                </Ellipse.RenderTransform>
-                                            </Ellipse>
-                                        </Panel>
-                                        <TextBlock
-                                            VerticalAlignment="Center"
-                                            Foreground="{DynamicResource Brush.OnAccent}"
-                                            Text="{loc:T Buy_Pay}" />
-                                    </StackPanel>
-                                </Button>
-                            </StackPanel>
+                            </Border>
                         </Border>
+
+                        <!--  «Итого» имеет смысл, только когда сумма собирается из нескольких слагаемых
+                              (срок + докупленные устройства). Иначе её несёт сама кнопка оплаты.  -->
+                        <Grid
+                            Margin="4,14,4,0"
+                            ColumnDefinitions="*,Auto"
+                            IsVisible="{Binding ShowExtraDevices}">
+                            <TextBlock
+                                Grid.Column="0"
+                                VerticalAlignment="Center"
+                                Classes="SubName"
+                                Foreground="{DynamicResource Brush.OnSurfaceVariant}"
+                                Text="{loc:T Buy_Total}" />
+                            <StackPanel
+                                Grid.Column="1"
+                                Orientation="Horizontal"
+                                Spacing="4"
+                                VerticalAlignment="Center">
+                                <TextBlock
+                                    x:Name="TotalAmount"
+                                    FontFamily="{DynamicResource Font.Numeric}"
+                                    FontFeatures="tnum,lnum,zero"
+                                    FontSize="15"
+                                    FontWeight="Bold"
+                                    Foreground="{DynamicResource Brush.OnSurface}"
+                                    RenderTransformOrigin="50%,50%"
+                                    VerticalAlignment="Center" />
+                                <TextBlock
+                                    x:Name="TotalCurrency"
+                                    FontSize="12.5"
+                                    Foreground="{DynamicResource Brush.OnSurfaceVariant}"
+                                    VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Grid>
+
+                        <!--  Инлайн-диагностика оплаты (код и деталь бэкенда), а не «что-то пошло не так».  -->
+                        <StackPanel
+                            Margin="4,14,4,0"
+                            IsVisible="{Binding HasPaymentNotice}"
+                            Spacing="4">
+                            <TextBlock
+                                Classes="SubName"
+                                FontWeight="Bold"
+                                Foreground="{DynamicResource Brush.RedText}"
+                                Text="{Binding PaymentNoticeTitle}"
+                                TextTrimming="None"
+                                TextWrapping="Wrap" />
+                            <TextBlock
+                                Classes="SubSub"
+                                IsVisible="{Binding HasPaymentNoticeBody}"
+                                Text="{Binding PaymentNoticeBody}"
+                                TextTrimming="None"
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+
+                        <!--  CTA: «Оплатить» + сумма. Спиннер живёт у правого края и не двигает подпись.  -->
+                        <Button
+                            Margin="0,18,0,0"
+                            Classes="OutlinedAccent PayCta"
+                            Command="{Binding PayCmd}"
+                            IsEnabled="{Binding !IsPaying}">
+                            <Grid>
+                                <StackPanel
+                                    HorizontalAlignment="Center"
+                                    Orientation="Horizontal"
+                                    Spacing="6"
+                                    VerticalAlignment="Center">
+                                    <TextBlock
+                                        VerticalAlignment="Center"
+                                        Foreground="{DynamicResource Brush.Accent}"
+                                        Text="{loc:T Buy_Pay}" />
+                                    <TextBlock
+                                        FontFamily="{DynamicResource Font.Numeric}"
+                                        FontFeatures="tnum,lnum,zero"
+                                        Foreground="{DynamicResource Brush.Accent}"
+                                        Text="{Binding TotalText}"
+                                        VerticalAlignment="Center" />
+                                </StackPanel>
+                                <Ellipse
+                                    Width="16"
+                                    Height="16"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    Classes="Spinner"
+                                    Classes.spinning="{Binding IsPaying}"
+                                    IsVisible="{Binding IsPaying}"
+                                    Stroke="{DynamicResource Brush.Accent}"
+                                    StrokeDashArray="6.3,18.8"
+                                    StrokeLineCap="Round"
+                                    StrokeThickness="2">
+                                    <Ellipse.RenderTransform>
+                                        <RotateTransform
+                                            Angle="0"
+                                            CenterX="8"
+                                            CenterY="8" />
+                                    </Ellipse.RenderTransform>
+                                </Ellipse>
+                            </Grid>
+                        </Button>
                     </StackPanel>
                 </StackPanel>
-            </ScrollViewer>
-        </DockPanel>
+            </StackPanel>
+        </ScrollViewer>
 
         <!--  ============ Оверлей «Способ оплаты»: скрим + шит снизу окна ============  -->
         <Panel
@@ -613,13 +625,11 @@
             Classes.open="{Binding IsSheetOpen}"
             IsHitTestVisible="{Binding IsSheetOpen}">
 
-            <!--  Скрим: тап закрывает шит (общий токен Brush.Scrim, ~60%).  -->
             <Border
                 x:Name="SheetScrim"
                 Background="{DynamicResource Brush.Scrim}"
                 Tapped="OnScrimTapped" />
 
-            <!--  Поверхность шита: grab-handle 36×4 + заголовок + плоские строки методов.  -->
             <Border
                 x:Name="Sheet"
                 MaxWidth="560"
@@ -631,9 +641,10 @@
                     <Border Margin="0,8,0,0" Classes="SheetHandle" />
                     <TextBlock
                         Margin="16,12,16,4"
-                        Classes="Title"
+                        Classes="SubEmptyTitle"
+                        HorizontalAlignment="Left"
                         Text="{loc:T Buy_PaymentMethod}"
-                        TextTrimming="CharacterEllipsis" />
+                        TextAlignment="Left" />
 
                     <ItemsControl ItemsSource="{Binding SheetMethods}">
                         <ItemsControl.ItemTemplate>
@@ -645,12 +656,8 @@
                                         Background="{DynamicResource Brush.OutlineVariant}" />
                                     <Button Classes="Flat" Command="{Binding PickCmd}">
                                         <Border Classes="SheetRow">
-                                            <Grid VerticalAlignment="Center" ColumnDefinitions="Auto,*,Auto">
-                                                <Border
-                                                    Grid.Column="0"
-                                                    VerticalAlignment="Center"
-                                                    Classes="Tile Blue PayTile"
-                                                    Classes.balance="{Binding IsBalance}">
+                                            <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
+                                                <Border Grid.Column="0" Classes="SubTile">
                                                     <Panel>
                                                         <PathIcon
                                                             Width="22"
@@ -658,7 +665,6 @@
                                                             HorizontalAlignment="Center"
                                                             VerticalAlignment="Center"
                                                             Data="{StaticResource Geo.Buy.Wallet}"
-                                                            Foreground="{DynamicResource Brush.Green}"
                                                             IsVisible="{Binding IsBalance}" />
                                                         <PathIcon
                                                             Width="22"
@@ -666,7 +672,6 @@
                                                             HorizontalAlignment="Center"
                                                             VerticalAlignment="Center"
                                                             Data="{StaticResource Geo.Buy.Sbp}"
-                                                            Foreground="{DynamicResource Brush.Accent}"
                                                             IsVisible="{Binding IsSbp}" />
                                                         <PathIcon
                                                             Width="22"
@@ -674,27 +679,21 @@
                                                             HorizontalAlignment="Center"
                                                             VerticalAlignment="Center"
                                                             Data="{StaticResource Geo.Buy.Card}"
-                                                            Foreground="{DynamicResource Brush.Accent}"
                                                             IsVisible="{Binding IsCard}" />
                                                     </Panel>
                                                 </Border>
                                                 <TextBlock
                                                     Grid.Column="1"
-                                                    Margin="16,0,0,0"
+                                                    Margin="16,0,8,0"
                                                     VerticalAlignment="Center"
-                                                    Classes="Body"
+                                                    Classes="SubName"
                                                     FontFamily="{DynamicResource Font.Numeric}"
                                                     FontFeatures="tnum,lnum,zero"
-                                                    Text="{Binding Label}"
-                                                    TextTrimming="CharacterEllipsis" />
+                                                    Text="{Binding Label}" />
                                                 <PathIcon
                                                     Grid.Column="2"
-                                                    Width="18"
-                                                    Height="18"
-                                                    Margin="8,0,0,0"
-                                                    VerticalAlignment="Center"
-                                                    Data="{StaticResource Geo.Buy.Chevron}"
-                                                    Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+                                                    Classes="SubChevron"
+                                                    Data="{StaticResource Geo.Buy.Chevron}" />
                                             </Grid>
                                         </Border>
                                     </Button>

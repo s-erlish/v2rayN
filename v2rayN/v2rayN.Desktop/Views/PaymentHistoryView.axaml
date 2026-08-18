@@ -3,349 +3,255 @@
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:conv="clr-namespace:Avalonia.Data.Converters;assembly=Avalonia.Base"
     xmlns:loc="clr-namespace:v2rayN.Desktop.Common"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:vms="clr-namespace:v2rayN.Desktop.ViewModels"
     x:DataType="vms:PaymentHistoryViewModel"
+    d:DesignWidth="900"
+    d:DesignHeight="720"
     mc:Ignorable="d">
 
     <!--
-        Суб-экран «История платежей» (порт Android activity_payment_history.xml + item_payment.xml,
-        PaymentHistoryActivity.kt / PaymentsAdapter.kt). Бесшовный тулбар (шеврон «назад» + Headline),
-        ниже ровно ОДНО из четырёх состояний: скелет (3 пульсирующих силуэта карточек) / список /
-        пусто (hero-иконка + «Платежей пока нет» + CTA «Купить подписку») / ошибка (текст + «Повторить»).
+        Подэкран «История платежей» (screens.md «История платежей · Все ваши операции»).
 
-        Карточка платежа: синий тайл 40 с глифом истории 22 · описание Body + дата Caption ·
-        справа сумма Body/Bold tnum + статус-чип. Цвет чипа НЕСЁТ статус (текст = полный цвет,
-        фон = тот же цвет @18%), не только форма. Incy: pure dark, один синий акцент, радиусы
-        chip 12 / card 20, сетка отступов 4/8/12/16/24, gutter 16, без теней и ripple.
+        ЕДИНОЕ ЛЕКАЛО подэкранов (Assets/SubScreenStyles.axaml): кнопка назад 40 со смещением −8 →
+        заголовок 22/700 → пояснение 13 → карточка 16 со строками 56. Строка: плитка 40 с глифом
+        истории 22 · название · подпись «09.08.2026 · Оплачено» · справа сумма.
 
-        DATA-DRIVEN: строки приходят из GET /client/payments через PaymentHistoryViewModel
-        (кэш-first, потом сеть); все строки уже отформатированы во вьюмодели. Русский, sentence-case.
+        Что изменилось против прежней версии и ПОЧЕМУ: был бесшовный тулбар с Headline и колонка 560
+        со своей карточной геометрией — два разных лекала на один и тот же тип экрана. Теперь
+        подэкран собран тем же лекалом, что «Устройства», «Купить подписку» и одиннадцать подэкранов
+        настроек, и колонка равна эталонной (760 всего, контент 720). Статус-чипы сняты: на эталонных
+        кадрах статус — часть подписи, а не цветная плашка; цвет остался ТОЛЬКО у неуспеха, где он
+        несёт смысл, а не украшает.
+
+        Фон НЕ задан: подэкран прозрачный, под ним непрерывный фон окна (шелл погашен хостом).
+        DATA-DRIVEN: строки из GET /client/payments через PaymentHistoryViewModel.
     -->
 
     <UserControl.Resources>
-        <!--  Глиф истории (порт Android drawable/ic_acc_history, Material history 24dp).  -->
+        <!--  Глиф истории (Material history 24dp; порт Android drawable/ic_acc_history).  -->
         <StreamGeometry x:Key="Geo.Pay.History">M13,3c-4.97,0 -9,4.03 -9,9H1l3.89,3.89 0.07,0.14L9,12H6c0,-3.87 3.13,-7 7,-7s7,3.13 7,7 -3.13,7 -7,7c-1.93,0 -3.68,-0.79 -4.94,-2.06l-1.42,1.42C8.27,19.99 10.51,21 13,21c4.97,0 9,-4.03 9,-9s-4.03,-9 -9,-9zM12,8v5l4.28,2.54 0.72,-1.21 -3.5,-2.08V8H12z</StreamGeometry>
     </UserControl.Resources>
 
-    <!--  Тулбар (Border.SubToolbar + Button.BackNav), статус-чипы (Border.StatusChip +
-          варианты) и скелет (Border.SkelBar + пульс .SkeletonPulse) — всё из GlobalStyles.
-          Локальные копии удалены: чипы больше не держат #2E-литералы, а пульс скелета теперь
-          :not(.lite)-gated (не анимируется в Облегчённом режиме).  -->
+    <UserControl.Styles>
+        <StyleInclude Source="avares://departament/Assets/SubScreenStyles.axaml" />
 
-    <DockPanel Background="{DynamicResource Brush.Bg}">
+        <!--  Разделитель рисуется НАД каждой строкой, у первой он гасится: у PaymentRow нет флага
+              «я не первая», а ItemsControl индекс знает сам. Иначе над первой строкой легла бы
+              вторая линия поверх границы карточки.  -->
+        <Style Selector="ItemsControl.SubRows ContentPresenter:nth-child(1) Border.SubDivider">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
 
-        <!--  Бесшовный тулбар суб-экрана: шеврон «назад» + Headline, фон окна, без границы и тени.
-              Колонка выровнена с контентом (MaxWidth 560, gutter 16).  -->
-        <Border DockPanel.Dock="Top" Classes="SubToolbar">
-            <Grid MaxWidth="560" ColumnDefinitions="Auto,*">
+        <!--  Неуспех подсвечен цветом «плохо»: «Ошибка» и «Отменён» серым читались бы как «всё в
+              порядке». Успех и обработка остаются приглушёнными — ровно как на эталонных кадрах.  -->
+        <Style Selector="TextBlock.SubSub.bad">
+            <Setter Property="Foreground" Value="{DynamicResource Brush.RedText}" />
+        </Style>
+    </UserControl.Styles>
+
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <!--  Колонка 760 БЕЗ HorizontalAlignment="Center": у Center StackPanel сжимается по
+        содержимому, и экран с короткими строками получает колонку уже соседних. Stretch
+        с MaxWidth даёт ровно 760 и центрируется сам.  -->
+        <StackPanel
+            MaxWidth="760"
+            Margin="20,10,20,20">
+
+            <!--  ==================== Лекало: назад 40 (−8) → заголовок 22/700 → пояснение 13 ====================  -->
+            <StackPanel Orientation="Horizontal" Spacing="10">
                 <Button
-                    Grid.Column="0"
                     AutomationProperties.Name="{loc:T Common_Back}"
-                    Classes="BackNav"
+                    Classes="SubBack"
                     Click="OnBackClick"
                     ToolTip.Tip="{loc:T Common_Back}">
-                    <PathIcon Data="{StaticResource Geo.ArrowBack}" />
+                    <PathIcon
+                        Width="22"
+                        Height="22"
+                        Data="{DynamicResource Geo.Sub.Back}"
+                        Foreground="{DynamicResource Brush.OnSurface}" />
                 </Button>
-                <TextBlock
-                    Grid.Column="1"
-                    Margin="12,0,0,0"
-                    VerticalAlignment="Center"
-                    Classes="Headline"
-                    Text="{loc:T Common_PaymentHistory}"
-                    TextTrimming="CharacterEllipsis" />
-            </Grid>
-        </Border>
+                <TextBlock Classes="SubTitle" Text="{loc:T Common_PaymentHistory}" />
+            </StackPanel>
+            <TextBlock
+                Margin="0,8,0,0"
+                Classes="SubNote"
+                Text="{loc:T Account_HistorySubtitle}" />
 
-        <!--  Четыре взаимоисключающих состояния (PaymentHistoryViewModel.Recompute).  -->
-        <Panel>
-
-            <!--  СПИСОК: колонка карточек платежей (RecyclerView rv_payments 1:1).  -->
-            <ScrollViewer
-                HorizontalScrollBarVisibility="Disabled"
-                IsVisible="{Binding ShowList}"
-                VerticalScrollBarVisibility="Auto">
-                <ItemsControl
-                    MaxWidth="560"
-                    Margin="16,12,16,24"
-                    ItemsSource="{Binding Payments}">
+            <!--  ==================== Список ====================  -->
+            <Border
+                Margin="0,14,0,0"
+                Classes="SubCard"
+                IsVisible="{Binding ShowList}">
+                <ItemsControl Classes="SubRows" ItemsSource="{Binding Payments}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vms:PaymentRow">
-                            <!--  Карточка платежа (item_payment): некликабельная строка-факт.  -->
-                            <Border Classes="Card" Margin="0,0,0,12">
-                                <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
+                            <StackPanel>
+                                <!--  Разделитель на всю ширину карточки перед каждой строкой кроме первой.  -->
+                                <Border Classes="SubDivider" />
 
-                                    <Border
-                                        Grid.Column="0"
-                                        Classes="Tile Blue"
-                                        VerticalAlignment="Center">
-                                        <PathIcon
-                                            Width="22"
-                                            Height="22"
-                                            HorizontalAlignment="Center"
-                                            VerticalAlignment="Center"
-                                            Data="{StaticResource Geo.Pay.History}"
-                                            Foreground="{DynamicResource Brush.Accent}" />
-                                    </Border>
-
-                                    <!--  Описание + дата (tv_payment_desc / tv_payment_date).  -->
-                                    <StackPanel
-                                        Grid.Column="1"
-                                        Margin="12,0,0,0"
-                                        VerticalAlignment="Center">
-                                        <TextBlock
-                                            Classes="Body"
-                                            Text="{Binding Description}"
-                                            TextTrimming="CharacterEllipsis" />
-                                        <TextBlock
-                                            Margin="0,4,0,0"
-                                            Classes="Caption"
-                                            FontFamily="{DynamicResource Font.Numeric}"
-                                            FontFeatures="tnum,lnum,zero"
-                                            IsVisible="{Binding HasDate}"
-                                            Text="{Binding Date}" />
-                                    </StackPanel>
-
-                                    <!--  Сумма + статус-чип, выровнены по правому краю на одной вертикали (§0.5).  -->
-                                    <StackPanel
-                                        Grid.Column="2"
-                                        Margin="8,0,0,0"
-                                        VerticalAlignment="Center">
-                                        <TextBlock
-                                            HorizontalAlignment="Right"
-                                            Classes="Body Numeric"
-                                            FontFamily="{DynamicResource Font.Numeric}"
-                                            FontFeatures="tnum,lnum,zero"
-                                            FontWeight="Bold"
-                                            Text="{Binding Amount}" />
-                                        <Border
-                                            Margin="0,4,0,0"
-                                            HorizontalAlignment="Right"
-                                            Classes="StatusChip"
-                                            Classes.canceled="{Binding IsCanceled}"
-                                            Classes.failed="{Binding IsFailed}"
-                                            Classes.paid="{Binding IsPaid}"
-                                            Classes.pending="{Binding IsPending}"
-                                            IsVisible="{Binding HasStatus}">
-                                            <TextBlock Classes="Chip" Text="{Binding StatusLabel}" />
+                                <Border Classes="SubRow">
+                                    <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
+                                        <Border Grid.Column="0" Classes="SubTile">
+                                            <PathIcon Data="{StaticResource Geo.Pay.History}" />
                                         </Border>
-                                    </StackPanel>
-                                </Grid>
-                            </Border>
+
+                                        <StackPanel
+                                            Grid.Column="1"
+                                            Margin="16,0,12,0"
+                                            VerticalAlignment="Center">
+                                            <TextBlock Classes="SubName" Text="{Binding Description}" />
+                                            <!--  Подпись «дата · статус» одной строкой: разделитель живёт
+                                                  вместе со статусом, поэтому без статуса не остаётся висячей точки.  -->
+                                            <!--  Grid, а не StackPanel: звёздная колонка ограничена по
+                                                  ширине, поэтому длинный статус обрезается, а не наезжает
+                                                  на сумму.  -->
+                                            <Grid ColumnDefinitions="Auto,*">
+                                                <TextBlock
+                                                    Grid.Column="0"
+                                                    Classes="SubSub"
+                                                    FontFamily="{DynamicResource Font.Numeric}"
+                                                    FontFeatures="tnum,lnum,zero"
+                                                    IsVisible="{Binding HasDate}"
+                                                    Text="{Binding Date}" />
+                                                <!--  Разделитель ВНУТРИ статуса: без даты не остаётся
+                                                      висячей точки, при нехватке места уходит вместе с ним.  -->
+                                                <TextBlock
+                                                    Grid.Column="1"
+                                                    Margin="4,0,0,0"
+                                                    Classes="SubSub"
+                                                    Classes.bad="{Binding IsFailed}"
+                                                    Text="{Binding StatusLabel, StringFormat='· {0}'}">
+                                                    <TextBlock.IsVisible>
+                                                        <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
+                                                            <Binding Path="HasDate" />
+                                                            <Binding Path="HasStatus" />
+                                                        </MultiBinding>
+                                                    </TextBlock.IsVisible>
+                                                </TextBlock>
+                                                <TextBlock
+                                                    Grid.Column="1"
+                                                    Classes="SubSub"
+                                                    Classes.bad="{Binding IsFailed}"
+                                                    Text="{Binding StatusLabel}">
+                                                    <TextBlock.IsVisible>
+                                                        <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
+                                                            <Binding Path="!HasDate" />
+                                                            <Binding Path="HasStatus" />
+                                                        </MultiBinding>
+                                                    </TextBlock.IsVisible>
+                                                </TextBlock>
+                                            </Grid>
+                                        </StackPanel>
+
+                                        <TextBlock
+                                            Grid.Column="2"
+                                            Classes="SubValue strong"
+                                            FontFamily="{DynamicResource Font.Numeric}"
+                                            FontFeatures="tnum,lnum,zero"
+                                            Text="{Binding Amount}" />
+                                    </Grid>
+                                </Border>
+                            </StackPanel>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
-            </ScrollViewer>
+            </Border>
 
-            <!--  ЗАГРУЗКА: 3 пульсирующих силуэта карточки платежа (та же геометрия, что у строки,
-                  чтобы смена скелет → список не прыгала).  -->
-            <StackPanel
-                MaxWidth="560"
-                Margin="16,12,16,24"
-                VerticalAlignment="Top"
+            <!--  ==================== Загрузка: те же строки силуэтом ====================  -->
+            <Border
+                Margin="0,14,0,0"
+                Classes="SubCard SkeletonPulse"
                 IsVisible="{Binding ShowLoading}">
+                <StackPanel>
+                    <Border Classes="SubRow">
+                        <Grid ColumnDefinitions="Auto,*" VerticalAlignment="Center">
+                            <Border Grid.Column="0" Classes="SubTile" />
+                            <StackPanel Grid.Column="1" Margin="16,0,0,0" VerticalAlignment="Center">
+                                <Border Width="170" HorizontalAlignment="Left" Classes="SkelBar" />
+                                <Border
+                                    Width="120"
+                                    Height="12"
+                                    Margin="0,8,0,0"
+                                    HorizontalAlignment="Left"
+                                    Classes="SkelBar" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                    <Border Classes="SubDivider" />
+                    <Border Classes="SubRow">
+                        <Grid ColumnDefinitions="Auto,*" VerticalAlignment="Center">
+                            <Border Grid.Column="0" Classes="SubTile" />
+                            <StackPanel Grid.Column="1" Margin="16,0,0,0" VerticalAlignment="Center">
+                                <Border Width="140" HorizontalAlignment="Left" Classes="SkelBar" />
+                                <Border
+                                    Width="150"
+                                    Height="12"
+                                    Margin="0,8,0,0"
+                                    HorizontalAlignment="Left"
+                                    Classes="SkelBar" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                    <Border Classes="SubDivider" />
+                    <Border Classes="SubRow">
+                        <Grid ColumnDefinitions="Auto,*" VerticalAlignment="Center">
+                            <Border Grid.Column="0" Classes="SubTile" />
+                            <StackPanel Grid.Column="1" Margin="16,0,0,0" VerticalAlignment="Center">
+                                <Border Width="190" HorizontalAlignment="Left" Classes="SkelBar" />
+                                <Border
+                                    Width="130"
+                                    Height="12"
+                                    Margin="0,8,0,0"
+                                    HorizontalAlignment="Left"
+                                    Classes="SkelBar" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </StackPanel>
+            </Border>
 
-                <Border Classes="Card SkeletonPulse" Margin="0,0,0,12">
-                    <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
-                        <Border
-                            Grid.Column="0"
-                            Width="40"
-                            Height="40"
-                            Background="{DynamicResource Brush.SurfaceHighest}"
-                            CornerRadius="{StaticResource Radius.Tile}" />
-                        <StackPanel
-                            Grid.Column="1"
-                            Margin="12,0,0,0"
-                            VerticalAlignment="Center">
-                            <Border
-                                Classes="SkelBar"
-                                Width="160"
-                                HorizontalAlignment="Left" />
-                            <Border
-                                Classes="SkelBar"
-                                Width="88"
-                                Height="12"
-                                Margin="0,4,0,0"
-                                HorizontalAlignment="Left" />
-                        </StackPanel>
-                        <StackPanel
-                            Grid.Column="2"
-                            Margin="8,0,0,0"
-                            VerticalAlignment="Center">
-                            <Border
-                                Classes="SkelBar"
-                                Width="56"
-                                HorizontalAlignment="Right" />
-                            <Border
-                                Width="64"
-                                Height="18"
-                                Margin="0,4,0,0"
-                                HorizontalAlignment="Right"
-                                Background="{DynamicResource Brush.SurfaceHighest}"
-                                CornerRadius="{StaticResource Radius.Chip}" />
-                        </StackPanel>
-                    </Grid>
-                </Border>
-
-                <Border Classes="Card SkeletonPulse" Margin="0,0,0,12">
-                    <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
-                        <Border
-                            Grid.Column="0"
-                            Width="40"
-                            Height="40"
-                            Background="{DynamicResource Brush.SurfaceHighest}"
-                            CornerRadius="{StaticResource Radius.Tile}" />
-                        <StackPanel
-                            Grid.Column="1"
-                            Margin="12,0,0,0"
-                            VerticalAlignment="Center">
-                            <Border
-                                Classes="SkelBar"
-                                Width="128"
-                                HorizontalAlignment="Left" />
-                            <Border
-                                Classes="SkelBar"
-                                Width="88"
-                                Height="12"
-                                Margin="0,4,0,0"
-                                HorizontalAlignment="Left" />
-                        </StackPanel>
-                        <StackPanel
-                            Grid.Column="2"
-                            Margin="8,0,0,0"
-                            VerticalAlignment="Center">
-                            <Border
-                                Classes="SkelBar"
-                                Width="56"
-                                HorizontalAlignment="Right" />
-                            <Border
-                                Width="64"
-                                Height="18"
-                                Margin="0,4,0,0"
-                                HorizontalAlignment="Right"
-                                Background="{DynamicResource Brush.SurfaceHighest}"
-                                CornerRadius="{StaticResource Radius.Chip}" />
-                        </StackPanel>
-                    </Grid>
-                </Border>
-
-                <Border Classes="Card SkeletonPulse" Margin="0,0,0,12">
-                    <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
-                        <Border
-                            Grid.Column="0"
-                            Width="40"
-                            Height="40"
-                            Background="{DynamicResource Brush.SurfaceHighest}"
-                            CornerRadius="{StaticResource Radius.Tile}" />
-                        <StackPanel
-                            Grid.Column="1"
-                            Margin="12,0,0,0"
-                            VerticalAlignment="Center">
-                            <Border
-                                Classes="SkelBar"
-                                Width="144"
-                                HorizontalAlignment="Left" />
-                            <Border
-                                Classes="SkelBar"
-                                Width="88"
-                                Height="12"
-                                Margin="0,4,0,0"
-                                HorizontalAlignment="Left" />
-                        </StackPanel>
-                        <StackPanel
-                            Grid.Column="2"
-                            Margin="8,0,0,0"
-                            VerticalAlignment="Center">
-                            <Border
-                                Classes="SkelBar"
-                                Width="56"
-                                HorizontalAlignment="Right" />
-                            <Border
-                                Width="64"
-                                Height="18"
-                                Margin="0,4,0,0"
-                                HorizontalAlignment="Right"
-                                Background="{DynamicResource Brush.SurfaceHighest}"
-                                CornerRadius="{StaticResource Radius.Chip}" />
-                        </StackPanel>
-                    </Grid>
-                </Border>
-            </StackPanel>
-
-            <!--  ПУСТО (ll_empty_state): hero-иконка 64/32 (§0.4) + «Платежей пока нет» +
-                  wire-ready CTA «Купить подписку» → событие BuyRequested.  -->
-            <StackPanel
-                Margin="24,0"
-                HorizontalAlignment="Center"
-                VerticalAlignment="Center"
+            <!--  ==================== Пусто ====================  -->
+            <Border
+                Margin="0,14,0,0"
+                Classes="SubEmpty"
                 IsVisible="{Binding ShowEmpty}">
-                <Border
-                    Width="64"
-                    Height="64"
-                    HorizontalAlignment="Center"
-                    Background="{DynamicResource Brush.Tile.Blue}"
-                    CornerRadius="20">
-                    <PathIcon
-                        Width="32"
-                        Height="32"
+                <StackPanel VerticalAlignment="Center" Spacing="12">
+                    <Border Classes="SubEmptyTile">
+                        <PathIcon Data="{StaticResource Geo.Pay.History}" />
+                    </Border>
+                    <TextBlock Classes="SubEmptyTitle" Text="{loc:T History_Empty}" />
+                    <TextBlock Classes="SubEmptyText" Text="{loc:T History_EmptyHint}" />
+                    <Button
+                        Margin="0,4,0,0"
                         HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        Data="{StaticResource Geo.Pay.History}"
-                        Foreground="{DynamicResource Brush.Accent}" />
-                </Border>
-                <TextBlock
-                    Margin="0,12,0,0"
-                    HorizontalAlignment="Center"
-                    Classes="Body"
-                    Foreground="{DynamicResource Brush.OnSurfaceVariant}"
-                    Text="{loc:T History_Empty}"
-                    TextAlignment="Center" />
-                <Button
-                    Margin="0,16,0,0"
-                    HorizontalAlignment="Center"
-                    Classes="Primary"
-                    Click="OnBuyClick"
-                    Content="{loc:T Common_BuySubscription}" />
-            </StackPanel>
+                        Classes="Tonal"
+                        Click="OnBuyClick"
+                        Content="{loc:T Common_BuySubscription}" />
+                </StackPanel>
+            </Border>
 
-            <!--  ОШИБКА: тот же силуэт, но нейтральный тайл + причина + «Повторить» (retry).
-                  CTA покупки здесь нет — это ошибка, а не «платежей ещё нет» (PaymentHistoryActivity).  -->
-            <StackPanel
-                Margin="24,0"
-                HorizontalAlignment="Center"
-                VerticalAlignment="Center"
+            <!--  ==================== Ошибка: причина и «Повторить» ====================  -->
+            <Border
+                Margin="0,14,0,0"
+                Classes="SubEmpty"
                 IsVisible="{Binding ShowError}">
-                <Border
-                    Width="64"
-                    Height="64"
-                    HorizontalAlignment="Center"
-                    Background="{DynamicResource Brush.Tile.Neutral}"
-                    CornerRadius="20">
-                    <PathIcon
-                        Width="32"
-                        Height="32"
+                <StackPanel VerticalAlignment="Center" Spacing="12">
+                    <Border Classes="SubEmptyTile">
+                        <PathIcon Data="{StaticResource Geo.Pay.History}" />
+                    </Border>
+                    <TextBlock Classes="SubEmptyTitle" Text="{loc:T History_ErrLoad}" />
+                    <TextBlock Classes="SubEmptyText" Text="{Binding ErrorText}" />
+                    <Button
+                        Margin="0,4,0,0"
                         HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        Data="{StaticResource Geo.Pay.History}"
-                        Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
-                </Border>
-                <TextBlock
-                    MaxWidth="360"
-                    Margin="0,12,0,0"
-                    HorizontalAlignment="Center"
-                    Classes="Body"
-                    Foreground="{DynamicResource Brush.OnSurfaceVariant}"
-                    Text="{Binding ErrorText}"
-                    TextAlignment="Center"
-                    TextWrapping="Wrap" />
-                <Button
-                    Margin="0,16,0,0"
-                    HorizontalAlignment="Center"
-                    Classes="Tonal"
-                    Command="{Binding LoadCmd}"
-                    Content="{loc:T Common_Retry}" />
-            </StackPanel>
-        </Panel>
-    </DockPanel>
+                        Classes="Tonal"
+                        Command="{Binding LoadCmd}"
+                        Content="{loc:T Common_Retry}" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
 </UserControl>
