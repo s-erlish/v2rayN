@@ -61,17 +61,31 @@
         <Style Selector="Border.rowHairline">
             <Setter Property="Height" Value="1" />
             <Setter Property="VerticalAlignment" Value="Top" />
-            <!--  Отрицательный верхний отступ = вертикальный паддинг строки (8): линия садится на
+            <!--  Отрицательный верхний отступ = ВЕРХНИЙ паддинг строки (12): линия садится на
                   ВЕРХНЮЮ кромку паддинг-бокса, сразу под рамкой, а не на верх содержимого. По
                   ширине линия совпадает с паддинг-боксом (эталон: строка 88…504 → линия 102…490),
                   поэтому боковой отступ здесь НУЛЕВОЙ. Раньше тут стояло «12,0», но элемент задавал
                   свой Margin локально, и сеттер молча проигрывал — два числа, из которых работало
                   одно. Теперь геометрия линии живёт ровно здесь.  -->
-            <Setter Property="Margin" Value="0,-8,0,0" />
+            <Setter Property="Margin" Value="0,-12,0,0" />
             <Setter Property="IsHitTestVisible" Value="False" />
             <Setter Property="Background" Value="{DynamicResource Brush.OutlineVariant}" />
         </Style>
         <!--  У первой строки группы и у выбранной линии нет — гасим прозрачностью, НЕ видимостью.  -->
+        <!--  Отступы строки живут В СТИЛЕ, а не на элементе: локальное значение в Avalonia бьёт
+              стилевой сеттер, и правило для выделенной строки ниже молча не срабатывало бы.  -->
+        <Style Selector="Border.ServerRow">
+            <Setter Property="Padding" Value="12,12,12,2" />
+        </Style>
+        <!--  У ВЫДЕЛЕННОЙ строки отсчёт другой. Обычная строка читается между ЛИНИЯМИ, и её
+              отступы (12 сверху / 2 снизу) выверены так, чтобы текст встал по центру этой полосы:
+              замер даёт 15 и 15. Но у выделенной своей линии нет — её рамка обводит БОКС строки, а
+              бокс и полоса не совпадают: полоса уходит ниже бокса примерно на 7. С теми же 12/2
+              текст оказывался в рамке на 7 выше середины. Поэтому у выделенной отступы свои,
+              симметричные: она читается по рамке — и читается ровно.  -->
+        <Style Selector="Border.ServerRow.selected">
+            <Setter Property="Padding" Value="12,7" />
+        </Style>
         <Style Selector="Border.ServerRow.selected Border.rowHairline">
             <Setter Property="Opacity" Value="0" />
         </Style>
@@ -184,7 +198,6 @@
                                             <Border
                                                 MinHeight="54"
                                                 Margin="0,2,0,0"
-                                                Padding="12,8,12,6"
                                                 Classes="ServerRow"
                                                 Classes.selected="{Binding IsActive}"
                                                 ContextRequested="OnRowContextRequested"

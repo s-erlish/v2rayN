@@ -123,8 +123,10 @@
                 </Transitions>
             </Setter>
         </Style>
+        <!--  Без подсветки на наведении: в чёрно-белой теме этот тон почти белый, и карточки
+              «белели». Правило по всему приложению одно — отклик только на нажатии.  -->
         <Style Selector="Border.TariffHeader:pointerover">
-            <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
+            <Setter Property="Background" Value="Transparent" />
         </Style>
 
         <!--  Название тарифа 16/700 — докрашивается акцентом вместе с рамкой, за те же 240 мс.
@@ -252,8 +254,10 @@
                 </Transitions>
             </Setter>
         </Style>
+        <!--  Без подсветки на наведении: в чёрно-белой теме этот тон почти белый, и карточки
+              «белели». Правило по всему приложению одно — отклик только на нажатии.  -->
         <Style Selector="Border.TermRow:pointerover">
-            <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
+            <Setter Property="Background" Value="Transparent" />
         </Style>
 
         <!--  Цена срока 14/700 tnum.  -->
@@ -345,8 +349,10 @@
                 </Transitions>
             </Setter>
         </Style>
+        <!--  Без подсветки на наведении: в чёрно-белой теме этот тон почти белый, и карточки
+              «белели». Правило по всему приложению одно — отклик только на нажатии.  -->
         <Style Selector="Border.SheetRow:pointerover">
-            <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
+            <Setter Property="Background" Value="Transparent" />
         </Style>
 
         <!--  Оверлей шита: скрим fade + slide-up поверхности (220 мс), закрытие — реверс.  -->
@@ -500,7 +506,10 @@
                                         <Button Classes="Flat" Command="{Binding SelectCmd}">
                                             <Border Classes="TariffHeader">
                                                 <Grid ColumnDefinitions="*,Auto,Auto">
-                                                    <StackPanel Grid.Column="0">
+                                                    <!--  Левый блок центруется, как и правый (цена):
+                                                          без этого имя тарифа с подписью прижимались к
+                                                          верху и читались выше цены — «текст съехал».  -->
+                                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
                                                         <StackPanel Orientation="Horizontal" Spacing="9">
                                                             <TextBlock Classes="TariffName" Text="{Binding Name}" />
                                                             <Border Classes="TariffBadge">
