@@ -16,12 +16,24 @@
     </UserControl.Styles>
 
     <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <!--  Колонка подэкрана: карточки 720 + поля по 20 = внешний габарит 760, как в прототипе
+              (`max-width:760;padding:0 20px`). В Avalonia Margin лежит СНАРУЖИ MaxWidth, поэтому
+              ту же геометрию даёт 720 + поля 20 — ровно как в колонке вкладки настроек, чтобы
+              карточки не меняли ширину при входе в подэкран.
+              Выравнивание Stretch, а НЕ Center — см. SubScreenStyles.axaml, «Ширина колонки»:
+              Center отдаёт панели её желаемую ширину, и карточка съёживается по самой длинной
+              строке, у каждого экрана до своей.  -->
         <StackPanel
-            MaxWidth="760"
+            MaxWidth="720"
             Margin="20,10,20,20"
-            HorizontalAlignment="Center">
+            HorizontalAlignment="Stretch">
 
-            <StackPanel Orientation="Horizontal" Spacing="10">
+            <!--  Отступ 2 сверху — из прототипа (`padding:2px 0 0` у строки заголовка поверх
+                  `padding:10px 0 20px` у самой прокрутки). Без него шапка садится на 2 выше эталона.  -->
+            <StackPanel
+                Margin="0,2,0,0"
+                Orientation="Horizontal"
+                Spacing="10">
                 <Button
                     x:Name="btnBack"
                     Classes="SubBack"
@@ -43,7 +55,10 @@
                   Адрес показан значением, а не полем: 127.0.0.1 — это не настройка, вход всегда
                   слушает петлю. Поле, которое нельзя изменить, обещало бы обратное.  -->
             <TextBlock Classes="SubGroupLabel" Text="{loc:T LocalProxy_Params}" />
-            <Border Classes="SubCard">
+            <!--  14 сверху — только у ПЕРВОЙ карточки экрана (в прототипе `mt:'14px'` по умолчанию,
+                  а каждая следующая группа передаёт `mt:'0px'`): после шапки нужен вдох, между
+                  соседними группами — нет. Без него первая карточка встаёт на 14 выше эталона.  -->
+            <Border Margin="0,14,0,0" Classes="SubCard">
                 <StackPanel>
                     <Border Classes="SubRow">
                         <Grid ColumnDefinitions="Auto,*,Auto">
@@ -52,13 +67,17 @@
                             </Border>
                             <TextBlock
                                 Grid.Column="1"
-                                Margin="16,0,12,0"
+                                Margin="16,0,8,0"
                                 VerticalAlignment="Center"
                                 Classes="SubName"
                                 Text="{loc:T LocalProxy_Address}" />
+                            <!--  Значение приглушённое и полужирное (в прототипе `valueFg:fg2`,
+                                  `valW:'500'`): цвет отдаёт первенство названию строки, вес держит
+                                  цифры читаемыми. Класс `strong` не годится — он ещё и перекрашивает.  -->
                             <TextBlock
                                 Grid.Column="2"
-                                Classes="SubValue strong"
+                                Classes="SubValue"
+                                FontWeight="Medium"
                                 Text="127.0.0.1" />
                         </Grid>
                     </Border>
@@ -71,14 +90,20 @@
                             </Border>
                             <TextBlock
                                 Grid.Column="1"
-                                Margin="16,0,12,0"
+                                Margin="16,0,8,0"
                                 VerticalAlignment="Center"
                                 Classes="SubName"
                                 Text="{loc:T LocalProxy_PortSocks}" />
+                            <!--  Цвет и вес — как у соседних значений (12.5/400, приглушённый): в прототипе
+                                  порт выглядит ЗНАЧЕНИЕМ, а не полем ввода. Что его можно править, говорит
+                                  отклик — шаг фона под курсором и акцентная рамка на фокусе, а не постоянно
+                                  подсвеченный текст. Общее лекало (TextBox.SubField) не трогаем: там поле
+                                  задано ярким для экранов, где оно и правда форма.  -->
                             <TextBox
                                 x:Name="txtPortSocks"
                                 Grid.Column="2"
                                 Classes="SubField"
+                                Foreground="{DynamicResource Brush.OnSurfaceVariant}"
                                 MaxLength="5" />
                         </Grid>
                     </Border>
@@ -91,7 +116,7 @@
                             </Border>
                             <StackPanel
                                 Grid.Column="1"
-                                Margin="16,0,12,0"
+                                Margin="16,0,8,0"
                                 VerticalAlignment="Center">
                                 <TextBlock Classes="SubName" Text="{loc:T LocalProxy_PortHttp}" />
                                 <TextBlock
@@ -103,12 +128,12 @@
                             <TextBlock
                                 x:Name="txtPortHttp"
                                 Grid.Column="2"
-                                Classes="SubValue strong" />
+                                Classes="SubValue"
+                                FontWeight="Medium" />
                         </Grid>
                     </Border>
                 </StackPanel>
             </Border>
-            <TextBlock x:Name="txtPortFoot" Classes="SubFoot" />
 
             <!--  ==================== Доступ ====================  -->
             <TextBlock Classes="SubGroupLabel" Text="{loc:T LocalProxy_Access}" />
@@ -121,7 +146,7 @@
                             </Border>
                             <StackPanel
                                 Grid.Column="1"
-                                Margin="16,0,12,0"
+                                Margin="16,0,8,0"
                                 VerticalAlignment="Center">
                                 <TextBlock Classes="SubName" Text="{loc:T Settings_Socks5Auth}" />
                                 <TextBlock
@@ -146,7 +171,7 @@
                                 <Border Grid.Column="0" Classes="SubTile" Opacity="0" />
                                 <TextBlock
                                     Grid.Column="1"
-                                    Margin="16,0,12,0"
+                                    Margin="16,0,8,0"
                                     VerticalAlignment="Center"
                                     Classes="SubName"
                                     Text="{loc:T LocalProxy_Login}" />
@@ -163,7 +188,7 @@
                                 <Border Grid.Column="0" Classes="SubTile" Opacity="0" />
                                 <TextBlock
                                     Grid.Column="1"
-                                    Margin="16,0,12,0"
+                                    Margin="16,0,8,0"
                                     VerticalAlignment="Center"
                                     Classes="SubName"
                                     Text="{loc:T LocalProxy_Password}" />
@@ -185,7 +210,7 @@
                             </Border>
                             <StackPanel
                                 Grid.Column="1"
-                                Margin="16,0,12,0"
+                                Margin="16,0,8,0"
                                 VerticalAlignment="Center">
                                 <TextBlock Classes="SubName" Text="{loc:T LocalProxy_BlockUdp}" />
                                 <TextBlock
@@ -202,6 +227,11 @@
                     </Border>
                 </StackPanel>
             </Border>
+
+            <!--  Сноска — под ПОСЛЕДНЕЙ группой, как в прототипе: она про весь экран, а не про одну
+                  карточку, и снизу её видно вместе с обеими группами. Текст меняется на живом туннеле
+                  (LocalProxy_FootLive) — там она объясняет, почему порт не набирается.  -->
+            <TextBlock x:Name="txtPortFoot" Classes="SubFoot" />
         </StackPanel>
     </ScrollViewer>
 </UserControl>

@@ -1,3 +1,5 @@
+using Avalonia.Controls.Shapes;
+using Avalonia.Data.Converters;
 using ServiceLib.Models.Dto;
 using v2rayN.Desktop.Common;
 
@@ -30,7 +32,10 @@ public partial class CheckUpdateView : ReactiveUserControl<CheckUpdateViewModel>
         // напрямую (new CheckUpdateView()), поэтому модель заводим сами — иначе экран пустой.
         ViewModel ??= new CheckUpdateViewModel();
 
-        listComponents.ItemsSource = BuildRows(ViewModel);
+        // Строки строятся ОДИН раз: у обёртки собственное реактивное IsOn, а Remarks движка уже
+        // [Reactive] — значит и тумблер, и живой ответ проверки доезжают до экрана сами.
+        // Пересборка списка на каждый тап (как было) моргала всей карточкой.
+        listComponents.ItemsSource = ViewModel.CheckUpdateModels.Select((m, i) => new ComponentRow(m, i > 0)).ToList();
         txtFoot.Text = L.F("Update_Foot", Utils.GetVersionInfo());
 
         btnBack.Click += (_, _) => BackRequested?.Invoke(this, EventArgs.Empty);
@@ -62,17 +67,15 @@ public partial class CheckUpdateView : ReactiveUserControl<CheckUpdateViewModel>
         }
         if (sender is Border { DataContext: ComponentRow row })
         {
-            row.Model.IsSelected = row.Model.IsSelected != true;
-            // IsSelected — обычное свойство модели движка, без уведомления: перечитываем строки,
-            // чтобы тумблер показал новое состояние.
-            listComponents.ItemsSource = BuildRows(ViewModel!);
+            row.IsOn = !row.IsOn;
         }
     }
 
     /// <summary>
     /// Запускает движковую команду. Пока она идёт, действия теряют акцент и не откликаются: акцентный
     /// текст читается как «нажми», а нажимать в этот момент нечего (то же правило, что в «Файлах
-    /// ресурсов»).
+    /// ресурсов»). В плитке ЗАПУЩЕННОЙ строки глиф подменяется вращающимся кругом — motion.md
+    /// («Пинг и обновление подписки»): «на месте иконки вращается круг».
     /// </summary>
     private void Run(bool check)
     {
@@ -81,8 +84,7 @@ public partial class CheckUpdateView : ReactiveUserControl<CheckUpdateViewModel>
             return;
         }
         _busy = true;
-        SetBusy(true);
-        txtCheckState.Text = L.T("Update_Checking");
+        SetBusy(true, check);
 
         var cmd = check ? ViewModel.CheckOnlyCmd : ViewModel.CheckUpdateCmd;
         cmd.Execute().Subscribe(
@@ -93,40 +95,65 @@ public partial class CheckUpdateView : ReactiveUserControl<CheckUpdateViewModel>
         void Done() => Dispatcher.UIThread.Post(() =>
         {
             _busy = false;
-            SetBusy(false);
-            txtCheckState.Text = string.Empty;
+            SetBusy(false, check);
         });
     }
 
-    private void SetBusy(bool busy)
+    /// <param name="busy">идёт ли команда.</param>
+    /// <param name="check">какая именно строка её запустила — только у неё крутится круг.</param>
+    private void SetBusy(bool busy, bool check)
     {
         foreach (var (text, row) in new[] { (txtCheckOnly, RowCheckOnly), (txtInstall, RowInstall) })
         {
             text.Classes.Set("accent", !busy);
             row.Classes.Set("tap", !busy);
         }
+
+        Spin(icoCheckOnly, spinCheckOnly, busy && check);
+        Spin(icoInstall, spinInstall, busy && !check);
     }
 
-    private static List<ComponentRow> BuildRows(CheckUpdateViewModel vm) =>
-        vm.CheckUpdateModels.Select((m, i) => new ComponentRow(m, i > 0)).ToList();
+    /// <summary>Подмена глифа кругом в том же слоте: ничего вокруг не сдвигается.</summary>
+    private static void Spin(PathIcon glyph, Ellipse ring, bool on)
+    {
+        glyph.IsVisible = !on;
+        ring.IsVisible = on;
+        ring.Classes.Set("spinning", on);
+    }
 
     /// <summary>
-    /// Обёртка строки списка: несёт разделитель (он рисуется перед каждой строкой кроме первой) и
-    /// человеческое имя компонента. Имена ядра и Geo-баз показываем так, как их зовут в этом
-    /// приложении: «v2rayN» — это оно само, и апстримное имя в интерфейсе departament ни о чём не
-    /// говорит пользователю.
+    /// Обёртка строки списка: несёт разделитель (он рисуется перед каждой строкой кроме первой),
+    /// человеческое имя компонента и реактивный переключатель. Имена ядра и Geo-баз показываем так,
+    /// как их зовут в этом приложении: «v2rayN» — это оно само, и апстримное имя в интерфейсе
+    /// departament ни о чём не говорит пользователю.
+    ///
+    /// <c>IsOn</c> нужен потому, что <see cref="CheckUpdateModel.IsSelected"/> — обычное свойство без
+    /// уведомления: биндиться прямо к нему нельзя, тумблер не узнал бы о смене.
     /// </summary>
-    public sealed class ComponentRow
+    public sealed class ComponentRow : ReactiveObject
     {
+        private bool _isOn;
+
         public ComponentRow(CheckUpdateModel model, bool showDivider)
         {
             Model = model;
             ShowDivider = showDivider;
+            _isOn = model.IsSelected == true;
         }
 
         public CheckUpdateModel Model { get; }
 
         public bool ShowDivider { get; }
+
+        public bool IsOn
+        {
+            get => _isOn;
+            set
+            {
+                this.RaiseAndSetIfChanged(ref _isOn, value);
+                Model.IsSelected = value;
+            }
+        }
 
         public string Title => Model.CoreTypeForStorage switch
         {
@@ -137,4 +164,22 @@ public partial class CheckUpdateView : ReactiveUserControl<CheckUpdateViewModel>
             _ => "—",
         };
     }
+}
+
+/// <summary>
+/// Есть ли у компонента ЖИВОЙ ответ проверки. До первой проверки движок кладёт в <c>Remarks</c> свою
+/// менюшную надпись «Обновить» (<c>ResUI.menuCheckUpdate</c>) — как подзаголовок строки она обещает
+/// действие, которого в строке нет, поэтому такая подпись не показывается вовсе. Всё остальное —
+/// настоящий ответ («… уже последней версии», «не поддерживается», ход проверки) — показывается.
+/// Локален для этого экрана, в GlobalResources не выносится.
+/// </summary>
+public sealed class UpdateAnswerVisibleConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        var s = value?.ToString();
+        return !string.IsNullOrWhiteSpace(s) && !string.Equals(s, ResUI.menuCheckUpdate, StringComparison.Ordinal);
+    }
+
+    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => null;
 }

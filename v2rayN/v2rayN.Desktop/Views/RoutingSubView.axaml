@@ -40,10 +40,17 @@
     </UserControl.Styles>
 
     <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <!--  Колонка подэкрана: карточки 720 + поля по 20 = внешний габарит 760, как в прототипе
+              (`max-width:760;padding:0 20px`). В Avalonia Margin лежит СНАРУЖИ MaxWidth, поэтому
+              ту же геометрию даёт 720 + поля 20 — ровно как в колонке вкладки настроек, чтобы
+              карточки не меняли ширину при входе в подэкран.
+              Выравнивание Stretch, а НЕ Center — см. SubScreenStyles.axaml, «Ширина колонки»:
+              Center отдаёт панели её желаемую ширину, и карточка съёживается по самой длинной
+              строке, у каждого экрана до своей.  -->
         <StackPanel
-            MaxWidth="760"
+            MaxWidth="720"
             Margin="20,10,20,20"
-            HorizontalAlignment="Center">
+            HorizontalAlignment="Stretch">
 
             <StackPanel Orientation="Horizontal" Spacing="10">
                 <Button
@@ -108,8 +115,9 @@
                   В ветке маршрутизация живёт НАБОРАМИ правил, а не отдельными строками proxy /
                   direct / block, как в прототипе: тап делает набор активным. Показывать три
                   фиксированные строки поверх этого значило бы врать про устройство экрана.
-                  Отдельного правила отсюда не открыть — редактор правил был отдельным окном, а
-                  отдельных окон в приложении больше нет (вопрос владельцу).  -->
+                  Строки «Добавить правило» тоже нет и не будет (решено владельцем): редактор правил
+                  был отдельным окном, отдельных окон в приложении больше нет, и обещать кнопкой
+                  экран, которого не существует, — хуже, чем её отсутствие.  -->
             <TextBlock Classes="SubGroupLabel" Text="{loc:T Routing_RuleSets}" />
             <Border x:Name="RulesCard" Classes="SubCard">
                 <ItemsControl x:Name="listRoutings">

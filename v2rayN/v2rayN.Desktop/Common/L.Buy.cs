@@ -20,6 +20,12 @@ public sealed partial class L
         // Пояснение под заголовком подэкрана (лекало: заголовок 22/700 → пояснение 13).
         Add("Buy_Note", "Выберите тариф и срок", "Choose a plan and a term");
         Add("Buy_ErrTitle", "Тарифы не загрузились", "Plans didn't load");
+        // Бейдж у тарифа, который уже оплачен (Android buy_current).
+        Add("Buy_Current", "Текущий", "Current");
+        // Подпись под ценой за месяц в свёрнутой карточке (Android buy_per_month).
+        Add("Buy_PerMonth", "в месяц", "per month");
+        // Выгода длинного срока против самого короткого (Android buy_saving).
+        Add("Buy_Saving", "Выгода {0}", "Save {0}");
         Add("Buy_AdditionalDevices", "Дополнительные устройства", "Additional devices");
         Add("Buy_RemoveDevice", "Убрать устройство", "Remove device");
         Add("Buy_AddDevice", "Добавить устройство", "Add device");

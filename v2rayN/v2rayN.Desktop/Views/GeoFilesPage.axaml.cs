@@ -41,20 +41,38 @@ public partial class GeoFilesPage : UserControl, ISubPage
     }
 
     /// <summary>
-    /// Источник показан именем, а не полным адресом: строка узкая, а адрес — шаблон с «{0}».
-    /// По умолчанию это релизы Loyalsoldier (<see cref="Global.GeoUrl"/>); если владелец задал
-    /// свой адрес в конфиге — показываем его хост.
+    /// Источник — это РЕПОЗИТОРИЙ, а не полный адрес: адрес в ветке фиксирован
+    /// (<see cref="Global.GeoUrl"/> либо пресет региона в <c>ConstItem.GeoSourceUrl</c>) и является
+    /// шаблоном с «{0}» — показывать его целиком значит показывать то, что нельзя ни выбрать, ни
+    /// прочитать одним взглядом. «Loyalsoldier/v2ray-rules-dat» — та же строка, что в эталоне: по ней
+    /// сразу видно, чьи базы качаются. Не-GitHub адрес сводим к хосту, нечитаемый — оставляем как есть.
     /// </summary>
     private string DescribeSource()
     {
-        var custom = _config.ConstItem.GeoSourceUrl;
-        if (custom.IsNullOrEmpty())
+        var url = _config.ConstItem.GeoSourceUrl;
+        if (url.IsNullOrEmpty())
         {
-            return "Loyalsoldier";
+            url = Global.GeoUrl;
         }
-        return Uri.TryCreate(custom, UriKind.Absolute, out var uri) ? uri.Host : custom;
+
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        {
+            return url;
+        }
+
+        var segments = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        return uri.Host.EndsWith("github.com", StringComparison.OrdinalIgnoreCase) && segments.Length >= 2
+            ? $"{segments[0]}/{segments[1]}"
+            : uri.Host;
     }
 
+    /// <summary>
+    /// Подпись файла — «2 МБ · 03.08.2026» (эталонный кадр): размер и дата, без времени и без слова
+    /// «обновлён». Дата у базы маршрутизации отвечает на один вопрос — «свежая или нет», — и час с
+    /// минутами на него не отвечают, а строку удлиняют. Единицу берём из общей лестницы
+    /// <c>Common_ByteUnits</c> (та же, что у трафика), поэтому в английской локали строка сама
+    /// становится «2 MB · 03.08.2026». Разделитель «·» — та же пунктуация, что во всём интерфейсе.
+    /// </summary>
     private static string DescribeFile(string name)
     {
         try
@@ -66,7 +84,12 @@ public partial class GeoFilesPage : UserControl, ISubPage
             }
             var fi = new FileInfo(path);
             var mb = fi.Length / 1024d / 1024d;
-            return L.F("Geo_SizeUpdated", mb.ToString("0.0", CultureInfo.CurrentUICulture), fi.LastWriteTime.ToString("dd.MM.yyyy HH:mm", CultureInfo.CurrentUICulture));
+            var units = L.T("Common_ByteUnits").Split(',');
+            var unit = units.Length > 2 ? units[2] : "MB";
+            //  «0.#»: у целого числа мегабайт десятой доли не показываем — 2 МБ, а не 2,0 МБ.
+            var size = mb.ToString("0.#", CultureInfo.CurrentUICulture);
+            var stamp = fi.LastWriteTime.ToString("dd.MM.yyyy", CultureInfo.CurrentUICulture);
+            return $"{size} {unit} · {stamp}";
         }
         catch
         {
@@ -82,7 +105,7 @@ public partial class GeoFilesPage : UserControl, ISubPage
         }
         _busy = true;
         SetActionText(L.T("Geo_Updating"), busy: true);
-        txtStatus.Text = L.T("Geo_Downloading");
+        SetStatus(L.T("Geo_Downloading"));
 
         try
         {
@@ -92,7 +115,7 @@ public partial class GeoFilesPage : UserControl, ISubPage
                 {
                     if (msg.IsNotEmpty())
                     {
-                        txtStatus.Text = msg;
+                        SetStatus(msg);
                     }
                     if (success)
                     {
@@ -102,11 +125,11 @@ public partial class GeoFilesPage : UserControl, ISubPage
                 return Task.CompletedTask;
             });
             await svc.UpdateGeoFileAll();
-            txtStatus.Text = L.T("Geo_Done");
+            SetStatus(L.T("Geo_Done"));
         }
         catch (Exception ex)
         {
-            txtStatus.Text = L.T("Geo_Failed") + ex.Message;
+            SetStatus(L.T("Geo_Failed") + ex.Message);
         }
         finally
         {
@@ -114,6 +137,17 @@ public partial class GeoFilesPage : UserControl, ISubPage
             SetActionText(L.T("Geo_Update"), busy: false);
             _busy = false;
         }
+    }
+
+    /// <summary>
+    /// Сноска под карточкой существует, только когда ей есть что сказать: пустая строка занимает
+    /// высоту строки текста и раздвигает экран невидимым отступом. В эталонном кадре под карточкой
+    /// нет ничего — там и не должно быть ничего.
+    /// </summary>
+    private void SetStatus(string? text)
+    {
+        txtStatus.Text = text;
+        txtStatus.IsVisible = text.IsNotEmpty();
     }
 
     /// <summary>

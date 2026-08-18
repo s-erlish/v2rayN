@@ -5,6 +5,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:loc="clr-namespace:v2rayN.Desktop.Common"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:v="clr-namespace:v2rayN.Desktop.Views"
     xmlns:vms="clr-namespace:v2rayN.Desktop.ViewModels"
     x:DataType="vms:BuyViewModel"
     d:DesignWidth="900"
@@ -17,10 +18,16 @@
         ЕДИНОЕ ЛЕКАЛО подэкранов (Assets/SubScreenStyles.axaml): кнопка назад 40 со смещением −8 →
         заголовок 22/700 → пояснение 13 → карточки тарифов.
 
-        Тариф ПО УМОЛЧАНИЮ СВЁРНУТ. Свёрнутый: название 16/700, мета «Устройства: 2 · Трафик: ∞»,
-        каретка. Раскрытый: рамка и название акцентом, внутри строки сроков с радио и ценой справа.
-        Открыт всегда один тариф; повторное нажатие сворачивает (это уже поведение BuyViewModel).
-        Кнопка оплаты появляется только при раскрытом тарифе и несёт сумму.
+        Тариф ПО УМОЛЧАНИЮ СВЁРНУТ. Свёрнутый: название 16/700, бейдж «Текущий» у оплаченного,
+        мета «Устройства: 2 · Трафик: ∞», СПРАВА цена за месяц 15/700 с подписью «в месяц», каретка.
+        Раскрытый: рамка, название И цена акцентом, внутри строки сроков с радио, ценой справа и
+        выгодой подписью. Открыт всегда один тариф. Кнопка оплаты появляется только при раскрытом
+        тарифе и несёт сумму.
+
+        ЧТО ГОВОРИТ КАРТОЧКА ДО ТОГО, КАК ЕЁ ОТКРЫЛИ — цена. Без неё единственное, что человек
+        выбирает, читалось только после нажатия. Цена за месяц и «Выгода N ₽» ВЫВЕДЕНЫ из тех же
+        сроков, что вернул каталог (расчёт — в code-behind, формулы Android 1:1), поэтому каталог
+        без скидки перестаёт показывать скидку, а тариф без сроков не показывает и цены.
 
         Что изменилось против прежней версии и ПОЧЕМУ: был бесшовный тулбар с Headline, колонка 560,
         карта радиуса 20 с заливкой выбранного и ГАЛОЧКОЙ справа. Галочка говорила «выбрано», хотя
@@ -48,6 +55,16 @@
         <StreamGeometry x:Key="Geo.Buy.Chevron">M8.6,4.6L7.2,6l6,6l-6,6l1.4,1.4L16,12z</StreamGeometry>
         <!--  Каретка (Material arrow_drop_down) — она же индикатор раскрытия тарифа.  -->
         <StreamGeometry x:Key="Geo.Buy.Caret">M7,10l5,5 5,-5z</StreamGeometry>
+
+        <!--  Производные каталога: цена за месяц, выгода срока, «этот тариф уже оплачен».
+              Считает code-behind по формулам Android; здесь — только точки подключения.  -->
+        <v:BuyMonthlyRateConverter x:Key="Buy.Monthly" />
+        <v:BuyMonthlyRateConverter x:Key="Buy.HasMonthly" AsFlag="True" />
+        <v:BuySavingConverter x:Key="Buy.Saving" />
+        <v:BuySavingConverter x:Key="Buy.HasSaving" AsFlag="True" />
+        <v:BuyCurrentTariffConverter x:Key="Buy.IsCurrent" />
+        <!--  Деньги модели, перенабранные по языку интерфейса: «2600 ₽» → «2 600 ₽».  -->
+        <v:BuyMoneyConverter x:Key="Buy.Money" />
     </UserControl.Resources>
 
     <UserControl.Styles>
@@ -127,11 +144,59 @@
             <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
         </Style>
 
-        <!--  Каретка 18: поворот на 180° за 300 мс (motion.md «Окошко у значения» — та же лестница).  -->
+        <!--  ============ Бейдж «Текущий» ============
+              Факт о тарифе, за который уже платят, — поэтому чип, а не кнопка. Контейнер акцента
+              (в чёрно-белой теме — серый: токен сам меняется).
+              ПИЛЮЛЯ В AVALONIA — НЕ CSS: радиус подрезается по КАЖДОЙ ОСИ, и 100 дал бы эллипс.
+              Радиус = ПОЛОВИНА высоты; на высоту 18 своего токена в шкале Radius.Pill* нет.  -->
+        <Style Selector="Border.TariffBadge">
+            <Setter Property="Height" Value="18" />
+            <Setter Property="Padding" Value="9,0" />
+            <Setter Property="CornerRadius" Value="9" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Background" Value="{DynamicResource Brush.AccentContainer}" />
+        </Style>
+        <Style Selector="Border.TariffBadge > TextBlock">
+            <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
+            <Setter Property="FontSize" Value="10.5" />
+            <Setter Property="FontWeight" Value="Medium" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.OnAccentContainer}" />
+        </Style>
+
+        <!--  ============ Цена за месяц ============
+              15/700 tnum — та же величина, что и название, только справа; докрашивается акцентом
+              вместе с рамкой и названием, за те же 240 мс. «в месяц» остаётся приглушённой:
+              это единица измерения, а не второе число.  -->
+        <Style Selector="TextBlock.TariffMonth">
+            <Setter Property="FontFamily" Value="{DynamicResource Font.Numeric}" />
+            <Setter Property="FontFeatures" Value="tnum,lnum,zero" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Foreground" Duration="0:0:0.24" Easing="{StaticResource Ease.OutQuart}" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Border.TariffCard.selected TextBlock.TariffMonth">
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+        </Style>
+        <Style Selector="TextBlock.TariffPer">
+            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="Margin" Value="0,3,0,0" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
+        </Style>
+
+        <!--  Каретка 18: поворот на 180° за 300 мс (motion.md «Окошко у значения» — та же лестница).
+              Отступ 10 слева — зазор «величина ↔ голый глиф»: широкий отступ уже забрала цена.  -->
         <Style Selector="PathIcon.TariffCaret">
             <Setter Property="Width" Value="18" />
             <Setter Property="Height" Value="18" />
-            <Setter Property="Margin" Value="10,2,0,0" />
+            <Setter Property="Margin" Value="10,4,0,0" />
             <Setter Property="VerticalAlignment" Value="Top" />
             <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
             <Setter Property="RenderTransformOrigin" Value="50%,50%" />
@@ -146,10 +211,13 @@
             <Setter Property="RenderTransform" Value="rotate(180deg)" />
         </Style>
 
-        <!--  Строка срока: от 54, паддинг 16×9, разделитель сверху у КАЖДОЙ (первая отделяет шапку).  -->
+        <!--  Строка срока: от 54, разделитель сверху у КАЖДОЙ (первая отделяет шапку).
+              Паддинг 8, а не 9: со строкой «Выгода N ₽» содержимое ровно укладывается в 54, и
+              строки со скидкой и без неё стоят ОДНОЙ высоты — как в прототипе, где 54 всегда берёт
+              верх над содержимым.  -->
         <Style Selector="Border.TermRow">
             <Setter Property="MinHeight" Value="54" />
-            <Setter Property="Padding" Value="16,9" />
+            <Setter Property="Padding" Value="16,8" />
             <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineVariant}" />
             <Setter Property="BorderThickness" Value="0,1,0,0" />
             <Setter Property="Background" Value="Transparent" />
@@ -288,15 +356,20 @@
     <Panel Background="Transparent">
 
         <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-            <!--  Колонка 760 БЕЗ HorizontalAlignment="Center": у Center StackPanel сжимается по
-            содержимому, и экран с короткими строками получает колонку уже соседних. Stretch
-            с MaxWidth даёт ровно 760 и центрируется сам.  -->
+            <!--  Колонка подэкрана 760 = 720 содержимого + два поля по 20 (прототип: max-width 760
+            при padding 0 20). Поля живут в Margin, поэтому MaxWidth несёт ровно содержимое — с 760
+            карточки были на 40 шире эталона. БЕЗ HorizontalAlignment="Center": у Center StackPanel
+            сжимается по содержимому, и экран с короткими строками получает колонку уже соседних.
+            Stretch с MaxWidth даёт ровно 720 и центрируется сам.  -->
             <StackPanel
-                MaxWidth="760"
+                MaxWidth="720"
                 Margin="20,10,20,20">
 
                 <!--  ==================== Лекало: назад 40 (−8) → заголовок 22/700 → пояснение 13 ====================  -->
-                <StackPanel Orientation="Horizontal" Spacing="10">
+                <StackPanel
+                    Margin="0,2,0,0"
+                    Orientation="Horizontal"
+                    Spacing="10">
                     <Button
                         x:Name="BtnBack"
                         AutomationProperties.Name="{loc:T Common_Back}"
@@ -394,12 +467,25 @@
                                     Classes.selected="{Binding IsSelected}">
                                     <StackPanel>
 
-                                        <!--  Свёрнутая шапка: название · мета · каретка.  -->
+                                        <!--  Свёрнутая шапка: название + бейдж · мета · цена за месяц · каретка.
+                                              Колонки Auto у цены и каретки: длинное название сжимает СЕБЯ,
+                                              а не выталкивает цену за край карточки.  -->
                                         <Button Classes="Flat" Command="{Binding SelectCmd}">
                                             <Border Classes="TariffHeader">
-                                                <Grid ColumnDefinitions="*,Auto">
+                                                <Grid ColumnDefinitions="*,Auto,Auto">
                                                     <StackPanel Grid.Column="0">
-                                                        <TextBlock Classes="TariffName" Text="{Binding Name}" />
+                                                        <StackPanel Orientation="Horizontal" Spacing="9">
+                                                            <TextBlock Classes="TariffName" Text="{Binding Name}" />
+                                                            <Border Classes="TariffBadge">
+                                                                <Border.IsVisible>
+                                                                    <MultiBinding Converter="{StaticResource Buy.IsCurrent}">
+                                                                        <Binding Path="Tariff.Id" />
+                                                                        <Binding Path="CurrentTariffIds" RelativeSource="{RelativeSource AncestorType=v:BuyView}" />
+                                                                    </MultiBinding>
+                                                                </Border.IsVisible>
+                                                                <TextBlock Text="{loc:T Buy_Current}" />
+                                                            </Border>
+                                                        </StackPanel>
                                                         <TextBlock
                                                             Margin="0,5,0,0"
                                                             Classes="SubSub"
@@ -408,8 +494,20 @@
                                                             FontSize="12.5"
                                                             Text="{Binding Info}" />
                                                     </StackPanel>
-                                                    <PathIcon
+
+                                                    <!--  Цена и «в месяц» — одна величина в два этажа, прижата вправо
+                                                          и к ВЕРХУ строки: она читается вровень с названием.  -->
+                                                    <StackPanel
                                                         Grid.Column="1"
+                                                        Margin="12,0,0,0"
+                                                        VerticalAlignment="Top"
+                                                        IsVisible="{Binding Tariff, Converter={StaticResource Buy.HasMonthly}}">
+                                                        <TextBlock Classes="TariffMonth" Text="{Binding Tariff, Converter={StaticResource Buy.Monthly}}" />
+                                                        <TextBlock Classes="TariffPer" Text="{loc:T Buy_PerMonth}" />
+                                                    </StackPanel>
+
+                                                    <PathIcon
+                                                        Grid.Column="2"
                                                         Classes="TariffCaret"
                                                         Data="{StaticResource Geo.Buy.Caret}" />
                                                 </Grid>
@@ -430,18 +528,37 @@
                                                                         Classes.on="{Binding IsSelected}">
                                                                         <Ellipse />
                                                                     </Border>
-                                                                    <TextBlock
+                                                                    <StackPanel
                                                                         Grid.Column="1"
                                                                         Margin="14,0,12,0"
-                                                                        Classes="SubName"
-                                                                        FontFamily="{DynamicResource Font.Numeric}"
-                                                                        FontFeatures="tnum,lnum,zero"
-                                                                        VerticalAlignment="Center"
-                                                                        Text="{Binding DurationText}" />
+                                                                        VerticalAlignment="Center">
+                                                                        <TextBlock
+                                                                            Classes="SubName"
+                                                                            FontFamily="{DynamicResource Font.Numeric}"
+                                                                            FontFeatures="tnum,lnum,zero"
+                                                                            Text="{Binding DurationText}" />
+                                                                        <!--  Выгода — ПРИГЛУШЁННО-БЕЛЫМ, не зелёным: это замечание
+                                                                              о цене, а не системный статус; зелёный был бы четвёртым
+                                                                              смысловым цветом продукта.  -->
+                                                                        <TextBlock Classes="SubSub">
+                                                                            <TextBlock.IsVisible>
+                                                                                <MultiBinding Converter="{StaticResource Buy.HasSaving}">
+                                                                                    <Binding Path="Option" />
+                                                                                    <Binding Path="DataContext" RelativeSource="{RelativeSource AncestorType=ItemsControl}" />
+                                                                                </MultiBinding>
+                                                                            </TextBlock.IsVisible>
+                                                                            <TextBlock.Text>
+                                                                                <MultiBinding Converter="{StaticResource Buy.Saving}">
+                                                                                    <Binding Path="Option" />
+                                                                                    <Binding Path="DataContext" RelativeSource="{RelativeSource AncestorType=ItemsControl}" />
+                                                                                </MultiBinding>
+                                                                            </TextBlock.Text>
+                                                                        </TextBlock>
+                                                                    </StackPanel>
                                                                     <TextBlock
                                                                         Grid.Column="2"
                                                                         Classes="TermPrice"
-                                                                        Text="{Binding PriceText}" />
+                                                                        Text="{Binding PriceText, Converter={StaticResource Buy.Money}}" />
                                                                 </Grid>
                                                             </Border>
                                                         </Button>
@@ -480,7 +597,7 @@
                                             FontFamily="{DynamicResource Font.Numeric}"
                                             FontFeatures="tnum,lnum,zero"
                                             IsVisible="{Binding HasExtraCost}"
-                                            Text="{Binding ExtraCostText}" />
+                                            Text="{Binding ExtraCostText, Converter={StaticResource Buy.Money}}" />
                                     </StackPanel>
                                     <Button
                                         Grid.Column="2"
@@ -590,7 +707,7 @@
                                         FontFamily="{DynamicResource Font.Numeric}"
                                         FontFeatures="tnum,lnum,zero"
                                         Foreground="{DynamicResource Brush.Accent}"
-                                        Text="{Binding TotalText}"
+                                        Text="{Binding TotalText, Converter={StaticResource Buy.Money}}"
                                         VerticalAlignment="Center" />
                                 </StackPanel>
                                 <Ellipse
