@@ -33,12 +33,11 @@ public partial class BottomNavBar : UserControl
     // кнопки, поэтому корректен и в 3-пунктовом (вошёл), и в 2-пунктовом (без «Аккаунта») состоянии,
     // и пере-решается при ресайзе окна / смене числа колонок. Первый показ — мгновенно на активной
     // трети (без скольжения с X=0); дальше — переезд Motion.Dur.Nav 280мс ease-out-quart (motion.md
-    // «Навигация»). Под lite / off-screen — мгновенно. Токен _indicatorAnim отменяет незавершённое
-    // скольжение при новом тапе.
+    // «Навигация»). Под lite / off-screen — мгновенно. Незавершённое скольжение перебивает сам
+    // переход на трансформе: он подхватывает живое X, отменять нечего.
     private readonly TranslateTransform _indicatorTransform = new();
     private bool _indicatorSeeded;
     private double _lastTargetX = double.NaN;
-    private CancellationTokenSource? _indicatorAnim;
 
     // Ширина полоски (tokens.md «Нижняя панель»: 30×3). Держать равной Width у BottomIndicator в
     // разметке — из неё считается «центр трети минус половина полоски».
@@ -81,7 +80,6 @@ public partial class BottomNavBar : UserControl
             AccountSession.StateChanged -= _handler;
             _handler = null;
         }
-        _indicatorAnim?.Cancel();
     }
 
     private void Raise(AppTab tab)
@@ -147,10 +145,6 @@ public partial class BottomNavBar : UserControl
         _lastTargetX = targetX;
 
         var instant = !animate || !_indicatorSeeded || MotionState.IsLite || !IsWindowLive();
-        //  Текущее X (в т.ч. на СЕРЕДИНЕ идущего скольжения) ловим ДО Cancel: отмена ревертит свойство к
-        //  базе, поэтому чтение внутри аниматора давало «откат-кадр» при быстрых тапах трёх вкладок.
-        var fromX = _indicatorTransform.X;
-        _indicatorAnim?.Cancel();
         if (instant)
         {
             _indicatorTransform.Transitions?.Clear();

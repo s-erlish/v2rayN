@@ -220,18 +220,6 @@ public partial class ProfilesView : ReactiveUserControl<ProfilesViewModel>
         e.Row.Header = $" {e.Row.Index + 1}";
     }
 
-    //private void LstProfiles_ColumnHeader_Click(object? sender, RoutedEventArgs e)
-    //{
-    //    var colHeader = sender as DataGridColumnHeader;
-    //    if (colHeader == null || colHeader.TabIndex < 0 || colHeader.Column == null)
-    //    {
-    //        return;
-    //    }
-
-    //    var colName = ((MyDGTextColumn)colHeader.Column).ExName;
-    //    ViewModel?.SortServer(colName);
-    //}
-
     private void menuSelectAll_Click(object? sender, RoutedEventArgs e)
     {
         lstProfiles.SelectAll();

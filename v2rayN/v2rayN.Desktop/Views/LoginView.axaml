@@ -324,7 +324,7 @@
                             Margin="0,24,0,0"
                             Text="{Binding LoginEmail, Mode=TwoWay}"
                             Theme="{StaticResource TextBox.Incy}"
-                            Watermark="{loc:T Login_Email}" />
+                            PlaceholderText="{loc:T Login_Email}" />
                         <!--  Живая подсказка невалидного email (auth_email_invalid). Текст = RedText.  -->
                         <TextBlock
                             x:Name="EmailError"
@@ -343,7 +343,7 @@
                             PasswordChar="•"
                             Text="{Binding LoginPassword, Mode=TwoWay}"
                             Theme="{StaticResource TextBox.Incy}"
-                            Watermark="{loc:T Login_Password}">
+                            PlaceholderText="{loc:T Login_Password}">
                             <TextBox.InnerRightContent>
                                 <Button
                                     x:Name="TogglePasswordButton"
@@ -389,7 +389,7 @@
                             PasswordChar="•"
                             Text="{Binding RegisterConfirmPassword, Mode=TwoWay}"
                             Theme="{StaticResource TextBox.Incy}"
-                            Watermark="{loc:T Login_ConfirmPassword}" />
+                            PlaceholderText="{loc:T Login_ConfirmPassword}" />
                         <!--  Живая подсказка несовпадения паролей (RedText).  -->
                         <TextBlock
                             x:Name="ConfirmPasswordError"
@@ -575,7 +575,7 @@
                                     x:Name="HandoffCodeBox"
                                     Text="{Binding HandoffCodeInput, Mode=TwoWay}"
                                     Theme="{StaticResource TextBox.Incy}"
-                                    Watermark="{loc:T Login_CodePaste}" />
+                                    PlaceholderText="{loc:T Login_CodePaste}" />
                                 <Button
                                     x:Name="CodeSubmitButton"
                                     Margin="0,8,0,0"

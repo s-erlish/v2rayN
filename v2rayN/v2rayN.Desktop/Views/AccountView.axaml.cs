@@ -69,6 +69,9 @@ public partial class AccountView : UserControl
         }
 
         BuyRow.Tapped += (_, _) => BuyRequested?.Invoke(this, EventArgs.Empty);
+        // «Купить подписку» из пустого состояния ведёт ТУДА ЖЕ, куда строка «Управление» ниже —
+        // одно действие, одна дверь: два разных пути в каталог разошлись бы при первой же правке.
+        EmptyBuyButton.Click += (_, _) => BuyRequested?.Invoke(this, EventArgs.Empty);
         DevicesRow.Tapped += (_, _) => DevicesRequested?.Invoke(this, EventArgs.Empty);
         HistoryRow.Tapped += (_, _) => HistoryRequested?.Invoke(this, EventArgs.Empty);
         LoginTelegramButton.Click += (_, _) => OnLoginTelegram();
@@ -123,6 +126,9 @@ public partial class AccountView : UserControl
             PlanBlock.Margin = new Thickness(0, 18, 0, 0);
             PlanTitle.TextAlignment = TextAlignment.Center;
             PlanMetaRow.HorizontalAlignment = HorizontalAlignment.Center;
+            // Силуэт первой загрузки живёт по тем же правилам, что и блок, который он замещает:
+            // иначе в столбике полосы скелета липли бы к левому краю под центрированным кольцом.
+            SetSkeletonAlignment(HorizontalAlignment.Center);
         }
         else
         {
@@ -134,6 +140,20 @@ public partial class AccountView : UserControl
             PlanBlock.Margin = new Thickness(32, 0, 0, 0);
             PlanTitle.TextAlignment = TextAlignment.Left;
             PlanMetaRow.HorizontalAlignment = HorizontalAlignment.Left;
+            SetSkeletonAlignment(HorizontalAlignment.Left);
+        }
+    }
+
+    //  Полосы силуэта равняются так же, как настоящие строки блока (кнопочная пара — всегда во всю
+    //  ширину, её выравнивание задаёт сама сетка).
+    private void SetSkeletonAlignment(HorizontalAlignment align)
+    {
+        foreach (var child in PlanSkeleton.Children)
+        {
+            if (child is Border bar)
+            {
+                bar.HorizontalAlignment = align;
+            }
         }
     }
 
