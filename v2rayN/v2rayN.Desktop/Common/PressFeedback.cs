@@ -85,10 +85,11 @@ public static class PressFeedback
     private static readonly AttachedProperty<ScaleTransform?> DipProperty =
         AvaloniaProperty.RegisterAttached<Control, ScaleTransform?>("Dip", typeof(PressFeedback));
 
-    //  Токен отмены незавершённого прогиба/возврата: быстрый повторный тап не должен догонять
-    //  предыдущую анимацию (та же дисциплина, что у путешествующего индикатора навигации).
-    private static readonly AttachedProperty<CancellationTokenSource?> DipAnimProperty =
-        AvaloniaProperty.RegisterAttached<Control, CancellationTokenSource?>("DipAnim", typeof(PressFeedback));
+    //  Прогиб ведёт ПЕРЕХОД на самом трансформе (Transitions), а не Animation.RunAsync.
+    //  ЭТО НЕ СТИЛИСТИЧЕСКИЙ ВЫБОР, см. развёрнутое объяснение у RunDip-заменителя <see cref="Dip"/>:
+    //  ключевые кадры по подсвойствам трансформы обслуживает TransformAnimator, а он приводит цель
+    //  к Visual — на самом ScaleTransform это InvalidCastException прямо из RunAsync. Переход
+    //  перебивается новым значением сам, поэтому токен отмены больше не нужен.
 
     static PressFeedback()
     {
@@ -163,8 +164,7 @@ public static class PressFeedback
         c.RemoveHandler(InputElement.PointerReleasedEvent, OnPointerUp);
         c.RemoveHandler(InputElement.PointerCaptureLostEvent, OnPointerUp);
         c.RemoveHandler(InputElement.PointerExitedEvent, OnPointerUp);
-        c.GetValue(DipAnimProperty)?.Cancel();
-        c.SetValue(DipAnimProperty, null);
+        c.GetValue(DipProperty)?.Transitions?.Clear();
         c.SetValue(DipProperty, null);
         c.Classes.Remove("pressed");
     }
@@ -198,6 +198,25 @@ public static class PressFeedback
         Dip(c, 1d);
     }
 
+    /// <summary>
+    /// Ведёт прогиб к <paramref name="to"/>.
+    ///
+    /// ==================== ПОЧЕМУ ПЕРЕХОД, А НЕ Animation.RunAsync ====================
+    /// Раньше здесь крутилась <see cref="Animation"/> с ключевыми кадрами по
+    /// <c>ScaleTransform.ScaleX/Y</c>, запущенная НА САМОМ трансформе: <c>anim.RunAsync(dip, ct)</c>.
+    /// Ключевые кадры по подсвойствам трансформы Avalonia отдаёт аниматору
+    /// <c>TransformAnimator</c>, а тот первым делом приводит цель к <see cref="Visual"/> — на
+    /// <see cref="ScaleTransform"/> это <see cref="InvalidCastException"/> «Unable to cast
+    /// ScaleTransform to Avalonia.Visual», брошенный СРАЗУ, ещё на аттаче. Исключение съедал
+    /// <c>catch</c>, а следом стояло присвоение конечного масштаба — поэтому прогиб не «ломался»
+    /// заметно, он просто НИКОГДА НЕ ЕХАЛ: нажатие и отпускание были мгновенным щелчком масштаба
+    /// (тот же класс дефекта, что у полоски навигации, экрана входа и прогрузки).
+    ///
+    /// Переход (<see cref="DoubleTransition"/> на самом трансформе) — ровно тот приём, которым уже
+    /// едет полоска нижней навигации: он интерполирует ОТ живого значения, поэтому быстрый повторный
+    /// тап подхватывается с середины возврата без кадра-отката, и сам перебивается новым значением —
+    /// токен отмены не нужен.
+    /// </summary>
     private static void Dip(Control c, double to)
     {
         if (!IsUsable(to) && to != 1d)
@@ -220,50 +239,43 @@ public static class PressFeedback
             target.RenderTransform = dip;
         }
 
-        c.GetValue(DipAnimProperty)?.Cancel();
-
         //  «Облегчённый режим» гасит ВСЁ движение (motion.md): прогиб становится мгновенным
         //  переключением, но не исчезает — фон нажатия и снап масштаба остаются как отклик.
         if (MotionState.IsLite)
         {
+            dip.Transitions?.Clear();
             dip.ScaleX = dip.ScaleY = to;
-            c.SetValue(DipAnimProperty, null);
             return;
         }
 
-        var cts = new CancellationTokenSource();
-        c.SetValue(DipAnimProperty, cts);
-        RunDip(dip, to, cts.Token);
+        var pressingIn = to < 1d;
+        ApplyDipTransitions(dip, pressingIn ? InDuration : BackDuration, pressingIn ? InEase : BackEase);
+        dip.ScaleX = dip.ScaleY = to;
     }
 
-    private static async void RunDip(ScaleTransform dip, double to, CancellationToken ct)
+    //  Вход и возврат идут разной длительностью и разной кривой (70мс cubic-bezier(0.4,0,0.6,1) /
+    //  200мс cubic-bezier(0.34,1.25,0.64,1)), а переход у свойства ОДИН — поэтому параметры
+    //  переставляются перед каждым присвоением. Avalonia читает Duration в момент запуска перехода,
+    //  так что уже идущий отрезок доигрывает со своей длительностью, а новый берёт актуальную.
+    private static void ApplyDipTransitions(ScaleTransform dip, TimeSpan duration, Easing easing)
     {
-        var pressingIn = to < 1d;
-        //  Стартуем от ЖИВОГО масштаба (в т.ч. с середины идущего возврата), иначе быстрый повторный
-        //  тап дал бы кадр-откат — та же дисциплина, что у индикатора навигации.
-        var from = dip.ScaleX;
-        var anim = new Animation
+        if (dip.Transitions is not { Count: 2 } transitions)
         {
-            Duration = pressingIn ? InDuration : BackDuration,
-            Easing = pressingIn ? InEase : BackEase,
-            FillMode = FillMode.Forward,
-            Children =
+            transitions =
+            [
+                new DoubleTransition { Property = ScaleTransform.ScaleXProperty },
+                new DoubleTransition { Property = ScaleTransform.ScaleYProperty },
+            ];
+            dip.Transitions = transitions;
+        }
+
+        foreach (var t in transitions)
+        {
+            if (t is DoubleTransition d)
             {
-                new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(ScaleTransform.ScaleXProperty, from), new Setter(ScaleTransform.ScaleYProperty, from) } },
-                new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(ScaleTransform.ScaleXProperty, to), new Setter(ScaleTransform.ScaleYProperty, to) } },
-            },
-        };
-        try
-        {
-            await anim.RunAsync(dip, ct);
-        }
-        catch
-        {
-            // отменили новым нажатием — конечное значение поставит уже он
-        }
-        if (!ct.IsCancellationRequested)
-        {
-            dip.ScaleX = dip.ScaleY = to;
+                d.Duration = duration;
+                d.Easing = easing;
+            }
         }
     }
 

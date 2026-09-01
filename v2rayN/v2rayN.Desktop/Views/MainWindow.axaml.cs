@@ -159,7 +159,6 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     private CancellationTokenSource? _layoutAnim;
     private CancellationTokenSource? _resizeAnim;   // Bug6: плавная анимация размера окна при тумблере раскладки
     private CancellationTokenSource? _contentAnim;  // смена вкладки в едином contentHost (directional slide+fade)
-    private CancellationTokenSource? _indicatorAnim; // скольжение путешествующего индикатора рейла (P1-4)
     private Control? _currentShellView;          // текущий видимый оверлей оболочки (для кроссфейда)
     private Control? _currentContentView;        // текущая видимая вкладка в contentHost (keep-alive своп)
     private int _contentZ;                       // ZIndex-счётчик: входящая вкладка всегда поверх уходящей
@@ -617,9 +616,9 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     // поэтому шаг фиксированный: позиция = отступ + индекс × высота кнопки. Геометрия из tokens.md
     // «Рейл» — кнопка 64×72, полоска 3×30, значит слот центрируется как Y = index·72 + (72−30)/2 = 21.
     // Первый показ (не seeded) / lite / off-screen / layout-своп (animate:false) — мгновенно на активном
-    // слоте (без скольжения с Y=0); дальше — переезд Motion.Dur.Nav 280мс ease-out-quart. Токен
-    // _indicatorAnim отменяет незавершённое скольжение при новом тапе; на layout-свопе рейл↔бар пере-садим
-    // мгновенно (animate:false из ShowTab), т.к. геометрии разные.
+    // слоте (без скольжения с Y=0); дальше — переезд Motion.Dur.Nav 280мс ease-out-quart. Незавершённое
+    // скольжение перебивает сам переход на трансформе (он подхватывает живое Y), отменять нечего;
+    // на layout-свопе рейл↔бар пере-садим мгновенно (animate:false из ShowTab), т.к. геометрии разные.
     private const double RailButtonHeight = 72d;   // tokens.md «Рейл»: кнопка 64×72
     private const double RailIndicatorHeight = 30d;   // tokens.md «Рейл»: полоска 3×30
 
@@ -642,10 +641,6 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         //  В узкой раскладке рейл СКРЫТ — тап нижнего бара не должен гонять 220мс скольжение на
         //  невидимой полосе (лишняя работа компоновщика); на свопе в широкий рейл сядет мгновенно.
         var instant = !animate || !_railIndicatorSeeded || MotionState.IsLite || !IsWindowLive() || IsNarrow;
-        //  Текущее Y (в т.ч. на СЕРЕДИНЕ идущего скольжения) ловим ДО Cancel: отмена ревертит свойство к
-        //  базе, поэтому чтение внутри аниматора давало «откат-кадр» при быстрых тапах трёх вкладок.
-        var fromY = _railIndicatorTransform.Y;
-        _indicatorAnim?.Cancel();
         if (instant)
         {
             ClearIndicatorTransition();
@@ -2361,9 +2356,6 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         // RenderTargetBitmap snapshot (else it's left to GC and the async-void loop keeps poking a
         // closing window). No-op when no transition is in flight.
         CancelThemeTransition();
-        // P1-4: снимаем незавершённое скольжение путешествующего индикатора рейла (та же CTS-дисциплина,
-        // что у остальных узлов) — async-void аниматор не дёргает закрывающееся окно.
-        _indicatorAnim?.Cancel();
         // Позиция окна — на закрытии (base.OnClosed рядом персистит размер в UiItem.WindowSizeItem).
         SaveWindowPosition();
         base.OnClosed(e);

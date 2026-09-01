@@ -1,3 +1,4 @@
+using System.Runtime.Versioning;
 using Microsoft.Win32;
 using v2rayN.Desktop.Common;
 
@@ -115,6 +116,10 @@ public partial class UrlSchemesPage : UserControl, ISubPage
         }
     }
 
+    //  Реестр — только Windows. Вызывающий (RefreshStatus/Register) уже стоит за Utils.IsWindows(),
+    //  который помечен [SupportedOSPlatformGuard("windows")]; атрибут доносит тот же контракт до
+    //  анализатора внутри самого метода — иначе CA1416 ругается на каждое обращение к Registry.
+    [SupportedOSPlatform("windows")]
     private static bool IsRegistered()
     {
         try
@@ -155,6 +160,7 @@ public partial class UrlSchemesPage : UserControl, ISubPage
         RefreshStatus();
     }
 
+    [SupportedOSPlatform("windows")]
     private static void RegisterScheme(string scheme, string exe)
     {
         using var root = Registry.CurrentUser.CreateSubKey($@"Software\Classes\{scheme}");

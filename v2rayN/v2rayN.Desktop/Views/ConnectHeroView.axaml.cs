@@ -201,9 +201,6 @@ public partial class ConnectHeroView : UserControl
     /// <summary>Тап по диску: переключить подключение (connect/disconnect).</summary>
     public event EventHandler? ConnectToggleRequested;
 
-    /// <summary>«+» в стата-строке (добавить профиль/подписку).</summary>
-    public event EventHandler? AddRequested;
-
     /// <summary>Онбординг «нет подписки»: добавить по QR-коду.</summary>
     public event EventHandler? AddByQrRequested;
 

@@ -577,7 +577,7 @@ public partial class LoginView : UserControl
         ToolbarTitle.Text = L.T(_registerMode ? "Login_TabRegister" : "Login_SignIn");
         TitleText.Text = L.T(_registerMode ? "Login_TitleRegister" : "Login_Title");
         SubtitleText.Text = L.T(_registerMode ? "Login_SubtitleRegister" : "Login_Subtitle");
-        PasswordBox.Watermark = L.T(_registerMode ? "Login_PasswordRegister" : "Login_Password");
+        PasswordBox.PlaceholderText = L.T(_registerMode ? "Login_PasswordRegister" : "Login_Password");
 
         UpdateFormVisibility();
         UpdateSiteGate();

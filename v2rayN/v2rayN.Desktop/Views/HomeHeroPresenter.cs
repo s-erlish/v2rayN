@@ -58,18 +58,15 @@ internal sealed class HomeHeroPresenter
 
         // ── Connect-hero events → VM commands ──────────────────────────────
         void OnToggle(object? s, EventArgs e) => vm.ConnectToggle();
-        void OnAdd(object? s, EventArgs e) => _ = vm.AddViaClipboard();
         void OnAddQr(object? s, EventArgs e) => _ = vm.AddViaQr();
         void OnAddClip(object? s, EventArgs e) => _ = vm.AddViaClipboard();
 
         hero.ConnectToggleRequested += OnToggle;
-        hero.AddRequested += OnAdd;
         hero.AddByQrRequested += OnAddQr;
         hero.AddFromClipboardRequested += OnAddClip;
         Disposable.Create(() =>
         {
             hero.ConnectToggleRequested -= OnToggle;
-            hero.AddRequested -= OnAdd;
             hero.AddByQrRequested -= OnAddQr;
             hero.AddFromClipboardRequested -= OnAddClip;
         }).DisposeWith(d);
