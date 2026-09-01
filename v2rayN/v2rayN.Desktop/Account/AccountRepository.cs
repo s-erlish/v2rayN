@@ -75,7 +75,19 @@ public sealed class AccountRepository
         }
         catch (ApiError.Unauthorized e)
         {
-            AccountSession.EndSession();
+            // Ending the session is the single most disruptive thing this app does to itself, so the
+            // 401 has to be OURS. A captive portal answers every request with 401 and an HTML page —
+            // hotel, airport and office wifi, i.e. precisely the networks a VPN user is on — and taking
+            // that as «твой токен мёртв» signed the user out of an account whose token was fine. The
+            // owner's rule is that a session ends when the user ends it; a middlebox is not the user.
+            //
+            // What this CANNOT fix: the token is a 7-day JWT with no refresh endpoint, so once the
+            // backend itself rejects it the app has nothing left to present. Making a session outlive
+            // seven days needs a rolling or refreshable token from the panel — a server-side change.
+            if (e.FromApi)
+            {
+                AccountSession.EndSession();
+            }
             return ApiResult<UserProfileDto>.Failure(e);
         }
         catch (ApiError e)

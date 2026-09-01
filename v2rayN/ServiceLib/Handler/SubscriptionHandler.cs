@@ -245,6 +245,24 @@ public static class SubscriptionHandler
             return false;
         }
 
+        // A NOTICE IS NOT A SERVER LIST. The panel always answers this URL — an expired subscription
+        // does not get an error, it gets a body carrying ONE host whose name is the message («подписка
+        // истекла»), exactly the way the HWID-limit case is answered with the «Приложение не
+        // поддерживается» host. Handing that body to the importer below did real damage: AddBatchServers
+        // is a DESTRUCTIVE replace (delete the group, then import), so the notice host parsed fine,
+        // counted as one imported server, and the user's whole location list was replaced by a single
+        // fake node they could select and try to connect to. The subscription must survive its own
+        // expiry — that is the entire renewal path («увидел, что истекло, и зашёл продлил»).
+        //
+        // So: recognise it, keep every server already on the machine, and still persist the metadata —
+        // SubItem.Expire is what the Home meta-bar reads to say «Просрочено», so the user is TOLD.
+        if (IsNoticeResponse(result, body, out var noticeReason))
+        {
+            await SaveSubscriptionMetadata(subItem.Id, result);
+            await updateFunc?.Invoke(false, $"{hashCode}Subscription notice ({noticeReason}) — servers left untouched.");
+            return false;
+        }
+
         await updateFunc?.Invoke(false, $"{hashCode}{ResUI.MsgGetSubscriptionSuccessfully}");
 
         // If result is too short, display content directly
@@ -275,6 +293,78 @@ public static class SubscriptionHandler
                 : $"{hashCode}{ResUI.MsgFailedImportSubscription}");
 
         return ret > 0;
+    }
+
+    /// <summary>
+    /// True when the fetched body is the panel's NOTICE response instead of a server list.
+    ///
+    /// Two signals, in order of how much they can be trusted:
+    ///
+    /// 1. THE HEADER, and it is the authoritative one. `subscription-userinfo` carries `expire` as
+    ///    epoch SECONDS, and the panel keeps sending it after the subscription lapses — that is
+    ///    already how the Home meta-bar knows to print «Просрочено» (SubscriptionMetaView.ApplyExpiry
+    ///    reads the very same value off SubItem.Expire). An expire in the past therefore means the
+    ///    body cannot be a live server list, whatever it happens to contain, and it says so without
+    ///    depending on any wording. A clock running days fast is the only false positive, and its
+    ///    outcome is harmless by construction: we import nothing and CHANGE nothing, so the user keeps
+    ///    the servers they already have and the next fetch with a sane clock imports normally.
+    ///
+    /// 2. THE WORDING, for the case where the header never arrived (the headerless download fallback).
+    ///    Only markers actually verified on the wire are listed — a guess here would silently refuse a
+    ///    real subscription, which is worse than the bug. The body is base64-decoded and
+    ///    percent-decoded first, because a URI list carries the node name in its `#fragment`.
+    /// </summary>
+    private static bool IsNoticeResponse(SubContentResult result, string body, out string reason)
+    {
+        var info = ParseUserInfo(result.SubscriptionUserInfo);
+        if (info is { } userInfo && userInfo.Expire > 0
+            && userInfo.Expire < DateTimeOffset.UtcNow.ToUnixTimeSeconds())
+        {
+            reason = "expired";
+            return true;
+        }
+
+        if (ContainsNoticeMarker(body))
+        {
+            reason = "not a server list";
+            return true;
+        }
+
+        reason = string.Empty;
+        return false;
+    }
+
+    /// <summary>
+    /// Marker strings the panel puts in the NAME of a notice host. Verified on the wire, not guessed:
+    /// the HWID/UA case is documented in <see cref="Global.SubscriptionHwidProvider"/> and reproduced
+    /// in this file's <see cref="ResolveSubUserAgent"/> note. Matching is case-insensitive and done on
+    /// the decoded body, so it catches the name whether it arrived as a URI fragment or inside JSON.
+    /// </summary>
+    private static readonly string[] _noticeMarkers =
+    [
+        "Приложение не поддерживается",
+    ];
+
+    private static bool ContainsNoticeMarker(string body)
+    {
+        if (body.IsNullOrEmpty())
+        {
+            return false;
+        }
+        try
+        {
+            var text = Utils.IsBase64String(body) ? Utils.Base64Decode(body) : body;
+            // A node name travels percent-encoded in a URI fragment; decode so one marker list covers
+            // both the URI-list and the JSON-array shapes this panel can answer with.
+            var decoded = Uri.UnescapeDataString(text);
+            return _noticeMarkers.Any(marker => decoded.Contains(marker, StringComparison.OrdinalIgnoreCase));
+        }
+        catch (Exception ex)
+        {
+            // A body we cannot even decode is not evidence of a notice — let the importer judge it.
+            Logging.SaveLog("SubscriptionNoticeCheck", ex);
+            return false;
+        }
     }
 
     /// <summary>

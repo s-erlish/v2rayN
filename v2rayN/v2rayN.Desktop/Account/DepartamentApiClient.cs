@@ -25,7 +25,19 @@ public sealed class DepartamentApiClient : IDepartamentApiClient
 
     private static HttpClient CreateClient()
     {
-        var client = new HttpClient(new AuthMessageHandler(new HttpClientHandler()))
+        // SocketsHttpHandler with a BOUNDED pooled-connection lifetime. The default is infinite: a
+        // connection opened at launch is reused for the whole process life and its DNS answer is never
+        // re-resolved. For a VPN client that is the wrong default twice over — the machine's routing
+        // changes under the app every time the tunnel comes up or down, and the backend's address is
+        // exactly the kind that gets re-pointed when an IP is blocked. Recycling every two minutes
+        // makes the next request re-resolve and re-connect, instead of pinning the process to an
+        // address that stopped working. Two minutes is long enough that a burst of calls (the login
+        // sync fires six) still shares one connection.
+        var handler = new SocketsHttpHandler
+        {
+            PooledConnectionLifetime = TimeSpan.FromMinutes(2),
+        };
+        var client = new HttpClient(new AuthMessageHandler(handler))
         {
             Timeout = TimeSpan.FromSeconds(25),
         };
@@ -51,13 +63,23 @@ public sealed class DepartamentApiClient : IDepartamentApiClient
             }
 
             // Stable per-install HWID + OS/device so the panel keeps ONE device entry per machine.
+            // The OS is REPORTED, not assumed: this build also ships for Linux and macOS, and the
+            // hardcoded "windows" is what the panel stores and what the «Устройства» screen then reads
+            // back — so a Mac listed itself as a Windows box in the user's own device list.
             request.Headers.TryAddWithoutValidation(HeaderHwid, AuthTokenStore.DeviceId());
-            request.Headers.TryAddWithoutValidation(HeaderDeviceOs, "windows");
+            request.Headers.TryAddWithoutValidation(HeaderDeviceOs, CurrentDeviceOs());
             request.Headers.TryAddWithoutValidation(HeaderVerOs, Environment.OSVersion.Version.ToString());
             request.Headers.TryAddWithoutValidation(HeaderDeviceModel, Environment.MachineName);
 
             return await base.SendAsync(request, cancellationToken);
         }
+
+        /// <summary>The OS this build is actually running on, in the panel's lowercase spelling.</summary>
+        private static string CurrentDeviceOs() =>
+            OperatingSystem.IsWindows() ? "windows"
+            : OperatingSystem.IsMacOS() ? "macos"
+            : OperatingSystem.IsLinux() ? "linux"
+            : "desktop";
     }
 
     #region public
@@ -376,10 +398,22 @@ public sealed class DepartamentApiClient : IDepartamentApiClient
             var body = await resp.Content.ReadAsStringAsync();
             if (!resp.IsSuccessStatusCode)
             {
-                throw MapError((int)resp.StatusCode, SanitizeBody(body));
+                throw MapError((int)resp.StatusCode, SanitizeBody(body), LooksLikeApiResponse(resp));
             }
             return Parse<T>(body);
         }
+    }
+
+    /// <summary>
+    /// Whether this response actually came from our API rather than from something intercepting the
+    /// request. Our backend answers JSON (or an empty body); a captive portal answers an HTML login
+    /// page. Only the 401 mapping reads this — see <see cref="ApiError.Unauthorized.FromApi"/> — but
+    /// judging it here is the only place that still HAS the response to judge.
+    /// </summary>
+    private static bool LooksLikeApiResponse(HttpResponseMessage resp)
+    {
+        var mediaType = resp.Content.Headers.ContentType?.MediaType;
+        return mediaType.IsNullOrEmpty() || mediaType!.Contains("json", StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task ExecuteVoid(HttpRequestMessage request)
@@ -415,12 +449,12 @@ public sealed class DepartamentApiClient : IDepartamentApiClient
         }
     }
 
-    private static ApiError MapError(int code, string? detail = null) => code switch
+    private static ApiError MapError(int code, string? detail = null, bool fromApi = true) => code switch
     {
         // Only 401 means "authentication failed / token expired". 403 (Forbidden) is a permission
         // outcome on a valid session and must NOT be treated as Unauthorized (else callers wipe a
-        // live session).
-        401 => new ApiError.Unauthorized(detail),
+        // live session). `fromApi` says whether the 401 is even ours to believe.
+        401 => new ApiError.Unauthorized(detail, fromApi),
         403 => new ApiError.Server(403, detail),
         404 => new ApiError.NotFoundError(),
         410 => new ApiError.GoneError(),

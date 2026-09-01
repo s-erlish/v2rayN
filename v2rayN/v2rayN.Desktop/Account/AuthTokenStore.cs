@@ -65,6 +65,10 @@ public static class AuthTokenStore
             data.Token = token;
             data.ExpiresAt = expiresAt ?? 0L;
             data.UserJson = user != null ? JsonSerializer.Serialize(user, ApiJson.Options) : null;
+            // An explicit sign-in is the ONE act allowed to replace a blob this process could not read:
+            // the user is standing in front of the app handing us a fresh session, and a permanently
+            // corrupt file must not condemn them to signing in again on every launch.
+            _blobUnreadable = false;
             Persist();
         }
     }
@@ -188,28 +192,88 @@ public static class AuthTokenStore
 
     private static StoreData Data() => _data ??= Load();
 
+    /// <summary>
+    /// Set when a blob EXISTS on disk that this process could not turn into a <see cref="StoreData"/>.
+    /// While it is set <see cref="Persist"/> WRITES NOTHING.
+    ///
+    /// The read used to swallow every failure into "start fresh", and "fresh" is then written straight
+    /// back: the very first <see cref="DeviceId"/> call — which happens on EVERY api request, because
+    /// the HWID header is built from it — finds no device id in the blank store, generates one and
+    /// calls Persist, renaming a blank blob over the real one. A read that failed for a reason that has
+    /// nothing to do with the contents (an antivirus or backup agent holding the file for a few ms on
+    /// Windows, a momentary permission error, a machine seed that could not be read so the key came out
+    /// different) therefore did not just sign the user out for that run — it DESTROYED the session AND
+    /// the uuid-&gt;guid map, permanently, so the next import re-added every account subscription beside
+    /// the ones already there. Exactly the shape of «вылетает аккаунт», and the same doctrine as
+    /// 12fc34fe applies: we could not read it, so we do not change it.
+    ///
+    /// The one deliberate act allowed to replace an unreadable blob is an explicit sign-in
+    /// (<see cref="SaveSession"/>) — otherwise a genuinely corrupt file could never be replaced and the
+    /// user would be signing in on every launch forever.
+    /// </summary>
+    private static bool _blobUnreadable;
+
+    /// <summary>Attempts for a read that failed transiently, and the pause between them.</summary>
+    private const int LoadAttempts = 3;
+
+    private const int LoadRetryDelayMs = 60;
+
     private static StoreData Load()
     {
+        string path;
         try
         {
-            var path = Utils.GetConfigPath(FileName);
+            path = Utils.GetConfigPath(FileName);
             if (!File.Exists(path))
             {
+                // No blob at all: a genuinely first run. Writing is safe — there is nothing to lose.
                 return new StoreData();
             }
-            var blob = File.ReadAllBytes(path);
-            var json = Decrypt(blob);
-            if (json.IsNullOrEmpty())
-            {
-                return new StoreData();
-            }
-            return JsonSerializer.Deserialize<StoreData>(json!) ?? new StoreData();
         }
-        catch
+        catch (Exception ex)
         {
-            // Corrupt/undecryptable (e.g. machine changed): start fresh rather than crash.
+            Logging.SaveLog(Tag, ex);
+            _blobUnreadable = true;
             return new StoreData();
         }
+
+        for (var attempt = 1; attempt <= LoadAttempts; attempt++)
+        {
+            try
+            {
+                var blob = File.ReadAllBytes(path);
+                var json = Decrypt(blob);
+                if (json.IsNullOrEmpty())
+                {
+                    break;
+                }
+                var data = JsonSerializer.Deserialize<StoreData>(json!);
+                if (data != null)
+                {
+                    return data;
+                }
+                break;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Somebody else is holding the file. This read happens once per launch, so a couple of
+                // short retries cost nothing and cover the whole realistic window.
+                Logging.SaveLog(Tag, ex);
+                if (attempt < LoadAttempts)
+                {
+                    Thread.Sleep(LoadRetryDelayMs);
+                }
+            }
+            catch (Exception ex)
+            {
+                // Undecryptable or not JSON — retrying cannot change the answer.
+                Logging.SaveLog(Tag, ex);
+                break;
+            }
+        }
+
+        _blobUnreadable = true;
+        return new StoreData();
     }
 
     /// <summary>
@@ -222,6 +286,12 @@ public static class AuthTokenStore
     /// </summary>
     private static void Persist()
     {
+        // Never write over a blob we failed to read — see _blobUnreadable. The session for this run is
+        // lost either way; the subscriptions, their servers and the uuid->guid map are not.
+        if (_blobUnreadable)
+        {
+            return;
+        }
         try
         {
             var json = JsonSerializer.Serialize(_data ?? new StoreData());

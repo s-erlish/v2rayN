@@ -46,6 +46,19 @@ public sealed class PaymentInitDto
     public string OrderId { get; set; } = "";
 }
 
+/// <summary>How a 200 from POST /client/payments/balance actually ended.</summary>
+public enum BalanceSettlement
+{
+    /// <summary>The wallet was debited — the purchase is done.</summary>
+    Settled,
+
+    /// <summary>Accepted but not settled yet (or the reply says nothing we can read as a debit).</summary>
+    Pending,
+
+    /// <summary>The backend answered 200 and refused — e.g. insufficient funds.</summary>
+    Rejected,
+}
+
 /// <summary>Returned by a balance (wallet) payment that settles immediately. The Departament backend's
 /// tariff-purchase/renewal reply is {message, paymentId, newBalance}; Status/OrderId are kept for
 /// source compatibility with older callers and stay blank on this endpoint.</summary>
@@ -58,6 +71,62 @@ public sealed class PaymentResultDto
     public string? Message { get; set; }
     public string? PaymentId { get; set; }
     public double? NewBalance { get; set; }
+
+    private static readonly HashSet<string> _settledStatuses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "paid", "success", "succeeded", "completed", "confirmed", "done",
+    };
+
+    private static readonly HashSet<string> _pendingStatuses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "pending", "processing", "new", "created", "waiting", "in_progress",
+    };
+
+    private static readonly HashSet<string> _rejectedStatuses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "failed", "error", "declined", "rejected", "canceled", "cancelled", "expired", "insufficient_funds",
+    };
+
+    /// <summary>
+    /// Reads what the reply actually says instead of taking the 2xx as a receipt.
+    ///
+    /// A balance purchase is settled INSIDE the request, so its outcome lives in the body: this
+    /// endpoint answers 200 both when the wallet was debited and when it refused (insufficient funds
+    /// is the ordinary case). The callers treated any 200 as «Подписка продлена» and reloaded — the
+    /// user was told the thing had happened, and the reload quietly put the unchanged expiry back.
+    ///
+    /// The status field is the first authority. It is BLANK on this backend's own success shape
+    /// ({message, paymentId, newBalance}), so a blank status is judged by the receipt instead: a
+    /// newBalance the server computed after the debit — or, failing that, a paymentId — is what a
+    /// settlement leaves behind. Anything else is reported as still in flight rather than as success:
+    /// callers reload either way, so an over-cautious «обрабатывается» corrects itself within a second,
+    /// while a wrong «продлено» is a lie the user acts on.
+    /// </summary>
+    public BalanceSettlement Settlement()
+    {
+        var status = Status.Trim();
+        if (status.Length > 0)
+        {
+            if (_rejectedStatuses.Contains(status))
+            {
+                return BalanceSettlement.Rejected;
+            }
+            if (_pendingStatuses.Contains(status))
+            {
+                return BalanceSettlement.Pending;
+            }
+            if (_settledStatuses.Contains(status))
+            {
+                return BalanceSettlement.Settled;
+            }
+            // An unmapped status is not a receipt.
+            return BalanceSettlement.Pending;
+        }
+
+        return NewBalance is not null || PaymentId.IsNotEmpty()
+            ? BalanceSettlement.Settled
+            : BalanceSettlement.Pending;
+    }
 }
 
 /// <summary>

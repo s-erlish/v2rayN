@@ -36,6 +36,12 @@ public class AccountViewModel : MyReactiveObject
     private List<SubInfoDto> _lastAll = new();
     private bool _hasSubData;
 
+    // True when the last subscription fetch could NOT establish the remote state (the authoritative
+    // primary summary failed) and there is nothing on screen to fall back on. «Не смогли узнать» and
+    // «подписки нет» are different sentences, and only this flag lets the hero say the first one: the
+    // empty state is a claim ABOUT THE ACCOUNT and must never be printed from a failed request.
+    private bool _subsUnavailable;
+
     // True until the FIRST real load result lands. Gates the loading skeleton so a genuinely-empty
     // account resolves to the empty state rather than spinning forever.
     private bool _pendingFirstLoad = true;
@@ -368,7 +374,7 @@ public class AccountViewModel : MyReactiveObject
             Profile = AuthTokenStore.GetUser();
         }
 
-        RefreshProfileCmd = ReactiveCommand.CreateFromTask(RefreshProfile);
+        RefreshProfileCmd = ReactiveCommand.CreateFromTask(async () => { await RefreshProfile(); });
         LoadSubscriptionsCmd = ReactiveCommand.CreateFromTask(LoadSubscriptions);
         LoadTariffsCmd = ReactiveCommand.CreateFromTask(LoadTariffs);
         LoadPaymentsCmd = ReactiveCommand.CreateFromTask(LoadPayments);
@@ -436,6 +442,9 @@ public class AccountViewModel : MyReactiveObject
 
         AccountSession.StateChanged += OnSessionStateChanged;
 
+        // Refresh on returning to the window after a long idle — see HookIdleReturnRefresh.
+        HookIdleReturnRefresh();
+
         // Live language switch: re-derive every display string (balance caption, «Действует до …»,
         // device counts, referral line, error text) so open bindings pick up the new language. Also
         // re-apply the sync stage caption if a sync is mid-flight, so the loading line follows the switch.
@@ -466,19 +475,25 @@ public class AccountViewModel : MyReactiveObject
     /// <summary>Returning-user startup: auto-import subscriptions (→ refresh Home) then load the tab.</summary>
     private async Task StartupLoad()
     {
-        // Same phase sequence as a fresh login MINUS the extra subscription fetch (parity with the original
-        // returning-user path: import + load only). On success clear the cold-start gate so the loading
-        // surface hands directly to the populated Home/Account instead of the empty login gate. On FAILURE
-        // RunSyncPhases raises SyncFailed and leaves IsStartupLoading TRUE, so the sync overlay shows the
-        // retry surface rather than flashing the logged-out login gate.
-        if (await RunSyncPhases(includeSubFetch: false))
+        // Same phase sequence as a fresh login MINUS the extra subscription fetch (parity with the
+        // original returning-user path: import + load only).
+        var ok = await RunSyncPhases(includeSubFetch: false);
+        RunOnUi(() =>
         {
-            RunOnUi(() =>
+            // THE COLD-START GATE ALWAYS DROPS, including on failure. AccountSyncView listens to
+            // IsImportingAccount only — the post-login import — and deliberately not to this flag, so
+            // on this path there is no retry surface to hold the user on: leaving IsStartupLoading true
+            // would freeze the shell on a loading frame with no way out. The servers live in the local
+            // database and need no backend, so a launch without network hands over to a working Home;
+            // the failure is told where it belongs, on the Account tab, which already carries the error
+            // Report() recorded and the «подписку не удалось загрузить» state.
+            IsStartupLoading = false;
+            if (!ok)
             {
-                IsStartupLoading = false;
-                Recompute();
-            });
-        }
+                SyncFailed = false;
+            }
+            Recompute();
+        });
     }
 
     /// <summary>Design-time constructor: sample logged-in active state so the previewer renders.</summary>
@@ -541,16 +556,36 @@ public class AccountViewModel : MyReactiveObject
 
     #region loads
 
-    private async Task LoadAll()
+    /// <summary>
+    /// The full tab load. <paramref name="includeSubscriptions"/> exists because the post-login sync
+    /// runs the subscription fetch as its OWN named stage — running it here too sent
+    /// GET /client/subscription and /client/subscription/all a second time, on the critical path of
+    /// the overlay the user is watching.
+    /// </summary>
+    private async Task<bool> LoadAll(bool includeSubscriptions = true)
     {
-        await RefreshProfile();
-        await LoadSubscriptions();
+        var reached = await RefreshProfile();
+        if (includeSubscriptions)
+        {
+            reached &= await FetchAndApplySubscriptions();
+        }
         await LoadPublicConfig();
         await LoadTariffs();
         await LoadPayments();
+        if (reached)
+        {
+            _lastReachedUtc = DateTime.UtcNow;
+        }
+        return reached;
     }
 
-    private async Task RefreshProfile()
+    /// <summary>
+    /// Re-reads the identity endpoint. Returns whether the BACKEND ANSWERED — success, or a 401, which
+    /// is an answer too (the token is dead, the session has just ended and the shell will show the
+    /// login gate). Anything else means we never reached it, and that is what makes a sync a failure
+    /// rather than a silent success.
+    /// </summary>
+    private async Task<bool> RefreshProfile()
     {
         var result = await _repo.RefreshProfile();
         RunOnUi(() =>
@@ -568,6 +603,7 @@ public class AccountViewModel : MyReactiveObject
                 .OnFailure(Report);
             Recompute();
         });
+        return result.IsSuccess || result.Error is ApiError.Unauthorized;
     }
 
     private async Task LoadSubscriptions()
@@ -579,8 +615,18 @@ public class AccountViewModel : MyReactiveObject
     /// Fetches /subscription/all plus the authoritative primary subscription and publishes the merged
     /// list, so the active/primary sub always renders (never the raw un-merged /all list). Port of
     /// AccountViewModel.fetchAndApplySubscriptions.
+    ///
+    /// AN EMPTY RESULT IS ONLY THE TRUTH WHEN BOTH ENDPOINTS ANSWERED. /all routinely omits the root
+    /// item (SubscriptionDtos.cs), so GET /client/subscription is the ONLY payload that can say the
+    /// account HAS an active subscription. The old gate published the merge whenever /all merely
+    /// returned 200 — and /all returns 200 with an empty list for an account whose only subscription
+    /// is the root one. So a single failed primary (timeout, 5xx, a blip on a laptop waking up) made
+    /// the merge come out empty for want of an answer, and that emptiness was written over the live
+    /// list: the card vanished and the tab printed «нет подписки» over a perfectly valid subscription.
+    /// Same class of bug 12fc34fe closed inside the importer, on the display side this time — so the
+    /// same doctrine applies: узнали ничего — не меняем ничего.
     /// </summary>
-    private async Task FetchAndApplySubscriptions()
+    private async Task<bool> FetchAndApplySubscriptions()
     {
         var allResult = await _repo.LoadSubscriptions();
         var primaryResult = await _repo.LoadPrimarySubscription();
@@ -591,11 +637,17 @@ public class AccountViewModel : MyReactiveObject
             var primary = primaryResult.GetOrNull();
             var merged = MergeSubscriptions(primary, all, Profile);
 
-            if (merged.Count > 0 || allResult.IsSuccess)
+            // Authoritative = both endpoints answered, so an empty merge really means "no subscription".
+            // A non-empty merge is published either way: learning SOMETHING is never a reason to keep a
+            // staler screen, and a /all root item is a real subscription even without the primary.
+            var authoritative = allResult.IsSuccess && primaryResult.IsSuccess;
+
+            if (authoritative || merged.Count > 0)
             {
                 _lastPrimary = primary;
                 _lastAll = all;
                 _hasSubData = true;
+                _subsUnavailable = false;
                 Subscriptions = merged;
                 if (merged.Count > 0)
                 {
@@ -610,7 +662,11 @@ public class AccountViewModel : MyReactiveObject
             }
             else
             {
-                var err = allResult.ExceptionOrNull() ?? primaryResult.ExceptionOrNull();
+                // Nothing was learned: keep whatever is already on screen and surface the REAL reason.
+                // With no subscription on screen at all the hero must read "не смогли загрузить" with a
+                // «Повторить», never the empty state — the empty state is a statement about the account.
+                _subsUnavailable = Subscriptions.Count == 0;
+                var err = primaryResult.ExceptionOrNull() ?? allResult.ExceptionOrNull();
                 if (err != null)
                 {
                     Report(err);
@@ -618,6 +674,10 @@ public class AccountViewModel : MyReactiveObject
             }
             Recompute();
         });
+
+        // Computed HERE, on this thread, from the results themselves — never by reading VM state after
+        // the RunOnUi above, which off the UI thread is a POST that has not run yet.
+        return allResult.IsSuccess || primaryResult.IsSuccess;
     }
 
     /// <summary>
@@ -941,11 +1001,9 @@ public class AccountViewModel : MyReactiveObject
             }
         });
         var url = $"{SiteLoginUrl}?return={AppScheme}://auth";
-        try
-        {
-            ProcUtils.ProcessStart(url);
-        }
-        catch
+        // TryProcessStart, not the void overload: that one swallows the failure, so this catch could
+        // never fire and a machine with no browser handler silently did nothing at all.
+        if (!ProcUtils.TryProcessStart(url))
         {
             RunOnUi(() => AppEvents.SendSnackMsgRequested.Publish(L.T("Common_SomethingWrong")));
         }
@@ -1128,13 +1186,35 @@ public class AccountViewModel : MyReactiveObject
         {
             RunOnUi(() => SetSyncStage(SyncPhase.Account));
             await AutoImportAndRefreshHome();   // import + RefreshServers (flips Home IsEmpty=false)
+            // The subscription pair (/client/subscription + /all) is fetched EXACTLY ONCE per sync:
+            // as its own captioned stage on the fresh-login path, otherwise inside LoadAll. Running
+            // both — which is what an unconditional LoadAll did — put two extra round-trips on the
+            // critical path of the sync overlay for an answer we already had.
+            var reached = true;
             if (includeSubFetch)
             {
                 RunOnUi(() => SetSyncStage(SyncPhase.Subs));
-                await FetchAndApplySubscriptions();
+                reached &= await FetchAndApplySubscriptions();
             }
             RunOnUi(() => SetSyncStage(SyncPhase.Servers));
-            await LoadAll();
+            reached &= await LoadAll(includeSubscriptions: !includeSubFetch);
+
+            // A SYNC THAT REACHED NOTHING IS NOT A SUCCESS. Every repository call is Guard-ed and hands
+            // back an ApiResult instead of throwing, so the catch below — the only thing that used to
+            // decide this — could practically never fire: offline, the whole sequence "completed", the
+            // overlay resolved, and the user was handed a screen that had learned nothing as though it
+            // had. Now the verdict comes from the results: the phases report whether the backend
+            // actually answered, and a sync that never reached it says so.
+            if (!reached)
+            {
+                RunOnUi(() =>
+                {
+                    IsLoading = false;
+                    SyncFailed = true;
+                    Recompute();
+                });
+                return false;
+            }
             return true;
         }
         catch (Exception ex)
@@ -1314,6 +1394,7 @@ public class AccountViewModel : MyReactiveObject
             _lastPrimary = null;
             _lastAll = new List<SubInfoDto>();
             _hasSubData = false;
+            _subsUnavailable = false;
             Payments = new List<PaymentDto>();
             DeviceCount = null;
             Tariffs = new List<TariffGroupDto>();
@@ -1329,6 +1410,7 @@ public class AccountViewModel : MyReactiveObject
     private async Task Retry()
     {
         _pendingFirstLoad = true;
+        _subsUnavailable = false;
         ClearError();
         Recompute();
         if (IsLoggedIn)
@@ -1336,6 +1418,114 @@ public class AccountViewModel : MyReactiveObject
             await LoadAll();
         }
     }
+
+    /// <summary>
+    /// What a settled payment changed lives in TWO places, and <see cref="Retry"/> only ever reloaded
+    /// one of them.
+    ///
+    /// The account API carries the balance, the new expiry and the device slots — that is what Retry
+    /// re-reads, and it is why the card looked right. THE SUBSCRIPTION ITSELF carries the server list
+    /// and the <c>subscription-userinfo</c> header, and only a real subscription fetch
+    /// (SubscriptionHandler.UpdateProcess, reached through the account import) writes those onto the
+    /// SubItem. So after a renewal made from an Account card, the card said the subscription was
+    /// extended while Home's meta-bar still showed the previous <c>SubItem.Expire</c> — a red
+    /// «Просрочено» over a subscription that had just been paid for — until the next launch. An
+    /// upgrade was worse: it can change which servers the account gets, and the list stayed the old
+    /// one. The Buy screen already does both on success (BuyViewModel.RefreshAfterPurchase); the
+    /// Account-tab actions did not, and now do.
+    ///
+    /// Runs off the UI thread: the import downloads the subscription and writes the profile rows, and
+    /// none of that belongs on the thread painting the card. Every UI mutation inside still marshals
+    /// back through RunOnUi, and the account reload is handed back to the UI thread exactly as before.
+    /// </summary>
+    private void ScheduleAccountReload()
+    {
+        _ = Task.Run(async () =>
+        {
+            await AutoImportAndRefreshHome();
+            RunOnUi(() => _ = Retry());
+        });
+    }
+
+    #region refresh on returning to the window
+
+    /// <summary>UTC of the last load that actually reached the backend. Zero until one has.</summary>
+    private DateTime _lastReachedUtc = DateTime.MinValue;
+
+    /// <summary>Guards against stacking idle-return refreshes while one is already running.</summary>
+    private int _idleRefreshRunning;
+
+    /// <summary>
+    /// How long the tab may go unrefreshed before returning to the window is worth a round-trip.
+    /// Account-imported subscriptions carry AutoUpdateInterval = 0, so TaskManager's per-minute
+    /// scheduler never touches them: without this, a machine left running for days kept whatever
+    /// server list and expiry it had at launch.
+    /// </summary>
+    private static readonly TimeSpan IdleRefreshAfter = TimeSpan.FromMinutes(15);
+
+    /// <summary>
+    /// Refresh on RETURNING TO THE WINDOW after a long idle, rather than on a timer. A poll would run
+    /// for hours nobody is looking, and would spend a laptop's battery to learn nothing; the moment the
+    /// answer starts mattering again is the moment the user comes back to it. The staleness gate means
+    /// alt-tabbing costs nothing — at most one refresh per <see cref="IdleRefreshAfter"/>.
+    ///
+    /// Deliberately does NOT go through RunSyncPhases: that raises SyncFailed, which AccountSyncView
+    /// turns into a full-screen retry column. A background refresh must never take the screen; it
+    /// reports through the ordinary error state like any other load.
+    /// </summary>
+    private void HookIdleReturnRefresh()
+    {
+        // The window does not exist yet while this VM is constructed (it is built during MainWindow's
+        // field initialisation), so resolve it on the next dispatcher turn.
+        Dispatcher.UIThread.Post(() =>
+        {
+            try
+            {
+                if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime { MainWindow: { } window })
+                {
+                    window.Activated += (_, _) => RefreshIfIdle();
+                }
+            }
+            catch (Exception ex)
+            {
+                Logging.SaveLog("AccountIdleRefreshHook", ex);
+            }
+        });
+    }
+
+    private void RefreshIfIdle()
+    {
+        if (!IsLoggedIn || IsImportingAccount || IsStartupLoading || SyncFailed)
+        {
+            return;
+        }
+        if (_lastReachedUtc == DateTime.MinValue || DateTime.UtcNow - _lastReachedUtc < IdleRefreshAfter)
+        {
+            return;
+        }
+        if (Interlocked.Exchange(ref _idleRefreshRunning, 1) == 1)
+        {
+            return;
+        }
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await AutoImportAndRefreshHome();
+                await LoadAll();
+            }
+            catch (Exception ex)
+            {
+                Logging.SaveLog("AccountIdleRefresh", ex);
+            }
+            finally
+            {
+                Volatile.Write(ref _idleRefreshRunning, 0);
+            }
+        });
+    }
+
+    #endregion refresh on returning to the window
 
     /// <summary>
     /// Balance top-up (parity with Android «Пополнение баланса»): opens a Platega checkout for the
@@ -1380,9 +1570,11 @@ public class AccountViewModel : MyReactiveObject
                         AppEvents.SendSnackMsgRequested.Publish(L.T("Common_CouldntOpenPayment"));
                         return;
                     }
-                    try
+                    // The browser launch has to be CHECKED, not assumed: promising «завершите оплату
+                    // в браузере» and starting a poll over a browser that never opened is the worst
+                    // possible answer — the user waits for a page that is not there.
+                    if (ProcUtils.TryProcessStart(url))
                     {
-                        ProcUtils.ProcessStart(url);
                         AppEvents.SendSnackMsgRequested.Publish(L.T("Common_CompletePaymentInBrowser"));
                         TopUpAmount = string.Empty;
                         HasTopUpError = false;
@@ -1394,7 +1586,7 @@ public class AccountViewModel : MyReactiveObject
                         // manual retry.
                         SchedulePostTopUpBalanceRefresh();
                     }
-                    catch
+                    else
                     {
                         AppEvents.SendSnackMsgRequested.Publish(L.T("Common_CouldntOpenPayment"));
                     }
@@ -1424,7 +1616,13 @@ public class AccountViewModel : MyReactiveObject
                 {
                     await Task.Delay(TimeSpan.FromSeconds(5), cts.Token);
                     await RefreshProfile();
-                    if (Profile?.Balance is { } current && current != startingBalance)
+                    // Read the SESSION's profile, not the [Reactive] one: RefreshProfile publishes to
+                    // the VM through RunOnUi, which off the UI thread is a Dispatcher POST — it has not
+                    // run yet when the await returns, so `Profile` here is still the previous cycle's
+                    // value and the poll always noticed the balance one full cycle (5s) late, or missed
+                    // it entirely on the last attempt. AccountSession is updated synchronously inside
+                    // RefreshProfile, on THIS thread, so it is the value that actually just landed.
+                    if (AccountSession.CurrentProfile?.Balance is { } current && current != startingBalance)
                     {
                         break;
                     }
@@ -1463,10 +1661,28 @@ public class AccountViewModel : MyReactiveObject
         {
             card.IsRenewing = false;
             result
-                .OnSuccess(ok =>
+                .OnSuccess(dto =>
                 {
-                    AppEvents.SendSnackMsgRequested.Publish(L.T("Account_RenewDone"));
-                    _ = Retry();
+                    // A 2xx is not a receipt. A balance purchase settles inside the request, so the
+                    // outcome is in the BODY — this endpoint answers 200 both when the wallet was
+                    // debited and when it refused (insufficient funds is the ordinary refusal). Saying
+                    // «Подписка продлена» on any 200 told the user a thing had happened and then let
+                    // the reload quietly put the unchanged expiry back.
+                    switch (dto.Settlement())
+                    {
+                        case BalanceSettlement.Settled:
+                            AppEvents.SendSnackMsgRequested.Publish(L.T("Account_RenewDone"));
+                            break;
+                        case BalanceSettlement.Rejected:
+                            AppEvents.SendSnackMsgRequested.Publish(L.T("Buy_PaymentError"));
+                            break;
+                        default:
+                            AppEvents.SendSnackMsgRequested.Publish(L.T("Buy_Processing"));
+                            break;
+                    }
+                    // Reload in every case: the account is the authority on what really changed, and a
+                    // cautious «обрабатывается» over a settled purchase corrects itself a second later.
+                    ScheduleAccountReload();
                 })
                 .OnFailure(err => AppEvents.SendSnackMsgRequested.Publish(MessageFor(err)));
         });
@@ -1496,14 +1712,15 @@ public class AccountViewModel : MyReactiveObject
                         AppEvents.SendSnackMsgRequested.Publish(L.T("Common_CouldntOpenPayment"));
                         return;
                     }
-                    try
+                    if (ProcUtils.TryProcessStart(url))
                     {
-                        ProcUtils.ProcessStart(url);
                         AppEvents.SendSnackMsgRequested.Publish(L.T("Common_CompletePaymentInBrowser"));
                         ScheduleRenewPoll(card, init);
                     }
-                    catch
+                    else
                     {
+                        // No browser opened ⇒ no payment can settle: drop the spinner instead of
+                        // spinning through a 40-second poll for an order nobody could pay.
                         card.IsRenewing = false;
                         AppEvents.SendSnackMsgRequested.Publish(L.T("Common_CouldntOpenPayment"));
                     }
@@ -1553,7 +1770,7 @@ public class AccountViewModel : MyReactiveObject
                         {
                             card.IsRenewing = false;
                             AppEvents.SendSnackMsgRequested.Publish(L.T("Account_RenewDone"));
-                            _ = Retry();
+                            ScheduleAccountReload();
                         });
                         return;
                     }
@@ -1626,7 +1843,7 @@ public class AccountViewModel : MyReactiveObject
                     {
                         card.IsDeviceBusy = false;
                         AppEvents.SendSnackMsgRequested.Publish(L.T("Account_DevicesAdded"));
-                        _ = Retry();
+                        ScheduleAccountReload();
                     }
                 })
                 .OnFailure(err =>
@@ -1689,7 +1906,7 @@ public class AccountViewModel : MyReactiveObject
                     {
                         card.IsUpgradeBusy = false;
                         AppEvents.SendSnackMsgRequested.Publish(L.T("Account_UpgradeDone"));
-                        _ = Retry();
+                        ScheduleAccountReload();
                     }
                 })
                 .OnFailure(err =>
@@ -1713,17 +1930,13 @@ public class AccountViewModel : MyReactiveObject
             AppEvents.SendSnackMsgRequested.Publish(L.T("Common_CouldntOpenPayment"));
             return;
         }
-        try
-        {
-            ProcUtils.ProcessStart(url);
-            AppEvents.SendSnackMsgRequested.Publish(L.T("Common_CompletePaymentInBrowser"));
-        }
-        catch
+        if (!ProcUtils.TryProcessStart(url))
         {
             clearBusy();
             AppEvents.SendSnackMsgRequested.Publish(L.T("Common_CouldntOpenPayment"));
             return;
         }
+        AppEvents.SendSnackMsgRequested.Publish(L.T("Common_CompletePaymentInBrowser"));
 
         _cardActionPollCts?.Cancel();
         // Drop the spinner of a superseded DIFFERENT card so it doesn't hang; same card keeps spinning.
@@ -1758,7 +1971,7 @@ public class AccountViewModel : MyReactiveObject
                         {
                             clearBusy();
                             AppEvents.SendSnackMsgRequested.Publish(L.T(doneKey));
-                            _ = Retry();
+                            ScheduleAccountReload();
                         });
                         return;
                     }
@@ -1890,7 +2103,10 @@ public class AccountViewModel : MyReactiveObject
                 {
                     await Task.Delay(TimeSpan.FromSeconds(3), cts.Token);
                     await RefreshProfile();
-                    if (Profile?.TelegramLinked == true)
+                    // Same reason as the top-up poll: the [Reactive] Profile is written by a posted UI
+                    // action that has not run yet, so reading it here lagged one cycle behind the reply
+                    // we just received. AccountSession is written synchronously by RefreshProfile.
+                    if (AccountSession.CurrentProfile?.TelegramLinked == true)
                     {
                         RunOnUi(() =>
                         {
@@ -1946,11 +2162,7 @@ public class AccountViewModel : MyReactiveObject
                         AppEvents.SendSnackMsgRequested.Publish(L.T("Common_SomethingWrong"));
                         return;
                     }
-                    try
-                    {
-                        ProcUtils.ProcessStart(url);
-                    }
-                    catch
+                    if (!ProcUtils.TryProcessStart(url))
                     {
                         AppEvents.SendSnackMsgRequested.Publish(L.T("Common_SomethingWrong"));
                     }
@@ -2227,8 +2439,11 @@ public class AccountViewModel : MyReactiveObject
         {
             skeleton = true;
         }
-        else if (Profile == null && Error != null)
+        else if (_subsUnavailable || (Profile == null && Error != null))
         {
+            // _subsUnavailable: the subscription fetch never got an answer. Showing «нет подписки» here
+            // told the owner his subscription was gone whenever the network hiccuped; the retry surface
+            // says the truth and gives him the one action that helps.
             error = true;
         }
         else
