@@ -25,9 +25,12 @@ public sealed partial class L
         Add("Account_TopUpMethod", "Способ оплаты", "Payment method");
         Add("Account_TopUpVia", "Оплата · {0}", "Payment · {0}");
         Add("Account_CopyReferralCode", "Скопировать код", "Copy code");
-        Add("Account_FirstSub", "Оформи первую подписку", "Set up your first subscription");
+        // На «вы», как весь остальной интерфейс. Обе строки лежали на «ты» ровно потому, что их
+        // НИКТО НЕ ПОКАЗЫВАЛ: пустое состояние «Аккаунта» не было привязано к разметке. Теперь оно
+        // на экране — значит и голос обязан совпасть с остальным приложением.
+        Add("Account_FirstSub", "Оформите первую подписку", "Set up your first subscription");
         Add("Account_NoSubHint",
-            "Выбери тариф — оплата в рублях, подключение сразу.",
+            "Выберите тариф — оплата в рублях, подключение сразу.",
             "Pick a plan — pay in rubles, connect right away.");
         Add("Account_Devices", "Устройства", "Devices");
         Add("Account_SignOut", "Выйти", "Sign out");

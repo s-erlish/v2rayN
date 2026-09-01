@@ -364,12 +364,16 @@
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center"
                             Classes="TrafficRing"
+                            IsVisible="{Binding ShowActiveSub}"
                             StartAngle="-90"
                             Stroke="{DynamicResource Brush.Accent}"
                             StrokeLineCap="Round"
                             StrokeThickness="6"
                             SweepAngle="{Binding TrafficSweep}" />
-                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <StackPanel
+                            HorizontalAlignment="Center"
+                            IsVisible="{Binding ShowActiveSub}"
+                            VerticalAlignment="Center">
                             <TextBlock
                                 HorizontalAlignment="Center"
                                 FontFamily="{DynamicResource Font.Numeric}"
@@ -386,6 +390,29 @@
                                 Foreground="{DynamicResource Brush.OnSurfaceVariant}"
                                 Text="{Binding TrafficOfText}" />
                         </StackPanel>
+
+                        <!--  Первая загрузка: внутри дорожки кольца — две полосы силуэтом на месте
+                              цифр (общий скелет-примитив SkelBar + пульс SkeletonPulse). Дорожка
+                              остаётся настоящей: она не данные, а рамка, и её ширина уже занята —
+                              поэтому при приходе цифр ничего не прыгает. Под «Облегчённым режимом»
+                              селектор пульса не совпадает и силуэт стоит статично.  -->
+                        <StackPanel
+                            HorizontalAlignment="Center"
+                            Classes="SkeletonPulse"
+                            IsVisible="{Binding ShowSkeleton}"
+                            Spacing="8"
+                            VerticalAlignment="Center">
+                            <Border
+                                Width="76"
+                                Height="18"
+                                HorizontalAlignment="Center"
+                                Classes="SkelBar" />
+                            <Border
+                                Width="52"
+                                Height="10"
+                                HorizontalAlignment="Center"
+                                Classes="SkelBar" />
+                        </StackPanel>
                     </Panel>
 
                     <!--  Блок тарифа: название продукта · бейдж тарифа + срок · пара кнопок ·
@@ -397,218 +424,309 @@
                         MinWidth="200"
                         VerticalAlignment="Center">
 
-                        <!--  LineHeight числом НЕ задаём: строка гротеска = 1.276em, то есть 24.2
-                              при кегле 19, и прежние 22.8 подпирали её — «p» в «departament vpn»
-                              и все нижние выносные русского имени срезало бы по нижней кромке.  -->
-                        <TextBlock
-                            x:Name="PlanTitle"
-                            FontFamily="{DynamicResource Font.Grotesk}"
-                            FontSize="19"
-                            FontWeight="Bold"
-                            Foreground="{DynamicResource Brush.OnSurface}"
-                            LetterSpacing="-0.19"
-                            Text="departament vpn" />
+                        <!--  Настоящее содержимое блока — ОДНИМ узлом: название, срок, пара кнопок,
+                              выбор способа продления и автопродление. Гейт один на всех, потому что
+                              все они держатся на ActiveCard: пока карточки нет (первая загрузка),
+                              их привязки ActiveCard.* не разрешаются, IsVisible остаётся дефолтным
+                              true — и над скелетом всплывали «Оплатить картой» и тумблер
+                              автопродления от несуществующей подписки.  -->
+                        <StackPanel x:Name="PlanContent" IsVisible="{Binding ShowActiveSub}">
 
-                        <!--  Бейдж тарифа и срок на одной строке; оба появляются только когда
-                              подписка реально известна — плейсхолдеров экран не рисует.  -->
-                        <StackPanel
-                            x:Name="PlanMetaRow"
-                            Margin="0,9,0,0"
-                            Orientation="Horizontal"
-                            Spacing="9">
-                            <Border
-                                Height="19"
-                                Padding="9,0"
-                                VerticalAlignment="Center"
-                                Background="{DynamicResource Brush.AccentContainer}"
-                                CornerRadius="9.5"
-                                IsVisible="{Binding HasTariffBadge}">
+                            <!--  LineHeight числом НЕ задаём: строка гротеска = 1.276em, то есть 24.2
+                                  при кегле 19, и прежние 22.8 подпирали её — «p» в «departament vpn»
+                                  и все нижние выносные русского имени срезало бы по нижней кромке.  -->
+                            <TextBlock
+                                x:Name="PlanTitle"
+                                FontFamily="{DynamicResource Font.Grotesk}"
+                                FontSize="19"
+                                FontWeight="Bold"
+                                Foreground="{DynamicResource Brush.OnSurface}"
+                                LetterSpacing="-0.19"
+                                Text="departament vpn" />
+
+                            <!--  Бейдж тарифа и срок на одной строке; оба появляются только когда
+                                  подписка реально известна — плейсхолдеров экран не рисует.  -->
+                            <StackPanel
+                                x:Name="PlanMetaRow"
+                                Margin="0,9,0,0"
+                                Orientation="Horizontal"
+                                Spacing="9">
+                                <Border
+                                    Height="19"
+                                    Padding="9,0"
+                                    VerticalAlignment="Center"
+                                    Background="{DynamicResource Brush.AccentContainer}"
+                                    CornerRadius="9.5"
+                                    IsVisible="{Binding HasTariffBadge}">
+                                    <TextBlock
+                                        VerticalAlignment="Center"
+                                        FontFamily="{DynamicResource Font.Grotesk}"
+                                        FontSize="10.5"
+                                        FontWeight="Medium"
+                                        Foreground="{DynamicResource Brush.OnAccentContainer}"
+                                        LetterSpacing="0.42"
+                                        Text="{Binding TariffBadge}" />
+                                </Border>
                                 <TextBlock
                                     VerticalAlignment="Center"
-                                    FontFamily="{DynamicResource Font.Grotesk}"
-                                    FontSize="10.5"
-                                    FontWeight="Medium"
-                                    Foreground="{DynamicResource Brush.OnAccentContainer}"
-                                    LetterSpacing="0.42"
-                                    Text="{Binding TariffBadge}" />
-                            </Border>
-                            <TextBlock
-                                VerticalAlignment="Center"
-                                FontSize="12.5"
-                                Foreground="{DynamicResource Brush.OnSurfaceVariant}"
-                                IsVisible="{Binding HasPlanValid}"
-                                Text="{Binding PlanValidText}"
-                                TextTrimming="CharacterEllipsis" />
-                        </StackPanel>
+                                    FontSize="12.5"
+                                    Foreground="{DynamicResource Brush.OnSurfaceVariant}"
+                                    IsVisible="{Binding HasPlanValid}"
+                                    Text="{Binding PlanValidText}"
+                                    TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
 
-                        <!-- ============ 3 · Две кнопки равной ширины ============ -->
-                        <Grid Margin="0,16,0,0" ColumnDefinitions="*,9,*">
-                            <Button
-                                x:Name="TopUpButton"
-                                Grid.Column="0"
-                                Classes="OutlinedAccent PairCta"
-                                Content="{loc:T Account_TopUp}"
-                                Foreground="{DynamicResource Brush.Accent}">
-                                <Button.Flyout>
-                                    <!--  Флайаут пополнения: сумма → инлайн-валидация → способ оплаты
-                                          (чипы при 2+ методах / подпись при одном) → «Продолжить»
-                                          (активна только при валидной сумме И доступном методе).  -->
-                                    <Flyout FlyoutPresenterTheme="{StaticResource IncyFlyoutTheme}" Placement="Bottom">
-                                        <StackPanel
-                                            Width="264"
-                                            Spacing="12"
-                                            x:DataType="vms:AccountViewModel">
-                                            <TextBlock Classes="Title" Text="{loc:T Account_TopUpTitle}" />
-                                            <TextBlock
-                                                Classes="Caption"
-                                                Text="{loc:T Account_TopUpHint}"
-                                                TextWrapping="Wrap" />
-                                            <TextBox
-                                                x:Name="TopUpAmountBox"
-                                                FontFamily="{DynamicResource Font.Numeric}"
-                                                FontFeatures="tnum,lnum,zero"
-                                                Text="{Binding TopUpAmount, Mode=TwoWay}"
-                                                Watermark="{loc:T Account_AmountRub}">
-                                                <TextBox.KeyBindings>
-                                                    <KeyBinding Command="{Binding TopUpCmd}" Gesture="Enter" />
-                                                </TextBox.KeyBindings>
-                                            </TextBox>
-                                            <TextBlock
-                                                Classes="Caption"
-                                                Foreground="{DynamicResource Brush.RedText}"
-                                                IsVisible="{Binding HasTopUpError}"
-                                                Text="{Binding TopUpError}"
-                                                TextWrapping="Wrap" />
-                                            <StackPanel IsVisible="{Binding ShowTopUpMethods}" Spacing="8">
-                                                <TextBlock Classes="Caption" Text="{loc:T Account_TopUpMethod}" />
-                                                <ItemsControl ItemsSource="{Binding TopUpMethods}">
-                                                    <ItemsControl.ItemsPanel>
-                                                        <ItemsPanelTemplate>
-                                                            <WrapPanel Orientation="Horizontal" />
-                                                        </ItemsPanelTemplate>
-                                                    </ItemsControl.ItemsPanel>
-                                                    <ItemsControl.ItemTemplate>
-                                                        <DataTemplate x:DataType="vms:TopUpMethodItem">
-                                                            <Button
-                                                                Margin="0,0,8,8"
-                                                                Classes="MethodChip"
-                                                                Classes.selected="{Binding IsSelected}"
-                                                                Command="{Binding SelectCmd}"
-                                                                Content="{Binding Label}" />
-                                                        </DataTemplate>
-                                                    </ItemsControl.ItemTemplate>
-                                                </ItemsControl>
+                            <!-- ============ 3 · Две кнопки равной ширины ============ -->
+                            <Grid Margin="0,16,0,0" ColumnDefinitions="*,9,*">
+                                <Button
+                                    x:Name="TopUpButton"
+                                    Grid.Column="0"
+                                    Classes="OutlinedAccent PairCta"
+                                    Content="{loc:T Account_TopUp}"
+                                    Foreground="{DynamicResource Brush.Accent}">
+                                    <Button.Flyout>
+                                        <!--  Флайаут пополнения: сумма → инлайн-валидация → способ оплаты
+                                              (чипы при 2+ методах / подпись при одном) → «Продолжить»
+                                              (активна только при валидной сумме И доступном методе).  -->
+                                        <Flyout FlyoutPresenterTheme="{StaticResource IncyFlyoutTheme}" Placement="Bottom">
+                                            <StackPanel
+                                                Width="264"
+                                                Spacing="12"
+                                                x:DataType="vms:AccountViewModel">
+                                                <TextBlock Classes="Title" Text="{loc:T Account_TopUpTitle}" />
+                                                <TextBlock
+                                                    Classes="Caption"
+                                                    Text="{loc:T Account_TopUpHint}"
+                                                    TextWrapping="Wrap" />
+                                                <TextBox
+                                                    x:Name="TopUpAmountBox"
+                                                    FontFamily="{DynamicResource Font.Numeric}"
+                                                    FontFeatures="tnum,lnum,zero"
+                                                    Text="{Binding TopUpAmount, Mode=TwoWay}"
+                                                    PlaceholderText="{loc:T Account_AmountRub}">
+                                                    <TextBox.KeyBindings>
+                                                        <KeyBinding Command="{Binding TopUpCmd}" Gesture="Enter" />
+                                                    </TextBox.KeyBindings>
+                                                </TextBox>
+                                                <TextBlock
+                                                    Classes="Caption"
+                                                    Foreground="{DynamicResource Brush.RedText}"
+                                                    IsVisible="{Binding HasTopUpError}"
+                                                    Text="{Binding TopUpError}"
+                                                    TextWrapping="Wrap" />
+                                                <StackPanel IsVisible="{Binding ShowTopUpMethods}" Spacing="8">
+                                                    <TextBlock Classes="Caption" Text="{loc:T Account_TopUpMethod}" />
+                                                    <ItemsControl ItemsSource="{Binding TopUpMethods}">
+                                                        <ItemsControl.ItemsPanel>
+                                                            <ItemsPanelTemplate>
+                                                                <WrapPanel Orientation="Horizontal" />
+                                                            </ItemsPanelTemplate>
+                                                        </ItemsControl.ItemsPanel>
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate x:DataType="vms:TopUpMethodItem">
+                                                                <Button
+                                                                    Margin="0,0,8,8"
+                                                                    Classes="MethodChip"
+                                                                    Classes.selected="{Binding IsSelected}"
+                                                                    Command="{Binding SelectCmd}"
+                                                                    Content="{Binding Label}" />
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </StackPanel>
+                                                <TextBlock
+                                                    Classes="Caption"
+                                                    IsVisible="{Binding HasTopUpMethodCaption}"
+                                                    Text="{Binding TopUpMethodCaption}" />
+                                                <Button
+                                                    HorizontalAlignment="Stretch"
+                                                    HorizontalContentAlignment="Center"
+                                                    Classes="Primary FlyoutCta"
+                                                    Command="{Binding TopUpCmd}"
+                                                    Content="{loc:T Account_Continue}"
+                                                    IsEnabled="{Binding CanTopUp}" />
                                             </StackPanel>
-                                            <TextBlock
-                                                Classes="Caption"
-                                                IsVisible="{Binding HasTopUpMethodCaption}"
-                                                Text="{Binding TopUpMethodCaption}" />
-                                            <Button
-                                                HorizontalAlignment="Stretch"
-                                                HorizontalContentAlignment="Center"
-                                                Classes="Primary FlyoutCta"
-                                                Command="{Binding TopUpCmd}"
-                                                Content="{loc:T Account_Continue}"
-                                                IsEnabled="{Binding CanTopUp}" />
-                                        </StackPanel>
-                                    </Flyout>
-                                </Button.Flyout>
-                            </Button>
+                                        </Flyout>
+                                    </Button.Flyout>
+                                </Button>
 
-                            <!--  «Продлить» — НАСТОЯЩЕЕ продление своей подписки (область root/secondary),
-                                  а не переход в общий каталог: тап раскрывает выбор «с баланса / картой»
-                                  прямо под парой. Карточка без тарифа (нечего перевыпускать) уводит в «Купить».  -->
-                            <Button
-                                x:Name="RenewButton"
-                                Grid.Column="2"
-                                Classes="OutlinedAccent PairCta"
-                                Command="{Binding ActiveCard.PrimaryRenewCmd}"
-                                Content="{loc:T Account_Renew}"
-                                Foreground="{DynamicResource Brush.OnSurface}" />
-                        </Grid>
+                                <!--  «Продлить» — НАСТОЯЩЕЕ продление своей подписки (область root/secondary),
+                                      а не переход в общий каталог: тап раскрывает выбор «с баланса / картой»
+                                      прямо под парой. Карточка без тарифа (нечего перевыпускать) уводит в «Купить».  -->
+                                <Button
+                                    x:Name="RenewButton"
+                                    Grid.Column="2"
+                                    Classes="OutlinedAccent PairCta"
+                                    Command="{Binding ActiveCard.PrimaryRenewCmd}"
+                                    Content="{loc:T Account_Renew}"
+                                    Foreground="{DynamicResource Brush.OnSurface}" />
+                            </Grid>
 
-                        <!--  Выбор способа продления — раскрывается только по «Продлить».  -->
-                        <StackPanel
-                            Margin="0,9,0,0"
-                            Classes="RenewReveal"
-                            IsVisible="{Binding ActiveCard.RenewExpanded}"
-                            Spacing="8">
-                            <Button
-                                HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Left"
-                                Classes="Tonal"
-                                Command="{Binding ActiveCard.RenewBalanceCmd}"
-                                IsEnabled="{Binding !ActiveCard.IsRenewing}">
-                                <StackPanel
-                                    Orientation="Horizontal"
-                                    Spacing="10"
-                                    VerticalAlignment="Center">
-                                    <PathIcon
-                                        Width="18"
-                                        Height="18"
+                            <!--  Выбор способа продления — раскрывается только по «Продлить».  -->
+                            <StackPanel
+                                Margin="0,9,0,0"
+                                Classes="RenewReveal"
+                                IsVisible="{Binding ActiveCard.RenewExpanded}"
+                                Spacing="8">
+                                <Button
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Left"
+                                    Classes="Tonal"
+                                    Command="{Binding ActiveCard.RenewBalanceCmd}"
+                                    IsEnabled="{Binding !ActiveCard.IsRenewing}">
+                                    <StackPanel
+                                        Orientation="Horizontal"
+                                        Spacing="10"
+                                        VerticalAlignment="Center">
+                                        <PathIcon
+                                            Width="18"
+                                            Height="18"
+                                            VerticalAlignment="Center"
+                                            Data="{StaticResource Geo.Acc.Wallet}"
+                                            Foreground="{DynamicResource Brush.OnSurface}" />
+                                        <TextBlock VerticalAlignment="Center" Text="{Binding ActiveCard.BalanceMethodLabel}" />
+                                    </StackPanel>
+                                </Button>
+                                <Button
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Left"
+                                    Classes="Tonal"
+                                    Command="{Binding ActiveCard.RenewCardCmd}"
+                                    IsEnabled="{Binding !ActiveCard.IsRenewing}">
+                                    <StackPanel
+                                        Orientation="Horizontal"
+                                        Spacing="10"
+                                        VerticalAlignment="Center">
+                                        <PathIcon
+                                            Width="18"
+                                            Height="18"
+                                            VerticalAlignment="Center"
+                                            Data="{StaticResource Geo.Acc.Card}"
+                                            Foreground="{DynamicResource Brush.OnSurface}" />
+                                        <TextBlock VerticalAlignment="Center" Text="{loc:T Account_RenewWithCard}" />
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+
+                            <!-- ============ 4 · Автопродление ============ -->
+                            <!--  Мелкая карточка (радиус 14): текст ВЫРОВНЕН ПО ЛЕВОМУ КРАЮ, тумблер справа.
+                                  Двусторонний биндинг бьёт в armed-сеттер карточки → реальный PATCH и откат
+                                  тумблера, если сервер отказал (UI никогда не врёт).  -->
+                            <Border
+                                Margin="0,10,0,0"
+                                Padding="13,11"
+                                Background="{DynamicResource Brush.Surface}"
+                                BorderBrush="{DynamicResource Brush.OutlineVariant}"
+                                BorderThickness="1"
+                                CornerRadius="{DynamicResource Radius.Search}"
+                                IsVisible="{Binding ActiveCard.ShowAutoRenew}">
+                                <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
+                                    <StackPanel Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center">
+                                        <TextBlock
+                                            FontSize="13.5"
+                                            Foreground="{DynamicResource Brush.OnSurface}"
+                                            Text="{loc:T Account_AutoRenew}"
+                                            TextAlignment="Left" />
+                                        <TextBlock
+                                            Margin="0,2,0,0"
+                                            FontSize="11.5"
+                                            Foreground="{DynamicResource Brush.OnSurfaceVariant}"
+                                            Text="{Binding ActiveCard.AutoRenewCaption}"
+                                            TextAlignment="Left"
+                                            TextWrapping="Wrap" />
+                                    </StackPanel>
+                                    <ToggleSwitch
+                                        Grid.Column="1"
                                         VerticalAlignment="Center"
-                                        Data="{StaticResource Geo.Acc.Wallet}"
-                                        Foreground="{DynamicResource Brush.OnSurface}" />
-                                    <TextBlock VerticalAlignment="Center" Text="{Binding ActiveCard.BalanceMethodLabel}" />
-                                </StackPanel>
-                            </Button>
-                            <Button
-                                HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Left"
-                                Classes="Tonal"
-                                Command="{Binding ActiveCard.RenewCardCmd}"
-                                IsEnabled="{Binding !ActiveCard.IsRenewing}">
-                                <StackPanel
-                                    Orientation="Horizontal"
-                                    Spacing="10"
-                                    VerticalAlignment="Center">
-                                    <PathIcon
-                                        Width="18"
-                                        Height="18"
-                                        VerticalAlignment="Center"
-                                        Data="{StaticResource Geo.Acc.Card}"
-                                        Foreground="{DynamicResource Brush.OnSurface}" />
-                                    <TextBlock VerticalAlignment="Center" Text="{loc:T Account_RenewWithCard}" />
-                                </StackPanel>
-                            </Button>
+                                        IsChecked="{Binding ActiveCard.AutoRenewOn, Mode=TwoWay}"
+                                        Theme="{DynamicResource ToggleSwitch.iOS}" />
+                                </Grid>
+                            </Border>
                         </StackPanel>
 
-                        <!-- ============ 4 · Автопродление ============ -->
-                        <!--  Мелкая карточка (радиус 14): текст ВЫРОВНЕН ПО ЛЕВОМУ КРАЮ, тумблер справа.
-                              Двусторонний биндинг бьёт в armed-сеттер карточки → реальный PATCH и откат
-                              тумблера, если сервер отказал (UI никогда не врёт).  -->
-                        <Border
-                            Margin="0,10,0,0"
-                            Padding="13,11"
-                            Background="{DynamicResource Brush.Surface}"
-                            BorderBrush="{DynamicResource Brush.OutlineVariant}"
-                            BorderThickness="1"
-                            CornerRadius="{DynamicResource Radius.Search}"
-                            IsVisible="{Binding ActiveCard.ShowAutoRenew}">
-                            <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
-                                <StackPanel Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center">
-                                    <TextBlock
-                                        FontSize="13.5"
-                                        Foreground="{DynamicResource Brush.OnSurface}"
-                                        Text="{loc:T Account_AutoRenew}"
-                                        TextAlignment="Left" />
-                                    <TextBlock
-                                        Margin="0,2,0,0"
-                                        FontSize="11.5"
-                                        Foreground="{DynamicResource Brush.OnSurfaceVariant}"
-                                        Text="{Binding ActiveCard.AutoRenewCaption}"
-                                        TextAlignment="Left"
-                                        TextWrapping="Wrap" />
-                                </StackPanel>
-                                <ToggleSwitch
-                                    Grid.Column="1"
-                                    VerticalAlignment="Center"
-                                    IsChecked="{Binding ActiveCard.AutoRenewOn, Mode=TwoWay}"
-                                    Theme="{DynamicResource ToggleSwitch.iOS}" />
+                        <!--  Первая загрузка: силуэт блока тарифа в его собственном ритме —
+                              название 19, мета-строка 12.5, пара кнопок 44. Высоты и отступы взяты
+                              у настоящих строк, поэтому «Управление» ниже стоит на месте и не
+                              подпрыгивает, когда данные приходят.  -->
+                        <StackPanel
+                            x:Name="PlanSkeleton"
+                            Classes="SkeletonPulse"
+                            IsVisible="{Binding ShowSkeleton}">
+                            <Border
+                                Width="196"
+                                Height="20"
+                                HorizontalAlignment="Left"
+                                Classes="SkelBar" />
+                            <Border
+                                Width="148"
+                                Height="12"
+                                Margin="0,11,0,0"
+                                HorizontalAlignment="Left"
+                                Classes="SkelBar" />
+                            <Grid
+                                Margin="0,18,0,0"
+                                ColumnDefinitions="*,9,*">
+                                <Border
+                                    Grid.Column="0"
+                                    Height="44"
+                                    Classes="SkelBar" />
+                                <Border
+                                    Grid.Column="2"
+                                    Height="44"
+                                    Classes="SkelBar" />
                             </Grid>
-                        </Border>
+                        </StackPanel>
                     </StackPanel>
                 </Grid>
+
+                <!-- ============ 2а · Подписок нет ============ -->
+                <!--  Полосы 2-4 держатся на подписке: без неё кольцо и «Продлить» нечего показывать.
+                      Вместо исчезновения — общее пустое состояние подэкранов (Border.SubEmpty), тот же
+                      лекало, что на «Устройствах» и в «Истории платежей»: плитка 54, заголовок,
+                      пояснение и одно действие. Действие ведёт туда же, куда строка «Купить подписку»
+                      ниже, — в каталог тарифов.  -->
+                <Border
+                    Margin="4,18,4,0"
+                    Classes="SubEmpty"
+                    IsVisible="{Binding ShowEmpty}">
+                    <StackPanel Spacing="12" VerticalAlignment="Center">
+                        <Border Classes="SubEmptyTile">
+                            <PathIcon Data="{StaticResource Geo.Acc.Upgrade}" />
+                        </Border>
+                        <TextBlock Classes="SubEmptyTitle" Text="{loc:T Account_FirstSub}" />
+                        <TextBlock Classes="SubEmptyText" Text="{loc:T Account_NoSubHint}" />
+                        <Button
+                            x:Name="EmptyBuyButton"
+                            Margin="0,4,0,0"
+                            HorizontalAlignment="Center"
+                            Classes="Tonal"
+                            Content="{loc:T Common_BuySubscription}" />
+                    </StackPanel>
+                </Border>
+
+                <!-- ============ 2б · Подписку не удалось загрузить ============ -->
+                <!--  ОДНА строка причины, и она же заголовок — как на «Устройствах» и в «Истории»
+                      (там заголовок-константа и подпись-ErrorText печатали один и тот же текст
+                      дважды). «Повторить» бьёт в RetryCmd модели: это настоящий повтор загрузки,
+                      а не перерисовка. Раньше отказ загрузки просто СТИРАЛ полосу подписки с
+                      экрана — молча, без объяснения и без действия.  -->
+                <Border
+                    Margin="4,18,4,0"
+                    Classes="SubEmpty"
+                    IsVisible="{Binding ShowError}">
+                    <StackPanel Spacing="12" VerticalAlignment="Center">
+                        <Border Classes="SubEmptyTile">
+                            <PathIcon Data="{StaticResource Geo.Acc.Upgrade}" />
+                        </Border>
+                        <TextBlock Classes="SubEmptyTitle" Text="{Binding ErrorText}" />
+                        <Button
+                            Margin="0,4,0,0"
+                            HorizontalAlignment="Center"
+                            Classes="Tonal"
+                            Command="{Binding RetryCmd}"
+                            Content="{loc:T Common_Retry}" />
+                    </StackPanel>
+                </Border>
 
                 <!-- ============ 5 · Управление ============ -->
                 <TextBlock Classes="SubGroupLabel" Text="{loc:T Common_Manage}" />
@@ -811,7 +929,7 @@
                                                         Classes="Caption"
                                                         Text="{loc:T Account_EmailLinkHint}"
                                                         TextWrapping="Wrap" />
-                                                    <TextBox Text="{Binding LinkEmailInput, Mode=TwoWay}" Watermark="{loc:T Login_Email}" />
+                                                    <TextBox Text="{Binding LinkEmailInput, Mode=TwoWay}" PlaceholderText="{loc:T Login_Email}" />
                                                     <!--  Тот же класс, что у «Продолжить»: вторая шторка —
                                                           та же кнопка в том же окружении.  -->
                                                     <Button
