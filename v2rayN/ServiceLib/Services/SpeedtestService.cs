@@ -7,7 +7,13 @@ public class SpeedtestService(Config config, Func<SpeedTestResult, Task> updateF
     private static readonly string _tag = "SpeedtestService";
     private readonly Config? _config = config;
     private readonly Func<SpeedTestResult, Task>? _updateFunc = updateFunc;
-    private static readonly ConcurrentBag<string> _lstExitLoop = [];
+    // Ключи ИДУЩИХ прогонов. Раньше это был ConcurrentBag, из которого нельзя удалить один элемент:
+    // каждый замер добавлял свой GUID и НИКОГДА его не убирал — очистить набор умел только ExitLoop,
+    // то есть кнопка «остановить ВСЁ». За сеанс с двадцатью пингами в наборе копилось двадцать
+    // мёртвых ключей, а ShouldStopTest — он вызывается на КАЖДЫЙ сервер в КАЖДОМ пакете — линейно
+    // просматривал их все. Словарь позволяет прогону снять СВОЙ ключ по завершении и проверять
+    // остановку за O(1).
+    private static readonly ConcurrentDictionary<string, byte> _lstExitLoop = new();
     private readonly int _speedTestPageSize = config.SpeedTestItem.SpeedTestPageSize ?? Global.SpeedTestPageSize;
     private readonly TimeSpan _delayInterval = TimeSpan.FromSeconds(config.SpeedTestItem.SpeedTestDelayInterval ?? 1);
 
@@ -33,14 +39,26 @@ public class SpeedtestService(Config config, Func<SpeedTestResult, Task> updateF
 
     private static bool ShouldStopTest(string exitLoopKey)
     {
-        return _lstExitLoop.All(p => p != exitLoopKey);
+        return !_lstExitLoop.ContainsKey(exitLoopKey);
     }
 
     private async Task RunAsync(ESpeedActionType actionType, List<ProfileItem> selecteds)
     {
         var exitLoopKey = Utils.GetGuid(false);
-        _lstExitLoop.Add(exitLoopKey);
+        _lstExitLoop[exitLoopKey] = 0;
+        try
+        {
+            await RunActionAsync(actionType, selecteds, exitLoopKey);
+        }
+        finally
+        {
+            // Прогон закончился (сам или по «остановить») — ключ больше не нужен.
+            _lstExitLoop.TryRemove(exitLoopKey, out _);
+        }
+    }
 
+    private async Task RunActionAsync(ESpeedActionType actionType, List<ProfileItem> selecteds, string exitLoopKey)
+    {
         var lstSelected = await GetClearItem(actionType, selecteds);
 
         switch (actionType)
@@ -564,19 +582,33 @@ public class SpeedtestService(Config config, Func<SpeedTestResult, Task> updateF
         return responseTime;
     }
 
+    /// <summary>
+    /// Режет список на пакеты по ядру: замер поднимает ОДНО ядро на пакет, поэтому смешивать их
+    /// нельзя. Раньше здесь отбирались ровно два ядра — Xray и sing_box, — а узел с любым другим
+    /// (v2fly, mihomo и т.п.) не попадал НИ В ОДИН пакет и молча исчезал из замера: строка навсегда
+    /// оставалась без значения, и об этом никто не сообщал. Теперь группируем по всем ядрам, что
+    /// реально встретились, сохраняя прежний порядок (сначала Xray, затем sing_box, затем остальные),
+    /// — для списков из двух известных ядер поведение ровно прежнее.
+    /// </summary>
     private List<List<ServerTestItem>> GetTestBatchItem(List<ServerTestItem> lstSelected, int pageSize)
     {
         List<List<ServerTestItem>> lstTest = [];
-        var lst1 = lstSelected.Where(t => t.CoreType == ECoreType.Xray).ToList();
-        var lst2 = lstSelected.Where(t => t.CoreType == ECoreType.sing_box).ToList();
+        var groups = lstSelected
+            .GroupBy(t => t.CoreType)
+            .OrderBy(g => g.Key switch
+            {
+                ECoreType.Xray => 0,
+                ECoreType.sing_box => 1,
+                _ => 2,
+            });
 
-        for (var num = 0; num < (int)Math.Ceiling(lst1.Count * 1.0 / pageSize); num++)
+        foreach (var group in groups)
         {
-            lstTest.Add(lst1.Skip(num * pageSize).Take(pageSize).ToList());
-        }
-        for (var num = 0; num < (int)Math.Ceiling(lst2.Count * 1.0 / pageSize); num++)
-        {
-            lstTest.Add(lst2.Skip(num * pageSize).Take(pageSize).ToList());
+            var lst = group.ToList();
+            for (var num = 0; num < (int)Math.Ceiling(lst.Count * 1.0 / pageSize); num++)
+            {
+                lstTest.Add(lst.Skip(num * pageSize).Take(pageSize).ToList());
+            }
         }
 
         return lstTest;
