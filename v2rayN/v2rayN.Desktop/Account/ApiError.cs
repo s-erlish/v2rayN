@@ -43,7 +43,24 @@ public abstract class ApiError : Exception
     {
         public string? Detail { get; }
 
-        public Unauthorized(string? detail = null) : base("Unauthorized") => Detail = detail;
+        /// <summary>
+        /// True when the 401 actually came from the departament backend, false when it came from
+        /// something else standing in the way.
+        ///
+        /// A 401 is the ONE answer allowed to end a session, so it matters who said it. A captive
+        /// portal — hotel, airport, office wifi, the exact networks a VPN user meets — answers every
+        /// request with 401 and an HTML login page, and the app read that as «твой токен мёртв» and
+        /// signed the user out of an account whose token was perfectly fine. Provenance is judged by
+        /// the response's content type: our API answers JSON (or nothing), a portal answers a page.
+        /// Defaults to true so a call site that cannot judge behaves exactly as before.
+        /// </summary>
+        public bool FromApi { get; }
+
+        public Unauthorized(string? detail = null, bool fromApi = true) : base("Unauthorized")
+        {
+            Detail = detail;
+            FromApi = fromApi;
+        }
     }
 
     /// <summary>404 — resource not found (also the "keep polling" signal for telegram-login-check).</summary>

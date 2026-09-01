@@ -200,9 +200,17 @@ public sealed class SubscriptionSyncManager
         // исчезают при запуске". Worse, ImportAll then returned normally, so AccountRepository.Guard
         // reported SUCCESS and the user was handed a silently empty Home with no error at all.
         //
-        // When we learned nothing, we change nothing: keep every managed mapping (merging in anything
-        // we did manage to import) and report the full managed set to the caller.
-        if (!authoritative)
+        // AN EMPTY ANSWER IS NOT A DELETION ORDER EITHER. `newMap.Count == 0` after an authoritative
+        // fetch means the account named no subscription we could import — and the ordinary way to
+        // reach that is a subscription that LAPSED: the owner's panel keeps answering, but the account
+        // summary no longer advertises an active one. Pruning on it ran DeleteSubItem ->
+        // RemoveServersViaSubid and took every server with it, which is exactly what must not happen
+        // on expiry: the subscription has to survive so the user can see «истекла» and renew it, and
+        // renewing brings the SAME url back to life. A deletion needs a positive statement — the
+        // account naming subscriptions, none of which is this one — so it is kept for the case that
+        // actually needs it: signing in as somebody else, whose own subscriptions come back in newMap
+        // and reconcile the previous account's rows away.
+        if (!authoritative || newMap.Count == 0)
         {
             var merged = new Dictionary<string, string>(managed);
             foreach (var kv in newMap)

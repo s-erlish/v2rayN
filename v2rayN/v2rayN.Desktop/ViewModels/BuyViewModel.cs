@@ -508,7 +508,28 @@ public class BuyViewModel : MyReactiveObject
             {
                 IsPaying = false;
                 result
-                    .OnSuccess(_ => SetSuccess())
+                    .OnSuccess(dto =>
+                    {
+                        // Read the reply, don't take the 2xx as a receipt: this endpoint answers 200
+                        // both for a debited wallet and for a refusal (insufficient funds). «Подписка
+                        // оплачена» over a refusal is the one message this screen must never show.
+                        switch (dto.Settlement())
+                        {
+                            case BalanceSettlement.Settled:
+                                SetSuccess();
+                                break;
+                            case BalanceSettlement.Rejected:
+                                ShowNotice(Common.L.T("Buy_PaymentError"));
+                                break;
+                            default:
+                                // Accepted but not settled in-request: keep the checkout open and let
+                                // the ordinary payment poll decide, exactly as the card path does.
+                                _pendingInit = null;
+                                PendingText = Common.L.T("Buy_Processing");
+                                ShowPending = true;
+                                break;
+                        }
+                    })
                     .OnFailure(ShowPaymentError);
             });
         }

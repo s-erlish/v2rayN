@@ -374,7 +374,7 @@ public class AccountViewModel : MyReactiveObject
             Profile = AuthTokenStore.GetUser();
         }
 
-        RefreshProfileCmd = ReactiveCommand.CreateFromTask(RefreshProfile);
+        RefreshProfileCmd = ReactiveCommand.CreateFromTask(async () => { await RefreshProfile(); });
         LoadSubscriptionsCmd = ReactiveCommand.CreateFromTask(LoadSubscriptions);
         LoadTariffsCmd = ReactiveCommand.CreateFromTask(LoadTariffs);
         LoadPaymentsCmd = ReactiveCommand.CreateFromTask(LoadPayments);
@@ -442,6 +442,9 @@ public class AccountViewModel : MyReactiveObject
 
         AccountSession.StateChanged += OnSessionStateChanged;
 
+        // Refresh on returning to the window after a long idle — see HookIdleReturnRefresh.
+        HookIdleReturnRefresh();
+
         // Live language switch: re-derive every display string (balance caption, «Действует до …»,
         // device counts, referral line, error text) so open bindings pick up the new language. Also
         // re-apply the sync stage caption if a sync is mid-flight, so the loading line follows the switch.
@@ -472,19 +475,25 @@ public class AccountViewModel : MyReactiveObject
     /// <summary>Returning-user startup: auto-import subscriptions (→ refresh Home) then load the tab.</summary>
     private async Task StartupLoad()
     {
-        // Same phase sequence as a fresh login MINUS the extra subscription fetch (parity with the original
-        // returning-user path: import + load only). On success clear the cold-start gate so the loading
-        // surface hands directly to the populated Home/Account instead of the empty login gate. On FAILURE
-        // RunSyncPhases raises SyncFailed and leaves IsStartupLoading TRUE, so the sync overlay shows the
-        // retry surface rather than flashing the logged-out login gate.
-        if (await RunSyncPhases(includeSubFetch: false))
+        // Same phase sequence as a fresh login MINUS the extra subscription fetch (parity with the
+        // original returning-user path: import + load only).
+        var ok = await RunSyncPhases(includeSubFetch: false);
+        RunOnUi(() =>
         {
-            RunOnUi(() =>
+            // THE COLD-START GATE ALWAYS DROPS, including on failure. AccountSyncView listens to
+            // IsImportingAccount only — the post-login import — and deliberately not to this flag, so
+            // on this path there is no retry surface to hold the user on: leaving IsStartupLoading true
+            // would freeze the shell on a loading frame with no way out. The servers live in the local
+            // database and need no backend, so a launch without network hands over to a working Home;
+            // the failure is told where it belongs, on the Account tab, which already carries the error
+            // Report() recorded and the «подписку не удалось загрузить» state.
+            IsStartupLoading = false;
+            if (!ok)
             {
-                IsStartupLoading = false;
-                Recompute();
-            });
-        }
+                SyncFailed = false;
+            }
+            Recompute();
+        });
     }
 
     /// <summary>Design-time constructor: sample logged-in active state so the previewer renders.</summary>
@@ -553,19 +562,30 @@ public class AccountViewModel : MyReactiveObject
     /// GET /client/subscription and /client/subscription/all a second time, on the critical path of
     /// the overlay the user is watching.
     /// </summary>
-    private async Task LoadAll(bool includeSubscriptions = true)
+    private async Task<bool> LoadAll(bool includeSubscriptions = true)
     {
-        await RefreshProfile();
+        var reached = await RefreshProfile();
         if (includeSubscriptions)
         {
-            await LoadSubscriptions();
+            reached &= await FetchAndApplySubscriptions();
         }
         await LoadPublicConfig();
         await LoadTariffs();
         await LoadPayments();
+        if (reached)
+        {
+            _lastReachedUtc = DateTime.UtcNow;
+        }
+        return reached;
     }
 
-    private async Task RefreshProfile()
+    /// <summary>
+    /// Re-reads the identity endpoint. Returns whether the BACKEND ANSWERED — success, or a 401, which
+    /// is an answer too (the token is dead, the session has just ended and the shell will show the
+    /// login gate). Anything else means we never reached it, and that is what makes a sync a failure
+    /// rather than a silent success.
+    /// </summary>
+    private async Task<bool> RefreshProfile()
     {
         var result = await _repo.RefreshProfile();
         RunOnUi(() =>
@@ -583,6 +603,7 @@ public class AccountViewModel : MyReactiveObject
                 .OnFailure(Report);
             Recompute();
         });
+        return result.IsSuccess || result.Error is ApiError.Unauthorized;
     }
 
     private async Task LoadSubscriptions()
@@ -605,7 +626,7 @@ public class AccountViewModel : MyReactiveObject
     /// Same class of bug 12fc34fe closed inside the importer, on the display side this time — so the
     /// same doctrine applies: узнали ничего — не меняем ничего.
     /// </summary>
-    private async Task FetchAndApplySubscriptions()
+    private async Task<bool> FetchAndApplySubscriptions()
     {
         var allResult = await _repo.LoadSubscriptions();
         var primaryResult = await _repo.LoadPrimarySubscription();
@@ -653,6 +674,10 @@ public class AccountViewModel : MyReactiveObject
             }
             Recompute();
         });
+
+        // Computed HERE, on this thread, from the results themselves — never by reading VM state after
+        // the RunOnUi above, which off the UI thread is a POST that has not run yet.
+        return allResult.IsSuccess || primaryResult.IsSuccess;
     }
 
     /// <summary>
@@ -1165,13 +1190,31 @@ public class AccountViewModel : MyReactiveObject
             // as its own captioned stage on the fresh-login path, otherwise inside LoadAll. Running
             // both — which is what an unconditional LoadAll did — put two extra round-trips on the
             // critical path of the sync overlay for an answer we already had.
+            var reached = true;
             if (includeSubFetch)
             {
                 RunOnUi(() => SetSyncStage(SyncPhase.Subs));
-                await FetchAndApplySubscriptions();
+                reached &= await FetchAndApplySubscriptions();
             }
             RunOnUi(() => SetSyncStage(SyncPhase.Servers));
-            await LoadAll(includeSubscriptions: !includeSubFetch);
+            reached &= await LoadAll(includeSubscriptions: !includeSubFetch);
+
+            // A SYNC THAT REACHED NOTHING IS NOT A SUCCESS. Every repository call is Guard-ed and hands
+            // back an ApiResult instead of throwing, so the catch below — the only thing that used to
+            // decide this — could practically never fire: offline, the whole sequence "completed", the
+            // overlay resolved, and the user was handed a screen that had learned nothing as though it
+            // had. Now the verdict comes from the results: the phases report whether the backend
+            // actually answered, and a sync that never reached it says so.
+            if (!reached)
+            {
+                RunOnUi(() =>
+                {
+                    IsLoading = false;
+                    SyncFailed = true;
+                    Recompute();
+                });
+                return false;
+            }
             return true;
         }
         catch (Exception ex)
@@ -1395,7 +1438,7 @@ public class AccountViewModel : MyReactiveObject
     /// none of that belongs on the thread painting the card. Every UI mutation inside still marshals
     /// back through RunOnUi, and the account reload is handed back to the UI thread exactly as before.
     /// </summary>
-    private void ReloadAfterPurchase()
+    private void ScheduleAccountReload()
     {
         _ = Task.Run(async () =>
         {
@@ -1403,6 +1446,86 @@ public class AccountViewModel : MyReactiveObject
             RunOnUi(() => _ = Retry());
         });
     }
+
+    #region refresh on returning to the window
+
+    /// <summary>UTC of the last load that actually reached the backend. Zero until one has.</summary>
+    private DateTime _lastReachedUtc = DateTime.MinValue;
+
+    /// <summary>Guards against stacking idle-return refreshes while one is already running.</summary>
+    private int _idleRefreshRunning;
+
+    /// <summary>
+    /// How long the tab may go unrefreshed before returning to the window is worth a round-trip.
+    /// Account-imported subscriptions carry AutoUpdateInterval = 0, so TaskManager's per-minute
+    /// scheduler never touches them: without this, a machine left running for days kept whatever
+    /// server list and expiry it had at launch.
+    /// </summary>
+    private static readonly TimeSpan IdleRefreshAfter = TimeSpan.FromMinutes(15);
+
+    /// <summary>
+    /// Refresh on RETURNING TO THE WINDOW after a long idle, rather than on a timer. A poll would run
+    /// for hours nobody is looking, and would spend a laptop's battery to learn nothing; the moment the
+    /// answer starts mattering again is the moment the user comes back to it. The staleness gate means
+    /// alt-tabbing costs nothing — at most one refresh per <see cref="IdleRefreshAfter"/>.
+    ///
+    /// Deliberately does NOT go through RunSyncPhases: that raises SyncFailed, which AccountSyncView
+    /// turns into a full-screen retry column. A background refresh must never take the screen; it
+    /// reports through the ordinary error state like any other load.
+    /// </summary>
+    private void HookIdleReturnRefresh()
+    {
+        // The window does not exist yet while this VM is constructed (it is built during MainWindow's
+        // field initialisation), so resolve it on the next dispatcher turn.
+        Dispatcher.UIThread.Post(() =>
+        {
+            try
+            {
+                if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime { MainWindow: { } window })
+                {
+                    window.Activated += (_, _) => RefreshIfIdle();
+                }
+            }
+            catch (Exception ex)
+            {
+                Logging.SaveLog("AccountIdleRefreshHook", ex);
+            }
+        });
+    }
+
+    private void RefreshIfIdle()
+    {
+        if (!IsLoggedIn || IsImportingAccount || IsStartupLoading || SyncFailed)
+        {
+            return;
+        }
+        if (_lastReachedUtc == DateTime.MinValue || DateTime.UtcNow - _lastReachedUtc < IdleRefreshAfter)
+        {
+            return;
+        }
+        if (Interlocked.Exchange(ref _idleRefreshRunning, 1) == 1)
+        {
+            return;
+        }
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await AutoImportAndRefreshHome();
+                await LoadAll();
+            }
+            catch (Exception ex)
+            {
+                Logging.SaveLog("AccountIdleRefresh", ex);
+            }
+            finally
+            {
+                Volatile.Write(ref _idleRefreshRunning, 0);
+            }
+        });
+    }
+
+    #endregion refresh on returning to the window
 
     /// <summary>
     /// Balance top-up (parity with Android «Пополнение баланса»): opens a Platega checkout for the
@@ -1538,10 +1661,28 @@ public class AccountViewModel : MyReactiveObject
         {
             card.IsRenewing = false;
             result
-                .OnSuccess(ok =>
+                .OnSuccess(dto =>
                 {
-                    AppEvents.SendSnackMsgRequested.Publish(L.T("Account_RenewDone"));
-                    ReloadAfterPurchase();
+                    // A 2xx is not a receipt. A balance purchase settles inside the request, so the
+                    // outcome is in the BODY — this endpoint answers 200 both when the wallet was
+                    // debited and when it refused (insufficient funds is the ordinary refusal). Saying
+                    // «Подписка продлена» on any 200 told the user a thing had happened and then let
+                    // the reload quietly put the unchanged expiry back.
+                    switch (dto.Settlement())
+                    {
+                        case BalanceSettlement.Settled:
+                            AppEvents.SendSnackMsgRequested.Publish(L.T("Account_RenewDone"));
+                            break;
+                        case BalanceSettlement.Rejected:
+                            AppEvents.SendSnackMsgRequested.Publish(L.T("Buy_PaymentError"));
+                            break;
+                        default:
+                            AppEvents.SendSnackMsgRequested.Publish(L.T("Buy_Processing"));
+                            break;
+                    }
+                    // Reload in every case: the account is the authority on what really changed, and a
+                    // cautious «обрабатывается» over a settled purchase corrects itself a second later.
+                    ScheduleAccountReload();
                 })
                 .OnFailure(err => AppEvents.SendSnackMsgRequested.Publish(MessageFor(err)));
         });
@@ -1629,7 +1770,7 @@ public class AccountViewModel : MyReactiveObject
                         {
                             card.IsRenewing = false;
                             AppEvents.SendSnackMsgRequested.Publish(L.T("Account_RenewDone"));
-                            ReloadAfterPurchase();
+                            ScheduleAccountReload();
                         });
                         return;
                     }
@@ -1702,7 +1843,7 @@ public class AccountViewModel : MyReactiveObject
                     {
                         card.IsDeviceBusy = false;
                         AppEvents.SendSnackMsgRequested.Publish(L.T("Account_DevicesAdded"));
-                        ReloadAfterPurchase();
+                        ScheduleAccountReload();
                     }
                 })
                 .OnFailure(err =>
@@ -1765,7 +1906,7 @@ public class AccountViewModel : MyReactiveObject
                     {
                         card.IsUpgradeBusy = false;
                         AppEvents.SendSnackMsgRequested.Publish(L.T("Account_UpgradeDone"));
-                        ReloadAfterPurchase();
+                        ScheduleAccountReload();
                     }
                 })
                 .OnFailure(err =>
@@ -1830,7 +1971,7 @@ public class AccountViewModel : MyReactiveObject
                         {
                             clearBusy();
                             AppEvents.SendSnackMsgRequested.Publish(L.T(doneKey));
-                            ReloadAfterPurchase();
+                            ScheduleAccountReload();
                         });
                         return;
                     }

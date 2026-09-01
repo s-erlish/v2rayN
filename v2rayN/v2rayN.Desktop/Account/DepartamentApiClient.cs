@@ -398,10 +398,22 @@ public sealed class DepartamentApiClient : IDepartamentApiClient
             var body = await resp.Content.ReadAsStringAsync();
             if (!resp.IsSuccessStatusCode)
             {
-                throw MapError((int)resp.StatusCode, SanitizeBody(body));
+                throw MapError((int)resp.StatusCode, SanitizeBody(body), LooksLikeApiResponse(resp));
             }
             return Parse<T>(body);
         }
+    }
+
+    /// <summary>
+    /// Whether this response actually came from our API rather than from something intercepting the
+    /// request. Our backend answers JSON (or an empty body); a captive portal answers an HTML login
+    /// page. Only the 401 mapping reads this — see <see cref="ApiError.Unauthorized.FromApi"/> — but
+    /// judging it here is the only place that still HAS the response to judge.
+    /// </summary>
+    private static bool LooksLikeApiResponse(HttpResponseMessage resp)
+    {
+        var mediaType = resp.Content.Headers.ContentType?.MediaType;
+        return mediaType.IsNullOrEmpty() || mediaType!.Contains("json", StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task ExecuteVoid(HttpRequestMessage request)
@@ -437,12 +449,12 @@ public sealed class DepartamentApiClient : IDepartamentApiClient
         }
     }
 
-    private static ApiError MapError(int code, string? detail = null) => code switch
+    private static ApiError MapError(int code, string? detail = null, bool fromApi = true) => code switch
     {
         // Only 401 means "authentication failed / token expired". 403 (Forbidden) is a permission
         // outcome on a valid session and must NOT be treated as Unauthorized (else callers wipe a
-        // live session).
-        401 => new ApiError.Unauthorized(detail),
+        // live session). `fromApi` says whether the 401 is even ours to believe.
+        401 => new ApiError.Unauthorized(detail, fromApi),
         403 => new ApiError.Server(403, detail),
         404 => new ApiError.NotFoundError(),
         410 => new ApiError.GoneError(),
