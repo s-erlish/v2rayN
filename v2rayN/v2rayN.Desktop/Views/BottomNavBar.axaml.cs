@@ -1,5 +1,4 @@
 using Avalonia.Animation;
-using v2rayN.Desktop.Account;
 using v2rayN.Desktop.Common;
 
 namespace v2rayN.Desktop.Views;
@@ -16,8 +15,8 @@ public enum AppTab
 /// <summary>
 /// Bottom navigation for the compact (phone-like) layout (CA-2). Drives the SAME tab switching the
 /// widescreen left rail does — it only raises <see cref="TabSelected"/>; the host (<c>MainWindow</c>)
-/// decides how to show the tab, so tab + connection state survive a width change. «Аккаунт» appears
-/// only while signed in (its column collapses to zero otherwise, keeping equal thirds).
+/// decides how to show the tab, so tab + connection state survive a width change. «Аккаунт» виден
+/// ВСЕГДА: в узком окне рейла нет, и если прятать вкладку до входа, войти будет негде.
 /// </summary>
 public partial class BottomNavBar : UserControl
 {
@@ -25,13 +24,11 @@ public partial class BottomNavBar : UserControl
     public event EventHandler<AppTab>? TabSelected;
 
     private AppTab _selected = AppTab.Home;
-    private Action<AccountState>? _handler;
 
     // ==================== Путешествующий индикатор (P0-1) ====================
     // ОДНА акцентная полоса (BottomIndicator) физически СКОЛЬЗИТ по X к центру активной трети —
     // вместо трёх независимых пилюль, «мигавших» на месте. Центр берётся из ЖИВЫХ bounds активной
-    // кнопки, поэтому корректен и в 3-пунктовом (вошёл), и в 2-пунктовом (без «Аккаунта») состоянии,
-    // и пере-решается при ресайзе окна / смене числа колонок. Первый показ — мгновенно на активной
+    // кнопки, поэтому пере-решается при ресайзе окна. Первый показ — мгновенно на активной
     // трети (без скольжения с X=0); дальше — переезд Motion.Dur.Nav 280мс ease-out-quart (motion.md
     // «Навигация»). Под lite / off-screen — мгновенно. Незавершённое скольжение перебивает сам
     // переход на трансформе: он подхватывает живое X, отменять нечего.
@@ -53,33 +50,14 @@ public partial class BottomNavBar : UserControl
         ItemSettings.Click += (_, _) => Raise(AppTab.Settings);
         ItemAccount.Click += (_, _) => Raise(AppTab.Account);
 
-        AttachedToVisualTree += OnAttached;
-        DetachedFromVisualTree += OnDetached;
-
         // Пере-ставим индикатор на активную треть после КАЖДОГО прохода раскладки (первый layout, ресайз
-        // окна в компакте, смена числа колонок при входе/выходе). LayoutUpdated (а не Bounds одной кнопки)
+        // окна в компакте). LayoutUpdated (а не Bounds одной кнопки)
         // гарантирует, что ВСЕ bounds пунктов уже финальные — иначе при активной не-первой трети коллбэк
         // мог сработать до арранжа ItemSettings/ItemAccount и увидеть нулевую ширину. Мгновенно, без
         // скольжения; _lastTargetX-guard гасит холостые повторы и не рвёт идущее скольжение по тапу.
         LayoutUpdated += (_, _) => PositionIndicator(animate: false);
 
         SetSelected(AppTab.Home);
-    }
-
-    private void OnAttached(object? sender, VisualTreeAttachmentEventArgs e)
-    {
-        ApplyAccountVisibility();
-        _handler = _ => Dispatcher.UIThread.Post(ApplyAccountVisibility);
-        AccountSession.StateChanged += _handler;
-    }
-
-    private void OnDetached(object? sender, VisualTreeAttachmentEventArgs e)
-    {
-        if (_handler is not null)
-        {
-            AccountSession.StateChanged -= _handler;
-            _handler = null;
-        }
     }
 
     private void Raise(AppTab tab)
@@ -116,8 +94,7 @@ public partial class BottomNavBar : UserControl
         }
     }
 
-    // Активная кнопка (для позиции индикатора). Её ЖИВЫЕ bounds дают центр активной трети — верно и
-    // для 2-пунктового logged-out (Account сворачивается, Home/Settings делят пополам).
+    // Активная кнопка (для позиции индикатора). Её ЖИВЫЕ bounds дают центр активной трети.
     private Button ActiveItem => _selected switch
     {
         AppTab.Settings => ItemSettings,
@@ -175,27 +152,4 @@ public partial class BottomNavBar : UserControl
     private bool IsWindowLive()
         => TopLevel.GetTopLevel(this) is Window w && w.IsVisible && w.WindowState != WindowState.Minimized;
 
-    // «Аккаунт» виден только при входе; его столбец сворачивается до 0, чтобы 2 остальных
-    // (Главная · Настройки) держали равные половины (Android nav_account weighted collapse).
-    private void ApplyAccountVisibility()
-    {
-        //  «Аккаунт» виден ВСЕГДА. Раньше он появлялся только после входа — и в узком окне, где
-        //  рейла нет, войти было НЕГДЕ: единственная дверь к логину пряталась до логина. Комментарий
-        //  в MainWindow это уже утверждал, но нижняя панель жила по своему правилу.
-        const bool logged = true;
-        ItemAccount.IsVisible = logged;
-        //  «Аккаунт» теперь СРЕДНЯЯ колонка (порядок пакета Главная · Аккаунт · Настройки);
-        //  без входа она сворачивается до 0, и Главная с Настройками делят панель пополам.
-        NavGrid.ColumnDefinitions[1].Width = logged
-            ? new GridLength(1, GridUnitType.Star)
-            : new GridLength(0);
-
-        // Signed out while on the Account tab → fall back to Home so no dead selection lingers.
-        if (!logged && _selected == AppTab.Account)
-        {
-            Raise(AppTab.Home);
-        }
-        // Смена числа колонок сдвигает центры Home/Settings — ItemHome-bounds пере-ляжет и Bounds-тик
-        // мгновенно пере-решит позицию индикатора (см. подписку в ctor).
-    }
 }

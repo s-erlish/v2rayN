@@ -323,9 +323,21 @@ public partial class App : Application
         }
     }
 
+    // «Выход». Обработчик события — значит async void: исключение из него НЕКОМУ поймать и оно
+    // валит процесс целиком. У трёх соседних пунктов трея try/catch есть, у этого не было — а он
+    // как раз останавливает ядро и снимает системный прокси, то есть трогает и процессы, и сеть.
+    // Падение здесь означало бы, что выход из приложения выглядит как крах, да ещё и с оставленным
+    // системным прокси на мёртвом порту. Ловим и всё равно завершаемся: пользователь просил выйти.
     private async void MenuExit_Click(object? sender, EventArgs e)
     {
-        await AppManager.Instance.AppExitAsync(false);
+        try
+        {
+            await AppManager.Instance.AppExitAsync(false);
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog("MenuExit_Click", ex);
+        }
         AppManager.Instance.Shutdown(true);
     }
 
