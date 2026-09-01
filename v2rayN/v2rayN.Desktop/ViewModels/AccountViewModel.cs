@@ -561,17 +561,36 @@ public class AccountViewModel : MyReactiveObject
     /// runs the subscription fetch as its OWN named stage — running it here too sent
     /// GET /client/subscription and /client/subscription/all a second time, on the critical path of
     /// the overlay the user is watching.
+    ///
+    /// ЗАПРОСЫ УХОДЯТ ВМЕСТЕ, А НЕ ДРУГ ЗА ДРУГОМ. Ни один из шести не зависит от ответа другого:
+    /// /me, /subscription, /subscription/all, /public/config, /public/tariffs и /payments — это шесть
+    /// независимых GET-ов. Раньше они выполнялись строго последовательно, и на плохой сети экран
+    /// «Аккаунт» ждал СУММУ всех задержек: у клиента таймаут 25 с на запрос, то есть до 150 с в
+    /// худшем случае. Теперь они стартуют одновременно и ожидание равно САМОМУ ДОЛГОМУ ответу.
+    ///
+    /// Порядок ПРИМЕНЕНИЯ результатов сохранён прежний (профиль → подписки → конфиг → тарифы →
+    /// платежи): подписки при слиянии читают уже загруженный профиль, а карточка тарифа — каталог,
+    /// поэтому меняется только момент отправки запросов, а не порядок, в котором экран узнаёт правду.
     /// </summary>
     private async Task<bool> LoadAll(bool includeSubscriptions = true)
     {
-        var reached = await RefreshProfile();
-        if (includeSubscriptions)
+        // Все задачи стартуют ЗДЕСЬ, до первого await. Репозиторий никогда не бросает (Guard
+        // возвращает ApiResult), поэтому «висящих» задач с необработанным исключением не бывает.
+        var profileTask = _repo.RefreshProfile();
+        var allTask = includeSubscriptions ? _repo.LoadSubscriptions() : null;
+        var primaryTask = includeSubscriptions ? _repo.LoadPrimarySubscription() : null;
+        var configTask = _repo.LoadPublicConfig();
+        var catalogTask = _repo.LoadCatalog();
+        var paymentsTask = _repo.GetPayments();
+
+        var reached = ApplyProfile(await profileTask);
+        if (allTask != null && primaryTask != null)
         {
-            reached &= await FetchAndApplySubscriptions();
+            reached &= ApplySubscriptions(await allTask, await primaryTask);
         }
-        await LoadPublicConfig();
-        await LoadTariffs();
-        await LoadPayments();
+        ApplyPublicConfig(await configTask);
+        ApplyTariffs(await catalogTask);
+        ApplyPayments(await paymentsTask);
         if (reached)
         {
             _lastReachedUtc = DateTime.UtcNow;
@@ -585,9 +604,12 @@ public class AccountViewModel : MyReactiveObject
     /// login gate). Anything else means we never reached it, and that is what makes a sync a failure
     /// rather than a silent success.
     /// </summary>
-    private async Task<bool> RefreshProfile()
+    private async Task<bool> RefreshProfile() => ApplyProfile(await _repo.RefreshProfile());
+
+    /// <summary>Публикует ответ /me на экран. Отделено от запроса, чтобы <see cref="LoadAll"/> могло
+    /// отправить все запросы разом и применить ответы в прежнем порядке.</summary>
+    private bool ApplyProfile(ApiResult<UserProfileDto> result)
     {
-        var result = await _repo.RefreshProfile();
         RunOnUi(() =>
         {
             result
@@ -628,9 +650,16 @@ public class AccountViewModel : MyReactiveObject
     /// </summary>
     private async Task<bool> FetchAndApplySubscriptions()
     {
-        var allResult = await _repo.LoadSubscriptions();
-        var primaryResult = await _repo.LoadPrimarySubscription();
+        // Пара запросов уходит ВМЕСТЕ: /all и /subscription друг о друге ничего не знают, а ждали
+        // строго по очереди — на плохой сети это удваивало ожидание карточки подписки.
+        var allTask = _repo.LoadSubscriptions();
+        var primaryTask = _repo.LoadPrimarySubscription();
+        return ApplySubscriptions(await allTask, await primaryTask);
+    }
 
+    /// <summary>Публикует пару ответов подписки на экран (см. <see cref="FetchAndApplySubscriptions"/>).</summary>
+    private bool ApplySubscriptions(ApiResult<SubscriptionAllDto> allResult, ApiResult<PrimarySubscriptionDto> primaryResult)
+    {
         RunOnUi(() =>
         {
             var all = allResult.GetOrNull()?.Items ?? new List<SubInfoDto>();
@@ -739,9 +768,10 @@ public class AccountViewModel : MyReactiveObject
         };
     }
 
-    private async Task LoadTariffs()
+    private async Task LoadTariffs() => ApplyTariffs(await _repo.LoadCatalog());
+
+    private void ApplyTariffs(ApiResult<TariffCatalogDto> result)
     {
-        var result = await _repo.LoadCatalog();
         RunOnUi(() =>
         {
             result.OnSuccess(c => Tariffs = c.Items).OnFailure(Report);
@@ -749,9 +779,10 @@ public class AccountViewModel : MyReactiveObject
         });
     }
 
-    private async Task LoadPayments()
+    private async Task LoadPayments() => ApplyPayments(await _repo.GetPayments());
+
+    private void ApplyPayments(ApiResult<PaymentsDto> result)
     {
-        var result = await _repo.GetPayments();
         RunOnUi(() =>
         {
             result
@@ -765,9 +796,8 @@ public class AccountViewModel : MyReactiveObject
         });
     }
 
-    private async Task LoadPublicConfig()
+    private void ApplyPublicConfig(ApiResult<PublicConfigDto> result)
     {
-        var result = await _repo.LoadPublicConfig();
         RunOnUi(() => result
             .OnSuccess(c =>
             {
