@@ -296,11 +296,17 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         // (НЕ IsVisible — тот бы гнал повторный layout при показе). Смена вкладки = дешёвый композитный
         // Opacity+TranslateY на уже разложенной вью → без detach/reattach и без first-layout под кадром
         // перехода (это и был лаг переключения). ZIndex ставит SwapContent (входящая поверх уходящей).
+        //
+        // НО В ДЕРЕВО ОНИ ПОПАДАЮТ НЕ ВСЕ СРАЗУ. До первого кадра нужна ровно одна вкладка — та, что
+        // пользователь увидит; остальные три только удлиняли первый проход раскладки, который и так
+        // самый дорогой за весь запуск. Поэтому здесь их только гасим, а в дерево кладём отложенно,
+        // сразу после первого кадра (см. ниже) — к моменту, когда пользователь дотянется до вкладки,
+        // они уже разложены, и переключение остаётся тем же дешёвым свопом без first-layout.
+        // EnsureAttached страхует любой более ранний показ (INITIAL_TAB, смена раскладки).
         foreach (var v in new Control[] { _homeView, _compactHome, _settingsView, _accountView })
         {
             v.Opacity = 0d;
             v.IsHitTestVisible = false;
-            contentHost.Children.Add(v);
         }
 
         // Первичная раскладка + вотчер ширины окна. Наблюдаем Bounds окна (ширина клиентской
@@ -457,6 +463,24 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         SwapContent(ViewFor(tab), animate, direction);
     }
 
+    /// <summary>Кладёт вкладку в общий хост, если её там ещё нет (отложенный keep-alive, см. ctor).</summary>
+    private void EnsureAttached(Control v)
+    {
+        if (v.Parent is null)
+        {
+            contentHost.Children.Add(v);
+        }
+    }
+
+    /// <summary>Досаживает в дерево остальные keep-alive вкладки — после первого кадра, на холостом ходу.</summary>
+    private void AttachRemainingTabs()
+    {
+        foreach (var v in new Control[] { _homeView, _compactHome, _settingsView, _accountView })
+        {
+            EnsureAttached(v);
+        }
+    }
+
     private static int NavIndex(AppTab tab) => tab switch
     {
         //  Порядок пакета: Главная · Аккаунт · Настройки (README, прототип) — от него считается
@@ -488,6 +512,7 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         }
         _currentContentView = target;
 
+        EnsureAttached(target);
         target.ZIndex = ++_contentZ;   // входящая ВСЕГДА поверх уходящей → подъём читается корректно
 
         // Bug7: РОВНО одна интерактивная поверхность. Гасим hit-test на ВСЕХ keep-alive вкладках, кроме
@@ -2538,6 +2563,13 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         {
             UpdateLayoutMode(Bounds.Width / _uiScale);
         }
+
+        // Остальные keep-alive вкладки — В ДЕРЕВО ПОСЛЕ ПЕРВОГО КАДРА. Background — самый низкий из
+        // рабочих приоритетов диспетчера: очередь сначала доводит до конца раскладку и отрисовку того,
+        // что пользователь увидит, и только потом досаживает соседние вкладки. Тем самым первый проход
+        // раскладки меряет ОДНУ вкладку вместо четырёх, а keep-alive (смена вкладки без first-layout)
+        // остаётся в силе — к первому же тапу по навигации все четыре уже разложены.
+        Dispatcher.UIThread.Post(AttachRemainingTabs, DispatcherPriority.Background);
 
         // DEV probe hooks (скриншот-обвязка, как INITIAL_TAB/PREVIEW_VIEW): DP_SETPOS=x,y ставит позицию
         // окна, как будто его перенёс пользователь; DP_EXIT_AFTER_MS=N штатно завершает приложение через
