@@ -2764,7 +2764,7 @@ public class AccountViewModel : MyReactiveObject
         return Math.Max(0, price);
     }
 
-    /// <summary>The traffic-pill track width (px), mirrored from <c>Size.TrafficPill</c>, used to size the usage-bar fill.</summary>
+    /// <summary>Ширина трека трафик-пилюли (px) — из неё считается ширина заливки.</summary>
     private const double TrafficPillWidth = 160.0;
 
     /// <summary>

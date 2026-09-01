@@ -297,13 +297,6 @@
     <!-- ==================================================================== -->
 
     <!--  Типографика Space Grotesk (шкала 1:1 с Android TextAppearance.App.*)  -->
-    <Style Selector="TextBlock.Display">
-        <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
-        <Setter Property="FontWeight" Value="Bold" />
-        <Setter Property="FontSize" Value="34" />
-        <Setter Property="LetterSpacing" Value="-0.7" />
-        <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
-    </Style>
     <Style Selector="TextBlock.Headline">
         <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
         <Setter Property="FontWeight" Value="Bold" />
@@ -314,12 +307,6 @@
     <Style Selector="TextBlock.Title">
         <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
         <Setter Property="FontWeight" Value="Bold" />
-        <Setter Property="FontSize" Value="16" />
-        <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
-    </Style>
-    <Style Selector="TextBlock.TitleMedium">
-        <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
-        <Setter Property="FontWeight" Value="Medium" />
         <Setter Property="FontSize" Value="16" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
     </Style>
@@ -372,24 +359,6 @@
     </Style>
     <Style Selector="Border.Row:pointerover">
         <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
-    </Style>
-
-    <!--  Плитка иконки 40 с глифом 22  -->
-    <Style Selector="Border.Tile">
-        <Setter Property="Width" Value="{DynamicResource Size.Tile}" />
-        <Setter Property="Height" Value="{DynamicResource Size.Tile}" />
-        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Tile}" />
-        <Setter Property="Background" Value="{DynamicResource Brush.Tile.Neutral}" />
-    </Style>
-    <Style Selector="Border.Tile.Blue">
-        <Setter Property="Background" Value="{DynamicResource Brush.Tile.Blue}" />
-    </Style>
-
-    <!--  Чип/бейдж  -->
-    <Style Selector="Border.ChipBadge">
-        <Setter Property="Background" Value="{DynamicResource Brush.AccentContainer}" />
-        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Chip}" />
-        <Setter Property="Padding" Value="10,4" />
     </Style>
 
     <!-- ==================================================================== -->
@@ -700,23 +669,6 @@
     <!--  departament VPN — недостающие компоненты мастер-плана §2.4 (фаза 0)   -->
     <!-- ==================================================================== -->
 
-    <!--  Цветные варианты плитки иконки 40 (к базовому Border.Tile + .Blue)  -->
-    <Style Selector="Border.Tile.Green">
-        <Setter Property="Background" Value="{DynamicResource Brush.Tile.Green}" />
-    </Style>
-    <Style Selector="Border.Tile.Orange">
-        <Setter Property="Background" Value="{DynamicResource Brush.Tile.Orange}" />
-    </Style>
-    <Style Selector="Border.Tile.Purple">
-        <Setter Property="Background" Value="{DynamicResource Brush.Tile.Purple}" />
-    </Style>
-    <Style Selector="Border.Tile.Red">
-        <Setter Property="Background" Value="{DynamicResource Brush.Tile.Red}" />
-    </Style>
-    <Style Selector="Border.Tile.Yellow">
-        <Setter Property="Background" Value="{DynamicResource Brush.Tile.Yellow}" />
-    </Style>
-
     <!--  Бейдж протокола (bg_type_chip): контейнер акцента, radius 12, паддинг 8,2.
           Текст внутри — класс Chip цвет Accent, значение через .ToUpper() («VLESS»).  -->
     <Style Selector="Border.ProtocolChip">
@@ -785,27 +737,18 @@
     <!--  карты (карта клипует углы), focus = авто-кольцо FocusAdorner (строка становится     -->
     <!--  Focusable/IsTabStop в code-behind, как AccountChip).                                -->
     <!--                                                                                      -->
-    <!--  ПРОГИБ 0.985 (motion.md «Отклик на нажатие», строка настроек) ВЕРНУЛСЯ — но НЕ тем       -->
-    <!--  механизмом, что сняли в 1e884ad9 «Settings rows: remove press-scale, fix every-other-tap».-->
-    <!--  Там класс .pressed вешал RenderTransform на САМУ строку, а render-transform в Avalonia    -->
-    <!--  участвует в hit-test: строка уезжала из-под курсора, у краёв прилетал PointerExited,      -->
-    <!--  обработчик снимал .pressed, строка возвращалась — и на этом дребезге жест Tapped          -->
-    <!--  отменялся («тап через раз»).                                                              -->
-    <!--                                                                                            -->
-    <!--  Теперь прогиб ведёт cm:PressFeedback.Scale и применяет его к СОДЕРЖИМОМУ строки, а не к    -->
-    <!--  ней самой: границы строки под нажатием НЕ меняются, поэтому hit-test, IsPointerOver и      -->
-    <!--  Tapped физически не могут сбиться — дефект исключён по построению, а не подобран           -->
-    <!--  таймингами. Ховер-заливка (её рисует сам Border) тоже стоит на месте и не съёживается.     -->
-    <!--  Wiring в SettingsView.axaml.cs НЕ нужен: свойство ставится отсюда, селектором.             -->
-    <!--                                                                                            -->
-    <!--  Ховер МГНОВЕННЫЙ (без BrushTransition на Background): при прокрутке колесом подсвечена    -->
-    <!--  ровно одна строка (паритет ServerRow). Кольцо фокуса — a11y.                              -->
+    <!--  ПРОГИБА У СТРОКИ НАСТРОЕК НЕТ. Здесь стоял cm:PressFeedback.Scale 0.985, но          -->
+    <!--  единственный потребитель класса — SettingsView — гасил его своим NaN: прототип не     -->
+    <!--  гнёт `.srow`, а масштаб на строке-якоре растянул бы и раскрытое у неё окошко.         -->
+    <!--  Сеттер не действовал ни на одну строку в приложении и убран.                          -->
+    <!--                                                                                        -->
+    <!--  Ховер МГНОВЕННЫЙ (без BrushTransition на Background): при прокрутке колесом подсвечена -->
+    <!--  ровно одна строка (паритет ServerRow). Кольцо фокуса — a11y.                          -->
     <!--  ==================================================================== -->
     <Style Selector="Border.SettingRow">
         <Setter Property="MinHeight" Value="{DynamicResource Size.Row}" />
         <Setter Property="Padding" Value="16,12" />
         <Setter Property="Background" Value="Transparent" />
-        <Setter Property="cm:PressFeedback.Scale" Value="0.985" />
         <!--  Кольцо фокуса ВНУТРЕННЕЕ (отступ 3, радиус 12): строка во всю ширину карты, внешнее
               кольцо вылезло бы за скруглённый край карты. Мгновенно, переживает lite (a11y > движение).  -->
         <Setter Property="FocusAdorner">
@@ -818,42 +761,13 @@
     <Style Selector="Border.SettingRow:pointerover">
         <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
     </Style>
-    <!--  Строки-сегменты (Mode/Appearance): тело строки НЕ тап-таргет — действуют только сегмент-чипы
-          справа. Полноширинный hover-фон подсвечивал бы строку без действия (ложный аффорданс), поэтому
-          у .segmentRow ховер тела подавлен (реагируют сами чипы). Специфичнее базового → перекрывает.  -->
-    <Style Selector="Border.SettingRow.segmentRow:pointerover">
-        <Setter Property="Background" Value="Transparent" />
-    </Style>
-    <!--  …и по той же причине НЕ прогибается: прогиб без действия — тот же ложный аффорданс.  -->
-    <Style Selector="Border.SettingRow.segmentRow">
-        <Setter Property="cm:PressFeedback.Scale" Value="NaN" />
-    </Style>
-    <!--  Фон нажатия (прототип: .row:active берёт переменную pressBg) — шаг ГЛУБЖЕ ховера.
-          Класс .pressed вешает PressFeedback; масштаб он не трогает (иначе трансформ снова сел бы
-          на саму строку). Под «Облегчённым режимом» этот фон остаётся единственным откликом на
-          нажатие — движение там погашено, а строка обязана отвечать на палец.  -->
+    <!--  Фон нажатия (прототип: .row:active берёт переменную pressBg) — шаг ГЛУБЖЕ ховера. Класс
+          .pressed вешает PressFeedback, а он подписывается на указатель только когда у строки задан
+          рабочий масштаб прогиба. Прогиба у строк настроек нет (см. выше), поэтому СЕЙЧАС это
+          правило не срабатывает; оставлено как единственная точка, куда вернётся отклик на нажатие,
+          если владелец решит его вернуть. См. ВОПРОСЫ в отчёте.  -->
     <Style Selector="Border.SettingRow.pressed">
         <Setter Property="Background" Value="{DynamicResource Brush.PressBg}" />
-    </Style>
-
-    <!--  Поиск-пилюля (bg_search_pill): Surface, radius 14, 1px OutlineVariant.  -->
-    <Style Selector="Border.SearchPill">
-        <Setter Property="Background" Value="{DynamicResource Brush.Surface}" />
-        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Search}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineVariant}" />
-        <Setter Property="BorderThickness" Value="1" />
-    </Style>
-
-    <!--  Трафик-пилюля: трек SurfaceVariant, высота 16, radius 8 (+ .Fill = заливка Accent).  -->
-    <Style Selector="Border.TrafficPill">
-        <Setter Property="Height" Value="16" />
-        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Traffic}" />
-        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceVariant}" />
-        <Setter Property="ClipToBounds" Value="True" />
-    </Style>
-    <Style Selector="Border.TrafficPill.Fill">
-        <Setter Property="Background" Value="{DynamicResource Brush.Accent}" />
-        <Setter Property="HorizontalAlignment" Value="Left" />
     </Style>
 
     <!--  Аватар (bg_avatar_circle): овал, фон Tile.Blue; инициал — TextBlock цвет Accent.
@@ -886,18 +800,6 @@
     </Style>
     <Style Selector="Border.ConnectDisc.pressed">
         <Setter Property="RenderTransform" Value="scale(0.94)" />
-    </Style>
-
-    <!--  Точки-пейджер карусели: неактивная 6/OutlineVariant, активная 8/Accent.  -->
-    <Style Selector="Ellipse.Dot">
-        <Setter Property="Width" Value="{DynamicResource Dot}" />
-        <Setter Property="Height" Value="{DynamicResource Dot}" />
-        <Setter Property="Fill" Value="{DynamicResource Brush.OutlineVariant}" />
-    </Style>
-    <Style Selector="Ellipse.Dot.active">
-        <Setter Property="Width" Value="{DynamicResource Dot.Active}" />
-        <Setter Property="Height" Value="{DynamicResource Dot.Active}" />
-        <Setter Property="Fill" Value="{DynamicResource Brush.Accent}" />
     </Style>
 
     <!-- ==================================================================== -->
@@ -1313,17 +1215,6 @@
         </Setter>
     </Style>
 
-    <!--  Сегмент-чип (Radius.Chip 12 → кольцо 14): инлайн-переключатели Режим/Оформление
-          в настройках теперь реальные фокусируемые контролы — даём им единое кольцо фокуса.  -->
-    <Style Selector="ToggleButton.Segment">
-        <Setter Property="FocusAdorner">
-            <FocusAdornerTemplate>
-                <Border Margin="-2" BorderThickness="2" CornerRadius="14"
-                        BorderBrush="{DynamicResource Brush.Accent}" />
-            </FocusAdornerTemplate>
-        </Setter>
-    </Style>
-
     <!--  Primary/Tall — ВНУТРЕННЕЕ кольцо OnAccent @40% (радиус 16, без -2 отступа).  -->
     <Style Selector="Button.Primary">
         <Setter Property="FocusAdorner">
@@ -1332,77 +1223,6 @@
                         BorderBrush="{DynamicResource Brush.OnAccent}" />
             </FocusAdornerTemplate>
         </Setter>
-    </Style>
-
-    <!-- ==================================================================== -->
-    <!--  Статус-чип истории платежей (promoted из PaymentHistoryView, P1 18).    -->
-    <!--  Радиус 12, паддинг 8,2 (оптический вертикальный 2 — санкционированное    -->
-    <!--  исключение чипа, §0.3). База = неизвестный статус (нейтрально). Вариант  -->
-    <!--  несёт цвет статуса: текст = полный цвет, фон = тот же цвет @ 18%.        -->
-    <!-- ==================================================================== -->
-    <Style Selector="Border.StatusChip">
-        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceVariant}" />
-        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Chip}" />
-        <Setter Property="Padding" Value="8,2" />
-    </Style>
-    <Style Selector="Border.StatusChip TextBlock">
-        <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
-    </Style>
-    <Style Selector="Border.StatusChip.paid">
-        <Setter Property="Background" Value="{DynamicResource Brush.StatusChip.Green}" />
-    </Style>
-    <Style Selector="Border.StatusChip.paid TextBlock">
-        <Setter Property="Foreground" Value="{DynamicResource Brush.Green}" />
-    </Style>
-    <Style Selector="Border.StatusChip.pending">
-        <Setter Property="Background" Value="{DynamicResource Brush.StatusChip.Orange}" />
-    </Style>
-    <Style Selector="Border.StatusChip.pending TextBlock">
-        <Setter Property="Foreground" Value="{DynamicResource Brush.Icon.Orange}" />
-    </Style>
-    <Style Selector="Border.StatusChip.failed">
-        <Setter Property="Background" Value="{DynamicResource Brush.StatusChip.Red}" />
-    </Style>
-    <Style Selector="Border.StatusChip.failed TextBlock">
-        <Setter Property="Foreground" Value="{DynamicResource Brush.Red}" />
-    </Style>
-    <Style Selector="Border.StatusChip.canceled">
-        <Setter Property="Background" Value="{DynamicResource Brush.StatusChip.Yellow}" />
-    </Style>
-    <Style Selector="Border.StatusChip.canceled TextBlock">
-        <Setter Property="Foreground" Value="{DynamicResource Brush.Icon.Yellow}" />
-    </Style>
-
-    <!-- ==================================================================== -->
-    <!--  Опция срока/цены (§2.3, §5.4 Border.PriceOption; promoted из BuyView     -->
-    <!--  Border.OptionRow). Радиус 14 (Radius.Search), minHeight 48, рамка        -->
-    <!--  ПОСТОЯННО 1.5px (§0.6 выбор не сдвигает раскладку); selected =           -->
-    <!--  SelectedFill + 1.5px Accent. hover только у невыбранной.                 -->
-    <!-- ==================================================================== -->
-    <Style Selector="Border.PriceOption">
-        <Setter Property="MinHeight" Value="48" />
-        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Search}" />
-        <Setter Property="Padding" Value="12" />
-        <Setter Property="Background" Value="Transparent" />
-        <!--  Ступень «карточка» 0.975 (motion.md). Как и у строки настроек — через
-              cm:PressFeedback, т.е. прогибается СОДЕРЖИМОЕ, а границы карточки стоят на месте:
-              выбор тарифа идёт по Tapped в BuyView, и сбить его прогибом теперь нечем.  -->
-        <Setter Property="cm:PressFeedback.Scale" Value="0.975" />
-        <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineVariant}" />
-        <Setter Property="BorderThickness" Value="1.5" />
-        <Setter Property="Transitions">
-            <Transitions>
-                <BrushTransition Property="Background" Duration="0:0:0.15" />
-                <BrushTransition Property="BorderBrush" Duration="0:0:0.15" />
-            </Transitions>
-        </Setter>
-    </Style>
-    <Style Selector="Border.PriceOption:not(.selected):pointerover">
-        <Setter Property="Background" Value="{DynamicResource Brush.Hover}" />
-    </Style>
-    <Style Selector="Border.PriceOption.selected">
-        <Setter Property="Background" Value="{DynamicResource Brush.SelectedFill}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
     </Style>
 
     <!-- ==================================================================== -->
@@ -1444,69 +1264,6 @@
         <Setter Property="FontWeight" Value="Bold" />
         <Setter Property="FontSize" Value="14" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurface}" />
-    </Style>
-
-    <!-- ==================================================================== -->
-    <!--  Сегмент-переключатель (§2.11c ToggleButton.Segment): чипы 44, single-    -->
-    <!--  select. Покой = прозрачный + 1px OutlineVariant, текст muted; checked =  -->
-    <!--  SelectedFill + 1.5px Accent, текст Accent. press scale 0.975, без ripple. -->
-    <!--  Одиночный выбор обеспечивает потребитель (RadioButton-группа/биндинг).   -->
-    <!-- ==================================================================== -->
-    <Style Selector="ToggleButton.Segment">
-        <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
-        <Setter Property="RenderTransformOrigin" Value="50%,50%" />
-        <Setter Property="Height" Value="{DynamicResource Size.SegmentChip}" />
-        <Setter Property="MinWidth" Value="44" />
-        <Setter Property="Padding" Value="16,0" />
-        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Chip}" />
-        <Setter Property="Background" Value="Transparent" />
-        <Setter Property="BorderBrush" Value="{DynamicResource Brush.OutlineVariant}" />
-        <Setter Property="BorderThickness" Value="1.5" />
-        <Setter Property="Foreground" Value="{DynamicResource Brush.OnSurfaceVariant}" />
-        <Setter Property="FontFamily" Value="{DynamicResource Font.Grotesk}" />
-        <Setter Property="FontWeight" Value="Medium" />
-        <Setter Property="FontSize" Value="14" />
-        <Setter Property="HorizontalContentAlignment" Value="Center" />
-        <Setter Property="VerticalContentAlignment" Value="Center" />
-        <Setter Property="Cursor" Value="Arrow" />
-        <Setter Property="Transitions">
-            <Transitions>
-                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.2" Easing="{StaticResource Ease.PressBack}" />
-                <BrushTransition Property="BorderBrush" Duration="0:0:0.15" />
-            </Transitions>
-        </Setter>
-        <!--  «Аппаратный слой» под текстом на время прогиба (см. PressFeedback.Composited):
-              базовая линия не привязывается к пиксельной сетке, глифы всегда серо-сглажены —
-              поэтому на возврате текст не снапится. Нужен именно код: у TextOptions нет
-              AvaloniaProperty, из Setter'а их не выставить.  -->
-        <Setter Property="cm:PressFeedback.Composited" Value="True" />
-        <!--  Покой = ЯВНЫЙ scale(1), а не отсутствие трансформа: элемент всегда несёт
-              трансформ, поэтому рендер не переключается между ветками «трансформа нет» и
-              «трансформ есть» на последнем кадре возврата (это и был бы рывок), а
-              TransformOperations интерполирует scale→scale точно, без разложения матрицы.  -->
-        <Setter Property="RenderTransform" Value="scale(1)" />
-    </Style>
-    <Style Selector="ToggleButton.Segment /template/ ContentPresenter#PART_ContentPresenter">
-        <Setter Property="Background" Value="Transparent" />
-        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Chip}" />
-    </Style>
-    <Style Selector="ToggleButton.Segment:not(:checked):pointerover /template/ ContentPresenter#PART_ContentPresenter">
-        <Setter Property="Background" Value="Transparent" />
-    </Style>
-    <Style Selector="ToggleButton.Segment:pressed">
-        <Setter Property="RenderTransform" Value="scale(0.975)" />
-        <Setter Property="Transitions">
-            <Transitions>
-                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.07" Easing="{StaticResource Ease.PressIn}" />
-            </Transitions>
-        </Setter>
-    </Style>
-    <Style Selector="ToggleButton.Segment:checked /template/ ContentPresenter#PART_ContentPresenter">
-        <Setter Property="Background" Value="{DynamicResource Brush.SelectedFill}" />
-    </Style>
-    <Style Selector="ToggleButton.Segment:checked">
-        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
-        <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
     </Style>
 
     <!-- ==================================================================== -->
@@ -1640,19 +1397,6 @@
     </Style>
 
     <!-- ==================================================================== -->
-    <!--  Навигационный рейл — корректная поверхность (REVIEW_BACKLOG P1 3,        -->
-    <!--  DESIGN_PLAN Часть 3). Фон Bg (сливается с окном), БЕЗ правой границы.    -->
-    <!--  Аддитивный класс: контейнер рейла в MainWindow переходит на него в       -->
-    <!--  проходе дедупликации (сейчас там Surface + 1px правая граница).          -->
-    <!--  Активный пункт (Accent глиф + левая пилюля 3×30, press 0.92, без ripple) -->
-    <!--  уже задан классом Button.NavRailItem выше.                              -->
-    <!-- ==================================================================== -->
-    <Style Selector="Border.NavRail">
-        <Setter Property="Background" Value="{DynamicResource Brush.Bg}" />
-        <Setter Property="BorderThickness" Value="0" />
-    </Style>
-
-    <!-- ==================================================================== -->
     <!--  «Облегчённый режим» (lite / reduced-motion) для слабых ПК: НОЛЬ            -->
     <!--  декоративного движения. Класс .lite ставит окно (MainWindow) по           -->
     <!--  _config.UiItem.LiteMode; :is(Window) нужно, т.к. это подкласс Window.      -->
@@ -1686,11 +1430,6 @@
         </Setter>
     </Style>
     <Style Selector=":is(Window).lite Border.ServerRow">
-        <Setter Property="Transitions">
-            <Transitions />
-        </Setter>
-    </Style>
-    <Style Selector=":is(Window).lite Border.PriceOption">
         <Setter Property="Transitions">
             <Transitions />
         </Setter>

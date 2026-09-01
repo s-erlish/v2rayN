@@ -63,21 +63,8 @@
               В этом случае углы тоже прямые: лучше честный прямоугольник, чем светлые/чёрные клинья.
           Уровень прозрачности на X11 меняется НА ХОДУ (композитор можно запустить/убить), поэтому
           подписка живая, а не разовая проверка на старте.  -->
-    <!--  Красный закрытия — ОДИН на все три темы, включая чёрно-белую: это единственный красный,
-          который в ней намеренно выживает (README «Хром окна»). Поэтому он НЕ в ThemeDictionaries —
-          тема-скоупленный Brush.Red в моно сводится к белому/серому и для закрытия не годится.
-          Наведение — #E5484D с белым глифом, нажатие — на шаг темнее.  -->
-    <Window.Resources>
-        <ResourceDictionary>
-            <SolidColorBrush x:Key="Brush.CloseHover" Color="#E5484D" />
-            <SolidColorBrush x:Key="Brush.ClosePressed" Color="#CC3B40" />
-            <!--  Глиф «X» поверх красной заливки — чистый белый во всех темах.  -->
-            <SolidColorBrush x:Key="Brush.OnClose" Color="#FFFFFF" />
-        </ResourceDictionary>
-    </Window.Resources>
-
     <!--  Кнопки окна (min/max/close): 40×30, скругление 8, в покое прозрачные. Наведение — шаг фона
-          (Brush.Hover), у закрытия — красная заливка #E5484D с белым глифом (см. Window.Resources).  -->
+          (Brush.Hover) у всех трёх; у закрытия краснеет САМ ГЛИФ (Brush.Red), а не подложка.  -->
     <Window.Styles>
         <Style Selector="Button.WinBtn">
             <Setter Property="Theme" Value="{DynamicResource BorderlessButton}" />
@@ -107,7 +94,7 @@
               проявлялась → на ~120мс подсвечены ОБЕ («ховер минимайза подсвечивает и максимайз»).
               Тот же фикс, что для строк сервера (GlobalStyles.axaml Border.ServerRow). Каждая
               кнопка теперь загорается независимо; close сразу чист (без серо-красной мути), так
-              как убран переход между Brush.Hover и Brush.CloseHover. Path.CloseGlyph держит свой
+              как подложка close ведёт себя как у min/max. Path.CloseGlyph держит свой
               Stroke-переход (тинт глифа) отдельно. RailToggle переопределяет Transitions ниже
               (TransformOperationsTransition для press-scale) — на него это не влияет.  -->
         <Style Selector="Border.WinBtnBg">
