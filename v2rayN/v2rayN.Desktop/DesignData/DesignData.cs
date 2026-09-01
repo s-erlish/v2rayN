@@ -19,35 +19,13 @@ public static class DesignData
     // Home aggregator — design-only sample groups (runtime is real and empty by default).
     public static HomeViewModel? Home { get; } = SafeCreate(HomeViewModel.CreateDesign);
 
-    public static ProfilesViewModel? Profiles { get; } = SafeCreate(() => new ProfilesViewModel());
-
     public static StatusBarViewModel? StatusBar { get; } = SafeCreate(CreateStatusBar);
 
-    public static MsgViewModel? Msg { get; } = SafeCreate(() => new MsgViewModel());
-
-    public static SubSettingViewModel? SubSetting { get; } = SafeCreate(() => new SubSettingViewModel());
-
-    public static RoutingSettingViewModel? RoutingSetting { get; } = SafeCreate(() => new RoutingSettingViewModel());
-
-    public static ClashProxiesViewModel? ClashProxies { get; } = SafeCreate(() => new ClashProxiesViewModel());
-
-    public static ClashConnectionsViewModel? ClashConnections { get; } = SafeCreate(() => new ClashConnectionsViewModel());
-
     public static CheckUpdateViewModel? CheckUpdate { get; } = SafeCreate(() => new CheckUpdateViewModel());
-
-    public static DNSSettingViewModel? DNSSetting { get; } = SafeCreate(() => new DNSSettingViewModel());
-
-    public static FullConfigTemplateViewModel? FullConfigTemplate { get; } = SafeCreate(() => new FullConfigTemplateViewModel());
-
-    public static GlobalHotkeySettingViewModel? GlobalHotkeySetting { get; } = SafeCreate(() => new GlobalHotkeySettingViewModel());
-
-    public static OptionSettingViewModel? OptionSetting { get; } = SafeCreate(() => new OptionSettingViewModel());
 
     public static ProfilesSelectViewModel? ProfilesSelect { get; } = SafeCreate(() => new ProfilesSelectViewModel());
 
     public static BackupAndRestoreViewModel? BackupAndRestore { get; } = SafeCreate(() => new BackupAndRestoreViewModel());
-
-    public static ThemeSettingViewModel? ThemeSetting { get; } = SafeCreate(() => new ThemeSettingViewModel());
 
     // ── ViewModels that require constructor parameters ─────────────────────
 
@@ -56,12 +34,6 @@ public static class DesignData
     public static AddServer2ViewModel? AddServer2 { get; } = SafeCreate(() => new AddServer2ViewModel(new ProfileItem { Remarks = "Design Custom Server", ConfigType = EConfigType.Custom }));
 
     public static AddServerViewModel? AddServer { get; } = SafeCreate(() => new AddServerViewModel(new ProfileItem { Remarks = "Design VMess Server", ConfigType = EConfigType.VMess, Address = "example.com", Port = 443 }));
-
-    public static RoutingRuleSettingViewModel? RoutingRuleSetting { get; } = SafeCreate(() => new RoutingRuleSettingViewModel(new RoutingItem { Remarks = "Design Routing Rule" }));
-
-    public static RoutingRuleDetailsViewModel? RoutingRuleDetails { get; } = SafeCreate(() => new RoutingRuleDetailsViewModel(new RulesItem { Domain = ["example.com"], OutboundTag = "direct" }));
-
-    public static SubEditViewModel? SubEdit { get; } = SafeCreate(() => new SubEditViewModel(new SubItem { Remarks = "Design Subscription", Url = "https://example.com/sub" }));
 
     // ── Helper factories ───────────────────────────────────────────────────
 
