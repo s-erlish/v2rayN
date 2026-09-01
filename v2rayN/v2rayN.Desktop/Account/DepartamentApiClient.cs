@@ -25,7 +25,19 @@ public sealed class DepartamentApiClient : IDepartamentApiClient
 
     private static HttpClient CreateClient()
     {
-        var client = new HttpClient(new AuthMessageHandler(new HttpClientHandler()))
+        // SocketsHttpHandler with a BOUNDED pooled-connection lifetime. The default is infinite: a
+        // connection opened at launch is reused for the whole process life and its DNS answer is never
+        // re-resolved. For a VPN client that is the wrong default twice over — the machine's routing
+        // changes under the app every time the tunnel comes up or down, and the backend's address is
+        // exactly the kind that gets re-pointed when an IP is blocked. Recycling every two minutes
+        // makes the next request re-resolve and re-connect, instead of pinning the process to an
+        // address that stopped working. Two minutes is long enough that a burst of calls (the login
+        // sync fires six) still shares one connection.
+        var handler = new SocketsHttpHandler
+        {
+            PooledConnectionLifetime = TimeSpan.FromMinutes(2),
+        };
+        var client = new HttpClient(new AuthMessageHandler(handler))
         {
             Timeout = TimeSpan.FromSeconds(25),
         };
@@ -51,13 +63,23 @@ public sealed class DepartamentApiClient : IDepartamentApiClient
             }
 
             // Stable per-install HWID + OS/device so the panel keeps ONE device entry per machine.
+            // The OS is REPORTED, not assumed: this build also ships for Linux and macOS, and the
+            // hardcoded "windows" is what the panel stores and what the «Устройства» screen then reads
+            // back — so a Mac listed itself as a Windows box in the user's own device list.
             request.Headers.TryAddWithoutValidation(HeaderHwid, AuthTokenStore.DeviceId());
-            request.Headers.TryAddWithoutValidation(HeaderDeviceOs, "windows");
+            request.Headers.TryAddWithoutValidation(HeaderDeviceOs, CurrentDeviceOs());
             request.Headers.TryAddWithoutValidation(HeaderVerOs, Environment.OSVersion.Version.ToString());
             request.Headers.TryAddWithoutValidation(HeaderDeviceModel, Environment.MachineName);
 
             return await base.SendAsync(request, cancellationToken);
         }
+
+        /// <summary>The OS this build is actually running on, in the panel's lowercase spelling.</summary>
+        private static string CurrentDeviceOs() =>
+            OperatingSystem.IsWindows() ? "windows"
+            : OperatingSystem.IsMacOS() ? "macos"
+            : OperatingSystem.IsLinux() ? "linux"
+            : "desktop";
     }
 
     #region public

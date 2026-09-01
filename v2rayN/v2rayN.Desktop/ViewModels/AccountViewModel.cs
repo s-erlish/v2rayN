@@ -36,6 +36,12 @@ public class AccountViewModel : MyReactiveObject
     private List<SubInfoDto> _lastAll = new();
     private bool _hasSubData;
 
+    // True when the last subscription fetch could NOT establish the remote state (the authoritative
+    // primary summary failed) and there is nothing on screen to fall back on. «Не смогли узнать» and
+    // «подписки нет» are different sentences, and only this flag lets the hero say the first one: the
+    // empty state is a claim ABOUT THE ACCOUNT and must never be printed from a failed request.
+    private bool _subsUnavailable;
+
     // True until the FIRST real load result lands. Gates the loading skeleton so a genuinely-empty
     // account resolves to the empty state rather than spinning forever.
     private bool _pendingFirstLoad = true;
@@ -541,10 +547,19 @@ public class AccountViewModel : MyReactiveObject
 
     #region loads
 
-    private async Task LoadAll()
+    /// <summary>
+    /// The full tab load. <paramref name="includeSubscriptions"/> exists because the post-login sync
+    /// runs the subscription fetch as its OWN named stage — running it here too sent
+    /// GET /client/subscription and /client/subscription/all a second time, on the critical path of
+    /// the overlay the user is watching.
+    /// </summary>
+    private async Task LoadAll(bool includeSubscriptions = true)
     {
         await RefreshProfile();
-        await LoadSubscriptions();
+        if (includeSubscriptions)
+        {
+            await LoadSubscriptions();
+        }
         await LoadPublicConfig();
         await LoadTariffs();
         await LoadPayments();
@@ -579,6 +594,16 @@ public class AccountViewModel : MyReactiveObject
     /// Fetches /subscription/all plus the authoritative primary subscription and publishes the merged
     /// list, so the active/primary sub always renders (never the raw un-merged /all list). Port of
     /// AccountViewModel.fetchAndApplySubscriptions.
+    ///
+    /// AN EMPTY RESULT IS ONLY THE TRUTH WHEN BOTH ENDPOINTS ANSWERED. /all routinely omits the root
+    /// item (SubscriptionDtos.cs), so GET /client/subscription is the ONLY payload that can say the
+    /// account HAS an active subscription. The old gate published the merge whenever /all merely
+    /// returned 200 — and /all returns 200 with an empty list for an account whose only subscription
+    /// is the root one. So a single failed primary (timeout, 5xx, a blip on a laptop waking up) made
+    /// the merge come out empty for want of an answer, and that emptiness was written over the live
+    /// list: the card vanished and the tab printed «нет подписки» over a perfectly valid subscription.
+    /// Same class of bug 12fc34fe closed inside the importer, on the display side this time — so the
+    /// same doctrine applies: узнали ничего — не меняем ничего.
     /// </summary>
     private async Task FetchAndApplySubscriptions()
     {
@@ -591,11 +616,17 @@ public class AccountViewModel : MyReactiveObject
             var primary = primaryResult.GetOrNull();
             var merged = MergeSubscriptions(primary, all, Profile);
 
-            if (merged.Count > 0 || allResult.IsSuccess)
+            // Authoritative = both endpoints answered, so an empty merge really means "no subscription".
+            // A non-empty merge is published either way: learning SOMETHING is never a reason to keep a
+            // staler screen, and a /all root item is a real subscription even without the primary.
+            var authoritative = allResult.IsSuccess && primaryResult.IsSuccess;
+
+            if (authoritative || merged.Count > 0)
             {
                 _lastPrimary = primary;
                 _lastAll = all;
                 _hasSubData = true;
+                _subsUnavailable = false;
                 Subscriptions = merged;
                 if (merged.Count > 0)
                 {
@@ -610,7 +641,11 @@ public class AccountViewModel : MyReactiveObject
             }
             else
             {
-                var err = allResult.ExceptionOrNull() ?? primaryResult.ExceptionOrNull();
+                // Nothing was learned: keep whatever is already on screen and surface the REAL reason.
+                // With no subscription on screen at all the hero must read "не смогли загрузить" with a
+                // «Повторить», never the empty state — the empty state is a statement about the account.
+                _subsUnavailable = Subscriptions.Count == 0;
+                var err = primaryResult.ExceptionOrNull() ?? allResult.ExceptionOrNull();
                 if (err != null)
                 {
                     Report(err);
@@ -941,11 +976,9 @@ public class AccountViewModel : MyReactiveObject
             }
         });
         var url = $"{SiteLoginUrl}?return={AppScheme}://auth";
-        try
-        {
-            ProcUtils.ProcessStart(url);
-        }
-        catch
+        // TryProcessStart, not the void overload: that one swallows the failure, so this catch could
+        // never fire and a machine with no browser handler silently did nothing at all.
+        if (!ProcUtils.TryProcessStart(url))
         {
             RunOnUi(() => AppEvents.SendSnackMsgRequested.Publish(L.T("Common_SomethingWrong")));
         }
@@ -1128,13 +1161,17 @@ public class AccountViewModel : MyReactiveObject
         {
             RunOnUi(() => SetSyncStage(SyncPhase.Account));
             await AutoImportAndRefreshHome();   // import + RefreshServers (flips Home IsEmpty=false)
+            // The subscription pair (/client/subscription + /all) is fetched EXACTLY ONCE per sync:
+            // as its own captioned stage on the fresh-login path, otherwise inside LoadAll. Running
+            // both — which is what an unconditional LoadAll did — put two extra round-trips on the
+            // critical path of the sync overlay for an answer we already had.
             if (includeSubFetch)
             {
                 RunOnUi(() => SetSyncStage(SyncPhase.Subs));
                 await FetchAndApplySubscriptions();
             }
             RunOnUi(() => SetSyncStage(SyncPhase.Servers));
-            await LoadAll();
+            await LoadAll(includeSubscriptions: !includeSubFetch);
             return true;
         }
         catch (Exception ex)
@@ -1314,6 +1351,7 @@ public class AccountViewModel : MyReactiveObject
             _lastPrimary = null;
             _lastAll = new List<SubInfoDto>();
             _hasSubData = false;
+            _subsUnavailable = false;
             Payments = new List<PaymentDto>();
             DeviceCount = null;
             Tariffs = new List<TariffGroupDto>();
@@ -1329,6 +1367,7 @@ public class AccountViewModel : MyReactiveObject
     private async Task Retry()
     {
         _pendingFirstLoad = true;
+        _subsUnavailable = false;
         ClearError();
         Recompute();
         if (IsLoggedIn)
@@ -1380,9 +1419,11 @@ public class AccountViewModel : MyReactiveObject
                         AppEvents.SendSnackMsgRequested.Publish(L.T("Common_CouldntOpenPayment"));
                         return;
                     }
-                    try
+                    // The browser launch has to be CHECKED, not assumed: promising «завершите оплату
+                    // в браузере» and starting a poll over a browser that never opened is the worst
+                    // possible answer — the user waits for a page that is not there.
+                    if (ProcUtils.TryProcessStart(url))
                     {
-                        ProcUtils.ProcessStart(url);
                         AppEvents.SendSnackMsgRequested.Publish(L.T("Common_CompletePaymentInBrowser"));
                         TopUpAmount = string.Empty;
                         HasTopUpError = false;
@@ -1394,7 +1435,7 @@ public class AccountViewModel : MyReactiveObject
                         // manual retry.
                         SchedulePostTopUpBalanceRefresh();
                     }
-                    catch
+                    else
                     {
                         AppEvents.SendSnackMsgRequested.Publish(L.T("Common_CouldntOpenPayment"));
                     }
@@ -1424,7 +1465,13 @@ public class AccountViewModel : MyReactiveObject
                 {
                     await Task.Delay(TimeSpan.FromSeconds(5), cts.Token);
                     await RefreshProfile();
-                    if (Profile?.Balance is { } current && current != startingBalance)
+                    // Read the SESSION's profile, not the [Reactive] one: RefreshProfile publishes to
+                    // the VM through RunOnUi, which off the UI thread is a Dispatcher POST — it has not
+                    // run yet when the await returns, so `Profile` here is still the previous cycle's
+                    // value and the poll always noticed the balance one full cycle (5s) late, or missed
+                    // it entirely on the last attempt. AccountSession is updated synchronously inside
+                    // RefreshProfile, on THIS thread, so it is the value that actually just landed.
+                    if (AccountSession.CurrentProfile?.Balance is { } current && current != startingBalance)
                     {
                         break;
                     }
@@ -1496,14 +1543,15 @@ public class AccountViewModel : MyReactiveObject
                         AppEvents.SendSnackMsgRequested.Publish(L.T("Common_CouldntOpenPayment"));
                         return;
                     }
-                    try
+                    if (ProcUtils.TryProcessStart(url))
                     {
-                        ProcUtils.ProcessStart(url);
                         AppEvents.SendSnackMsgRequested.Publish(L.T("Common_CompletePaymentInBrowser"));
                         ScheduleRenewPoll(card, init);
                     }
-                    catch
+                    else
                     {
+                        // No browser opened ⇒ no payment can settle: drop the spinner instead of
+                        // spinning through a 40-second poll for an order nobody could pay.
                         card.IsRenewing = false;
                         AppEvents.SendSnackMsgRequested.Publish(L.T("Common_CouldntOpenPayment"));
                     }
@@ -1713,17 +1761,13 @@ public class AccountViewModel : MyReactiveObject
             AppEvents.SendSnackMsgRequested.Publish(L.T("Common_CouldntOpenPayment"));
             return;
         }
-        try
-        {
-            ProcUtils.ProcessStart(url);
-            AppEvents.SendSnackMsgRequested.Publish(L.T("Common_CompletePaymentInBrowser"));
-        }
-        catch
+        if (!ProcUtils.TryProcessStart(url))
         {
             clearBusy();
             AppEvents.SendSnackMsgRequested.Publish(L.T("Common_CouldntOpenPayment"));
             return;
         }
+        AppEvents.SendSnackMsgRequested.Publish(L.T("Common_CompletePaymentInBrowser"));
 
         _cardActionPollCts?.Cancel();
         // Drop the spinner of a superseded DIFFERENT card so it doesn't hang; same card keeps spinning.
@@ -1890,7 +1934,10 @@ public class AccountViewModel : MyReactiveObject
                 {
                     await Task.Delay(TimeSpan.FromSeconds(3), cts.Token);
                     await RefreshProfile();
-                    if (Profile?.TelegramLinked == true)
+                    // Same reason as the top-up poll: the [Reactive] Profile is written by a posted UI
+                    // action that has not run yet, so reading it here lagged one cycle behind the reply
+                    // we just received. AccountSession is written synchronously by RefreshProfile.
+                    if (AccountSession.CurrentProfile?.TelegramLinked == true)
                     {
                         RunOnUi(() =>
                         {
@@ -1946,11 +1993,7 @@ public class AccountViewModel : MyReactiveObject
                         AppEvents.SendSnackMsgRequested.Publish(L.T("Common_SomethingWrong"));
                         return;
                     }
-                    try
-                    {
-                        ProcUtils.ProcessStart(url);
-                    }
-                    catch
+                    if (!ProcUtils.TryProcessStart(url))
                     {
                         AppEvents.SendSnackMsgRequested.Publish(L.T("Common_SomethingWrong"));
                     }
@@ -2227,8 +2270,11 @@ public class AccountViewModel : MyReactiveObject
         {
             skeleton = true;
         }
-        else if (Profile == null && Error != null)
+        else if (_subsUnavailable || (Profile == null && Error != null))
         {
+            // _subsUnavailable: the subscription fetch never got an answer. Showing «нет подписки» here
+            // told the owner his subscription was gone whenever the network hiccuped; the retry surface
+            // says the truth and gives him the one action that helps.
             error = true;
         }
         else

@@ -536,11 +536,10 @@ public class BuyViewModel : MyReactiveObject
             return;
         }
 
-        try
-        {
-            ProcUtils.ProcessStart(url);
-        }
-        catch
+        // Checked, not assumed: ProcUtils.ProcessStart swallows its failures, so the catch this
+        // replaces could never fire — a machine with no browser handler was told «завершите оплату
+        // в браузере» and then polled for forty seconds for a payment nobody could make.
+        if (!ProcUtils.TryProcessStart(url))
         {
             ShowNotice(Common.L.T("Common_CouldntOpenPayment"));
             return;
