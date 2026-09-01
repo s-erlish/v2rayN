@@ -33,12 +33,6 @@ public partial class MsgView : ReactiveUserControl<MsgViewModel>
 
     private void ShowMsg(object msg)
     {
-        //var lineCount = txtMsg.LineCount;
-        //if (lineCount > ViewModel?.NumMaxMsg)
-        //{
-        //    var cutLine = txtMsg.Document.GetLineByNumber(lineCount - KeepLines);
-        //    txtMsg.Document.Remove(0, cutLine.Offset);
-        //}
         if (txtMsg.LineCount > ViewModel?.NumMaxMsg)
         {
             ClearMsg();

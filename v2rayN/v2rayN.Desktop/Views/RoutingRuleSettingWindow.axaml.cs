@@ -142,17 +142,6 @@ public partial class RoutingRuleSettingWindow : WindowBase<RoutingRuleSettingVie
         lstRules.SelectAll();
     }
 
-    //private async void btnBrowseCustomIcon_Click(object? sender, RoutedEventArgs e)
-    //{
-    //    var fileName = await UI.OpenFileDialog(this, FilePickerFileTypes.ImagePng);
-    //    if (fileName.IsNullOrEmpty())
-    //    {
-    //        return;
-    //    }
-
-    //    txtCustomIcon.Text = fileName;
-    //}
-
     private async void btnBrowseCustomRulesetPath4Singbox_ClickAsync(object? sender, RoutedEventArgs e)
     {
         var fileName = await UI.OpenFileDialog(null);
