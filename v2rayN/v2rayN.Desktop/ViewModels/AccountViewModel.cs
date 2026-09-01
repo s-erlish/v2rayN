@@ -1377,6 +1377,34 @@ public class AccountViewModel : MyReactiveObject
     }
 
     /// <summary>
+    /// What a settled payment changed lives in TWO places, and <see cref="Retry"/> only ever reloaded
+    /// one of them.
+    ///
+    /// The account API carries the balance, the new expiry and the device slots — that is what Retry
+    /// re-reads, and it is why the card looked right. THE SUBSCRIPTION ITSELF carries the server list
+    /// and the <c>subscription-userinfo</c> header, and only a real subscription fetch
+    /// (SubscriptionHandler.UpdateProcess, reached through the account import) writes those onto the
+    /// SubItem. So after a renewal made from an Account card, the card said the subscription was
+    /// extended while Home's meta-bar still showed the previous <c>SubItem.Expire</c> — a red
+    /// «Просрочено» over a subscription that had just been paid for — until the next launch. An
+    /// upgrade was worse: it can change which servers the account gets, and the list stayed the old
+    /// one. The Buy screen already does both on success (BuyViewModel.RefreshAfterPurchase); the
+    /// Account-tab actions did not, and now do.
+    ///
+    /// Runs off the UI thread: the import downloads the subscription and writes the profile rows, and
+    /// none of that belongs on the thread painting the card. Every UI mutation inside still marshals
+    /// back through RunOnUi, and the account reload is handed back to the UI thread exactly as before.
+    /// </summary>
+    private void ReloadAfterPurchase()
+    {
+        _ = Task.Run(async () =>
+        {
+            await AutoImportAndRefreshHome();
+            RunOnUi(() => _ = Retry());
+        });
+    }
+
+    /// <summary>
     /// Balance top-up (parity with Android «Пополнение баланса»): opens a Platega checkout for the
     /// entered ₽ amount in the external browser. A top-up ADDS to the balance, so it is deliberately a
     /// provider checkout (PayPlatega), never a balance payment (which would be circular). Data-driven:
@@ -1513,7 +1541,7 @@ public class AccountViewModel : MyReactiveObject
                 .OnSuccess(ok =>
                 {
                     AppEvents.SendSnackMsgRequested.Publish(L.T("Account_RenewDone"));
-                    _ = Retry();
+                    ReloadAfterPurchase();
                 })
                 .OnFailure(err => AppEvents.SendSnackMsgRequested.Publish(MessageFor(err)));
         });
@@ -1601,7 +1629,7 @@ public class AccountViewModel : MyReactiveObject
                         {
                             card.IsRenewing = false;
                             AppEvents.SendSnackMsgRequested.Publish(L.T("Account_RenewDone"));
-                            _ = Retry();
+                            ReloadAfterPurchase();
                         });
                         return;
                     }
@@ -1674,7 +1702,7 @@ public class AccountViewModel : MyReactiveObject
                     {
                         card.IsDeviceBusy = false;
                         AppEvents.SendSnackMsgRequested.Publish(L.T("Account_DevicesAdded"));
-                        _ = Retry();
+                        ReloadAfterPurchase();
                     }
                 })
                 .OnFailure(err =>
@@ -1737,7 +1765,7 @@ public class AccountViewModel : MyReactiveObject
                     {
                         card.IsUpgradeBusy = false;
                         AppEvents.SendSnackMsgRequested.Publish(L.T("Account_UpgradeDone"));
-                        _ = Retry();
+                        ReloadAfterPurchase();
                     }
                 })
                 .OnFailure(err =>
@@ -1802,7 +1830,7 @@ public class AccountViewModel : MyReactiveObject
                         {
                             clearBusy();
                             AppEvents.SendSnackMsgRequested.Publish(L.T(doneKey));
-                            _ = Retry();
+                            ReloadAfterPurchase();
                         });
                         return;
                     }
