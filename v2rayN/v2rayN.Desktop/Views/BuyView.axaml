@@ -324,8 +324,16 @@
             </Style.Animations>
         </Style>
 
-        <!--  Появление кнопки оплаты — тем же рецептом, что раскрытие: она следствие раскрытия.  -->
-        <Style Selector=":is(Window):not(.lite) Button.PayCta[IsVisible=True]">
+        <!--  Появление кнопки оплаты — тем же рецептом, что раскрытие: она следствие раскрытия.
+              Кадры висят на ОБЁРТКЕ (Panel.PayCtaHost), а не на самой кнопке. Причина не
+              стилистическая: подъём задан подсвойством трансформы (TranslateTransform.Y), а его
+              обслуживает TransformAnimator — он ищет у визуала либо пустой RenderTransform (тогда
+              заводит свой TransformGroup), либо трансформ ТОГО ЖЕ типа. У Button.OutlinedAccent
+              покой — ЯВНЫЙ scale(1), то есть TransformOperations под press-переходом; аниматор
+              молча возвращает null, и подъём НЕ ИГРАЛ НИКОГДА — проявлялась одна прозрачность.
+              У обёртки трансформа нет, поэтому подъём едет, а press-scale кнопки остаётся её
+              собственным и ни с чем не спорит.  -->
+        <Style Selector=":is(Window):not(.lite) Panel.PayCtaHost">
             <Style.Animations>
                 <Animation Duration="0:0:0.3" Easing="{StaticResource Ease.OutQuart}" FillMode="Forward">
                     <KeyFrame Cue="0%">
@@ -723,56 +731,59 @@
                                 TextWrapping="Wrap" />
                         </StackPanel>
 
-                        <!--  CTA: «Оплатить» + сумма. Спиннер живёт у правого края и не двигает подпись.  -->
-                        <Button
-                            Margin="0,18,0,0"
-                            Classes="OutlinedAccent PayCta"
-                            Command="{Binding PayCmd}"
-                            IsEnabled="{Binding !IsPaying}">
-                            <Grid>
-                                <StackPanel
-                                    HorizontalAlignment="Center"
-                                    Orientation="Horizontal"
-                                    Spacing="6"
-                                    VerticalAlignment="Center">
-                                    <!--  Слово — обычной гарнитурой, СУММА — гротеском с tnum: ровно
-                                          то же число стоит строкой выше в «Итого», и набирать его
-                                          на кнопке другой гарнитурой значило бы показать одну
-                                          величину двумя разными шрифтами в двух строках подряд.
-                                          Прототип «Итого» не знает вовсе и держит всю подпись
-                                          Roboto — здесь расходимся сознательно.  -->
-                                    <TextBlock
+                        <!--  CTA: «Оплатить» + сумма. Спиннер живёт у правого края и не двигает подпись.
+                              Обёртка несёт ТОЛЬКО анимацию появления (см. Panel.PayCtaHost выше) —
+                              ни отступов сверх кнопкиных, ни фона у неё нет.  -->
+                        <Panel Margin="0,18,0,0" Classes="PayCtaHost">
+                            <Button
+                                Classes="OutlinedAccent PayCta"
+                                Command="{Binding PayCmd}"
+                                IsEnabled="{Binding !IsPaying}">
+                                <Grid>
+                                    <StackPanel
+                                        HorizontalAlignment="Center"
+                                        Orientation="Horizontal"
+                                        Spacing="6"
+                                        VerticalAlignment="Center">
+                                        <!--  Слово — обычной гарнитурой, СУММА — гротеском с tnum: ровно
+                                              то же число стоит строкой выше в «Итого», и набирать его
+                                              на кнопке другой гарнитурой значило бы показать одну
+                                              величину двумя разными шрифтами в двух строках подряд.
+                                              Прототип «Итого» не знает вовсе и держит всю подпись
+                                              Roboto — здесь расходимся сознательно.  -->
+                                        <TextBlock
+                                            VerticalAlignment="Center"
+                                            Foreground="{DynamicResource Brush.Accent}"
+                                            Text="{loc:T Buy_Pay}" />
+                                        <TextBlock
+                                            FontFamily="{DynamicResource Font.Numeric}"
+                                            FontFeatures="tnum,lnum,zero"
+                                            Foreground="{DynamicResource Brush.Accent}"
+                                            Text="{Binding TotalText, Converter={StaticResource Buy.Money}}"
+                                            VerticalAlignment="Center" />
+                                    </StackPanel>
+                                    <Ellipse
+                                        Width="16"
+                                        Height="16"
+                                        HorizontalAlignment="Right"
                                         VerticalAlignment="Center"
-                                        Foreground="{DynamicResource Brush.Accent}"
-                                        Text="{loc:T Buy_Pay}" />
-                                    <TextBlock
-                                        FontFamily="{DynamicResource Font.Numeric}"
-                                        FontFeatures="tnum,lnum,zero"
-                                        Foreground="{DynamicResource Brush.Accent}"
-                                        Text="{Binding TotalText, Converter={StaticResource Buy.Money}}"
-                                        VerticalAlignment="Center" />
-                                </StackPanel>
-                                <Ellipse
-                                    Width="16"
-                                    Height="16"
-                                    HorizontalAlignment="Right"
-                                    VerticalAlignment="Center"
-                                    Classes="Spinner"
-                                    Classes.spinning="{Binding IsPaying}"
-                                    IsVisible="{Binding IsPaying}"
-                                    Stroke="{DynamicResource Brush.Accent}"
-                                    StrokeDashArray="6.3,18.8"
-                                    StrokeLineCap="Round"
-                                    StrokeThickness="2">
-                                    <Ellipse.RenderTransform>
-                                        <RotateTransform
-                                            Angle="0"
-                                            CenterX="8"
-                                            CenterY="8" />
-                                    </Ellipse.RenderTransform>
-                                </Ellipse>
-                            </Grid>
-                        </Button>
+                                        Classes="Spinner"
+                                        Classes.spinning="{Binding IsPaying}"
+                                        IsVisible="{Binding IsPaying}"
+                                        Stroke="{DynamicResource Brush.Accent}"
+                                        StrokeDashArray="6.3,18.8"
+                                        StrokeLineCap="Round"
+                                        StrokeThickness="2">
+                                        <Ellipse.RenderTransform>
+                                            <RotateTransform
+                                                Angle="0"
+                                                CenterX="8"
+                                                CenterY="8" />
+                                        </Ellipse.RenderTransform>
+                                    </Ellipse>
+                                </Grid>
+                            </Button>
+                        </Panel>
                     </StackPanel>
                 </StackPanel>
             </StackPanel>
