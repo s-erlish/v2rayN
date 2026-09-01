@@ -31,12 +31,35 @@ public sealed class DepartamentApiClient : IDepartamentApiClient
         // changes under the app every time the tunnel comes up or down, and the backend's address is
         // exactly the kind that gets re-pointed when an IP is blocked. Recycling every two minutes
         // makes the next request re-resolve and re-connect, instead of pinning the process to an
-        // address that stopped working. Two minutes is long enough that a burst of calls (the login
-        // sync fires six) still shares one connection.
+        // address that stopped working. Two minutes is long enough that a burst of calls (the account
+        // load fires six at once) still shares its connections.
         var handler = new SocketsHttpHandler
         {
             PooledConnectionLifetime = TimeSpan.FromMinutes(2),
+
+            // АККАУНТ НЕ ХОДИТ ЧЕРЕЗ СИСТЕМНЫЙ ПРОКСИ. По умолчанию хендлер берёт прокси операционной
+            // системы — а этот самый прокси приложение САМО и переписывает на свой локальный порт в
+            // режимах «Изменить системный прокси» и PAC. То есть весь аккаунтный трафик (/me, подписка,
+            // тарифы, платежи, вход) уходил в собственное ядро и умирал вместе с ним: ядро не поднято —
+            // «Аккаунт» не грузится, ядро упало — вход по Telegram не завершается. Клиент подписок
+            // (DownloadService.CreateSubscriptionClient) системный прокси не берёт НИКОГДА — либо явно
+            // заданный локальный SOCKS, либо напрямую. Приводим к одному: напрямую.
+            UseProxy = false,
         };
+
+        // …и та же политика цепочки сертификатов, что у клиента подписок. Настройка «поставщик
+        // корневых сертификатов» (system / Chrome / Mozilla) действовала на загрузку подписки, но не
+        // на API: с не-системным набором корней подписка качалась, а /me отвечал ошибкой TLS. Читается
+        // ОДИН раз на процесс — это ровно тот срок, на который значение и живёт: менять его в этой
+        // сборке негде, оно приходит из конфига при старте. Для «system» политика null — стоковая
+        // проверка TLS, как и было.
+        var certificateChainPolicy = CertPemManager.Instance.BuildCertificateChainPolicy();
+        if (certificateChainPolicy != null)
+        {
+            handler.SslOptions.CertificateChainPolicy = certificateChainPolicy;
+            handler.SslOptions.RemoteCertificateValidationCallback = null;
+        }
+
         var client = new HttpClient(new AuthMessageHandler(handler))
         {
             Timeout = TimeSpan.FromSeconds(25),
