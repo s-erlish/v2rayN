@@ -168,8 +168,7 @@
             <Button
                 x:Name="ItemAccount"
                 Grid.Column="1"
-                Classes="BottomNavItem"
-                IsVisible="False">
+                Classes="BottomNavItem">
                 <StackPanel HorizontalAlignment="Center">
                     <PathIcon HorizontalAlignment="Center" Data="{StaticResource Geo.Nav.Account}" />
                     <TextBlock Classes="NavLabel" Text="{loc:T Nav_Account}" />
@@ -179,8 +178,7 @@
             <!--  ОДИН путешествующий индикатор: акцентная полоса 30×3 (tokens.md), СКОЛЬЗИТ по X к
                   центру активной трети. Спан по всем колонкам, база (left,bottom); реальный X ставит
                   TranslateTransform.X из code-behind (PositionIndicator) — центры берутся из ЖИВЫХ
-                  ширин колонок, поэтому индикатор корректен и в 3-, и в 2-пунктовом (без «Аккаунта»)
-                  состоянии, и пере-решается на каждом ресайзе окна. Первый показ — мгновенно на
+                  ширин колонок, и пере-решается на каждом ресайзе окна. Первый показ — мгновенно на
                   активной трети, дальше — переезд Motion.Dur.Nav 280мс ease-out-quart.  -->
             <Border
                 x:Name="BottomIndicator"
