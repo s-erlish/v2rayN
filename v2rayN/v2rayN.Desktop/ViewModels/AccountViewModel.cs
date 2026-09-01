@@ -2412,19 +2412,33 @@ public class AccountViewModel : MyReactiveObject
         // Carousel cards: EVERY subscription (active/root first), each with health + expiry urgency + a
         // device-usage bar. The connected-device count is only known for the active sub (index 0), so
         // only that card shows the honest used/total bar; secondaries show their total device slots.
-        var cards = new List<AccountSubCard>();
+        // КАРТОЧКА ПЕРЕЖИВАЕТ ПЕРЕСЧЁТ, ЕСЛИ ЕЙ НЕЧЕГО ПОКАЗАТЬ НОВОГО. Recompute зовут на каждый шаг
+        // загрузки, на смену языка и на смену состояния сессии — а он собирал карточки заново всегда.
+        // У новой карточки IsRenewing = false и RenewExpanded = false, поэтому крутящийся индикатор
+        // продления гас прямо посреди операции (опрос платежа идёт до 40 секунд и сам зовёт перезагрузку
+        // аккаунта), а раскрытый выбор «с баланса / картой» схлопывался под руками. Сравниваем слепок
+        // всего, что карточка показывает: совпал — оставляем ЖИВОЙ объект вместе с его состоянием,
+        // не совпал — строим новую, как и раньше.
+        var previousCards = SubCards;
+        var cards = new List<AccountSubCard>(Subscriptions.Count);
+        var cardsUnchanged = previousCards.Count == Subscriptions.Count;
         for (var i = 0; i < Subscriptions.Count; i++)
         {
-            cards.Add(BuildCard(Subscriptions[i], i));
+            var card = BuildCard(Subscriptions[i], i, previousCards.ElementAtOrDefault(i));
+            cardsUnchanged &= ReferenceEquals(card, previousCards.ElementAtOrDefault(i));
+            cards.Add(card);
         }
         // Keep the same fixed width the view last measured so a rebuild doesn't reset cards to a stale size.
         foreach (var c in cards)
         {
             c.CardWidth = CardWidth;
         }
-        SubCards = cards;
-        // Корневая карточка — та, на которую смотрят «Продлить» и тумблер автопродления полосы 4.
-        ActiveCard = cards.FirstOrDefault();
+        if (!cardsUnchanged)
+        {
+            SubCards = cards;
+            // Корневая карточка — та, на которую смотрят «Продлить» и тумблер автопродления полосы 4.
+            ActiveCard = cards.FirstOrDefault();
+        }
         HasMultipleSubs = cards.Count > 1;
         if (CarouselIndex > cards.Count - 1)
         {
@@ -2498,7 +2512,7 @@ public class AccountViewModel : MyReactiveObject
     /// devices), a real scoped renewal + an auto-renew toggle with its next-charge line. The tariff word
     /// is deliberately absent — it lives once, on the hero identity line.
     /// </summary>
-    private AccountSubCard BuildCard(SubInfoDto sub, int index)
+    private AccountSubCard BuildCard(SubInfoDto sub, int index, AccountSubCard? existing)
     {
         // Title: the user's rename if set, else «Ваша подписка» (root/first), else «Подписка N».
         var name = sub.DisplayName.IsNotEmpty()
@@ -2614,8 +2628,51 @@ public class AccountViewModel : MyReactiveObject
             && remainingDays > 0
             && subscriptionId.IsNotEmpty();
 
+        // Список доступных апгрейдов считаем ДО постройки карточки: он входит в слепок, а значит
+        // должен быть известен раньше, чем мы решим, строить ли карточку вообще.
+        // Только тарифы строго дороже текущего; если цена текущего неизвестна (его нет в каталоге и
+        // в подписке нет цены), апгрейдов не предлагаем вовсе — иначе «улучшением» стал бы любой
+        // платный тариф, включая более дешёвый.
+        var currentPrice = tariff?.Price ?? sub.TariffPrice ?? 0;
+        var upgradeTargets = new List<(string Id, string Name, string Price)>();
+        if (!sub.IsTrial && remnawaveUuid.IsNotEmpty() && currentPrice > 0)
+        {
+            foreach (var tt in Tariffs.SelectMany(g => g.Tariffs))
+            {
+                if (tt.Id == tariffId || tt.Id.IsNullOrEmpty() || tt.Price <= currentPrice)
+                {
+                    continue;
+                }
+                upgradeTargets.Add((tt.Id, tt.Name,
+                    FormatMoney(tt.Price, tt.Currency.IsNotEmpty() ? tt.Currency : currency)));
+            }
+        }
+
+        // Слепок ВСЕГО, что карточка показывает и чем действует. Совпал со слепком живой карточки —
+        // значит показывать нечего нового, и её состояние (индикатор продления, раскрытый выбор
+        // оплаты) переживает пересчёт.
+        var fingerprint = string.Join('\u001f', new[]
+        {
+            name, healthLabel, health.ToString(), expiryText,
+            (urgent && health == SubHealth.Expiring).ToString(), (health == SubHealth.Expired).ToString(),
+            showTrafficPill.ToString(), trafficText, trafficWidth.ToString(CultureInfo.InvariantCulture),
+            devicesText, showDeviceBar.ToString(), deviceWidth.ToString(CultureInfo.InvariantCulture),
+            canRenew.ToString(), balanceLabel, tariffId ?? string.Empty, sub.TariffPriceOptionId ?? string.Empty,
+            scope, subscriptionId, currency,
+            showAutoRenew.ToString(), autoRenewCaption, autoRenewOn.ToString(),
+            maxExtra.ToString(CultureInfo.InvariantCulture), pricePerExtra.ToString(CultureInfo.InvariantCulture),
+            remainingDays.ToString(CultureInfo.InvariantCulture), canBuyDevices.ToString(),
+            remnawaveUuid ?? string.Empty,
+            string.Join('\u001e', upgradeTargets.Select(o => $"{o.Id}|{o.Name}|{o.Price}")),
+        });
+        if (existing != null && existing.Fingerprint == fingerprint)
+        {
+            return existing;
+        }
+
         var card = new AccountSubCard(this)
         {
+            Fingerprint = fingerprint,
             Name = name,
             HealthLabel = healthLabel,
             IsHealthActive = health == SubHealth.Active,
@@ -2654,26 +2711,14 @@ public class AccountViewModel : MyReactiveObject
             RemnawaveUuidValue = remnawaveUuid,
         };
 
-        // Eligible upgrades: catalog tariffs strictly above the current one (by price), excluding trials
-        // and the current tariff. Built after the card so each option can call back into it.
-        var currentPrice = tariff?.Price ?? sub.TariffPrice ?? 0;
-        // Only offer upgrades when we actually know the current price (> 0). If the active tariff isn't
-        // in the loaded catalog AND its price is unknown, currentPrice would be 0 and EVERY paid tariff —
-        // including cheaper/lateral ones — would falsely qualify as an "upgrade".
-        if (!sub.IsTrial && remnawaveUuid.IsNotEmpty() && currentPrice > 0)
+        // Апгрейды материализуем только теперь: каждый пункт держит ссылку на карточку, поэтому
+        // построить их раньше самой карточки нельзя (список их данных посчитан выше).
+        if (upgradeTargets.Count > 0)
         {
-            var targets = new List<UpgradeTargetOption>();
-            foreach (var t in Tariffs.SelectMany(g => g.Tariffs))
-            {
-                if (t.Id == tariffId || t.Id.IsNullOrEmpty() || t.Price <= currentPrice)
-                {
-                    continue;
-                }
-                targets.Add(new UpgradeTargetOption(this, card, t.Id, t.Name,
-                    FormatMoney(t.Price, t.Currency.IsNotEmpty() ? t.Currency : currency)));
-            }
-            card.UpgradeTargets = targets;
-            card.HasUpgradeTargets = targets.Count > 0;
+            card.UpgradeTargets = upgradeTargets
+                .Select(o => new UpgradeTargetOption(this, card, o.Id, o.Name, o.Price))
+                .ToList();
+            card.HasUpgradeTargets = true;
         }
 
         card.ShowMore = canBuyDevices || card.HasUpgradeTargets;
@@ -2943,6 +2988,10 @@ public sealed class AccountSubCard : ReactiveObject
     // Guards the auto-renew network call: the toggle's initial value is set (SetAutoRenewSilently) BEFORE
     // Arm(), so building a card never fires a spurious PATCH; only a genuine user flip does.
     private bool _armed;
+
+    /// <summary>Слепок всего, что карточка показывает и чем действует. Совпал — пересчёт оставляет
+    /// ЖИВОЙ объект вместе с его состоянием (см. <see cref="AccountViewModel.BuildCard"/>).</summary>
+    internal string Fingerprint { get; init; } = string.Empty;
 
     public string Name { get; init; } = string.Empty;
 
