@@ -1,7 +1,7 @@
 namespace v2rayN.Desktop.Common;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// OWNER: WP6 — Tray / App / MainWindow / BottomNav / StatusBar.
+// OWNER: WP6. Tray / App / MainWindow / BottomNav / StatusBar.
 // Keys: Tray_*, Nav_*, Status_* (+ Common_* references, incl. the plural keys).
 // Files: App(.axaml/.cs), MainWindow(.axaml/.cs), BottomNavBar, StatusBarView.axaml.cs,
 //        ProfileDisplay.cs.
@@ -16,7 +16,7 @@ public sealed partial class L
 {
     partial void RegisterShell()
     {
-        // ── Tray menu (native, App.axaml) — four items + the live toggle label. ──
+        // ── Tray menu (native, App.axaml): four items + the live toggle label. ──
         Add("Tray_Restart", "Перезапустить", "Restart");
         Add("Tray_Connect", "Подключить", "Connect");
         Add("Tray_Disconnect", "Отключить", "Disconnect");
