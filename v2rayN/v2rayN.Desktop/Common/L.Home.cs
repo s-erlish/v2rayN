@@ -30,7 +30,8 @@ public sealed partial class L
         // ── Empty / onboarding (no subscriptions) ──
         Add("Home_Welcome", "Приветствуем!", "Welcome!");
         Add("Home_NoSubs", "Пока нет подписок", "No subscriptions yet");
-        Add("Home_NoSubsHint", "Добавьте подписку, чтобы начать пользоваться", "Add a subscription to get started");
+        Add("Home_NoSubsHint", "Купите подписку — серверы появятся сами", "Buy a subscription — the servers will appear on their own");
+        Add("Home_GoToAccount", "Перейти в аккаунт", "Go to account");
 
         // First-run onboarding hero (OnboardingView): active-verb title names the exact job, subtitle
         // tells the concrete "how" and promises immediacy. Home_Welcome/Home_NoSubsHint kept above for

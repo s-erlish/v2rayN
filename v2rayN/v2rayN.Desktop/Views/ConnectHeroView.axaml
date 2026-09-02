@@ -807,8 +807,13 @@
                         Text="{loc:T Home_NoSubsHint}"
                         TextAlignment="Center"
                         TextWrapping="Wrap" />
+                    <!--  Первое действие — уйти в «Аккаунт» и купить подписку: серверы приезжают
+                          сами, добавлять их руками новому человеку не с чего. Цвет НЕ Brush.OnAccent:
+                          Primary давно рисуется обводкой, а не заливкой, и белая по замыслу подпись
+                          на прозрачном фоне попросту не читалась — берём AccentText, как у самой
+                          кнопки.  -->
                     <Button
-                        x:Name="AddQrButton"
+                        x:Name="GoAccountButton"
                         Margin="0,24,0,0"
                         HorizontalAlignment="Stretch"
                         HorizontalContentAlignment="Center"
@@ -818,16 +823,16 @@
                                 Width="18"
                                 Height="18"
                                 VerticalAlignment="Center"
-                                Data="M4 9 V6 A2 2 0 0 1 6 4 H9 M15 4 H18 A2 2 0 0 1 20 6 V9 M20 15 V18 A2 2 0 0 1 18 20 H15 M9 20 H6 A2 2 0 0 1 4 18 V15"
+                                Data="M12 12 A4 4 0 1 0 12 4 A4 4 0 0 0 12 12 M4 21 V20 A6 6 0 0 1 10 14 H14 A6 6 0 0 1 20 20 V21"
                                 Stretch="Uniform"
-                                Stroke="{DynamicResource Brush.OnAccent}"
+                                Stroke="{DynamicResource Brush.AccentText}"
                                 StrokeJoin="Round"
                                 StrokeLineCap="Round"
                                 StrokeThickness="1.8" />
                             <TextBlock
                                 VerticalAlignment="Center"
-                                Foreground="{DynamicResource Brush.OnAccent}"
-                                Text="{loc:T Common_AddViaQr}" />
+                                Foreground="{DynamicResource Brush.AccentText}"
+                                Text="{loc:T Home_GoToAccount}" />
                         </StackPanel>
                     </Button>
                     <Button

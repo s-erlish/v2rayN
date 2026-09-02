@@ -201,8 +201,12 @@ public partial class ConnectHeroView : UserControl
     /// <summary>Тап по диску: переключить подключение (connect/disconnect).</summary>
     public event EventHandler? ConnectToggleRequested;
 
-    /// <summary>Онбординг «нет подписки»: добавить по QR-коду.</summary>
+    /// <summary>Онбординг «нет подписки»: добавить по QR-коду (пункт меню «плюса»).</summary>
     public event EventHandler? AddByQrRequested;
+
+    /// <summary>Онбординг «нет подписки»: уйти в «Аккаунт» — оттуда покупают подписку, после
+    /// чего серверы приезжают сами. Хост решает, как открыть вкладку (как у чипа аккаунта).</summary>
+    public event EventHandler? AccountRequested;
 
     /// <summary>Онбординг «нет подписки»: добавить из буфера обмена.</summary>
     public event EventHandler? AddFromClipboardRequested;
@@ -465,7 +469,7 @@ public partial class ConnectHeroView : UserControl
         ConnectDisc.PointerEntered += OnDiscPointerEntered;
         ConnectDisc.PointerExited += OnDiscHoverExit;
 
-        AddQrButton.Click += (_, _) => AddByQrRequested?.Invoke(this, EventArgs.Empty);
+        GoAccountButton.Click += (_, _) => AccountRequested?.Invoke(this, EventArgs.Empty);
         AddClipboardButton.Click += (_, _) => AddFromClipboardRequested?.Invoke(this, EventArgs.Empty);
 
         //  Угловой «+» (правый-верхний угол панели) — меню импорта (буфер / QR) через команды

@@ -64,6 +64,10 @@ public partial class HomeView : ReactiveUserControl<HomeViewModel>
         //  Independent of the ViewModel, so wire it once, unconditionally.
         AccountChip.AccountRequested += (_, _) => OpenAccountTab();
 
+        //  Та же дверь из приветственной карточки: у нового человека подписки ещё нет, и первый
+        //  осмысленный шаг — не «добавить сервер», а купить её во вкладке «Аккаунт».
+        ConnectHero.AccountRequested += (_, _) => OpenAccountTab();
+
         // ── «+» и его меню ────────────────────────────────────────────────────────────
         AddGlyph.RenderTransform = _glyphRotate;
         _glyphRotate.Transitions = new Transitions

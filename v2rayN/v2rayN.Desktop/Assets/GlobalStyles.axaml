@@ -988,9 +988,15 @@
 
     <!--  Бесшовный тулбар суб-страницы (§5.4 SubScreenToolbar): контейнер 56,
           фон Bg (сливается с окном), без рамки/тени. Хостит BackNav + Headline.  -->
+    <!--  Шапка подэкрана. ФОНА У НЕЁ НЕТ, и это главное её свойство: здесь стоял плоский Brush.Bg,
+          и на любом экране с градиентом (вход, регистрация, онбординг) он ложился поверх градиента
+          ровной плитой — сверху плоско, снизу градиент, между ними горизонтальный шов во всю ширину.
+          Замер по кадру: выше шва цвет одинаков при любом x, ниже меняется с x. Прозрачная шапка
+          пропускает то, что рисует сама страница: на градиентных — градиент, на обычных — их
+          собственный Brush.Bg, то есть ровно прежний вид без шва.  -->
     <Style Selector="Border.SubToolbar">
         <Setter Property="Height" Value="{DynamicResource Size.SubToolbar}" />
-        <Setter Property="Background" Value="{DynamicResource Brush.Bg}" />
+        <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Padding" Value="16,0" />
     </Style>
