@@ -103,11 +103,21 @@ public partial class RoutingSubView : UserControl, ISubPage
     /// <summary>Тап по строке набора → сделать его активным по умолчанию (движковый SetDefaultRouting).</summary>
     private async void OnRoutingRowTapped(object? sender, TappedEventArgs e)
     {
-        if (sender is Border { DataContext: RuleSetRow row } && !row.Item.IsActive)
+        //  Обработчик события ⇒ async void: исключение отсюда ловить НЕКОМУ, оно валит процесс.
+        //  А внутри — запись в базу профилей (SetDefaultRouting) и перезагрузка ядра, то есть
+        //  и файлы, и процессы. Ловим: набор не переключился — это строка списка, не крах.
+        try
         {
-            _vm.SelectedSource = row.Item;
-            await _vm.RoutingAdvancedSetDefault();
-            RefreshRuleSets();
+            if (sender is Border { DataContext: RuleSetRow row } && !row.Item.IsActive)
+            {
+                _vm.SelectedSource = row.Item;
+                await _vm.RoutingAdvancedSetDefault();
+                RefreshRuleSets();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog("RoutingSubView.RowTapped", ex);
         }
     }
 

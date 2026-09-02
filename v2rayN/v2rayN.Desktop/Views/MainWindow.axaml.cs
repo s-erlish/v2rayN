@@ -2348,7 +2348,19 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
                 break;
 
             case WindowCloseReason.ApplicationShutdown or WindowCloseReason.OSShutdown:
-                await AppManager.Instance.AppExitAsync(false);
+                //  Переопределённый обработчик ⇒ async void: исключение отсюда ловить НЕКОМУ.
+                //  А AppExitAsync останавливает ядро, снимает системный прокси и пишет конфиг —
+                //  трогает и процессы, и сеть, и файлы. Падение здесь означало бы, что завершение
+                //  сеанса ОС выглядит как крах приложения. Ловим и всё равно закрываемся: выход
+                //  уже начат и отменить его нельзя.
+                try
+                {
+                    await AppManager.Instance.AppExitAsync(false);
+                }
+                catch (Exception ex)
+                {
+                    Logging.SaveLog("MainWindow.OnClosing", ex);
+                }
                 break;
         }
 
@@ -2402,25 +2414,35 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
             }
         }
 
-        if (e.KeyModifiers is KeyModifiers.Control or KeyModifiers.Meta)
+        //  Обработчик клавиатуры ⇒ async void: исключение отсюда ловить НЕКОМУ, оно валит процесс.
+        //  А за Ctrl V стоит буфер обмена (на X11 чтение может не ответить и бросить), за Ctrl S —
+        //  снимок экрана и разбор QR. Ловим: горячая клавиша не сработала — это не повод падать.
+        try
         {
-            switch (e.Key)
+            if (e.KeyModifiers is KeyModifiers.Control or KeyModifiers.Meta)
             {
-                case Key.V:
-                    await AddServerViaClipboardAsync();
-                    break;
+                switch (e.Key)
+                {
+                    case Key.V:
+                        await AddServerViaClipboardAsync();
+                        break;
 
-                case Key.S:
-                    await ScanScreenTaskAsync();
-                    break;
+                    case Key.S:
+                        await ScanScreenTaskAsync();
+                        break;
+                }
+            }
+            else
+            {
+                if (e.Key == Key.F5)
+                {
+                    ViewModel?.Reload();
+                }
             }
         }
-        else
+        catch (Exception ex)
         {
-            if (e.Key == Key.F5)
-            {
-                ViewModel?.Reload();
-            }
+            Logging.SaveLog("MainWindow.KeyDown", ex);
         }
     }
 

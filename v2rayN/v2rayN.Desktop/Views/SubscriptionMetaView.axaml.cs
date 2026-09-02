@@ -738,14 +738,19 @@ public partial class SubscriptionMetaView : UserControl
             return;
         }
 
-        // Confirm in the interface's voice («Удалить подписку?»), same yes/no affordance as row-delete.
-        if (await UI.ShowYesNo(L.T("Sub_DeleteConfirm")) != ButtonResult.Yes)
-        {
-            return;
-        }
-
         try
         {
+            // Confirm in the interface's voice («Удалить подписку?»), same yes/no affordance as row-delete.
+            //  Подтверждение ВНУТРИ try. Диалогу нужно окно-владелец, и WindowDialog.TryGetOwnerWindow
+            //  БРОСАЕТ InvalidOperationException, когда видимых окон нет и MainWindow не найден
+            //  (окно ушло в трей / закрывается). Раньше этот вызов стоял снаружи try, а метод —
+            //  обработчик события, то есть async void: ловить исключение было НЕКОМУ, и оно уносило
+            //  весь процесс. Теперь неудача подтверждения = подписка не удалена, и только.
+            if (await UI.ShowYesNo(L.T("Sub_DeleteConfirm")) != ButtonResult.Yes)
+            {
+                return;
+            }
+
             await ConfigHandler.DeleteSubItem(AppManager.Instance.Config, subId);
             // Rebuild the real ProfileItems → HomeViewModel.ServerGroups reprojects → this section is gone.
             var profiles = Profiles;
