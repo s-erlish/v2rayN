@@ -125,7 +125,6 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     //  на холодном старте мелькал экран входа, и лишь потом его перекидывало на Главную.
     private bool _profilesResolved;
     private bool _isSyncing;                     // E3: идёт пост-логин импорт → оверлей синхронизации
-    private bool _isStartupLoading;              // Bug4: холодный старт с сохранённой сессией → оверлей загрузки (НЕ гейт входа)
     private bool _isLoggedIn;                    // A1: залогинен ли пользователь → пустое состояние ведёт на Главную, а не на онбординг-вход
     private bool _layoutInitialized;             // C6: первый ApplyLayoutMode без кроссфейда морфинга
 
@@ -283,13 +282,6 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
 
         // Drag-to-edge: тащим компактное окно к краю рабочей области → разворот в широкую.
         PositionChanged += OnPositionChanged;
-
-        // Bug4: СЕМЕНИМ cold-start-сигнал ДО первого ApplyShellVisibility. _accountVm (field-init выше)
-        // уже сконструирован, и его ctor синхронно взвёл IsStartupLoading, если есть сохранённая сессия.
-        // Считываем сейчас, чтобы первый же ApplyLayoutMode→ApplyShellVisibility нацелился сразу на оверлей
-        // загрузки (previous==null → мгновенно), а НЕ на онбординг-гейт с последующим кроссфейдом. Живые
-        // изменения ловит подписка в SetupHome. (В дизайне IsStartupLoading=false → обычный путь.)
-        _isStartupLoading = _accountVm.IsStartupLoading;
 
         // Keep-alive: ВСЕ вкладки — постоянные дети contentHost (широкая/компактная «Главная»,
         // Настройки, Аккаунт). Они всегда в дереве (measured/arranged), скрыты через Opacity/hit-test
@@ -1074,15 +1066,11 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
             return;
         }
 
-        // 3-way gate (E3 + Bug4): SYNCING > EMPTY > CONTENT. Оверлей синхронизации перекрывает и пустой
-        // онбординг, и половинчатую «Главную». Его поднимают ДВА независимых сигнала загрузки:
-        //   • _isSyncing (IsImportingAccount) — пост-логин импорт: между закрытием «Входа» и приходом
-        //     серверов НЕ мелькает пустой онбординг;
-        //   • _isStartupLoading (IsStartupLoading) — ХОЛОДНЫЙ старт с сохранённой сессией: пока идёт
-        //     восстановление аккаунта/подписок/серверов при запуске, показываем загрузку, а НЕ гейт
-        //     входа (иначе у уже-вошедшего пользователя ~2с мелькал бы экран «Войдите в аккаунт»).
-        // Оба сигнала снимаются только ПОСЛЕ завершения загрузки, к тому моменту _isEmpty уже false
-        // (сервера пришли) → кадр уходит прямо в заполненный bodyRoot без промежуточного онбординга.
+        // 3-way gate (E3): SYNCING > EMPTY > CONTENT. Оверлей синхронизации перекрывает и пустой
+        // онбординг, и половинчатую «Главную». Поднимает его ОДИН сигнал — _isSyncing
+        // (IsImportingAccount), пост-логин импорт: между закрытием «Входа» и приходом серверов НЕ
+        // мелькает пустой онбординг. Снимается он только ПОСЛЕ завершения импорта, к тому моменту
+        // _isEmpty уже false (сервера пришли) → кадр уходит прямо в заполненный bodyRoot.
         //
         // A1: онбординг-гейт (с CTA входа) осмыслен ТОЛЬКО для вышедшего из аккаунта пользователя. Если
         // пользователь ВОШЁЛ, но подписок/серверов нет (пустой аккаунт), НЕ показываем ему снова экран
@@ -1097,10 +1085,10 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
             return;
         }
 
-        //  _isStartupLoading (восстановление сессии при запуске) БОЛЬШЕ НЕ поднимает оверлей: он
-        //  рисует шаги входа, а при запуске никто не входит — владелец видел «Открываем Telegram»
-        //  на перезапуске уже вошедшим. Роль этого признака — не дать мелькнуть гейту входа — теперь
-        //  выполняет _profilesResolved выше: до первого ответа о составе кадр держится пустым.
+        //  Восстановление сессии при запуске (IsStartupLoading) оверлей НЕ поднимает: он рисует шаги
+        //  входа, а при запуске никто не входит — владелец видел «Открываем Telegram» на перезапуске
+        //  уже вошедшим. Роль того признака — не дать мелькнуть гейту входа — выполняет
+        //  _profilesResolved выше: до первого ответа о составе кадр держится пустым.
         Control target = _isSyncing
             ? accountSyncView
             : (_isEmpty && !_isLoggedIn) ? onboardingView : bodyRoot;
@@ -1297,11 +1285,7 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         // пользователя не мелькал гейт входа. Отличается от IsImportingAccount (пост-логин импорт).
         _accountVm.WhenAnyValue(x => x.IsStartupLoading)
             .ObserveOn(RxSchedulers.MainThreadScheduler)
-            .Subscribe(loading =>
-            {
-                _isStartupLoading = loading;
-                ApplyShellVisibility();
-            });
+            .Subscribe(_ => ApplyShellVisibility());
 
         // Пустой старт (нет подписок): показываем ТОЛЬКО онбординг на всю ширину под chrome — оба
         // дерева скрыты. После добавления подписки (IsEmpty=false) — дерево по текущей раскладке.
@@ -2364,7 +2348,19 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
                 break;
 
             case WindowCloseReason.ApplicationShutdown or WindowCloseReason.OSShutdown:
-                await AppManager.Instance.AppExitAsync(false);
+                //  Переопределённый обработчик ⇒ async void: исключение отсюда ловить НЕКОМУ.
+                //  А AppExitAsync останавливает ядро, снимает системный прокси и пишет конфиг —
+                //  трогает и процессы, и сеть, и файлы. Падение здесь означало бы, что завершение
+                //  сеанса ОС выглядит как крах приложения. Ловим и всё равно закрываемся: выход
+                //  уже начат и отменить его нельзя.
+                try
+                {
+                    await AppManager.Instance.AppExitAsync(false);
+                }
+                catch (Exception ex)
+                {
+                    Logging.SaveLog("MainWindow.OnClosing", ex);
+                }
                 break;
         }
 
@@ -2418,25 +2414,35 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
             }
         }
 
-        if (e.KeyModifiers is KeyModifiers.Control or KeyModifiers.Meta)
+        //  Обработчик клавиатуры ⇒ async void: исключение отсюда ловить НЕКОМУ, оно валит процесс.
+        //  А за Ctrl V стоит буфер обмена (на X11 чтение может не ответить и бросить), за Ctrl S —
+        //  снимок экрана и разбор QR. Ловим: горячая клавиша не сработала — это не повод падать.
+        try
         {
-            switch (e.Key)
+            if (e.KeyModifiers is KeyModifiers.Control or KeyModifiers.Meta)
             {
-                case Key.V:
-                    await AddServerViaClipboardAsync();
-                    break;
+                switch (e.Key)
+                {
+                    case Key.V:
+                        await AddServerViaClipboardAsync();
+                        break;
 
-                case Key.S:
-                    await ScanScreenTaskAsync();
-                    break;
+                    case Key.S:
+                        await ScanScreenTaskAsync();
+                        break;
+                }
+            }
+            else
+            {
+                if (e.Key == Key.F5)
+                {
+                    ViewModel?.Reload();
+                }
             }
         }
-        else
+        catch (Exception ex)
         {
-            if (e.Key == Key.F5)
-            {
-                ViewModel?.Reload();
-            }
+            Logging.SaveLog("MainWindow.KeyDown", ex);
         }
     }
 
@@ -2466,9 +2472,9 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
 
     private void Shutdown(bool obj)
     {
-        if (obj is bool b && _blCloseByUser == false)
+        if (!_blCloseByUser)
         {
-            _blCloseByUser = b;
+            _blCloseByUser = obj;
         }
         StorageUI();
         if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)

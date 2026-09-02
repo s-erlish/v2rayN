@@ -258,25 +258,22 @@ public class HomeViewModel : MyReactiveObject, IDisposable
             return;
         }
 
-        // Drive the SAME Connecting spin a shield tap does whenever this pick will RELOAD or CONNECT
-        // (A5). Two cases qualify: a CHANGED default (SetDefaultServer's Reload tears the core down
-        // and restarts it — a genuine reconnect, even from a live connection), and ANY pick while
-        // disconnected (it connects). The ONLY tap that spins nothing is re-selecting the already-
-        // active server WHILE CONNECTED: it reloads nothing, so the shield stays Connected.
-        var willConnect = changed || !wasConnected;
-        if (willConnect)
+        // Ниже по коду туннель ЗАВЕДОМО поднят: отключённый случай ушёл ранним возвратом выше, а
+        // wasConnected между ними не меняется. Поэтому единственное, что здесь решает, — сменился ли
+        // сервер по умолчанию. Раньше условия ещё раз спрашивали «а вдруг мы отключены»
+        // (`changed || !wasConnected`, `!changed && !wasConnected`), и обе эти ветки были
+        // недостижимы — вместе с вызовом Connect() внутри одной из них.
+        if (changed)
         {
+            // Переключение сервера с живого подключения — та же крутилка Connecting, что у щита (A5):
+            // SetDefaultServer перезагружает ядро, то есть это настоящий реконнект.
             BeginConnecting();
-            if (wasConnected)
-            {
-                // Switching servers from a live connection: drop Connected NOW so the hero paints
-                // the Connecting spin during the switch (the presenter renders Connected as long as
-                // IsConnected is true). The still-running OLD core must not read as Connected until
-                // it actually cycles — SyncState holds Connecting until the stop event (see
-                // _awaitingCoreCycle), then the new core's start resolves to Connected.
-                IsConnected = false;
-                _awaitingCoreCycle = true;
-            }
+            // Роняем Connected СЕЙЧАС, чтобы герой рисовал крутилку на время переключения (презентер
+            // держит Connected, пока IsConnected истинно). Ещё живое СТАРОЕ ядро не должно читаться
+            // как Connected, пока не отработает цикл: SyncState держит Connecting до события останова
+            // (_awaitingCoreCycle), а старт нового ядра уже разрешается в Connected.
+            IsConnected = false;
+            _awaitingCoreCycle = true;
         }
 
         if (!await Profiles.SetDefaultServer(indexId))
@@ -289,17 +286,9 @@ public class HomeViewModel : MyReactiveObject, IDisposable
             return;
         }
 
-        // Re-tapping the ALREADY-active server while disconnected does not reload (nothing changed),
-        // so connect explicitly — this is the A5 fix (that tap used to be dead). When the pick changed,
-        // SetDefaultServer's Reload already connects, so a second Connect() here would double-connect.
-        if (!changed && !wasConnected)
-        {
-            await Connect();
-        }
-        else
-        {
-            SyncState();
-        }
+        // Повторный тап по УЖЕ активному серверу при живом подключении не перезагружает ничего —
+        // щит остаётся Connected. Смена сервера подключает сама (Reload внутри SetDefaultServer).
+        SyncState();
     }
 
     private void BeginConnecting()
