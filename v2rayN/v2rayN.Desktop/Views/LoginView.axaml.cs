@@ -1,5 +1,4 @@
 using System.Reactive.Disposables;
-using System.Text.Json;
 using System.Text.RegularExpressions;
 using Avalonia.Animation;
 using Avalonia.Animation.Easings;
@@ -148,11 +147,6 @@ public partial class LoginView : UserControl
         CodeBox.GotFocus += (_, _) => RenderCodeCells();
         CodeBox.LostFocus += (_, _) => RenderCodeCells();
 
-        //  Код подтверждения почты — тот же жест: Enter отправляет, фокус меняет активную ячейку.
-        VerifyCodeBox.KeyDown += OnVerifyCodeKeyDown;
-        VerifyCodeBox.GotFocus += (_, _) => RenderVerifyCells();
-        VerifyCodeBox.LostFocus += (_, _) => RenderVerifyCells();
-
         // Email подрезается перед отправкой командой (VM использует значение как есть).
         SiteButton.Click += (_, _) => TrimEmail();
 
@@ -262,21 +256,6 @@ public partial class LoginView : UserControl
         _vm.WhenAnyValue(x => x.TwoFaCode)
             .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ => Update2FaGate())
-            .DisposeWith(d);
-
-        //  Код подтверждения почты: ячейки отражают поле, кнопка живёт по шести цифрам. Ошибка
-        //  прошлой попытки гаснет при первой же правке — иначе «Неверный код» висел бы над кодом,
-        //  который человек уже набирает заново.
-        _vm.WhenAnyValue(x => x.VerifyCode)
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
-            .Subscribe(_ =>
-            {
-                if (VerifyCodeError.IsVisible)
-                {
-                    VerifyCodeError.IsVisible = false;
-                }
-                RenderVerifyCells();
-            })
             .DisposeWith(d);
 
         // Общий ErrorText VM (реальный диагностик) — если нет ошибки логин-потока.
@@ -412,20 +391,6 @@ public partial class LoginView : UserControl
                 SetRegisterBusy(false);
                 SetLoginError(string.Empty);
                 PlaySuccessBeat();
-                break;
-
-            case LoginState.Error error when _viewBlock == ViewBlock.EmailPending && _pendingKind == PendingKind.Verify:
-                //  Ошибка ввода кода НЕ выбрасывает с экрана ожидания: письмо уже ушло, регистрация
-                //  жива, человеку нужно просто набрать код заново. Возврат к форме здесь стирал бы
-                //  и адрес, и сам факт ожидания — а вместе с ними единственный путь закончить.
-                SetSiteBusy(false);
-                SetRegisterBusy(false);
-                //  Панель отвечает готовым человеческим текстом («Неверный код», «Код устарел»,
-                //  «Слишком много попыток»), и он точнее нашей общей формулировки — она не знает,
-                //  что именно не так. Своя строка остаётся на случай, когда сервер молчит (сеть).
-                VerifyCodeError.Text = ServerMessageOf(error.ErrorValue) ?? L.T(MessageKeyFor(error.ErrorValue));
-                VerifyCodeError.IsVisible = true;
-                VerifyCodeBox.Focus();
                 break;
 
             case LoginState.Error error:
@@ -670,48 +635,6 @@ public partial class LoginView : UserControl
         var spin = (kind == PendingKind.Verify || kind == PendingKind.Handoff) && !IsReducedMotion();
         SetSpinning(PendingSpinner, spin);
         PendingSpinner.Opacity = spin ? 1 : 0;
-
-        //  Код есть только у подтверждения регистрации. Каждый ВХОД в это состояние начинается с
-        //  чистых ячеек: код из прошлой попытки (или из прошлой регистрации) не должен там лежать.
-        var codeEntry = kind == PendingKind.Verify;
-        VerifyCodeHost.IsVisible = codeEntry;
-        if (codeEntry)
-        {
-            if (_vm != null)
-            {
-                _vm.VerifyCode = string.Empty;
-            }
-            VerifyCodeError.IsVisible = false;
-            RenderVerifyCells();
-            VerifyCodeBox.Focus();
-        }
-    }
-
-    /// <summary>
-    /// Те же шесть ячеек, что у 2FA, но для кода подтверждения почты. Источник истины — реальный
-    /// <c>VerifyCodeBox</c>, ячейки только отражают его: ввод, вставка целого кода, стрелки и
-    /// автофокус остаются штатными. Заодно держит доступность кнопки «Подтвердить» — шесть цифр.
-    /// </summary>
-    private void RenderVerifyCells()
-    {
-        var code = _vm?.VerifyCode ?? string.Empty;
-        var focused = VerifyCodeBox.IsFocused;
-        var cells = VerifyCodeCells.Children;
-        for (var i = 0; i < cells.Count; i++)
-        {
-            if (cells[i] is not Border border)
-            {
-                continue;
-            }
-            if (border.Child is TextBlock tb)
-            {
-                tb.Text = i < code.Length ? code[i].ToString() : string.Empty;
-            }
-            var active = focused && code.Length < 6 && i == code.Length;
-            SetClass(border, "active", active);
-            SetClass(border, "filled", i < code.Length && !active);
-        }
-        VerifyCodeButton.IsEnabled = IsSixDigits(code);
     }
 
     /// <summary>Показывает/прячет блок 2FA по tempToken (паритет onTwoFactor) с reveal + автофокусом.</summary>
@@ -845,36 +768,6 @@ public partial class LoginView : UserControl
         {
             el.Classes.Remove(name);
         }
-    }
-
-    /// <summary>
-    /// Текст ошибки, который прислала сама панель. Тело ошибки уже обрезано и очищено клиентом
-    /// (<c>SanitizeBody</c>), здесь только достаём из него поле <c>message</c>: показывать сырой
-    /// JSON нельзя, а формулировка панели точнее нашей общей. Не разобралось — null, и вызывающий
-    /// возьмёт свою строку.
-    /// </summary>
-    private static string? ServerMessageOf(ApiError error)
-    {
-        if (error is not ApiError.Server { Detail: { } detail } || detail.IsNullOrEmpty())
-        {
-            return null;
-        }
-        try
-        {
-            using var doc = JsonDocument.Parse(detail);
-            if (doc.RootElement.ValueKind == JsonValueKind.Object
-                && doc.RootElement.TryGetProperty("message", out var msg)
-                && msg.ValueKind == JsonValueKind.String)
-            {
-                var text = msg.GetString();
-                return text.IsNotEmpty() ? text : null;
-            }
-        }
-        catch (JsonException)
-        {
-            //  Не JSON — это нормально: тело могло быть html-страницей прокси. Своя строка подойдёт.
-        }
-        return null;
     }
 
     private static bool IsEmail(string value) => value.Length > 0 && _emailRegex.IsMatch(value);
@@ -1164,20 +1057,6 @@ public partial class LoginView : UserControl
         {
             Submit2Fa();
             e.Handled = true;
-        }
-    }
-
-    /// <summary>Enter в поле кода подтверждения = нажать «Подтвердить», но только на полном коде.</summary>
-    private void OnVerifyCodeKeyDown(object? sender, KeyEventArgs e)
-    {
-        if (e.Key is not (Key.Enter or Key.Return))
-        {
-            return;
-        }
-        e.Handled = true;
-        if (_vm is not null && IsSixDigits(_vm.VerifyCode ?? string.Empty))
-        {
-            Execute(_vm.SubmitVerifyCodeCmd);
         }
     }
 

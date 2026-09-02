@@ -95,28 +95,6 @@ public sealed class TokenRequestDto
     public TokenRequestDto(string token) => Token = token;
 }
 
-/// <summary>
-/// POST /client/auth/verify-email — вторая форма того же запроса: почта + шестизначный код из
-/// письма. Ссылка из письма открывается в браузере и уводит из приложения, поэтому регистрация,
-/// начатая здесь, заканчивается кодом, а не переходом на сайт.
-/// </summary>
-public sealed class EmailCodeRequestDto
-{
-    public string Email { get; set; } = "";
-
-    public string Code { get; set; } = "";
-
-    public EmailCodeRequestDto()
-    {
-    }
-
-    public EmailCodeRequestDto(string email, string code)
-    {
-        Email = email;
-        Code = code;
-    }
-}
-
 /// <summary>POST /client/auth/magic-link/request and /client/password-reset/request — {email}.</summary>
 public sealed class EmailRequestDto
 {

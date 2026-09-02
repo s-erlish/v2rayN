@@ -341,49 +341,6 @@ public sealed class AuthManager
     }
 
     /// <summary>
-    /// Завершает регистрацию КОДОМ из письма — не уходя из приложения.
-    ///
-    /// Ссылка в письме открывается в браузере; для сайта это нормально, а здесь она уводит человека
-    /// из приложения ровно посередине сценария. Код закрывает регистрацию там же, где её начали, и
-    /// сразу поднимает сессию — <see cref="PollUntilVerified"/> остаётся запасным путём на случай,
-    /// если пользователь всё-таки нажал ссылку.
-    ///
-    /// Неверный код — это <see cref="ApiError"/> от бэкенда с человеческим текстом («Неверный код»),
-    /// и он идёт в <see cref="LoginState.Error"/>: экран ожидания остаётся на месте, ячейки можно
-    /// набрать заново.
-    /// </summary>
-    public async Task SubmitVerificationCode(string email, string code, Action<LoginState> emit)
-    {
-        if (!BackendConfig.IsConfigured())
-        {
-            emit(new LoginState.Error(new ApiError.NotConfiguredError()));
-            return;
-        }
-
-        LoginResult result;
-        try
-        {
-            result = await _api.VerifyEmailCode(email, code);
-        }
-        catch (ApiError e)
-        {
-            emit(new LoginState.Error(e));
-            return;
-        }
-
-        if (result is LoginResult.Success success)
-        {
-            AccountSession.OnAuthenticated(success.Token, success.Client);
-            emit(new LoginState.Success(success.Client));
-            return;
-        }
-
-        //  Свежая регистрация не может нести TOTP, поэтому Requires2Fa сюда не приходит. Если
-        //  всё-таки пришёл — оставляем экран ожидания, а не бросаем человека на пустой запрос кода.
-        emit(new LoginState.AwaitingEmailVerification(email));
-    }
-
-    /// <summary>
     /// Requests a passwordless magic sign-in link for <paramref name="email"/> and emits
     /// <see cref="LoginState.MagicLinkSent"/>. Deliberately does NOT poll: the link is consumed in the
     /// system browser and there is no in-app return callback (a URL-scheme / loopback receiver would live

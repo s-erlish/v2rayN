@@ -53,10 +53,6 @@ public class AccountViewModel : MyReactiveObject
     // logout, on «другой способ входа», and whenever a new start-page auth flow begins.
     private CancellationTokenSource? _registerCts;
 
-    /// <summary>Адрес, на который ушло письмо подтверждения. Держится отдельно от состояния входа:
-    /// после неверного кода состояние — ошибка, а подтверждать надо всё тот же адрес.</summary>
-    private string? _pendingVerifyEmail;
-
     // Bounded post-top-up profile re-poll (a Platega top-up completes in the external browser with no
     // in-app return callback). Cancelled on logout or a subsequent top-up.
     private CancellationTokenSource? _topUpRefreshCts;
@@ -271,10 +267,6 @@ public class AccountViewModel : MyReactiveObject
 
     [Reactive] public string TwoFaCode { get; set; } = string.Empty;
 
-    /// <summary>Шестизначный код подтверждения почты из письма — вводится на экране ожидания
-    /// сразу после регистрации, чтобы закончить её здесь, а не по ссылке в браузере.</summary>
-    [Reactive] public string VerifyCode { get; set; } = string.Empty;
-
     /// <summary>The one-time handoff code the user can paste in the «войти по коду» fallback field
     /// (for platforms/edge cases where the <c>departamentvpn://auth</c> scheme callback doesn't fire).</summary>
     [Reactive] public string HandoffCodeInput { get; set; } = string.Empty;
@@ -336,9 +328,6 @@ public class AccountViewModel : MyReactiveObject
     public ReactiveCommand<Unit, Unit> PasswordResetCmd { get; }
 
     public ReactiveCommand<Unit, Unit> Submit2FaCmd { get; }
-
-    /// <summary>«Подтвердить» на экране ожидания письма — закрывает регистрацию кодом.</summary>
-    public ReactiveCommand<Unit, Unit> SubmitVerifyCodeCmd { get; }
     public ReactiveCommand<Unit, Unit> LogoutCmd { get; }
     public ReactiveCommand<Unit, Unit> RetryCmd { get; }
 
@@ -398,7 +387,6 @@ public class AccountViewModel : MyReactiveObject
         MagicLinkCmd = ReactiveCommand.CreateFromTask(RequestMagicLink);
         PasswordResetCmd = ReactiveCommand.CreateFromTask(RequestPasswordReset);
         Submit2FaCmd = ReactiveCommand.CreateFromTask(Submit2Fa);
-        SubmitVerifyCodeCmd = ReactiveCommand.CreateFromTask(SubmitVerifyCode);
         LogoutCmd = ReactiveCommand.CreateFromTask(Logout);
         RetryCmd = ReactiveCommand.CreateFromTask(Retry);
         SyncRetryCmd = ReactiveCommand.CreateFromTask(SyncRetry);
@@ -424,7 +412,6 @@ public class AccountViewModel : MyReactiveObject
                 MagicLinkCmd.ThrownExceptions,
                 PasswordResetCmd.ThrownExceptions,
                 Submit2FaCmd.ThrownExceptions,
-                SubmitVerifyCodeCmd.ThrownExceptions,
                 LogoutCmd.ThrownExceptions,
                 RetryCmd.ThrownExceptions,
                 SyncRetryCmd.ThrownExceptions,
@@ -1145,29 +1132,6 @@ public class AccountViewModel : MyReactiveObject
         await _authManager.BeginPasswordReset(email, state => RunOnUi(() => ApplyLoginState(state)));
     }
 
-    /// <summary>
-    /// «Подтвердить» на экране ожидания письма: заканчивает регистрацию кодом.
-    ///
-    /// Почта берётся из самого состояния ожидания, а не из поля формы: пока ждём письмо, человек
-    /// вполне может поправить адрес в форме за спиной у экрана, и подтверждать надо ТОТ адрес, на
-    /// который письмо ушло. Опрос входа не отменяем — если он всё-таки нажал ссылку в письме,
-    /// сессия поднимется оттуда, и оба пути ведут в одно и то же место.
-    /// </summary>
-    private async Task SubmitVerifyCode()
-    {
-        var email = _pendingVerifyEmail;
-        if (email.IsNullOrEmpty())
-        {
-            return;
-        }
-        var code = (VerifyCode ?? string.Empty).Trim();
-        if (code.Length != 6)
-        {
-            return;
-        }
-        await _authManager.SubmitVerificationCode(email!, code, state => RunOnUi(() => ApplyLoginState(state)));
-    }
-
     private async Task Submit2Fa()
     {
         var tempToken = TwoFaTempToken;
@@ -1193,12 +1157,6 @@ public class AccountViewModel : MyReactiveObject
         CurrentLoginState = state;
         switch (state)
         {
-            case LoginState.AwaitingEmailVerification verify:
-                //  Адрес запоминаем ОТДЕЛЬНО от состояния: после неверного кода состояние
-                //  становится Error, и если спрашивать адрес у него, повторная попытка не уйдёт
-                //  вовсе — экран останется на месте, а кнопка перестанет что-либо делать.
-                _pendingVerifyEmail = verify.Email;
-                break;
             case LoginState.AwaitingTelegram awaiting:
                 TelegramDeepLink = awaiting.DeepLink;
                 // Open the Telegram deep link in the default browser so the user can confirm.

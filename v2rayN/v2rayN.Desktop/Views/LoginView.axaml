@@ -779,55 +779,6 @@
                             Foreground="{DynamicResource Brush.OnSurfaceVariant}"
                             TextAlignment="Center"
                             TextWrapping="Wrap" />
-                        <!--  Ввод кода из письма. Виден ТОЛЬКО для подтверждения регистрации: у
-                              magic-ссылки и сброса пароля кода нет, там письмо ведёт по ссылке.
-                              Те же шесть ячеек, что у 2FA, — один и тот же жест в приложении не
-                              должен выглядеть двумя разными способами.  -->
-                        <StackPanel x:Name="VerifyCodeHost" IsVisible="False">
-                            <Panel Margin="0,20,0,0">
-                                <UniformGrid x:Name="VerifyCodeCells" Columns="6">
-                                    <Border Classes="CodeCell"><TextBlock Classes="CodeDigit" /></Border>
-                                    <Border Classes="CodeCell"><TextBlock Classes="CodeDigit" /></Border>
-                                    <Border Classes="CodeCell"><TextBlock Classes="CodeDigit" /></Border>
-                                    <Border Classes="CodeCell"><TextBlock Classes="CodeDigit" /></Border>
-                                    <Border Classes="CodeCell"><TextBlock Classes="CodeDigit" /></Border>
-                                    <Border Classes="CodeCell"><TextBlock Classes="CodeDigit" /></Border>
-                                </UniformGrid>
-                                <TextBox
-                                    x:Name="VerifyCodeBox"
-                                    Classes="CodeInput"
-                                    Background="Transparent"
-                                    BorderThickness="0"
-                                    CaretBrush="Transparent"
-                                    FontFamily="{DynamicResource Font.Numeric}"
-                                    FontFeatures="tnum,lnum,zero"
-                                    FontSize="20"
-                                    Foreground="Transparent"
-                                    MaxLength="6"
-                                    SelectionBrush="Transparent"
-                                    Text="{Binding VerifyCode, Mode=TwoWay}"
-                                    TextAlignment="Center"
-                                    Theme="{StaticResource TextBox.Incy}" />
-                            </Panel>
-                            <TextBlock
-                                x:Name="VerifyCodeError"
-                                Margin="0,10,0,0"
-                                HorizontalAlignment="Stretch"
-                                Classes="Caption"
-                                Foreground="{DynamicResource Brush.RedText}"
-                                IsVisible="False"
-                                TextAlignment="Center"
-                                TextWrapping="Wrap" />
-                            <Button
-                                x:Name="VerifyCodeButton"
-                                Margin="0,16,0,0"
-                                HorizontalAlignment="Stretch"
-                                Classes="Primary"
-                                Command="{Binding SubmitVerifyCodeCmd}"
-                                Content="{loc:T Login_Confirm}"
-                                IsEnabled="False" />
-                        </StackPanel>
-
                         <Button
                             x:Name="ResendButton"
                             Margin="0,24,0,0"
