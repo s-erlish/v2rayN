@@ -696,6 +696,33 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         return null;
     }
 
+    /// <summary>
+    /// Имя группы серверов. Порядок источников — от самого правдивого к самому слабому:
+    ///
+    ///  1. НАСТОЯЩЕЕ название подписки, которое прислал провайдер заголовком profile-title. Оно
+    ///     появляется после первой же загрузки подписки и не зависит от того, как её добавили.
+    ///  2. Пометка самой подписки, если она что-то называет.
+    ///  3. Общий заголовок «Мои серверы».
+    ///
+    /// Раньше здесь читалась ТОЛЬКО пометка. Добавление ссылки из буфера штампует пометку
+    /// «import_sub» — заглушку, которую показывать нельзя, — и группа навсегда оставалась
+    /// «Моими серверами», хотя настоящее имя уже лежало рядом, в той же записи подписки.
+    /// </summary>
+    private string GroupNameFor(ProfileItemModel item)
+    {
+        var subId = item.Subid ?? string.Empty;
+        if (subId.IsNotEmpty())
+        {
+            var sub = Profiles?.SubItems.FirstOrDefault(s => s.Id == subId);
+            var title = SubscriptionSyncManager.DisplayName(sub?.ProfileTitle);
+            if (title.IsNotEmpty())
+            {
+                return title!;
+            }
+        }
+        return SubscriptionSyncManager.DisplayName(item.SubRemarks) ?? L.T("Home_MyServers");
+    }
+
     /// <summary>The desired shape of one group for a reconcile pass (no view objects allocated yet).</summary>
     private readonly struct GroupPlan
     {
@@ -730,9 +757,7 @@ public class HomeViewModel : MyReactiveObject, IDisposable
             .GroupBy(i => new
             {
                 Key = i.Subid ?? string.Empty,
-                //  Заглушку («import sub» и родню) показывать нельзя — под ней та же группа
-                //  серверов, что и без имени, поэтому идёт общий заголовок. См. DisplayName.
-                Name = SubscriptionSyncManager.DisplayName(i.SubRemarks) ?? L.T("Home_MyServers"),
+                Name = GroupNameFor(i),
             })
             .ToList();
 
