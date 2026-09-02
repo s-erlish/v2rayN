@@ -48,6 +48,10 @@ public partial class PerAppProxyPage : UserControl, ISubPage
     private readonly ObservableCollection<AppItem> _all = new();
     private bool _saved;
 
+    //  Тумблеры наборов сейчас приводятся в согласие с галочками — их собственные события в этот
+    //  момент не команда пользователя, а эхо. См. SyncPresetSwitches.
+    private bool _syncingPresets;
+
     public event EventHandler? BackRequested;
 
     public PerAppProxyPage()
@@ -83,15 +87,12 @@ public partial class PerAppProxyPage : UserControl, ISubPage
         };
 
         // ── Готовые наборы ──
-        // Тумблер отражает ЗАПИСАННОЕ владение (AppPresets.IsApplied), а не «отмечены ли все процессы
-        // набора»: набор, чьи процессы человек отметил руками, не должен выглядеть применённым —
-        // иначе выключение отняло бы его собственный выбор.
+        // Тумблер ЧИТАЕТ ФАКТИЧЕСКИЙ ВЫБОР: набор применён, когда все его программы сейчас отмечены
+        // (AppPresets.IsApplied). Поэтому ставится он ПОСЛЕ LoadProcesses — до неё выбора ещё нет.
         txtPresetGames.Text = AppPresets.Games.Title;
         txtPresetGamesHint.Text = AppPresets.Games.Hint;
         txtPresetLaunchers.Text = AppPresets.Launchers.Title;
         txtPresetLaunchersHint.Text = AppPresets.Launchers.Hint;
-        switchPresetGames.IsChecked = AppPresets.IsApplied(AppPresets.Games);
-        switchPresetLaunchers.IsChecked = AppPresets.IsApplied(AppPresets.Launchers);
         switchPresetGames.IsCheckedChanged += (_, _) =>
             TogglePreset(AppPresets.Games, switchPresetGames.IsChecked == true);
         switchPresetLaunchers.IsCheckedChanged += (_, _) =>
@@ -100,6 +101,33 @@ public partial class PerAppProxyPage : UserControl, ISubPage
         WireRowToggle(RowPresetLaunchers, switchPresetLaunchers);
 
         LoadProcesses();
+    }
+
+    /// <summary>Текущий выбор без учёта регистра — то же множество, что уходит в конфиг.</summary>
+    private HashSet<string> ChosenSet() => new(
+        _all.Where(x => x.IsChecked && x.Identifier.IsNotEmpty()).Select(x => x.Identifier),
+        StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Приводит тумблеры наборов в согласие с галочками. Зовётся ПОСЛЕ каждого изменения выбора:
+    /// загрузка списка, тап по строке, добавленный файл, сам набор.
+    ///
+    /// Флаг <see cref="_syncingPresets"/> обязателен: присвоение IsChecked поднимает IsCheckedChanged,
+    /// а он ведёт в <see cref="TogglePreset"/> — без него отражение состояния снова его меняло бы.
+    /// </summary>
+    private void SyncPresetSwitches()
+    {
+        var chosen = ChosenSet();
+        _syncingPresets = true;
+        try
+        {
+            switchPresetGames.IsChecked = AppPresets.IsApplied(AppPresets.Games, chosen);
+            switchPresetLaunchers.IsChecked = AppPresets.IsApplied(AppPresets.Launchers, chosen);
+        }
+        finally
+        {
+            _syncingPresets = false;
+        }
     }
 
     /// <summary>Тап по строке переключает её тумблер — кроме случая, когда тапнули сам тумблер
@@ -121,16 +149,20 @@ public partial class PerAppProxyPage : UserControl, ISubPage
     /// Добавляется только то, чего в выборе ещё НЕТ, и запоминается именно добавленное
     /// (<see cref="AppPresets.Apply"/>); выключение возвращает ровно его. Процесс, отмеченный
     /// человеком до применения набора, набору не принадлежит и остаётся отмеченным.
+    ///
+    /// В конце тумблеры приводятся в согласие с получившимся выбором: их состояние — это и есть
+    /// «все программы набора отмечены», а не отдельная память о нажатии.
     /// </summary>
     private void TogglePreset(AppPreset preset, bool on)
     {
+        if (_syncingPresets)
+        {
+            return;
+        }
         EnsureRows(preset);
         if (on)
         {
-            var current = new HashSet<string>(
-                _all.Where(x => x.IsChecked && x.Identifier.IsNotEmpty()).Select(x => x.Identifier),
-                StringComparer.OrdinalIgnoreCase);
-            var added = new HashSet<string>(AppPresets.Apply(preset, current), StringComparer.OrdinalIgnoreCase);
+            var added = new HashSet<string>(AppPresets.Apply(preset, ChosenSet()), StringComparer.OrdinalIgnoreCase);
             foreach (var item in _all.Where(x => added.Contains(x.Identifier)))
             {
                 item.IsChecked = true;
@@ -149,6 +181,7 @@ public partial class PerAppProxyPage : UserControl, ISubPage
         // Пересортировка здесь и НИГДЕ БОЛЬШЕ — после ручной галочки строка уехала бы из-под курсора.
         SortByChosen();
         ApplyFilter();
+        SyncPresetSwitches();
     }
 
     /// <summary>Отмеченные — наверх, дальше по алфавиту. Тот же порядок, что задаёт LoadProcesses.</summary>
@@ -238,6 +271,7 @@ public partial class PerAppProxyPage : UserControl, ISubPage
             _all.Add(it);
         }
         ApplyFilter();
+        SyncPresetSwitches();
     }
 
     private void ApplyFilter()
@@ -269,6 +303,9 @@ public partial class PerAppProxyPage : UserControl, ISubPage
             return;
         }
         item.IsChecked = !item.IsChecked;
+        //  Снятая руками галочка гасит тумблер набора, поставленная — может его зажечь: он и есть
+        //  «все программы набора отмечены».
+        SyncPresetSwitches();
         txtProgramsLabel.Text = $"{L.T("PerApp_Programs")} · {L.F("PerApp_Chosen", _all.Count(x => x.IsChecked))}";
     }
 
@@ -297,6 +334,7 @@ public partial class PerAppProxyPage : UserControl, ISubPage
         }
         _all.Insert(0, new AppItem { Identifier = path!, Display = Path.GetFileName(path), IsChecked = true });
         ApplyFilter();
+        SyncPresetSwitches();
     }
 
     private async Task SaveAndBackAsync()
@@ -315,9 +353,8 @@ public partial class PerAppProxyPage : UserControl, ISubPage
                          .ToList();
 
         // Владение наборами публикуется ЗДЕСЬ, вместе со списком, и на обеих дорогах отсюда: это
-        // две половины одного факта, и разъехаться им нельзя. Запись крошечная, а согласие тумблера
-        // с галочками она гарантирует даже там, где список не изменился.
-        AppPresets.Commit(new HashSet<string>(chosen, StringComparer.OrdinalIgnoreCase));
+        // две половины одного факта, и разъехаться им нельзя.
+        AppPresets.Commit();
 
         //  НИЧЕГО НЕ ИЗМЕНИЛОСЬ — НИЧЕГО И НЕ ДЕЛАЕМ. Раньше уход со страницы всегда сохранял,
         //  переписывал правила маршрутизации и публиковал перезагрузку ядра. Перезагрузка — это

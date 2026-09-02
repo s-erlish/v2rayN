@@ -295,7 +295,7 @@ public sealed class AuthManager
         {
             case RegisterResult.Success success:
                 AccountSession.OnAuthenticated(success.Token, success.Client);
-                emit(new LoginState.Success(success.Client));
+                emit(new LoginState.Success(await MarkOnboardingCompleted(success.Client)));
                 return;
             case RegisterResult.RequiresVerification:
                 emit(new LoginState.AwaitingEmailVerification(email));
@@ -345,11 +345,55 @@ public sealed class AuthManager
             if (result is LoginResult.Success success)
             {
                 AccountSession.OnAuthenticated(success.Token, success.Client);
-                emit(new LoginState.Success(success.Client));
+                //  Тот же вход, что и у обычной почты, но добрался сюда ТОЛЬКО зарегистрировавшийся:
+                //  этот цикл живёт лишь внутри BeginRegister. Значит, отметку о первом входе ставим
+                //  здесь же — см. MarkOnboardingCompleted.
+                emit(new LoginState.Success(await MarkOnboardingCompleted(success.Client)));
                 return;
             }
             // A freshly registered account cannot have TOTP, so Requires2Fa is not expected here; ignore
             // it and keep waiting rather than stranding the user on a code prompt they cannot satisfy.
+        }
+    }
+
+    /// <summary>
+    /// <b>Отмечает первый вход завершённым у аккаунта, который ТОЛЬКО ЧТО зарегистрировался.</b>
+    ///
+    /// Оба пути регистрации панели — <c>/client/auth/register</c> при выключенной проверке почты и
+    /// <c>/client/auth/verify-email</c> по ссылке из письма — создают клиента с
+    /// <c>onboardingCompleted: false</c>, хотя пароль у него уже есть. А set-password панель
+    /// отклоняет только при <c>passwordHash &amp;&amp; onboardingCompleted</c>: без этой отметки
+    /// <see cref="UserProfileExtensions.CanSetPassword"/> для такого аккаунта остаётся истинным
+    /// НАВСЕГДА, и панель до скончания века принимает повторную установку пароля.
+    ///
+    /// Правила те же, что после <c>set-password</c>: обе неудачи проглатываются (сессия уже выдана,
+    /// назвать неудачу довеска неудачей входа значило бы соврать), профиль перечитывается ПОСЛЕ
+    /// отметки, чтобы кэш и возвращаемый профиль несли свежий флаг. Запрос идёт через <c>_api</c>, а
+    /// не через хранилище: 401 на пути опознания завершает сессию, и умерший в этот момент токен не
+    /// должен выкидывать человека из только что созданного аккаунта.
+    /// </summary>
+    /// <returns>Свежий профиль, если его удалось перечитать, иначе тот, что пришёл с сессией.</returns>
+    private async Task<UserProfileDto> MarkOnboardingCompleted(UserProfileDto profile)
+    {
+        try
+        {
+            await _api.CompleteOnboarding();
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog("AuthManager.CompleteOnboarding", ex);
+        }
+
+        try
+        {
+            var fresh = await _api.GetMe();
+            AccountSession.UpdateProfile(fresh);
+            return fresh;
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog("AuthManager.CompleteOnboarding", ex);
+            return profile;
         }
     }
 
