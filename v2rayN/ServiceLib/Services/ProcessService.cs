@@ -10,8 +10,20 @@ public class ProcessService : IDisposable
     private volatile bool _stopping;
     // 0 → not yet raised, 1 → raised. Guarantees the public Exited event fires at most once.
     private int _exitedRaised;
-    // The log-pipe handler, retained so the exit handler can detach it (displayLog case only).
+    // Единый обработчик ОБОИХ потоков вывода; отцепляется только stdout-часть при выходе процесса.
     private DataReceivedEventHandler? _dataHandler;
+
+    //  ПОСЛЕДНИЕ СТРОКИ ВЫВОДА ЯДРА — почему запуск не удался, словами самого ядра.
+    //  Раньше вывод перенаправлялся только при displayLog, а он выключен для узлов типа Custom
+    //  (провайдерский XRAY_JSON). Ядро печатало «Failed to start: ...» и умирало, строка уходила
+    //  в никуда, и наверх поднималось безымянное «Не удалось запустить ядро». Теперь перенаправлены
+    //  ОБА потока всегда, и последние строки лежат здесь, чтобы отказ подключения мог назвать
+    //  причину. Именно оба: Xray печатает фатальную строку старта в stdout, а не в stderr, — на
+    //  одном stderr буфер оставался пустым, и причина снова терялась. В журнал строки по-прежнему
+    //  уходят только при displayLog: поведение панели сообщений не менялось.
+    private const int _outputTailCapacity = 12;
+    private readonly Queue<string> _outputTail = new(_outputTailCapacity);
+    private readonly object _outputTailLock = new();
 
     /// <summary>
     /// Raised exactly once when the underlying process exits UNEXPECTEDLY on its own (crash / OOM /
@@ -47,11 +59,12 @@ public class ProcessService : IDisposable
                 WorkingDirectory = workingDirectory,
                 UseShellExecute = false,
                 RedirectStandardInput = redirectInput,
-                RedirectStandardOutput = displayLog,
-                RedirectStandardError = displayLog,
+                // Оба потока — всегда: только по ним ядро называет причину отказа.
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
                 CreateNoWindow = true,
-                StandardOutputEncoding = displayLog ? Encoding.UTF8 : null,
-                StandardErrorEncoding = displayLog ? Encoding.UTF8 : null,
+                StandardOutputEncoding = Encoding.UTF8,
+                StandardErrorEncoding = Encoding.UTF8,
             },
             EnableRaisingEvents = true
         };
@@ -64,10 +77,7 @@ public class ProcessService : IDisposable
             }
         }
 
-        if (displayLog)
-        {
-            RegisterLogHandlers();
-        }
+        RegisterLogHandlers(displayLog);
 
         // ALWAYS observe process exit (not only for the displayLog case) so an unexpected death of the
         // core / pre-service can be surfaced to CoreManager for crash detection + auto-restart. The
@@ -83,6 +93,9 @@ public class ProcessService : IDisposable
         if (_process.StartInfo.RedirectStandardOutput)
         {
             _process.BeginOutputReadLine();
+        }
+        if (_process.StartInfo.RedirectStandardError)
+        {
             _process.BeginErrorReadLine();
         }
 
@@ -113,6 +126,9 @@ public class ProcessService : IDisposable
                     _process.CancelOutputRead();
                 }
                 catch { }
+            }
+            if (_process.StartInfo.RedirectStandardError)
+            {
                 try
                 {
                     _process.CancelErrorRead();
@@ -143,11 +159,56 @@ public class ProcessService : IDisposable
         }
     }
 
-    private void RegisterLogHandlers()
+    /// <summary>
+    /// Последние строки вывода ядра, сверху вниз, одной строкой. Пусто, когда ядро ничего не сказало.
+    /// Читается после падения запуска, чтобы отказ подключения назвал причину словами ядра.
+    /// </summary>
+    public string GetOutputTail()
+    {
+        lock (_outputTailLock)
+        {
+            return _outputTail.Count == 0 ? string.Empty : string.Join(Environment.NewLine, _outputTail);
+        }
+    }
+
+    /// <summary>
+    /// Дожидается, пока асинхронные читатели вывода доберут всё до конца. Событие Exited приходит
+    /// РАНЬШЕ, чем дочитаны потоки, поэтому без этого последняя (она же фатальная) строка ядра могла
+    /// не успеть попасть в буфер. Безпараметрный WaitForExit как раз и означает «выход + слив
+    /// вывода»; ждём его в пуле с потолком, чтобы никакая заминка не подвесила вызывающего.
+    /// </summary>
+    public async Task FlushOutputAsync(int timeoutMs = 800)
+    {
+        try
+        {
+            await Task.Run(() => _process.WaitForExit()).WaitAsync(TimeSpan.FromMilliseconds(timeoutMs));
+        }
+        catch
+        {
+        }
+    }
+
+    private void RegisterLogHandlers(bool displayLog)
     {
         _dataHandler = (sender, e) =>
         {
-            if (e.Data.IsNotEmpty())
+            if (e.Data.IsNullOrEmpty())
+            {
+                return;
+            }
+
+            lock (_outputTailLock)
+            {
+                _outputTail.Enqueue(e.Data);
+                while (_outputTail.Count > _outputTailCapacity)
+                {
+                    _outputTail.Dequeue();
+                }
+            }
+
+            //  В панель сообщений вывод уходит только при displayLog — ровно как раньше. Буфер выше
+            //  живёт всегда и сам никуда не печатает.
+            if (displayLog)
             {
                 _ = _updateFunc?.Invoke(false, e.Data + Environment.NewLine);
             }
@@ -161,17 +222,10 @@ public class ProcessService : IDisposable
     {
         // Detach the log pipe handlers (present only in the displayLog case) — preserves the exact
         // behavior of the original Exited handler.
-        if (_dataHandler != null)
-        {
-            try
-            {
-                _process.OutputDataReceived -= _dataHandler;
-                _process.ErrorDataReceived -= _dataHandler;
-            }
-            catch
-            {
-            }
-        }
+        //  Обработчик вывода НЕ отцепляем: Exited поднимается раньше, чем дочитаны асинхронные
+        //  потоки, и последняя строка ядра — та самая, где написана причина, — приходит уже ПОСЛЕ
+        //  выхода. Он только кладёт строку в ограниченную очередь и (при displayLog) шлёт её в
+        //  панель, как и до выхода, поэтому жить ему до Dispose не мешает.
 
         // Intentional teardown (StopAsync / Dispose set _stopping first) → the exit is expected, stay
         // quiet so it is never mistaken for a crash.

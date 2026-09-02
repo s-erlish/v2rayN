@@ -87,6 +87,13 @@ internal sealed class HomeHeroPresenter
             .Subscribe(_ => ApplyConnectState())
             .DisposeWith(d);
 
+        //  Причина отказа приезжает вместе с самим отказом (одна и та же попытка), но отдельным
+        //  свойством — подписываемся отдельно, чтобы поздняя причина всё равно попала под щит.
+        vm.WhenAnyValue(x => x.ConnectFailureHint)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .Subscribe(hint => hero.SetErrorReason(hint))
+            .DisposeWith(d);
+
         // ── Live speed + uptime ────────────────────────────────────────────
         vm.WhenAnyValue(x => x.UpSpeed, x => x.DownSpeed)
             .ObserveOn(RxSchedulers.MainThreadScheduler)
@@ -115,6 +122,7 @@ internal sealed class HomeHeroPresenter
         }
 
         hero.ShowEmptyState(vm.IsEmpty);
+        hero.SetErrorReason(vm.ConnectFailureHint);
         ApplyConnectState();
         ApplyServerInfo();
         return d;

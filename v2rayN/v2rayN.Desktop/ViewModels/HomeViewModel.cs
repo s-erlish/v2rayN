@@ -96,6 +96,12 @@ public class HomeViewModel : MyReactiveObject, IDisposable
     /// </summary>
     [Reactive] public bool ConnectFailed { get; set; }
 
+    /// <summary>
+    /// Почему не подключилось и что делать дальше — одна фраза под щитом. Пустая, пока отказа нет.
+    /// Заполняется из <see cref="CoreManager.LastStartFailure"/> в момент, когда отказ признан.
+    /// </summary>
+    [Reactive] public string ConnectFailureHint { get; set; } = string.Empty;
+
     [Reactive] public bool HasServers { get; set; }
 
     [Reactive] public bool IsEmpty { get; set; } = true;
@@ -216,7 +222,7 @@ public class HomeViewModel : MyReactiveObject, IDisposable
             // A4: surface a distinct FAILURE state instead of collapsing silently to Idle. Sticky
             // until the next attempt / a successful connect; drives the hero's Error shield — which is
             // the ONLY surface for connect state now (no bottom snack: the owner doesn't want it).
-            ConnectFailed = true;
+            MarkConnectFailed();
             ClearSwitchQueue();
         }
         SyncState();
@@ -231,7 +237,7 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         //  Отключение отменяет переключение вместе с его очередью: применять запомненный выбор
         //  на выключенном туннеле значило бы поднять его без спроса.
         ClearSwitchQueue();
-        ConnectFailed = false;
+        ClearConnectFailure();
         // byUser:true records sticky user-stop intent and aborts any in-flight auto-restart so the
         // tunnel the user just tore down can never be silently re-established (C1).
         await CoreManager.Instance.CoreStop(byUser: true);
@@ -325,7 +331,7 @@ public class HomeViewModel : MyReactiveObject, IDisposable
     {
         IsConnecting = true;
         // A new attempt clears the previous failure (A4): the hero leaves Error for Connecting.
-        ConnectFailed = false;
+        ClearConnectFailure();
         // Safety deadline so a failed connect can't leave the shield spinning forever.
         _connectingUntil = DateTime.Now.AddSeconds(12);
         // Run the transient tick while pending so the deadline is actually evaluated even when the
@@ -363,7 +369,7 @@ public class HomeViewModel : MyReactiveObject, IDisposable
             IsConnecting = false;
             _connectingUntil = null;
             // A successful connect clears any error shield (A4).
-            ConnectFailed = false;
+            ClearConnectFailure();
             //  Ядро поднялось и удержания больше нет — переключение ОСЕЛО. Сам запомненный выбор
             //  применяют обработчики событий (ApplyPendingServer), чтобы не входить в SelectServer
             //  рекурсивно из SyncState, который SelectServer же и вызывает.
@@ -397,7 +403,7 @@ public class HomeViewModel : MyReactiveObject, IDisposable
                 // via the deadline.
                 IsConnecting = false;
                 _connectingUntil = null;
-                ConnectFailed = true;
+                MarkConnectFailed();
                 ClearSwitchQueue();
             }
             else if (!IsConnecting)
@@ -406,6 +412,115 @@ public class HomeViewModel : MyReactiveObject, IDisposable
                 ClearSwitchQueue();
             }
         }
+    }
+
+    /// <summary>
+    /// Отказ признан: щит уходит в Error И под ним появляется ПРИЧИНА с шагом дальше. Причину
+    /// движок откладывает в <see cref="CoreManager.LastStartFailure"/> ровно в момент срыва
+    /// попытки, поэтому читаем её здесь, а не храним копию.
+    /// </summary>
+    private void MarkConnectFailed()
+    {
+        ConnectFailed = true;
+        ConnectFailureHint = DescribeConnectFailure(
+            CoreManager.Instance.LastStartFailure,
+            CoreManager.Instance.LastStartError);
+    }
+
+    private void ClearConnectFailure()
+    {
+        ConnectFailed = false;
+        ConnectFailureHint = string.Empty;
+    }
+
+    /// <summary>
+    /// Причина отказа человеческим языком: что произошло, почему и что делать (00-rules §9.4).
+    /// Структурные случаи движок называет сам (<see cref="ECoreStartFailure"/>); для вывода ядра
+    /// разбираем его собственный текст — он английский, версионно-нестабильный и пользователю не
+    /// показывается ни при каких условиях, в интерфейс идёт только наша фраза.
+    /// </summary>
+    internal static string DescribeConnectFailure(ECoreStartFailure kind, string? raw)
+    {
+        switch (kind)
+        {
+            case ECoreStartFailure.NoServer:
+                return L.T("Home_FailNoServer");
+
+            case ECoreStartFailure.CoreMissing:
+                return L.T("Home_FailCoreMissing");
+
+            case ECoreStartFailure.ConfigFailed:
+                return L.T("Home_FailConfig");
+
+            case ECoreStartFailure.CoreOutput:
+                break;
+
+            default:
+                return L.T("Home_FailUnknown");
+        }
+
+        //  Разбираем ТОЛЬКО строки, похожие на отказ. Хвост вывода — это последние строки ядра
+        //  целиком, включая обычный журнал: искать приметы по всему хвосту значило бы ловить
+        //  «tun» или «invalid» в проходной информационной записи и объявлять не ту причину.
+        var text = string.Join(
+            "\n",
+            (raw ?? string.Empty)
+                .Split('\n')
+                .Select(line => line.ToLowerInvariant())
+                .Where(line => line.Contains("failed")
+                               || line.Contains("error")
+                               || line.Contains("panic")
+                               || line.Contains("fatal")
+                               || line.Contains("cannot")
+                               || line.Contains("unable")
+                               || line.Contains("refused")
+                               || line.Contains("denied")
+                               || line.Contains("in use")));
+
+        if (text.Length == 0)
+        {
+            return L.T("Home_FailUnknown");
+        }
+
+        //  Порт занят: второй VPN, второй экземпляр приложения, чужая программа на том же порту.
+        if (text.Contains("address already in use")
+            || text.Contains("only one usage of each socket address")
+            || text.Contains("failed to listen"))
+        {
+            return L.T("Home_FailPortBusy");
+        }
+
+        //  Сетевой адаптер/маршруты: нужны права администратора (Windows) или root (Linux/macOS).
+        if (text.Contains("wintun")
+            || text.Contains("tun device")
+            || text.Contains("create tun")
+            || text.Contains("operation not permitted")
+            || text.Contains("access is denied")
+            || text.Contains("administrator"))
+        {
+            return L.T("Home_FailNoRights");
+        }
+
+        //  Сервер отказал/недоступен — сеть, а не настройки.
+        if (text.Contains("connection refused")
+            || text.Contains("no such host")
+            || text.Contains("i/o timeout")
+            || text.Contains("network is unreachable"))
+        {
+            return L.T("Home_FailServerRefused");
+        }
+
+        //  Ядро прочитало конфиг и отвергло его: поля узла из подписки не годятся этой версии ядра.
+        if (text.Contains("failed to load config")
+            || text.Contains("failed to build")
+            || text.Contains("failed to parse")
+            || text.Contains("unmarshal")
+            || text.Contains("decode config"))
+        {
+            return L.T("Home_FailCoreRejected");
+        }
+
+        return L.T("Home_FailUnknown");
     }
 
     /// <summary>Снимает признак переключения вместе с очередью — одной строкой во всех местах,
@@ -478,7 +593,7 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         _connectingUntil = null;
         IsConnecting = false;
         IsConnected = true;
-        ConnectFailed = false;
+        ClearConnectFailure();
         SyncState();
         UpdateStateTick();
         ApplyPendingServer();

@@ -44,6 +44,35 @@ public class CoreManager
     private CoreConfigContext? _lastMainContext;
     private CoreConfigContext? _lastPreContext;
 
+    //  ПРИЧИНА ПОСЛЕДНЕГО НЕУДАЧНОГО ЗАПУСКА — сырым текстом (сообщение о ненайденном ядре, ошибка
+    //  сборки конфига, хвост stderr самого ядра). Раньше всё это уходило только в панель журнала,
+    //  а наверх поднималось безымянное «Не удалось запустить ядро»: пользователь видел красный щит
+    //  без единого слова о том, ЧТО не так. Экран «Главная» читает это поле и переводит его в
+    //  человеческую подсказку под щитом. Сбрасывается на каждой новой попытке и на успехе.
+    public string? LastStartError { get; private set; }
+
+    /// <summary>Чем кончилась последняя попытка. См. <see cref="ECoreStartFailure"/>.</summary>
+    public ECoreStartFailure LastStartFailure { get; private set; } = ECoreStartFailure.None;
+
+    /// <summary>Записать причину отказа подключения. Пустой текст не записывается: он затёр бы более
+    /// внятную причину, уже найденную в ходе той же попытки.</summary>
+    public void ReportStartFailure(ECoreStartFailure kind, string? reason)
+    {
+        if (reason.IsNullOrEmpty())
+        {
+            return;
+        }
+        LastStartFailure = kind;
+        LastStartError = reason;
+    }
+
+    /// <summary>Новая попытка подключения — прошлая причина больше не про неё.</summary>
+    public void ClearStartFailure()
+    {
+        LastStartFailure = ECoreStartFailure.None;
+        LastStartError = null;
+    }
+
     // Tier 2 (live `xray api rmo/ado` outbound hot-swap) is DISABLED. It declared success on the api
     // command's exit code alone, which does not prove traffic actually moved: against the panel's custom
     // XRAY_JSON (Remnawave) configs the swap could exit 0 yet leave routing on the previous outbound, so
@@ -164,6 +193,7 @@ public class CoreManager
     {
         if (mainContext == null)
         {
+            ReportStartFailure(ECoreStartFailure.NoServer, ResUI.CheckServerSettings);
             await UpdateFunc(false, ResUI.CheckServerSettings);
             return;
         }
@@ -178,6 +208,7 @@ public class CoreManager
         var result = await CoreConfigHandler.GenerateClientConfig(mainContext, fileName);
         if (result.Success != true)
         {
+            ReportStartFailure(ECoreStartFailure.ConfigFailed, result.Msg);
             await UpdateFunc(true, result.Msg);
             return;
         }
@@ -200,11 +231,17 @@ public class CoreManager
         // making the user tap Connect a second time, we do ONE clean internal re-arm here. This is a
         // single retry, NOT a loop — a genuinely broken config still fails after the second attempt and
         // surfaces an honest error below.
+        //  Причина прошлой попытки к этой не относится: чистим ПЕРЕД стартом, чтобы под щитом
+        //  не всплыла позавчерашняя ошибка, если эта попытка сорвётся без единого слова.
+        ClearStartFailure();
         var started = await TryStartCoresOnce(mainContext, preContext);
         if (!started)
         {
             // Tear down whatever half-started (frees the port / removes the stale adapter), let the OS
             // settle a touch longer than the first attempt, then try exactly once more.
+            //  Снимаем причину ДО CoreStopInternal: он обнуляет _processService вместе с хвостом
+            //  stderr. Вторая попытка перезапишет её только если ядро скажет что-то своё.
+            await CaptureCoreErrorTail();
             await CoreStopInternal();
             await Task.Delay(300);
             started = await TryStartCoresOnce(mainContext, preContext);
@@ -232,6 +269,8 @@ public class CoreManager
             // auto-restart attempt counter can reset after a stretch of stable connected time.
             _coreUpSince = DateTime.Now;
             StartWatchdog();
+            //  Подключились — прошлой причине отказа больше нечего объяснять.
+            ClearStartFailure();
             await UpdateFunc(true, $"{node.GetSummary()}");
         }
         else
@@ -242,6 +281,7 @@ public class CoreManager
             // IsRunningCore() would falsely report "connected" (blue shield + tray + false
             // «Подключено» toast) with a dead tunnel behind it. CoreStopInternal resets RunningCoreType
             // to the idle sentinel; the next start re-assigns it. Internal stop — we hold _coreOpGate.
+            await CaptureCoreErrorTail();
             await CoreStopInternal();
             await UpdateFunc(true, ResUI.FailedToRunCore);
         }
@@ -670,7 +710,32 @@ public class CoreManager
             return;
         }
 
+        _ = RecordExitReasonAsync(sender);
         _ = HandleUnexpectedExitAsync();
+    }
+
+    /// <summary>
+    /// Ядро умерло само — забираем его последние слова СРАЗУ. Умереть оно может и позже окна
+    /// оседания (медленная машина, отвалившийся адаптер, конфликт порта, пойманный на секунде), и
+    /// тогда запуск уже был засчитан удачным: без этой записи щит, упавший в ошибку по сроку
+    /// ожидания, снова не смог бы назвать причину. Хвост читается ДО того, как перезапуск заменит
+    /// процесс, поэтому это делается здесь, а не в обработчике восстановления.
+    /// </summary>
+    private async Task RecordExitReasonAsync(ProcessService sender)
+    {
+        try
+        {
+            await sender.FlushOutputAsync();
+            var tail = sender.GetOutputTail();
+            if (tail.IsNotEmpty())
+            {
+                ReportStartFailure(ECoreStartFailure.CoreOutput, tail);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog(_tag, ex);
+        }
     }
 
     /// <summary>
@@ -1317,6 +1382,19 @@ public class CoreManager
         await WaitForProxyPort(preContext);
         await CoreStartPreService(preContext);
 
+        //  ОКНО ОСЕДАНИЯ. Проверка «жив ли процесс» внутри RunProcessNormal стоит на отметке 100 мс,
+        //  а ядро на плохом конфиге или занятом порту умирает ПОЗЖЕ: Xray успевает прочитать конфиг,
+        //  напечатать «Failed to start: ... address already in use» и выйти примерно к 150–250 мс.
+        //  Раньше такой запуск засчитывался успешным: приложение поднимало флаг «подключено», щит
+        //  синел, и лишь потом сторож ловил смерть ядра — пользователь видел «Подключено», а затем
+        //  красный щит без причины. Ждём ещё немного и перечитываем состояние: смерть в этом окне —
+        //  это отказ запуска, с готовым хвостом вывода, по которому называется причина. На удачном
+        //  подключении это стоит 350 мс — Reload и без того выдерживает секунду после LoadCore.
+        if (_processService is { HasExited: false })
+        {
+            await Task.Delay(350);
+        }
+
         var preServiceRequiredButFailed = preContext != null && _processPreService is null;
         return _processService is { HasExited: false } && !preServiceRequiredButFailed;
     }
@@ -1440,11 +1518,41 @@ public class CoreManager
 
     #region Process
 
+    /// <summary>
+    /// Забирает последние строки stderr у уже умерших процессов ядра и кладёт их в
+    /// <see cref="LastStartError"/>. Тишину не записывает, чтобы не затереть более внятную причину
+    /// (ненайденный файл ядра, ошибка сборки конфига), записанную раньше по ходу той же попытки.
+    /// </summary>
+    private async Task CaptureCoreErrorTail()
+    {
+        //  Событие выхода опережает дочитывание вывода — сливаем потоки у умерших процессов,
+        //  иначе фатальная строка ещё не в буфере и причина снова окажется безымянной.
+        if (_processService is { HasExited: true } main)
+        {
+            await main.FlushOutputAsync();
+        }
+        if (_processPreService is { HasExited: true } pre)
+        {
+            await pre.FlushOutputAsync();
+        }
+
+        var tail = _processService?.GetOutputTail();
+        if (tail.IsNullOrEmpty())
+        {
+            tail = _processPreService?.GetOutputTail();
+        }
+        if (tail.IsNotEmpty())
+        {
+            ReportStartFailure(ECoreStartFailure.CoreOutput, tail);
+        }
+    }
+
     private async Task<ProcessService?> RunProcess(CoreInfo? coreInfo, string configPath, bool displayLog, bool mayNeedSudo)
     {
         var fileName = CoreInfoManager.Instance.GetCoreExecFile(coreInfo, out var msg);
         if (fileName.IsNullOrEmpty())
         {
+            ReportStartFailure(ECoreStartFailure.CoreMissing, msg);
             await UpdateFunc(false, msg);
             return null;
         }
@@ -1495,6 +1603,20 @@ public class CoreManager
 
         if (procService is null or { HasExited: true })
         {
+            //  Ядро умерло на старте. Его последние слова приходят асинхронно, часто уже ПОСЛЕ
+            //  выхода процесса: дожидаемся слива потоков и забираем хвост, иначе отказ снова
+            //  окажется безымянным. Наверх по-прежнему уходит общее сообщение — сырой текст ядра
+            //  не место в панели уведомлений, он нужен для подсказки под щитом.
+            if (procService is not null)
+            {
+                await procService.FlushOutputAsync();
+            }
+            var tail = procService?.GetOutputTail();
+            if (tail.IsNotEmpty())
+            {
+                ReportStartFailure(ECoreStartFailure.CoreOutput, tail);
+                Logging.SaveLog($"{_tag} core start failed: {tail}");
+            }
             throw new Exception(ResUI.FailedToRunCore);
         }
         AddProcessJob(procService.Handle);

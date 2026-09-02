@@ -826,16 +826,23 @@ public class MainWindowViewModel : MyReactiveObject
         try
         {
             SetReloadEnabled(false);
+            //  Новая попытка — прошлая причина отказа к ней не относится. Ветки ниже отбраковывают
+            //  попытку ДО запуска ядра, поэтому причину для щита записывают здесь сами.
+            CoreManager.Instance.ClearStartFailure();
 
             var profileItem = await ConfigHandler.GetDefaultServer(_config);
             if (profileItem == null)
             {
+                CoreManager.Instance.ReportStartFailure(ECoreStartFailure.NoServer, ResUI.CheckServerSettings);
                 NoticeManager.Instance.Enqueue(ResUI.CheckServerSettings);
                 return true;
             }
             var allResult = await CoreConfigContextBuilder.BuildAll(_config, profileItem);
             if (NoticeManager.Instance.NotifyValidatorResult(allResult.CombinedValidatorResult) && !allResult.Success)
             {
+                CoreManager.Instance.ReportStartFailure(
+                    ECoreStartFailure.ConfigFailed,
+                    Utils.List2String(allResult.CombinedValidatorResult.Errors.Take(3).ToList(), true));
                 return true;
             }
 

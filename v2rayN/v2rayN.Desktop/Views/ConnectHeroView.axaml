@@ -624,18 +624,22 @@
                       видимость ведёт code-behind (RetryHint.IsVisible = state == Error).  -->
                 <!--  Opacity=0 в покое; вход в Error плавно проявляет подсказку (fade 0→1, 220мс
                       Standard) — один спокойный сигнал, переход навешивает код-behind (lite = мгновенно).  -->
+                <!--  Текст ведёт HomeViewModel.ConnectFailureHint: причина отказа + шаг дальше
+                      (00-rules §9.4). Фраза длиннее одной строки, поэтому ПЕРЕНОС, а не обрезка:
+                      обрезанная причина — это снова отказ без причины (§1.1 «Text that overflows»).  -->
                 <TextBlock
                     x:Name="RetryHint"
-                    Margin="24,4,24,0"
+                    Margin="24,6,24,0"
                     MaxWidth="320"
                     HorizontalAlignment="Center"
                     Classes="Caption"
                     Foreground="{DynamicResource Brush.OnSurfaceVariant}"
                     IsVisible="False"
+                    LineHeight="18"
                     Opacity="0"
                     Text="{loc:T Home_RetryHint}"
                     TextAlignment="Center"
-                    TextTrimming="CharacterEllipsis" />
+                    TextWrapping="Wrap" />
 
                 <!--  Всё, что НИЖЕ пилюли статуса, приглушается до 45%, пока не подключено
                       (screens.md «Главная» → правая панель). Один общий контейнер вместо двух
