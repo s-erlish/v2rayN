@@ -176,6 +176,22 @@ public sealed class AccountRepository
 
     public Task<ApiResult<MessageResponseDto>> RequestLinkEmail(string email) => Guard(() => _api.RequestLinkEmail(email));
 
+    /// <summary>
+    /// The FIRST password of an account that has none. Goes through <see cref="Guard"/> like every
+    /// other errand — its 401 is a dead token, not a verdict on the identity endpoint, so it must not
+    /// end the session (only <see cref="RefreshProfile"/> may do that).
+    /// </summary>
+    public Task<ApiResult<MessageResponseDto>> SetPassword(string newPassword) => Guard(() => _api.SetPassword(newPassword));
+
+    /// <summary>
+    /// Replace an already-attached address. Note the 401 this can return is NOT a dead session: the
+    /// panel answers 401 code INVALID_PASSWORD for a wrong current password. Routing it through
+    /// <see cref="Guard"/> keeps that where it belongs — a refusal for the caller to show, never a
+    /// reason to sign anybody out.
+    /// </summary>
+    public Task<ApiResult<MessageResponseDto>> RequestChangeEmail(string newEmail, string? currentPassword) =>
+        Guard(() => _api.RequestChangeEmail(newEmail, currentPassword));
+
     /// <summary>App↔site SSO handoff — mint a code, open the site's tg-login page already signed in.</summary>
     public Task<ApiResult<AppHandoffDto>> CreateAppHandoff() => Guard(() => _api.CreateAppHandoff());
 }

@@ -52,6 +52,27 @@ public partial class LoginView : UserControl
     // Форма в режиме регистрации (сегмент «Регистрация») — иначе режим входа.
     private bool _registerMode;
 
+    // ── Поручение «Способов входа» ──────────────────────────────────────────
+    // null = обычный вход. Иначе страница открыта НАД живой сессией: привязать почту, сменить адрес
+    // или задать первый пароль. Задаётся конструктором, а не свойством после него: подписка на
+    // IsLoggedIn (см. Rebind) срабатывает сразу и на уже вошедшем аккаунте закрыла бы страницу
+    // первым же действием — ровно тот дефект, что был на Android.
+    private readonly EmailErrand? _errand;
+
+    // Шаг поручения: false — поля (адрес, при смене ещё и текущий пароль); true — «придумайте пароль».
+    private bool _passwordStep;
+
+    // Запрос поручения в полёте: спиннер на его CTA.
+    private bool _errandBusy;
+
+    // Панель ПОТРЕБОВАЛА текущий пароль (400 PASSWORD_REQUIRED), хотя кэшированный профиль говорил,
+    // что его нет. Профиль мог устареть — пароль завели на сайте или в другом клиенте, — и без этого
+    // флага экран показывал бы «Введите текущий пароль» над полем, которого на нём не нарисовано.
+    private bool _errandPasswordRequired;
+
+    // Поручение доведено до конца (галочка сыграна) — гейт того же хэндоффа, что и у входа.
+    private bool _errandDone;
+
     // Запрос регистрации в полёте (LoginState.RegisterLoading) — спиннер на «Создать аккаунт».
     private bool _registerBusy;
 
@@ -73,6 +94,12 @@ public partial class LoginView : UserControl
         Magic,
         Reset,
 
+        // Ожидание письма привязки почты и ожидание письма смены адреса. Экран тот же самый — те же
+        // кольцо, конверт, «Отправить снова» и выход, — потому что и МОМЕНТ тот же: письмо ушло, ждём
+        // человека. Разными остаются только слова и вопрос под капотом (какой факт опрашивает профиль).
+        Link,
+        Change,
+
         // Browser→app SSO handoff: a one-time code is being redeemed (departamentvpn://auth callback or a
         // pasted code). Transient, self-resolving — no resend/back actions; the ring spins while it redeems.
         Handoff,
@@ -81,6 +108,11 @@ public partial class LoginView : UserControl
     // Ключ ошибки ИМЕННО логин-потока (LoginState.Error → auth_err_*); имеет приоритет над общим
     // AccountViewModel.ErrorText. Храним КЛЮЧ (не текст), чтобы строка переводилась вживую.
     private string _loginErrorKey = string.Empty;
+
+    // Готовая фраза ПАНЕЛИ (не наш ключ): у 400 на поручениях несколько разных смыслов, и своя строка
+    // их не различает. Живёт отдельно от ключа именно потому, что переводить её нечем — её написал
+    // сервер, на языке аккаунта. Ключ и фраза взаимоисключающи: что поставили последним, то и видно.
+    private string _loginErrorText = string.Empty;
 
     private bool _revealPassword;
 
@@ -105,8 +137,20 @@ public partial class LoginView : UserControl
     private bool _handoffFired;
     private bool _detached;
 
-    public LoginView()
+    public LoginView() : this(null)
     {
+    }
+
+    /// <summary>
+    /// <paramref name="errand"/> null — обычный экран входа. Иначе страница открывается поверх УЖЕ
+    /// вошедшего аккаунта как поручение «Способов входа»; сегмент «Вход | Регистрация», пароль входа,
+    /// пассворлесс-ссылки и альтернативные способы с неё сняты — выбирать не из чего.
+    /// </summary>
+    public LoginView(EmailErrand? errand)
+    {
+        _errand = errand;
+        _passwordStep = errand == EmailErrand.SetPassword;
+
         InitializeComponent();
 
         if (Design.IsDesignMode)
@@ -128,6 +172,10 @@ public partial class LoginView : UserControl
         // Сегмент «Вход | Регистрация» — переключает режим формы (ApplyMode).
         SignInTab.Click += (_, _) => SetMode(false);
         RegisterTab.Click += (_, _) => SetMode(true);
+
+        // CTA поручения и «Пропустить» на шаге пароля.
+        ErrandButton.Click += OnErrandSubmitClick;
+        SkipButton.Click += OnSkipPasswordClick;
 
         // Пред-состояния «письмо отправлено»: повторная отправка (по виду) и возврат ко входу.
         ResendButton.Click += OnResendClick;
@@ -237,20 +285,17 @@ public partial class LoginView : UserControl
             .Subscribe(Apply2Fa)
             .DisposeWith(d);
 
-        // Живая валидация: submit активен только при валидном вводе (обе формы — вход и регистрация).
+        // Живая валидация: submit активен только при валидном вводе (обе формы — вход и регистрация,
+        // либо — на поручении — его собственный CTA; поля общие, гейты разные).
         _vm.WhenAnyValue(x => x.LoginEmail, x => x.LoginPassword)
             .ObserveOn(RxSchedulers.MainThreadScheduler)
-            .Subscribe(_ =>
-            {
-                UpdateSiteGate();
-                UpdateRegisterGate();
-            })
+            .Subscribe(_ => UpdateGates())
             .DisposeWith(d);
 
-        // Повтор пароля (регистрация): пере-считываем гейт «Создать аккаунт» + подсказку несовпадения.
+        // Повтор пароля: гейт «Создать аккаунт» / «Сохранить пароль» + подсказка несовпадения.
         _vm.WhenAnyValue(x => x.RegisterConfirmPassword)
             .ObserveOn(RxSchedulers.MainThreadScheduler)
-            .Subscribe(_ => UpdateRegisterGate())
+            .Subscribe(_ => UpdateGates())
             .DisposeWith(d);
 
         _vm.WhenAnyValue(x => x.TwoFaCode)
@@ -266,17 +311,41 @@ public partial class LoginView : UserControl
 
         // Вход выполнен — но суб-страница закрывается ТОЛЬКО после success-момента (см. OnLoggedIn):
         // BackRequested гейтится дугой→галочкой, чтобы был кадр подтверждения (§3.4).
-        _vm.WhenAnyValue(x => x.IsLoggedIn)
-            .DistinctUntilChanged()
-            .Where(loggedIn => loggedIn)
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
-            .Subscribe(_ => OnLoggedIn())
-            .DisposeWith(d);
+        //
+        // ТОЛЬКО ДЛЯ НАСТОЯЩЕГО ВХОДА. У поручения аккаунт вошёл ДО открытия страницы, и подписка,
+        // которая срабатывает сразу текущим значением, закрыла бы её через четверть секунды после
+        // появления — человек нажал «Привязать почту» и увидел моргнувший экран. Своё завершение у
+        // поручения есть (FinishErrand), и наступает оно по делу, а не по факту наличия сессии.
+        if (_errand is null)
+        {
+            _vm.WhenAnyValue(x => x.IsLoggedIn)
+                .DistinctUntilChanged()
+                .Where(loggedIn => loggedIn)
+                .ObserveOn(RxSchedulers.MainThreadScheduler)
+                .Subscribe(_ => OnLoggedIn())
+                .DisposeWith(d);
+        }
 
         // Живой перевод императивных строк (строка ошибки + подсказка глаза).
         void OnLanguageChanged(object? s, EventArgs e) => RunOnUiLang(ApplyLanguage);
         L.Instance.LanguageChanged += OnLanguageChanged;
         Disposable.Create(() => L.Instance.LanguageChanged -= OnLanguageChanged).DisposeWith(d);
+
+        // VM появилась только сейчас (DataContext ставится ПОСЛЕ конструктора), а от неё зависит вид
+        // формы: у смены адреса поле текущего пароля рисуется только когда пароль у аккаунта есть.
+        ApplyMode();
+    }
+
+    /// <summary>Пере-считывает гейты той формы, которая сейчас на экране (вход/регистрация или поручение).</summary>
+    private void UpdateGates()
+    {
+        if (_errand is not null)
+        {
+            UpdateErrandGate();
+            return;
+        }
+        UpdateSiteGate();
+        UpdateRegisterGate();
     }
 
     /// <summary>Диспетчеризует на UI-поток (событие языка/lite может прийти не из UI).</summary>
@@ -316,6 +385,11 @@ public partial class LoginView : UserControl
 
     private void ApplyLoginState(LoginState state)
     {
+        if (_errand is not null)
+        {
+            ApplyErrandState(state);
+            return;
+        }
         switch (state)
         {
             // AwaitingTelegram/Polling сюда больше НЕ приходят своим ходом: вход через Telegram
@@ -411,6 +485,239 @@ public partial class LoginView : UserControl
                 SetRegisterBusy(false);
                 break;
         }
+    }
+
+    // ── Поручения «Способов входа» (привязка · смена адреса · первый пароль) ──
+
+    /// <summary>
+    /// Машина состояний поручения. Отдельная от входной по одной причине: у поручения НЕТ успеха
+    /// входа. <see cref="LoginState.Success"/> сюда не приходит и приходить не должен — сессия уже
+    /// была, а её обработчики заново импортируют подписки и отдают оболочку экрану прогрузки.
+    /// Кончается поручение на <see cref="LoginState.EmailAttached"/>, и «кончается» значит разное:
+    /// на шаге пароля — совсем, а на ожидании письма — только когда аккаунту больше ничего не нужно.
+    /// </summary>
+    private void ApplyErrandState(LoginState state)
+    {
+        switch (state)
+        {
+            case LoginState.SiteLoading:
+                SetLoginError(string.Empty);
+                if (_viewBlock == ViewBlock.EmailPending)
+                {
+                    // «Отправить снова» — остаёмся на экране ожидания и крутим кольцо, как у регистрации.
+                    var spin = !IsReducedMotion();
+                    SetSpinning(PendingSpinner, spin);
+                    PendingSpinner.Opacity = spin ? 1 : 0;
+                }
+                else
+                {
+                    SetErrandBusy(true);
+                }
+                break;
+
+            case LoginState.AwaitingEmailVerification pending:
+                SetErrandBusy(false);
+                SetLoginError(string.Empty);
+                ConfigureEmailPending(_errand == EmailErrand.Change ? PendingKind.Change : PendingKind.Link, pending.Email);
+                ShowBlock(ViewBlock.EmailPending);
+                break;
+
+            case LoginState.EmailAttached attached:
+                SetErrandBusy(false);
+                SetLoginError(string.Empty);
+                // На шаге пароля это ответ панели «Пароль установлен»: больше ничего не нужно.
+                // На ожидании письма — ссылка открыта: адрес есть, но привязка пароля НЕ задаёт, и
+                // пока его нет, обещать вход по почте нельзя. Поэтому по умолчанию ведём в пароль.
+                if (_passwordStep || attached.Profile.HasPassword)
+                {
+                    FinishErrand();
+                }
+                else
+                {
+                    EnterPasswordStep();
+                }
+                break;
+
+            case LoginState.Error error:
+                SetErrandBusy(false);
+                ShowBlock(ViewBlock.Method);
+                ShowErrandError(error.ErrorValue);
+                break;
+
+            default: // Idle — открытие страницы. Ошибку не трогаем.
+                SetErrandBusy(false);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Переводит поручение на шаг «Придумайте пароль». Поле адреса уходит, его место занимают пароль
+    /// и повтор — те же самые поля, что у регистрации: второй набор полей для того же ввода был бы
+    /// вторым языком там, где хватает одного.
+    /// </summary>
+    private void EnterPasswordStep()
+    {
+        _passwordStep = true;
+        if (_vm != null)
+        {
+            // Пароль смены адреса (если он там был) в поле «придумайте пароль» — не подсказка, а
+            // подстава: человек нажмёт «сохранить» и заведёт себе пароль, которого не выбирал.
+            _vm.LoginPassword = string.Empty;
+            _vm.RegisterConfirmPassword = string.Empty;
+        }
+        ApplyMode();
+        ShowBlock(ViewBlock.Method);
+        if (!Design.IsDesignMode)
+        {
+            PasswordBox.Focus();
+        }
+    }
+
+    /// <summary>
+    /// Поручение доведено: та же 64-галочка, что подтверждает вход, и тот же хэндофф назад к вкладке.
+    /// Кадр подтверждения тут нужен ровно затем же — действие закончилось на сервере, и без него
+    /// страница просто исчезла бы.
+    /// </summary>
+    private void FinishErrand()
+    {
+        if (_errandDone)
+        {
+            return;
+        }
+        _errandDone = true;
+        _vm?.CancelEmailErrand();
+        // Кольцо ожидания гасим ДО галочки: крутящаяся дуга под подтверждением говорила бы, что мы
+        // всё ещё чего-то ждём, ровно в тот момент, когда ждать больше нечего.
+        SetSpinning(PendingSpinner, false);
+        _ = PlayErrandDone();
+    }
+
+    private async Task PlayErrandDone()
+    {
+        try
+        {
+            await PlayBadgeSuccess(IsReducedMotion());
+        }
+        catch (Exception ex)
+        {
+            // Движение — не причина оставить человека на законченном экране.
+            Logging.SaveLog("LoginView.PlayErrandDone", ex);
+        }
+        if (_handoffFired || _detached)
+        {
+            return;
+        }
+        _handoffFired = true;
+        BackRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Ошибку поручения ГОВОРИТ ПАНЕЛЬ там, где ей есть что сказать: у 400 на привязке три разных
+    /// смысла («Почта уже привязана», «Некорректный email», «Эта почта уже используется другим
+    /// аккаунтом»), и различить их по коду статуса нельзя.
+    ///
+    /// Два случая мы называем СВОИМИ словами, потому что они указывают на поле:
+    /// <c>PASSWORD_REQUIRED</c> — пароль не введён, <c>INVALID_PASSWORD</c> — введён неверный. Общая
+    /// красная строка на оба отправила бы человека искать опечатку в поле, которого он не заполнял.
+    /// И 401 без кода — это не «неверная почта или пароль»: пароля тут не спрашивали, это умерший
+    /// семидневный токен, и сказано про сессию.
+    /// </summary>
+    private void ShowErrandError(ApiError error)
+    {
+        var code = ApiErrorText.ServerCodeOf(error);
+        if (code == "PASSWORD_REQUIRED" || (code == "INVALID_PASSWORD" && error is ApiError.Unauthorized))
+        {
+            if (code == "PASSWORD_REQUIRED")
+            {
+                _errandPasswordRequired = true;
+                UpdateFormVisibility();
+            }
+            SetLoginErrorText(L.T(code == "PASSWORD_REQUIRED" ? "Account_PasswordRequired" : "Account_PasswordWrong"));
+            SetClass(PasswordBox, "fieldError", true);
+            DispatcherTimer.RunOnce(() => SetClass(PasswordBox, "fieldError", false), TimeSpan.FromMilliseconds(220));
+            if (!Design.IsDesignMode)
+            {
+                PasswordBox.Focus();
+            }
+            return;
+        }
+        if (error is ApiError.Unauthorized)
+        {
+            SetLoginError("Account_SessionExpired");
+            return;
+        }
+        var quoted = ApiErrorText.ServerMessageOf(error);
+        if (quoted.IsNotEmpty())
+        {
+            SetLoginErrorText(quoted!);
+            return;
+        }
+        SetLoginError(MessageKeyFor(error));
+    }
+
+    /// <summary>Спиннер на CTA поручения; сама кнопка блокируется на время запроса.</summary>
+    private void SetErrandBusy(bool busy)
+    {
+        _errandBusy = busy;
+        ErrandSpinner.IsVisible = busy;
+        ErrandButtonLabel.Opacity = busy ? 0 : 1;
+        SetSpinning(ErrandSpinner, busy && !IsReducedMotion());
+        UpdateErrandGate();
+    }
+
+    /// <summary>CTA поручения: отправить письмо (шаг полей) либо сохранить пароль (шаг пароля).</summary>
+    private void OnErrandSubmitClick(object? sender, RoutedEventArgs e)
+    {
+        if (_vm is null)
+        {
+            return;
+        }
+        if (_passwordStep)
+        {
+            Execute(_vm.SetPasswordCmd);
+            return;
+        }
+        TrimEmail();
+        Execute(_errand == EmailErrand.Change ? _vm.ChangeEmailCmd : _vm.LinkEmailCmd);
+    }
+
+    /// <summary>
+    /// «Пропустить» на шаге пароля. Шаг не обязателен — адрес уже привязан, и это настоящий выход,
+    /// а не отмена: возвращаемся во вкладку тем же движением, что и по завершении.
+    /// </summary>
+    private void OnSkipPasswordClick(object? sender, RoutedEventArgs e) => FinishErrand();
+
+    /// <summary>
+    /// Доступность CTA поручения. Привязка ждёт валидный адрес; смена — ещё и текущий пароль, когда
+    /// он у аккаунта есть (панель без него откажет, и лучше не давать нажать, чем ловить отказ);
+    /// шаг пароля — шесть символов и совпадающий повтор.
+    /// </summary>
+    private void UpdateErrandGate()
+    {
+        if (_errand is null)
+        {
+            return;
+        }
+        var email = _vm?.LoginEmail?.Trim() ?? string.Empty;
+        var password = _vm?.LoginPassword ?? string.Empty;
+        var confirm = _vm?.RegisterConfirmPassword ?? string.Empty;
+
+        bool ready;
+        if (_passwordStep)
+        {
+            ready = password.Length >= AccountViewModel.MinNewPasswordLength && confirm == password;
+            ConfirmPasswordError.IsVisible = confirm.Length > 0 && confirm != password;
+            EmailError.IsVisible = false;
+        }
+        else
+        {
+            var needsPassword = _errand == EmailErrand.Change
+                && (_errandPasswordRequired || _vm?.EmailHasPassword == true);
+            ready = IsEmail(email) && (!needsPassword || password.Length > 0);
+            EmailError.IsVisible = email.Length > 0 && !IsEmail(email);
+            ConfirmPasswordError.IsVisible = false;
+        }
+        ErrandButton.IsEnabled = !_errandBusy && ready;
     }
 
     /// <summary>
@@ -574,6 +881,14 @@ public partial class LoginView : UserControl
         SetClass(SignInTab, "segActive", !_registerMode);
         SetClass(RegisterTab, "segActive", _registerMode);
 
+        if (_errand is not null)
+        {
+            ApplyErrandCopy();
+            UpdateFormVisibility();
+            UpdateErrandGate();
+            return;
+        }
+
         ToolbarTitle.Text = L.T(_registerMode ? "Login_TabRegister" : "Login_SignIn");
         TitleText.Text = L.T(_registerMode ? "Login_TitleRegister" : "Login_Title");
         SubtitleText.Text = L.T(_registerMode ? "Login_SubtitleRegister" : "Login_Subtitle");
@@ -585,6 +900,33 @@ public partial class LoginView : UserControl
     }
 
     /// <summary>
+    /// Слова поручения: тулбар, заголовок, подсказка, подписи полей и надпись на CTA. Подсказка НЕ
+    /// обещает больше, чем делает: у привязки сказано, что почта добавится к тому же аккаунту (а не
+    /// «станет вторым способом входа» — пароля после письма всё ещё нет), у смены — что до перехода
+    /// по ссылке адрес остаётся прежним, у пароля — зачем он вообще нужен.
+    /// </summary>
+    private void ApplyErrandCopy()
+    {
+        var (titleKey, subtitleKey) = _passwordStep
+            ? ("Account_SetPasswordTitle", "Account_SetPasswordSubtitle")
+            : _errand == EmailErrand.Change
+                ? ("Account_ChangeEmailTitle", "Account_ChangeEmailSubtitle")
+                : ("Account_LinkEmailTitle", "Account_LinkEmailSubtitle");
+
+        ToolbarTitle.Text = L.T(titleKey);
+        TitleText.Text = L.T(titleKey);
+        SubtitleText.Text = L.T(subtitleKey);
+
+        EmailBox.PlaceholderText = L.T(_errand == EmailErrand.Change ? "Account_NewEmail" : "Login_Email");
+        PasswordBox.PlaceholderText = L.T(_passwordStep ? "Login_Password" : "Account_CurrentPassword");
+        RegisterPasswordHint.Text = L.T("Account_NewPasswordHint");
+        ErrandButtonLabel.Text = L.T(_passwordStep ? "Account_SavePassword" : "Account_SendLink");
+        SkipButton.Content = L.T("Account_SkipPassword");
+        // «Назад», а не «Вернуться ко входу»: входить некуда — за шагом стоит та же форма поручения.
+        BackToSignInButton.Content = L.T("Account_BackAction");
+    }
+
+    /// <summary>
     /// Gates the mutually-exclusive form regions: register fields + «Создать аккаунт» (register mode),
     /// email submit «Войти» + passwordless links + the demoted alternates block (sign-in mode), and the
     /// 2FA block (sign-in + tempToken). While 2FA is up the sign-in submit + alternates are hidden so the
@@ -593,6 +935,33 @@ public partial class LoginView : UserControl
     /// </summary>
     private void UpdateFormVisibility()
     {
+        if (_errand is not null)
+        {
+            // С формы снято две трети: ни сегмента «Вход | Регистрация», ни пассворлесс-ссылок, ни
+            // альтернативных способов, ни 2FA — это не вход и не регистрация, выбирать не из чего.
+            // Остаётся то, что поручение действительно спрашивает.
+            var fieldsStep = !_passwordStep;
+            var needsCurrentPassword = fieldsStep
+                && _errand == EmailErrand.Change
+                && (_errandPasswordRequired || _vm?.EmailHasPassword == true);
+
+            ModeSegment.IsVisible = false;
+            EmailBox.IsVisible = fieldsStep;
+            PasswordBox.IsVisible = _passwordStep || needsCurrentPassword;
+            RegisterPasswordHint.IsVisible = _passwordStep;
+            ConfirmPasswordBox.IsVisible = _passwordStep;
+
+            SiteButtonHost.IsVisible = false;
+            RegisterButtonHost.IsVisible = false;
+            PasswordlessLinks.IsVisible = false;
+            AltMethodsBlock.IsVisible = false;
+            TwoFaBlock.IsVisible = false;
+
+            ErrandButtonHost.IsVisible = true;
+            SkipButton.IsVisible = _passwordStep;
+            return;
+        }
+
         var signInForm = !_registerMode && !_twoFaVisible;
 
         // Только регистрация.
@@ -618,6 +987,8 @@ public partial class LoginView : UserControl
             PendingKind.Magic => ("Login_MagicSentTitle", "Login_MagicSentHint"),
             PendingKind.Reset => ("Login_ResetSentTitle", "Login_ResetSentHint"),
             PendingKind.Handoff => ("Login_SiteHandoff", string.Empty),
+            PendingKind.Link => ("Account_LinkEmailWaitTitle", "Account_LinkEmailWaitHint"),
+            PendingKind.Change => ("Account_ChangeEmailWaitTitle", "Account_ChangeEmailWaitHint"),
             _ => ("Login_VerifyTitle", "Login_VerifyHint"),
         };
         PendingTitle.Text = L.T(titleKey);
@@ -630,9 +1001,11 @@ public partial class LoginView : UserControl
         ResendButton.IsVisible = !transient;
         BackToSignInButton.IsVisible = !transient;
 
-        // verify-email polls login and the handoff redeems a code → spin the ring; magic/reset are a calm
-        // static «отправлено» (arc hidden, track + envelope remain). Under lite the arc is not shown at all.
-        var spin = (kind == PendingKind.Verify || kind == PendingKind.Handoff) && !IsReducedMotion();
+        // Кольцо крутится там, где приложение ДЕЙСТВИТЕЛЬНО ждёт ответа: verify-email опрашивает вход,
+        // хэндофф гасит код, привязка и смена — профиль. magic/reset ничего не опрашивают, у них
+        // спокойное статичное «отправлено» (дуга скрыта, трек и конверт остаются). Под lite дуги нет.
+        var spin = kind is PendingKind.Verify or PendingKind.Handoff or PendingKind.Link or PendingKind.Change
+            && !IsReducedMotion();
         SetSpinning(PendingSpinner, spin);
         PendingSpinner.Opacity = spin ? 1 : 0;
     }
@@ -793,6 +1166,15 @@ public partial class LoginView : UserControl
     private void SetLoginError(string messageKey)
     {
         _loginErrorKey = messageKey;
+        _loginErrorText = string.Empty;
+        UpdateErrorLine();
+    }
+
+    /// <summary>Ставит ГОТОВУЮ фразу (цитата панели) вместо ключа — переводить её нечем и незачем.</summary>
+    private void SetLoginErrorText(string text)
+    {
+        _loginErrorText = text;
+        _loginErrorKey = string.Empty;
         UpdateErrorLine();
     }
 
@@ -800,7 +1182,9 @@ public partial class LoginView : UserControl
     /// translateY −4→0, 220мс), lite — мгновенно. Ключ переводится вживую.</summary>
     private void UpdateErrorLine()
     {
-        var text = _loginErrorKey.IsNotEmpty() ? L.T(_loginErrorKey) : (_vm?.ErrorText ?? string.Empty);
+        var text = _loginErrorText.IsNotEmpty()
+            ? _loginErrorText
+            : (_loginErrorKey.IsNotEmpty() ? L.T(_loginErrorKey) : (_vm?.ErrorText ?? string.Empty));
         ErrorLine.Text = text;
         var show = text.IsNotEmpty();
 
@@ -967,6 +1351,12 @@ public partial class LoginView : UserControl
             case PendingKind.Reset:
                 Execute(_vm?.PasswordResetCmd);
                 break;
+            case PendingKind.Link:
+            case PendingKind.Change:
+                // То же письмо на тот же адрес. Адрес (и пароль смены) держит VM — на этом экране их
+                // уже нет, а после любой ошибки не было бы и в полях.
+                Execute(_vm?.ResendEmailLinkCmd);
+                break;
             default:
                 // Verify-email: повторная регистрация переотправляет письмо и перезапускает поллинг.
                 Execute(_vm?.RegisterCmd);
@@ -978,6 +1368,15 @@ public partial class LoginView : UserControl
     private void OnBackToSignInClick(object? sender, RoutedEventArgs e)
     {
         SetLoginError(string.Empty);
+        if (_errand is not null)
+        {
+            // У поручения это «Назад», а не «Вернуться ко входу»: останавливаем опрос и возвращаемся
+            // к форме, с которой письмо ушло, — страницу не закрываем, адрес в поле остаётся.
+            _vm?.CancelEmailErrand();
+            ShowBlock(ViewBlock.Method);
+            UpdateErrandGate();
+            return;
+        }
         // The button says «Вернуться ко входу» — land on the sign-in form, not the register form we may
         // have come from (register → verify-email → back).
         SetMode(register: false);

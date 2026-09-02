@@ -1,7 +1,7 @@
 namespace v2rayN.Desktop.Common;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// OWNER: WP3 — Settings + sub-pages.
+// OWNER: WP3. Settings + sub-pages.
 // Keys: Settings_*, Dns_*, Routing_*, PerApp_*, Ping_*, Geo_*, About_*, Backup_*,
 //       UrlSchemes_*, Provider_* (+ Common_* references).
 // Views: SettingsView(.axaml/.cs), SettingsViewModel, DnsSubView, RoutingSubView,
@@ -21,7 +21,7 @@ public sealed partial class L
 {
     partial void RegisterSettings()
     {
-        // ── SettingsView — section headers + rows ──
+        // ── SettingsView: section headers + rows ──
         Add("Settings_SecConnection", "Подключение", "Connection");
         Add("Settings_Mode", "Режим", "Mode");
         Add("Settings_ModeProxy", "Только прокси", "Proxy only");
@@ -75,7 +75,7 @@ public sealed partial class L
         Add("Settings_UrlSchemes", "Схемы URL-адресов", "URL schemes");
         Add("Settings_UrlSchemesHint", "Быстрые команды depv://", "Quick depv:// commands");
 
-        // ── SettingsViewModel — display-value resolvers (language-aware) ──
+        // ── SettingsViewModel: display-value resolvers (language-aware) ──
         Add("Settings_PerAppExcept", "кроме", "except");
         Add("Settings_PerAppOnly", "только", "only");
         Add("Settings_ThemeLight", "Светлая", "Light");
@@ -118,7 +118,7 @@ public sealed partial class L
         // ── PingSettingsPage (only Real / TCP rows) ──
         Add("Ping_Intro", "Как измеряется задержка до серверов", "How latency to servers is measured");
         Add("Ping_RealTitle", "Реальная задержка", "Real latency");
-        Add("Ping_RealHint", "Замер через туннель — точнее, но медленнее", "Measured through the tunnel — more accurate, but slower");
+        Add("Ping_RealHint", "Замер через туннель: точнее, но медленнее", "Measured through the tunnel: more accurate, but slower");
         Add("Ping_TcpHint", "tcping до адреса сервера", "tcping to the server address");
         Add("Ping_TestAddress", "Адрес проверки задержки", "Latency test address");
         Add("Ping_Timeout", "Тайм-аут проверки, сек", "Test timeout, sec");
@@ -130,7 +130,7 @@ public sealed partial class L
         Add("Geo_SizeUpdated", "{0} МБ · обновлён {1}", "{0} MB · updated {1}");
         Add("Geo_Updating", "Обновление…", "Updating…");
         Add("Geo_Downloading", "Загрузка баз…", "Downloading databases…");
-        Add("Geo_Done", "Готово — базы обновлены.", "Done — databases updated.");
+        Add("Geo_Done", "Готово. Базы обновлены.", "Done. Databases updated.");
         Add("Geo_Failed", "Не удалось обновить: ", "Update failed: ");
 
         // ── AboutPage ──
@@ -153,7 +153,7 @@ public sealed partial class L
         Add("UrlSchemes_Toggle", "Переключить соединение", "Toggle the connection");
         Add("UrlSchemes_Import", "Импорт (автоопределение типа)", "Import (auto-detect type)");
         Add("UrlSchemes_WindowsOnly", "Регистрация схемы доступна только на Windows.", "Scheme registration is available on Windows only.");
-        Add("UrlSchemes_Registered", "Схема зарегистрирована — ссылки depv:// открывают departament.", "Scheme registered — depv:// links open departament.");
+        Add("UrlSchemes_Registered", "Схема зарегистрирована. Ссылки depv:// открывают departament.", "Scheme registered. depv:// links open departament.");
         Add("UrlSchemes_NotRegistered", "Схема не зарегистрирована.", "Scheme not registered.");
         Add("UrlSchemes_NoPath", "Не удалось определить путь к программе.", "Couldn't determine the app's path.");
         Add("UrlSchemes_RegisterFailed", "Не удалось зарегистрировать: ", "Registration failed: ");
@@ -170,7 +170,7 @@ public sealed partial class L
         Add("Provider_UserAgentHint", "Отправляется ядром на исходящих соединениях.", "Sent by the core on outbound connections.");
 
         // ═════════════════════════════════════════════════════════════════════════════════════════
-        // Подэкраны настроек по единому лекалу (screens.md «Подэкраны»). Строки — как в спецификации.
+        // Подэкраны настроек по единому лекалу (screens.md «Подэкраны»). Строки как в спецификации.
         // ═════════════════════════════════════════════════════════════════════════════════════════
 
         // ── DNS ──
@@ -181,7 +181,7 @@ public sealed partial class L
         // ── Пинг ──
         Add("Ping_TcpTitle", "TCP-соединение", "TCP connection");
         Add("Ping_Params", "Параметры проверки", "Test parameters");
-        Add("Ping_Unsupported", "HTTP-запрос и ICMP ядром не измеряются — доступны реальная задержка и TCP.", "HTTP request and ICMP aren't measured by the core — real latency and TCP are available.");
+        Add("Ping_Unsupported", "HTTP-запрос и ICMP ядром не измеряются. Доступны реальная задержка и TCP.", "HTTP request and ICMP aren't measured by the core. Real latency and TCP are available.");
 
         // ── Прокси по приложениям ──
         Add("PerApp_Mode", "Режим", "Mode");
@@ -207,7 +207,7 @@ public sealed partial class L
         Add("LocalProxy_BlockUdp", "Блокировать UDP", "Block UDP");
         Add("LocalProxy_BlockUdpHint", "Запретить UDP через прокси", "Disallow UDP through the proxy");
         Add("LocalProxy_Foot", "Порты меняются только при отключённом туннеле.", "Ports can only be changed while the tunnel is off.");
-        Add("LocalProxy_FootLive", "Туннель включён — порт менять нельзя. Отключитесь, чтобы изменить его.", "The tunnel is on — the port can't be changed. Disconnect to change it.");
+        Add("LocalProxy_FootLive", "Туннель включён, порт менять нельзя. Отключитесь, чтобы изменить его.", "The tunnel is on, the port can't be changed. Disconnect to change it.");
 
         // ── Маршрутизация ──
         // Ключей редактора правил («Правила», «Добавить правило», «Сбросить») тут нет намеренно:
@@ -224,7 +224,7 @@ public sealed partial class L
 
         //  ── Наборы «Прокси по приложениям» ──
         Add("PerApp_PresetGames", "Игры", "Games");
-        Add("PerApp_PresetGamesHint", "Соревновательные игры идут мимо VPN — задержка ниже", "Competitive games skip the VPN — lower latency");
+        Add("PerApp_PresetGamesHint", "Соревновательные игры идут мимо VPN: задержка ниже", "Competitive games skip the VPN: lower latency");
         Add("PerApp_PresetLaunchers", "Игровые лаунчеры", "Game launchers");
         Add("PerApp_PresetLaunchersHint", "Загрузки быстрее, но магазин увидит ваш настоящий регион", "Faster downloads, but the store sees your real region");
 
@@ -283,7 +283,7 @@ public sealed partial class L
         // Только три рабочие ссылки (сайт · обратная связь · обновления). Ключей под «Исходный код»,
         // «Лицензии открытого ПО», «Канал в Telegram» и «Политику конфиденциальности» тут нет: адресов
         // под них не существует, и владелец решил эти строки не заводить. «Идентификатор» заменён
-        // «Системой» — андроидного идентификатора пакета на ПК нет.
+        // «Системой»: андроидного идентификатора пакета на ПК нет.
         Add("About_SecApp", "Приложение", "Application");
         Add("About_VersionRow", "Версия", "Version");
         Add("About_SecLinks", "Ссылки и документы", "Links and documents");

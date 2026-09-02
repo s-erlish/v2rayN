@@ -39,6 +39,11 @@ public interface IDepartamentApiClient
     Task<LinkTelegramRequestDto> RequestLinkTelegram();
     Task<MessageResponseDto> RequestLinkEmail(string email);
     Task<MessageResponseDto> SetPassword(string newPassword);
+
+    /// <summary>Replace an already-attached address; <paramref name="currentPassword"/> is required
+    /// by the panel exactly when the account has one (see <see cref="UserProfileDto.HasPassword"/>).</summary>
+    Task<MessageResponseDto> RequestChangeEmail(string newEmail, string? currentPassword);
+
     Task<UserProfileDto> LinkGoogle(string idToken);
 
     // Subscription

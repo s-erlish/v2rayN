@@ -891,7 +891,12 @@
                         <Border Classes="SubDivider" />
 
                         <!--  Сайт: адрес почты как идентификатор привязки; «Открыть» — вход в веб-кабинет
-                              по одноразовому SSO-хэндоффу, «Добавить» — привязать почту (флайаут).  -->
+                              по одноразовому SSO-хэндоффу. Второе действие ОДНО и называет недостающий
+                              шаг: «Добавить» (адреса нет) → «Задать пароль» (адрес есть, войти по нему
+                              ещё нельзя) → «Изменить». Раньше на его месте был флайаут с полем: письмо
+                              он отправлял, но ждать ответа было негде — приложение не узнавало, что
+                              ссылку открыли, и строка продолжала говорить «Не привязан». Теперь строка
+                              ведёт на суб-страницу, где есть и форма, и ожидание письма.  -->
                         <Border Classes="SubRow">
                             <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
                                 <Border
@@ -915,33 +920,9 @@
                                     Spacing="4"
                                     VerticalAlignment="Center">
                                     <Button
+                                        x:Name="EmailActionButton"
                                         Classes="LinkAction"
-                                        Content="{loc:T Account_AddAction}"
-                                        IsVisible="{Binding !EmailLinked}">
-                                        <Button.Flyout>
-                                            <Flyout FlyoutPresenterTheme="{StaticResource IncyFlyoutTheme}" Placement="Bottom">
-                                                <StackPanel
-                                                    Width="264"
-                                                    Spacing="12"
-                                                    x:DataType="vms:AccountViewModel">
-                                                    <TextBlock Classes="Title" Text="{loc:T Account_EmailLinkTitle}" />
-                                                    <TextBlock
-                                                        Classes="Caption"
-                                                        Text="{loc:T Account_EmailLinkHint}"
-                                                        TextWrapping="Wrap" />
-                                                    <TextBox Text="{Binding LinkEmailInput, Mode=TwoWay}" PlaceholderText="{loc:T Login_Email}" />
-                                                    <!--  Тот же класс, что у «Продолжить»: вторая шторка —
-                                                          та же кнопка в том же окружении.  -->
-                                                    <Button
-                                                        HorizontalAlignment="Stretch"
-                                                        HorizontalContentAlignment="Center"
-                                                        Classes="Primary FlyoutCta"
-                                                        Command="{Binding LinkEmailCmd}"
-                                                        Content="{loc:T Account_Send}" />
-                                                </StackPanel>
-                                            </Flyout>
-                                        </Button.Flyout>
-                                    </Button>
+                                        Content="{Binding EmailActionText}" />
                                     <Button
                                         Classes="LinkAction"
                                         Command="{Binding OpenWebCabinetCmd}"

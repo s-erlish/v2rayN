@@ -33,6 +33,13 @@ public partial class AccountView : UserControl
     public event EventHandler? LoginRequested;
 
     /// <summary>
+    /// Действие строки «Почта» в «Способах входа» — хост открывает суб-страницу поручения. Какое
+    /// именно поручение, решает состояние аккаунта: адреса нет — привязать, адрес есть, а пароля нет —
+    /// задать пароль, есть и то и другое — сменить адрес.
+    /// </summary>
+    public event EventHandler<EmailErrand>? EmailErrandRequested;
+
+    /// <summary>
     /// CTA «Войти через Telegram» на гейте входа (logged-out).
     ///
     /// Ведёт РОВНО туда же, куда та же кнопка начального экрана: открывает экран прогрузки
@@ -58,6 +65,22 @@ public partial class AccountView : UserControl
 
     private AccountViewModel? _vm;
 
+    /// <summary>
+    /// Одно действие строки почты — три поручения. Выбор делается по ПРОФИЛЮ, а не по надписи на
+    /// кнопке: надпись и выбор считаются из одного и того же состояния, поэтому разойтись не могут.
+    /// </summary>
+    private void OnEmailAction()
+    {
+        if (DataContext is not AccountViewModel vm)
+        {
+            return;
+        }
+        var errand = !vm.EmailLinked ? EmailErrand.Link
+            : !vm.EmailHasPassword ? EmailErrand.SetPassword
+            : EmailErrand.Change;
+        EmailErrandRequested?.Invoke(this, errand);
+    }
+
     public AccountView()
     {
         InitializeComponent();
@@ -76,6 +99,7 @@ public partial class AccountView : UserControl
         HistoryRow.Tapped += (_, _) => HistoryRequested?.Invoke(this, EventArgs.Empty);
         LoginTelegramButton.Click += (_, _) => OnLoginTelegram();
         LoginSiteButton.Click += (_, _) => LoginRequested?.Invoke(this, EventArgs.Empty);
+        EmailActionButton.Click += (_, _) => OnEmailAction();
         LogoutRow.Tapped += (_, _) => (DataContext as AccountViewModel)?.LogoutCmd.Execute().Subscribe();
 
         // Чип баланса — второй якорь того же флайаута пополнения. Второй Flyout здесь завёл бы

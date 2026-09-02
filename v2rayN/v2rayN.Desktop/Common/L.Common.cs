@@ -2,7 +2,7 @@ namespace v2rayN.Desktop.Common;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // OWNER: WP0 (Foundation). Shared Common_* keys reused across every screen.
-// WP1–WP6 only *reference* these keys via {loc:T Common_*} / L.T("Common_*") —
+// WP1..WP6 only *reference* these keys via {loc:T Common_*} / L.T("Common_*"):
 // they must NOT edit this file. Add screen-specific keys to your own L.<Area>.cs.
 // ─────────────────────────────────────────────────────────────────────────────
 

@@ -1,7 +1,7 @@
 namespace v2rayN.Desktop.Common;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// OWNER: WP5 — Buy / Devices / Payment history.  Keys: Buy_*, Devices_*, History_*
+// OWNER: WP5. Buy / Devices / Payment history.  Keys: Buy_*, Devices_*, History_*
 //        (+ Common_* references).
 // Views: BuyView, BuyViewModel, DevicesView, DevicesViewModel, PaymentHistoryView,
 //        PaymentHistoryViewModel.
@@ -15,7 +15,7 @@ public sealed partial class L
     {
         // ── Buy («Купить подписку») ──
         Add("Buy_Paid", "Подписка оплачена", "Subscription paid");
-        Add("Buy_PaidSubtitle", "Серверы уже добавлены — можно подключаться", "Servers are already added — you can connect");
+        Add("Buy_PaidSubtitle", "Серверы уже добавлены, можно подключаться", "Servers are already added, you can connect");
         Add("Buy_ChoosePlan", "Выберите тариф", "Choose a plan");
         // Пояснение под заголовком подэкрана (лекало: заголовок 22/700 → пояснение 13).
         Add("Buy_Note", "Выберите тариф и срок", "Choose a plan and a term");
@@ -37,7 +37,7 @@ public sealed partial class L
         Add("Buy_NoPlans", "Тарифы недоступны", "No plans available");
         Add("Buy_ChoosePeriod", "Выберите срок подписки", "Choose a subscription period");
         Add("Buy_NoPaymentMethods", "Способы оплаты недоступны", "No payment methods available");
-        Add("Buy_FromBalance", "С баланса — {0}", "From balance — {0}");
+        Add("Buy_FromBalance", "С баланса · {0}", "From balance · {0}");
         Add("Buy_PaymentError", "Ошибка оплаты", "Payment error");
         Add("Buy_DevicesTraffic", "Устройства: {0} · Трафик: {1}", "Devices: {0} · Traffic: {1}");
 

@@ -44,13 +44,26 @@ public abstract record LoginState
     /// <summary>Confirmed — session persisted; carries the profile.</summary>
     public sealed record Success(UserProfileDto Profile) : LoginState;
 
+    /// <summary>
+    /// The emailed link was opened and the PROFILE now carries the address — the ending of
+    /// <see cref="AuthManager.BeginLinkEmail"/> / <see cref="AuthManager.BeginChangeEmail"/>.
+    ///
+    /// Deliberately NOT <see cref="Success"/>: that one means «a session has just been issued» and its
+    /// handlers re-import subscriptions and hand the shell to the sync overlay. Here the session was
+    /// already there — the account merely gained an address, and the only things that follow are the
+    /// profile landing in the cache and, when it still has no password, the step that gives it one.
+    /// </summary>
+    public sealed record EmailAttached(UserProfileDto Profile) : LoginState;
+
     public sealed record Error(ApiError ErrorValue) : LoginState;
 }
 
 /// <summary>
-/// Orchestrates the auth flows only (Telegram deep-link login, site email/password, TOTP 2FA). There
-/// is NO refresh/logout here — the JWT is 7-day and non-refreshable; session persistence is delegated
-/// to <see cref="AccountSession"/>/<see cref="AuthTokenStore"/>. Port of V2rayNG auth/AuthManager.kt.
+/// Orchestrates the auth flows only (Telegram deep-link login, site email/password, TOTP 2FA) plus the
+/// two errands that attach an address to a session that already exists (<see cref="BeginLinkEmail"/>,
+/// <see cref="BeginChangeEmail"/> — same emailed link, same wait). There is NO refresh/logout here —
+/// the JWT is 7-day and non-refreshable; session persistence is delegated to
+/// <see cref="AccountSession"/>/<see cref="AuthTokenStore"/>. Port of V2rayNG auth/AuthManager.kt.
 /// </summary>
 public sealed class AuthManager
 {
@@ -337,6 +350,155 @@ public sealed class AuthManager
             }
             // A freshly registered account cannot have TOTP, so Requires2Fa is not expected here; ignore
             // it and keep waiting rather than stranding the user on a code prompt they cannot satisfy.
+        }
+    }
+
+    /// <summary>
+    /// <b>Attaching an email to the account that is already signed in.</b>
+    ///
+    /// The errand a Telegram-only account arrives with: it has no address, so «Способы входа» has
+    /// nothing to report on its email row and the panel has no second way to let that person back in.
+    /// <c>POST /client/link-email-request</c> carries the address ALONE — the Bearer token already says
+    /// which account is asking, and no password is set here (that is <see cref="SetPassword"/>'s job,
+    /// and until it runs the address is an identifier the user cannot sign in with).
+    ///
+    /// Shaped like <see cref="BeginRegister"/> and for the same reason: the errand does not end with the
+    /// request. A 200 only means a letter is out, and the wait that follows is the user's, not the
+    /// network's — so the state moves to <see cref="LoginState.AwaitingEmailVerification"/> and the flow
+    /// sits on <see cref="PollUntilProfile"/> until the link is opened. Also serves as the «отправить
+    /// снова» action: a fresh call re-sends the letter and restarts the poll.
+    /// </summary>
+    public async Task BeginLinkEmail(string email, Action<LoginState> emit, CancellationToken cancellationToken)
+    {
+        if (!BackendConfig.IsConfigured())
+        {
+            emit(new LoginState.Error(new ApiError.NotConfiguredError()));
+            return;
+        }
+        try
+        {
+            await _api.RequestLinkEmail(email);
+        }
+        catch (ApiError e)
+        {
+            emit(new LoginState.Error(e));
+            return;
+        }
+        emit(new LoginState.AwaitingEmailVerification(email));
+
+        // The address the letter went to is deliberately NOT compared against the one that comes back:
+        // the panel owns that value and hands it back normalised (trimmed, lower-cased), so an equality
+        // test would wait forever for a link that was opened correctly. An account that HAS an address
+        // where it had none is the whole signal.
+        await PollUntilProfile(profile => profile.Email.IsNotEmpty(), emit, cancellationToken);
+    }
+
+    /// <summary>
+    /// <b>Replacing the address already attached to this account.</b>
+    ///
+    /// A different endpoint from <see cref="BeginLinkEmail"/> and a different guard: the panel refuses
+    /// <c>/link-email-request</c> outright once an address exists («Почта уже привязана»), and asks
+    /// <c>/profile/change-email/request</c> for the CURRENT PASSWORD whenever the account has one —
+    /// otherwise anyone holding a borrowed session could move the account to their own address. The
+    /// two refusals that guard says (400 <c>PASSWORD_REQUIRED</c>, 401 <c>INVALID_PASSWORD</c>) reach
+    /// the caller as-is; separating them is the screen's job.
+    ///
+    /// The confirmation is the same letter with the same link, so the wait is the same wait — but what
+    /// it watches for differs. The profile already carries an address, so «non-blank» would be true on
+    /// the very first poll; what changes when the link is opened is the address ITSELF, and that is
+    /// what <paramref name="previousEmail"/> is compared against. Compared against the OLD one, never
+    /// the new one, for the same normalisation reason as <see cref="BeginLinkEmail"/>.
+    /// </summary>
+    public async Task BeginChangeEmail(
+        string newEmail,
+        string? currentPassword,
+        string previousEmail,
+        Action<LoginState> emit,
+        CancellationToken cancellationToken)
+    {
+        if (!BackendConfig.IsConfigured())
+        {
+            emit(new LoginState.Error(new ApiError.NotConfiguredError()));
+            return;
+        }
+        try
+        {
+            await _api.RequestChangeEmail(newEmail, currentPassword);
+        }
+        catch (ApiError e)
+        {
+            emit(new LoginState.Error(e));
+            return;
+        }
+        emit(new LoginState.AwaitingEmailVerification(newEmail));
+        await PollUntilProfile(
+            profile => profile.Email.IsNotEmpty()
+                && !string.Equals(profile.Email.Trim(), previousEmail.Trim(), StringComparison.OrdinalIgnoreCase),
+            emit,
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Watches for the emailed link being opened by asking the one question whose answer changes when
+    /// it is: the PROFILE. Registration polls the login instead (the account it is waiting on does not
+    /// exist yet); these errands are run BY a session, so <c>/client/auth/me</c> is what moves.
+    ///
+    /// Two things here are load-bearing.
+    ///
+    /// First, <b>every failure is swallowed</b>, exactly as in <see cref="PollUntilVerified"/>: an
+    /// unread letter is not news, and neither is a network blip. On timeout the flow simply stops and
+    /// leaves the waiting screen up — «отправить снова» and «назад» are both still there, and inventing
+    /// an error for a letter that may be read a minute later would be a lie.
+    ///
+    /// Second, the poll asks <see cref="_api"/> DIRECTLY rather than going through
+    /// <see cref="AccountRepository.RefreshProfile"/>: a 401 on the identity endpoint ENDS THE SESSION
+    /// there, and a seven-day token that died while a letter was in flight must not sign the user out
+    /// from inside a background poll they cannot see. They would come back from the letter to a
+    /// logged-out app and no idea why.
+    ///
+    /// The profile is written to <see cref="AccountSession"/> before the state is emitted, so the row
+    /// that sent the user here reports the new address from cache rather than from a lucky reload.
+    /// </summary>
+    private async Task PollUntilProfile(
+        Func<UserProfileDto, bool> attached,
+        Action<LoginState> emit,
+        CancellationToken cancellationToken)
+    {
+        var pollInterval = TimeSpan.FromSeconds(4);
+        var deadline = DateTime.UtcNow.AddMinutes(10);
+
+        while (DateTime.UtcNow < deadline)
+        {
+            try
+            {
+                await Task.Delay(pollInterval, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+
+            UserProfileDto profile;
+            try
+            {
+                profile = await _api.GetMe();
+            }
+            catch (ApiError)
+            {
+                continue; // Not opened yet, or a blip. Neither is news.
+            }
+
+            if (cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+
+            if (attached(profile))
+            {
+                AccountSession.UpdateProfile(profile);
+                emit(new LoginState.EmailAttached(profile));
+                return;
+            }
         }
     }
 

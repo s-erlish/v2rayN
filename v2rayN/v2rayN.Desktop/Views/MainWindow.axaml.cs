@@ -3,6 +3,7 @@ using Avalonia.Animation;
 using Avalonia.Animation.Easings;
 using Avalonia.LogicalTree;
 using Avalonia.VisualTree;
+using v2rayN.Desktop.Account;
 using v2rayN.Desktop.Base;
 using v2rayN.Desktop.Common;
 using v2rayN.Desktop.Manager;
@@ -321,6 +322,7 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         _accountView.DevicesRequested += (_, _) => OpenDevices();
         _accountView.HistoryRequested += (_, _) => OpenHistory();
         _accountView.LoginRequested += (_, _) => OpenLogin();
+        _accountView.EmailErrandRequested += (_, errand) => OpenEmailErrand(errand);
 
         // Вкладка «Аккаунт» ВСЕГДА видна в шелле (как нижняя навигация Android): пользователь
         // с подпиской, но без входа, иначе не доберётся до логина. В logged-out AccountView сам
@@ -333,14 +335,22 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         }
 
         // DEV screenshot hook: PREVIEW_VIEW=buy|login|devices|history renders that (still
-        // un-wired) sub-page with design-time data into the content area for capture.
+        // un-wired) sub-page with design-time data into the content area for capture. The four
+        // link-email|link-email-wait|change-email|set-password values render the «Способы входа»
+        // errand page at each of its steps — the wait one with the letter already out, because that
+        // state only exists after a real request and otherwise cannot be looked at.
         var previewView = Environment.GetEnvironmentVariable("PREVIEW_VIEW");
         if (previewView is not null)
         {
             Control? preview = previewView switch
             {
                 "buy" => new BuyView { DataContext = BuyViewModel.CreateDesign() },
+                "account" => new AccountView { DataContext = AccountViewModel.CreateDesign() },
                 "login" => new LoginView { DataContext = AccountViewModel.CreateDesign() },
+                "link-email" => ErrandPreview(EmailErrand.Link),
+                "link-email-wait" => ErrandPreview(EmailErrand.Link, waiting: true),
+                "change-email" => ErrandPreview(EmailErrand.Change),
+                "set-password" => ErrandPreview(EmailErrand.SetPassword),
                 "devices" => new DevicesView { DataContext = DevicesViewModel.CreateDesign() },
                 "history" => new PaymentHistoryView { DataContext = PaymentHistoryViewModel.CreateDesign() },
                 _ => null
@@ -1460,6 +1470,18 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         }
     }
 
+    /// <summary>DEV screenshot hook: одна ступень поручения «Способов входа» на дизайнерских данных.</summary>
+    private static LoginView ErrandPreview(EmailErrand errand, bool waiting = false)
+    {
+        var vm = AccountViewModel.CreateDesign();
+        vm.LoginEmail = "user@example.com";
+        if (waiting)
+        {
+            vm.CurrentLoginState = new LoginState.AwaitingEmailVerification("user@example.com");
+        }
+        return new LoginView(errand) { DataContext = vm };
+    }
+
     // «Купить подписку»: BuyView со своим BuyViewModel (грузит каталог в ctor).
     public void OpenBuy()
     {
@@ -1501,6 +1523,23 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
             {
                 _accountVm.CancelLogin();
             }
+            PopSubPage();
+        };
+        PushSubPage(view);
+    }
+
+    // «Способы входа» → «Почта»: та же суб-страница «Входа», открытая как ПОРУЧЕНИЕ существующего
+    // аккаунта (привязать адрес · сменить адрес · задать первый пароль). Поручение объявляется VM ДО
+    // создания вью — форму открывает чистой, — и передаётся в конструктор, а не свойством после него:
+    // подписка на IsLoggedIn внутри вью срабатывает мгновенно и на вошедшем аккаунте закрыла бы
+    // страницу сама. Возврат по «назад» останавливает и запрос, и опрос профиля за ним.
+    public void OpenEmailErrand(EmailErrand errand)
+    {
+        _accountVm.BeginEmailErrand(errand);
+        var view = new LoginView(errand) { DataContext = _accountVm };
+        view.BackRequested += (_, _) =>
+        {
+            _accountVm.CancelEmailErrand();
             PopSubPage();
         };
         PushSubPage(view);
