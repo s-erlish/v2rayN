@@ -222,7 +222,14 @@ public partial class CoreConfigV2rayService
                         }
                         usersItem.id = _node.Password;
                         usersItem.email = Global.UserEMail;
-                        usersItem.encryption = protocolExtra.VlessEncryption;
+                        //  encryption у VLESS обязателен: Xray отказывается собирать outbound с
+                        //  пустым значением («VLESS users: please add/set "encryption":"none"») и
+                        //  падает на старте — ядро не поднимается вовсе. Пустым оно приезжает с
+                        //  профилей, прошедших миграцию V2→V3 с незаполненным Security. Нормализуем
+                        //  здесь, на выходе: место, мимо которого не пройдёт ни один узел.
+                        usersItem.encryption = protocolExtra.VlessEncryption.IsNullOrEmpty()
+                            ? Global.None
+                            : protocolExtra.VlessEncryption;
 
                         if (protocolExtra.Flow.IsNullOrEmpty())
                         {

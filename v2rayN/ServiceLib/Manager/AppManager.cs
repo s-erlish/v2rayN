@@ -532,7 +532,9 @@ public sealed class AppManager
                         extra = extra with
                         {
                             Flow = item.Flow.NullIfEmpty(),
-                            VlessEncryption = item.Security,
+                            //  У старых профилей Security мог быть пустым, а пустой encryption
+                            //  Xray не принимает и не запускается вовсе. Переносим «none».
+                            VlessEncryption = item.Security.IsNullOrEmpty() ? Global.None : item.Security,
                         };
                         break;
 

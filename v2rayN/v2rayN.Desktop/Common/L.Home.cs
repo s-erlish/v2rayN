@@ -27,6 +27,20 @@ public sealed partial class L
         // but a user-facing literal in an owned Home view, so localized here.
         Add("Home_RetryHint", "Нажмите, чтобы повторить", "Tap to retry");
 
+        //  ПОЧЕМУ НЕ ПОДКЛЮЧИЛОСЬ. Пилюля говорит ЧТО случилось («Не удалось подключиться»),
+        //  подсказка под ней — ПОЧЕМУ и ЧТО ДЕЛАТЬ (00-rules §9.4). Раньше здесь всегда стояло
+        //  «Нажмите, чтобы повторить»: повторять одно и то же, не зная причины, бессмысленно, а
+        //  настоящая причина уходила в журнал, которого никто не видит. Разбор причины —
+        //  HomeViewModel.DescribeConnectFailure по ECoreStartFailure и тексту ядра.
+        Add("Home_FailNoServer", "Сервер не выбран. Выберите сервер в списке слева и повторите.", "No server selected. Pick one from the list and try again.");
+        Add("Home_FailCoreMissing", "Не хватает файлов приложения: ядро VPN не найдено. Переустановите приложение.", "The app is missing files: the VPN core wasn't found. Reinstall the app.");
+        Add("Home_FailConfig", "Настройки сервера не подходят. Обновите подписку и повторите.", "The server settings don't fit. Refresh the subscription and try again.");
+        Add("Home_FailPortBusy", "Локальный порт занят другой программой. Закройте другой VPN и повторите.", "A local port is taken by another program. Close the other VPN and try again.");
+        Add("Home_FailNoRights", "Не хватает прав на сетевой адаптер. Запустите приложение от имени администратора.", "Not enough rights for the network adapter. Run the app as administrator.");
+        Add("Home_FailServerRefused", "Сервер не отвечает. Выберите другой сервер или повторите позже.", "The server isn't responding. Pick another server or try again later.");
+        Add("Home_FailCoreRejected", "Ядро отклонило настройки сервера. Обновите подписку и выберите сервер заново.", "The core rejected the server settings. Refresh the subscription and pick a server again.");
+        Add("Home_FailUnknown", "Ядро VPN не запустилось. Причина записана в журнале: «Настройки», раздел «Журнал».", "The VPN core didn't start. The reason is in the log: Settings, Log section.");
+
         // ── Empty / onboarding (no subscriptions) ──
         Add("Home_Welcome", "Приветствуем!", "Welcome!");
         Add("Home_NoSubs", "Пока нет подписок", "No subscriptions yet");

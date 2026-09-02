@@ -525,6 +525,16 @@ public partial class ConnectHeroView : UserControl
     }
 
     /// <summary>
+    /// Подпись под щитом в состоянии Error: ПОЧЕМУ не подключилось и что делать (00-rules §9.4).
+    /// Пустая строка возвращает прежнюю тихую аффорданс-подсказку «Нажмите, чтобы повторить» —
+    /// щит остаётся кнопкой повтора в обоих случаях.
+    /// </summary>
+    public void SetErrorReason(string? reason)
+    {
+        RetryHint.Text = reason.IsNullOrEmpty() ? L.T("Home_RetryHint") : reason;
+    }
+
+    /// <summary>
     /// Задаёт щит/кольца/glow/подпись для состояния подключения. <paramref name="hasServer"/>
     /// тускнит idle-щит (0.38) и меняет «Не подключено» ↔ «Выберите сервер».
     /// <paramref name="animate"/> = живой переход в connected (играет сонар-подтверждение).
