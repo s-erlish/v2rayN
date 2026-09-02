@@ -120,6 +120,9 @@ public sealed partial class L
         Add("Account_SiteMethod", "Сайт", "Website");
         Add("Account_LinkedAs", "Привязан · {0}", "Linked · {0}");
         Add("Account_NotLinked", "Не привязан", "Not linked");
+        // Третье состояние строки «Почта»: адрес привязан, а пароля за ним нет — войти по нему
+        // нельзя. «Привязан · адрес» здесь обещал бы вход, которого не существует.
+        Add("Account_EmailNoPassword", "Нужен пароль для входа · {0}", "Password needed to sign in · {0}");
 
         // ── Linking block (Способы входа) ──
         Add("Account_LinkingTitle", "Способы входа", "Sign-in methods");

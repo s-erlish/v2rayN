@@ -346,6 +346,7 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
             {
                 "buy" => new BuyView { DataContext = BuyViewModel.CreateDesign() },
                 "account" => new AccountView { DataContext = AccountViewModel.CreateDesign() },
+                "account-nopass" => new AccountView { DataContext = AccountViewModel.CreateDesignEmailWithoutPassword() },
                 "login" => new LoginView { DataContext = AccountViewModel.CreateDesign() },
                 "link-email" => ErrandPreview(EmailErrand.Link),
                 "link-email-wait" => ErrandPreview(EmailErrand.Link, waiting: true),

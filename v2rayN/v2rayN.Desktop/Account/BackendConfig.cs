@@ -74,6 +74,15 @@ public static class BackendConfig
         public const string SetPassword = "/client/set-password";
 
         /// <summary>
+        /// Marks the account's first sign-in as finished — no body of its own (the panel parses JSON
+        /// on this route, so an empty object is sent, not an empty entity). Always the second half of
+        /// <see cref="SetPassword"/> and never called alone: the panel refuses set-password only when
+        /// `passwordHash && onboardingCompleted`, so without this flag the step stays open on an
+        /// account that already has a password — walkable twice, and disagreeing with the site.
+        /// </summary>
+        public const string CompleteOnboarding = "/client/complete-onboarding";
+
+        /// <summary>
         /// Replace an address that is already attached — {newEmail, currentPassword?}. Confirmed by the
         /// same emailed link as <see cref="LinkEmailRequest"/>, so the app watches <see cref="Me"/> for
         /// the address to CHANGE. The password is the panel's account-takeover guard and is required

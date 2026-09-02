@@ -4,6 +4,7 @@ using Avalonia.Animation;
 using Avalonia.Animation.Easings;
 using Avalonia.Media.Transformation;
 using v2rayN.Desktop.Account;
+using v2rayN.Desktop.Account.Dto;
 using v2rayN.Desktop.Common;
 using v2rayN.Desktop.ViewModels;
 
@@ -528,7 +529,12 @@ public partial class LoginView : UserControl
                 // На шаге пароля это ответ панели «Пароль установлен»: больше ничего не нужно.
                 // На ожидании письма — ссылка открыта: адрес есть, но привязка пароля НЕ задаёт, и
                 // пока его нет, обещать вход по почте нельзя. Поэтому по умолчанию ведём в пароль.
-                if (_passwordStep || attached.Profile.HasPassword)
+                //
+                // Спрашиваем CanSetPassword(), а не «есть ли пароль»: панель отклоняет set-password
+                // только при `passwordHash && onboardingCompleted`, и шаг предлагается ровно там,
+                // где он сработает. Иначе поручение упиралось бы в отказ на то, чего никто не просил
+                // — или, наоборот, обрывалось бы там, где пароль ещё можно задать.
+                if (_passwordStep || !attached.Profile.CanSetPassword())
                 {
                     FinishErrand();
                 }

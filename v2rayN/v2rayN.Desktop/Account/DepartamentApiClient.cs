@@ -233,6 +233,19 @@ public sealed class DepartamentApiClient : IDepartamentApiClient
     public Task<MessageResponseDto> SetPassword(string newPassword) =>
         PostJson<MessageResponseDto>(Endpoints.SetPassword, Serialize(new SetPasswordRequestDto(newPassword)));
 
+    public async Task CompleteOnboarding()
+    {
+        EnsureConfigured();
+        // «{}», не пустое тело: панель разбирает JSON на этом маршруте, и отсутствующая сущность —
+        // не то же самое, что пустой объект. Ответ не читаем — единственное, что этот вызов делает,
+        // это ставит флаг.
+        var req = new HttpRequestMessage(HttpMethod.Post, UrlOf(Endpoints.CompleteOnboarding))
+        {
+            Content = JsonBody("{}"),
+        };
+        await ExecuteVoid(req);
+    }
+
     public Task<MessageResponseDto> RequestChangeEmail(string newEmail, string? currentPassword) =>
         PostJson<MessageResponseDto>(
             Endpoints.ChangeEmailRequest,
