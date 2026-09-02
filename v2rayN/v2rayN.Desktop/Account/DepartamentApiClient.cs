@@ -233,6 +233,11 @@ public sealed class DepartamentApiClient : IDepartamentApiClient
     public Task<MessageResponseDto> SetPassword(string newPassword) =>
         PostJson<MessageResponseDto>(Endpoints.SetPassword, Serialize(new SetPasswordRequestDto(newPassword)));
 
+    public Task<MessageResponseDto> RequestChangeEmail(string newEmail, string? currentPassword) =>
+        PostJson<MessageResponseDto>(
+            Endpoints.ChangeEmailRequest,
+            Serialize(new ChangeEmailRequestDto(newEmail, currentPassword.NullIfEmpty())));
+
     public Task<UserProfileDto> LinkGoogle(string idToken) =>
         PostJson<UserProfileDto>(Endpoints.LinkGoogle, Serialize(new LinkGoogleRequestDto(idToken)));
 

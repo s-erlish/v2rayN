@@ -52,8 +52,36 @@ public static class BackendConfig
 
         // Account linking (all authed; attach a missing sign-in method to the current account)
         public const string LinkTelegramRequest = "/client/link-telegram-request";
+
+        /// <summary>
+        /// Attach an address to the session already in flight: {email} in, a letter carrying a LINK
+        /// out. Deliberately NOT under /client/auth — the panel puts it on the client root, because it
+        /// is an errand of an account that exists rather than a way of getting one.
+        ///
+        /// There is no confirmation endpoint here on purpose. The link in the letter opens the SITE,
+        /// and the site calls /client/auth/verify-link-email with the token in it; the app never sees
+        /// that token and never posts it. What the app watches instead is <see cref="Me"/>, which
+        /// starts answering with a non-blank `email` the moment the link is opened.
+        /// </summary>
         public const string LinkEmailRequest = "/client/link-email-request";
+
+        /// <summary>
+        /// The FIRST password of an account that has none — {newPassword}, minimum SIX characters
+        /// (the registration endpoint's eight belongs to registration; this one is the panel's
+        /// setPasswordSchema). Needed because <see cref="LinkEmailRequest"/> writes an address and
+        /// nothing else: without this the linked address is an identifier the user cannot sign in with.
+        /// </summary>
         public const string SetPassword = "/client/set-password";
+
+        /// <summary>
+        /// Replace an address that is already attached — {newEmail, currentPassword?}. Confirmed by the
+        /// same emailed link as <see cref="LinkEmailRequest"/>, so the app watches <see cref="Me"/> for
+        /// the address to CHANGE. The password is the panel's account-takeover guard and is required
+        /// exactly when the account has one (`hasPassword`): 400 code PASSWORD_REQUIRED when it is
+        /// missing, 401 code INVALID_PASSWORD when it is wrong.
+        /// </summary>
+        public const string ChangeEmailRequest = "/client/profile/change-email/request";
+
         public const string LinkGoogle = "/client/link-google";
 
         // Subscription

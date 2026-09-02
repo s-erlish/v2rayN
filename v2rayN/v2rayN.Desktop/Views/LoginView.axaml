@@ -301,7 +301,10 @@
 
                         <!--  Сегмент «Вход | Регистрация» — переключает режим формы (ApplyMode). Оба таба
                               равной ширины; активный — приподнятая нейтральная плитка (не синяя).  -->
-                        <Border Margin="0,16,0,0" Classes="SegTrack">
+                        <Border
+                            x:Name="ModeSegment"
+                            Margin="0,16,0,0"
+                            Classes="SegTrack">
                             <Grid ColumnDefinitions="*,*">
                                 <Button
                                     x:Name="SignInTab"
@@ -464,6 +467,51 @@
                                 StrokeLineCap="Round"
                                 StrokeThickness="2.5" />
                         </Panel>
+
+                        <!--  ==================== CTA поручений «Способов входа» ====================
+                              Та же кнопка, тот же класс и тот же инлайн-спиннер, что у «Войти» и
+                              «Создать аккаунт»: экран один, и третьего вида первичного действия у него
+                              быть не должно. Отличается только НАДПИСЬ («Отправить ссылку» / «Сохранить
+                              пароль») и команда — их ставит code-behind по виду поручения, поэтому
+                              биндинга здесь нет. Виден только в поручениях; вход и регистрация его не
+                              показывают, и ни одно состояние не рисует два первичных действия сразу.  -->
+                        <Panel x:Name="ErrandButtonHost" Margin="0,16,0,0" IsVisible="False">
+                            <Button
+                                x:Name="ErrandButton"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Center"
+                                VerticalContentAlignment="Center"
+                                Classes="Primary Tall">
+                                <TextBlock
+                                    x:Name="ErrandButtonLabel"
+                                    HorizontalAlignment="Center"
+                                    TextAlignment="Center" />
+                            </Button>
+                            <Ellipse
+                                x:Name="ErrandSpinner"
+                                Width="22"
+                                Height="22"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Classes="Spinner"
+                                IsVisible="False"
+                                RenderTransformOrigin="50%,50%"
+                                Stroke="{DynamicResource Brush.Accent}"
+                                StrokeDashArray="6.9,20.8"
+                                StrokeLineCap="Round"
+                                StrokeThickness="2.5" />
+                        </Panel>
+
+                        <!--  «Пропустить» на шаге пароля: третичное действие тем же классом, что и
+                              «Отправить снова» / «Вернуться ко входу» — шаг можно не делать, но по
+                              умолчанию ведём в него, поэтому пропуск и выглядит как второстепенный.  -->
+                        <Button
+                            x:Name="SkipButton"
+                            Margin="0,12,0,0"
+                            HorizontalAlignment="Center"
+                            Classes="LinkAction"
+                            Foreground="{DynamicResource Brush.OnSurfaceVariant}"
+                            IsVisible="False" />
 
                         <!--  Пассворлесс-ссылки — ТОЛЬКО в режиме входа: «Войти по ссылке» · «Забыли пароль?».  -->
                         <StackPanel

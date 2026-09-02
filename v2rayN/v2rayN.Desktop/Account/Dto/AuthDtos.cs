@@ -165,6 +165,31 @@ public sealed class SetPasswordRequestDto
     public SetPasswordRequestDto(string newPassword) => NewPassword = newPassword;
 }
 
+/// <summary>
+/// POST /client/profile/change-email/request — replace the address already attached to this account.
+///
+/// <see cref="CurrentPassword"/> is OPTIONAL in the wire schema and mandatory in fact whenever the
+/// account has a password: the panel answers 400 code PASSWORD_REQUIRED when it is missing and 401
+/// code INVALID_PASSWORD when it is wrong. Null is omitted on write (ApiJson drops nulls), so a
+/// passwordless account sends the address alone rather than an empty string the schema would accept
+/// and the comparison would then fail on.
+/// </summary>
+public sealed class ChangeEmailRequestDto
+{
+    public string NewEmail { get; set; } = "";
+    public string? CurrentPassword { get; set; }
+
+    public ChangeEmailRequestDto()
+    {
+    }
+
+    public ChangeEmailRequestDto(string newEmail, string? currentPassword = null)
+    {
+        NewEmail = newEmail;
+        CurrentPassword = currentPassword;
+    }
+}
+
 /// <summary>POST /client/link-google — {idToken} (attach Google to the current account).</summary>
 public sealed class LinkGoogleRequestDto
 {

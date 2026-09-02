@@ -6,6 +6,28 @@ using v2rayN.Desktop.Common;
 namespace v2rayN.Desktop.ViewModels;
 
 /// <summary>
+/// The three errands the «Способы входа» email row can send the user on. All three run against a
+/// session that ALREADY EXISTS — which is why none of them is a sign-in and none of them may end on
+/// <see cref="LoginState.Success"/>.
+/// </summary>
+public enum EmailErrand
+{
+    /// <summary>An account with no address gets one (POST /client/link-email-request).</summary>
+    Link,
+
+    /// <summary>An account with an address gets a different one (POST /client/profile/change-email/request).</summary>
+    Change,
+
+    /// <summary>
+    /// An account with an address but no password gets one (POST /client/set-password). Reached on its
+    /// own from the row, and automatically right after <see cref="Link"/> — because the link letter
+    /// writes ONLY the address, and until this runs «войдите по почте» would be a promise the account
+    /// cannot keep.
+    /// </summary>
+    SetPassword,
+}
+
+/// <summary>
 /// Backs the Account tab. Port of V2rayNG viewmodel/AccountViewModel.kt (StateFlow → ReactiveUI):
 /// holds the observable account/subscription/tariff/payment data, delegates every action to
 /// <see cref="AccountRepository"/> / <see cref="AuthManager"/>, and derives the display strings the
@@ -66,6 +88,30 @@ public class AccountViewModel : MyReactiveObject
 
     // Bounded poll of /me after a Telegram-link code is issued (until telegramLinked flips true).
     private CancellationTokenSource? _linkPollCts;
+
+    // ── Email errand (привязка / смена адреса / первый пароль) ──────────────────
+    // The request + the bounded /me poll that waits for the emailed link to be opened. Cancelled on
+    // logout, on leaving the errand sub-page, and whenever a new errand starts.
+    private CancellationTokenSource? _emailErrandCts;
+
+    // WHICH errand the wait belongs to — «отправить снова» has to re-send the right letter, and the
+    // state it is pressed from is the state being rebuilt.
+    private EmailErrand _emailErrand = EmailErrand.Link;
+
+    // WHAT THE LETTER WENT TO, HELD APART FROM THE SCREEN. The waiting state carries the address too,
+    // but the screen leaves that state the moment anything fails — and «отправить снова» is pressed
+    // exactly then. Reading the address back out of the state made the second attempt post an empty
+    // one; reading it out of the input field made it post whatever the user had since typed. It lives
+    // here, written once when the letter goes out.
+    private string _pendingEmailAddress = string.Empty;
+
+    // The current password a change-email errand was authorised with, kept for the same reason and
+    // cleared with the errand — a resend must re-present it, and the field it came from is off screen.
+    private string? _pendingCurrentPassword;
+
+    // The address the account had BEFORE a change errand: what the poll compares against, since a
+    // profile that already has an address cannot signal by merely having one.
+    private string _emailBeforeChange = string.Empty;
 
     // Bounded poll of GET /client/payments after a CARD device-top-up / upgrade opens in the browser
     // (webhook-confirmed there, no in-app return). Cancelled on logout or a newer card action.
@@ -251,8 +297,24 @@ public class AccountViewModel : MyReactiveObject
     /// <summary>Show the «Привязать» action only when Telegram is neither linked nor pending.</summary>
     [Reactive] public bool TelegramCanLink { get; set; }
 
-    /// <summary>The email the user types in the «Привязать почту» flyout.</summary>
-    [Reactive] public string LinkEmailInput { get; set; } = string.Empty;
+    /// <summary>
+    /// True when the account can actually SIGN IN with its address — it has a password.
+    ///
+    /// Kept apart from <see cref="EmailLinked"/> because the panel keeps them apart: the link letter
+    /// writes an address and nothing else, so between «почта привязана» and «пароль задан» there is a
+    /// real state in which the address is an identifier the user cannot log in with. Merging the two
+    /// (as this row used to: linked = email AND password) made the row claim «Не привязан» about an
+    /// account the panel would then refuse to link again — «Почта уже привязана» over a row that had
+    /// just offered «Добавить».
+    /// </summary>
+    [Reactive] public bool EmailHasPassword { get; set; }
+
+    /// <summary>
+    /// The label of the email row's single action — «Добавить» / «Задать пароль» / «Изменить». One
+    /// action per state rather than three buttons crowding a 56-точечная строка: what is missing is
+    /// what the row offers, and once nothing is missing it offers the change.
+    /// </summary>
+    [Reactive] public string EmailActionText { get; set; } = string.Empty;
 
     #endregion reactive state (derived display)
 
@@ -343,7 +405,18 @@ public class AccountViewModel : MyReactiveObject
     // ── Linking actions ──
     public ReactiveCommand<Unit, Unit> LinkTelegramCmd { get; }
     public ReactiveCommand<Unit, Unit> OpenLinkBotCmd { get; }
+    /// <summary>Sends the «привяжите почту» letter for <see cref="LoginEmail"/> and starts the wait.</summary>
     public ReactiveCommand<Unit, Unit> LinkEmailCmd { get; }
+
+    /// <summary>Sends the «подтвердите новый адрес» letter (with the current password when the account has one).</summary>
+    public ReactiveCommand<Unit, Unit> ChangeEmailCmd { get; }
+
+    /// <summary>Sets the account's FIRST password (≥6 chars) — the step that makes a linked address usable.</summary>
+    public ReactiveCommand<Unit, Unit> SetPasswordCmd { get; }
+
+    /// <summary>«Отправить снова» on the waiting screen: the same letter, to the same address.</summary>
+    public ReactiveCommand<Unit, Unit> ResendEmailLinkCmd { get; }
+
     public ReactiveCommand<Unit, Unit> OpenWebCabinetCmd { get; }
 
     #endregion commands
@@ -395,6 +468,9 @@ public class AccountViewModel : MyReactiveObject
         LinkTelegramCmd = ReactiveCommand.CreateFromTask(StartLinkTelegram);
         OpenLinkBotCmd = ReactiveCommand.Create(OpenLinkBot);
         LinkEmailCmd = ReactiveCommand.CreateFromTask(SubmitLinkEmail);
+        ChangeEmailCmd = ReactiveCommand.CreateFromTask(SubmitChangeEmail);
+        SetPasswordCmd = ReactiveCommand.CreateFromTask(SubmitSetPassword);
+        ResendEmailLinkCmd = ReactiveCommand.CreateFromTask(ResendEmailLink);
         OpenWebCabinetCmd = ReactiveCommand.CreateFromTask(OpenWebCabinet);
 
         // Safety net: a stray command exception surfaces as the error state instead of crashing.
@@ -420,6 +496,9 @@ public class AccountViewModel : MyReactiveObject
                 LinkTelegramCmd.ThrownExceptions,
                 OpenLinkBotCmd.ThrownExceptions,
                 LinkEmailCmd.ThrownExceptions,
+                ChangeEmailCmd.ThrownExceptions,
+                SetPasswordCmd.ThrownExceptions,
+                ResendEmailLinkCmd.ThrownExceptions,
                 OpenWebCabinetCmd.ThrownExceptions)
             .Subscribe(ex => RunOnUi(() =>
             {
@@ -505,6 +584,9 @@ public class AccountViewModel : MyReactiveObject
         Profile = new UserProfileDto
         {
             Email = "user@example.com",
+            // Дизайнерский аккаунт УКОМПЛЕКТОВАН: есть и адрес, и пароль. Иначе превью показывало бы
+            // строку почты в промежуточном состоянии («Задать пароль») как обычную.
+            HasPassword = true,
             TelegramUsername = "serumfx",
             Balance = 0.0,
             Currency = "RUB",
@@ -1402,6 +1484,8 @@ public class AccountViewModel : MyReactiveObject
         _renewPollCts?.Cancel();
         _cardActionPollCts?.Cancel();
         _linkPollCts?.Cancel();
+        _emailErrandCts?.Cancel();
+        _pendingCurrentPassword = null;
         if (removeAccountData)
         {
             // Wipe stops the VPN and DELETES the account-imported subscriptions + their servers (tracked by
@@ -2154,26 +2238,185 @@ public class AccountViewModel : MyReactiveObject
         });
     }
 
-    /// <summary>Requests an email-link confirmation for the typed address (anti-enumeration: same reply either way).</summary>
-    private async Task SubmitLinkEmail()
+    // ==================== Email errands (привязка · смена адреса · первый пароль) ====================
+    //
+    // ЧТО ЗДЕСЬ ПРОИСХОДИТ. Панель подтверждает адрес ССЫЛКОЙ В ПИСЬМЕ, и ссылка ведёт на САЙТ:
+    // приложение токена из письма не видит и `verify-link-email` не дёргает. Поэтому запрос — только
+    // половина дела, а вторая половина — ожидание: раз в 4 секунды читаем профиль и ждём, когда адрес
+    // там появится (привязка) или сменится (смена). Ведёт ожидание AuthManager, потому что ему можно
+    // ходить в API напрямую — через AccountRepository нельзя, там 401 на профиле ЗАКАНЧИВАЕТ СЕССИЮ,
+    // и умерший за время письма токен выкинул бы человека из аккаунта изнутри фонового цикла.
+    //
+    // ПРИВЯЗКА ПАРОЛЬ НЕ ЗАДАЁТ. В аккаунт пишется только адрес — значит войти по нему нельзя, пока не
+    // отработает POST /client/set-password. Отсюда третье поручение и правило экрана: пока чего-то не
+    // хватает, шаг следующий, и только когда не хватает нечего, копирайт вправе обещать вход по почте.
+
+    /// <summary>
+    /// Opens an errand: cancels whatever was in flight, clears the shared form fields and puts the
+    /// login state back to idle. Called by the sub-page as it appears, so a second visit never starts
+    /// on the leftovers of the first — an address half-typed and abandoned, or a password still in the
+    /// field it was typed into.
+    /// </summary>
+    public void BeginEmailErrand(EmailErrand errand)
     {
-        var email = LinkEmailInput?.Trim() ?? string.Empty;
-        if (email.IsNullOrEmpty() || !email.Contains('@'))
-        {
-            AppEvents.SendSnackMsgRequested.Publish(L.T("Login_EmailInvalid"));
-            return;
-        }
-        var result = await _repo.RequestLinkEmail(email);
+        _emailErrandCts?.Cancel();
+        _emailErrandCts = null;
+        _emailErrand = errand;
+        _pendingEmailAddress = string.Empty;
+        _pendingCurrentPassword = null;
+        _emailBeforeChange = Profile?.Email ?? string.Empty;
         RunOnUi(() =>
         {
-            result
-                .OnSuccess(_ =>
-                {
-                    AppEvents.SendSnackMsgRequested.Publish(L.F("Account_EmailSent", email));
-                    LinkEmailInput = string.Empty;
-                })
-                .OnFailure(err => AppEvents.SendSnackMsgRequested.Publish(MessageFor(err)));
+            LoginEmail = string.Empty;
+            LoginPassword = string.Empty;
+            RegisterConfirmPassword = string.Empty;
+            CurrentLoginState = new LoginState.Idle();
         });
+    }
+
+    /// <summary>
+    /// Leaves an errand: stops the request and the ≤10-минутный poll behind it, and drops the password
+    /// the change errand was carrying. Idempotent; called on «назад», on completion and on logout, so
+    /// nothing keeps reading /me for a screen that is gone.
+    /// </summary>
+    public void CancelEmailErrand()
+    {
+        _emailErrandCts?.Cancel();
+        _emailErrandCts = null;
+        _pendingCurrentPassword = null;
+        RunOnUi(() =>
+        {
+            LoginPassword = string.Empty;
+            RegisterConfirmPassword = string.Empty;
+        });
+    }
+
+    /// <summary>
+    /// «Привязать почту»: POST /client/link-email-request с ОДНИМ адресом (пароля у поручения нет —
+    /// аккаунт уже есть, и запрос подписан его токеном), затем ожидание письма. Doubles as the resend.
+    /// </summary>
+    private Task SubmitLinkEmail()
+    {
+        var email = LoginEmail?.Trim() ?? string.Empty;
+        if (!LooksLikeEmail(email))
+        {
+            // Недостижимо через интерфейс (CTA заблокирован, пока адрес не похож на адрес) и потому
+            // молчит: подсказку про формат несёт строка под самим полем, а красная строка внизу
+            // сказала бы то же самое второй раз и не там.
+            return Task.CompletedTask;
+        }
+        _emailErrand = EmailErrand.Link;
+        _pendingEmailAddress = email;
+        _pendingCurrentPassword = null;
+        return RunEmailErrand((emit, token) => _authManager.BeginLinkEmail(email, emit, token));
+    }
+
+    /// <summary>
+    /// «Изменить почту»: POST /client/profile/change-email/request. Пустой пароль уходит как ОТСУТСТВИЕ
+    /// поля, а не как пустая строка: у аккаунта без пароля панель его и не спрашивает, а пустая строка
+    /// стала бы для неё неверным паролем. Ожидание то же, но ждёт СМЕНЫ адреса, а не его появления.
+    /// </summary>
+    private Task SubmitChangeEmail()
+    {
+        var email = LoginEmail?.Trim() ?? string.Empty;
+        if (!LooksLikeEmail(email))
+        {
+            return Task.CompletedTask;   // см. SubmitLinkEmail: то же условие, тот же довод
+        }
+        // Отправляем ТО, ЧТО НАБРАНО, а не то, что мы думаем про аккаунт. Поле текущего пароля
+        // рисуется по кэшированному профилю, а требует пароль ПАНЕЛЬ; если профиль устарел и она
+        // ответит PASSWORD_REQUIRED, экран покажет поле, и следующая попытка пароль уже понесёт.
+        var password = LoginPassword ?? string.Empty;
+        _emailErrand = EmailErrand.Change;
+        _pendingEmailAddress = email;
+        _pendingCurrentPassword = password.NullIfEmpty();
+        _emailBeforeChange = Profile?.Email ?? _emailBeforeChange;
+        var previous = _emailBeforeChange;
+        var carried = _pendingCurrentPassword;
+        return RunEmailErrand((emit, token) => _authManager.BeginChangeEmail(email, carried, previous, emit, token));
+    }
+
+    /// <summary>
+    /// «Отправить снова» с экрана ожидания: то же письмо, на тот же адрес. Адрес и пароль берутся из
+    /// полей ЭТОГО класса, а не с экрана — экран к этому моменту мог побывать в ошибке и потерять их.
+    /// </summary>
+    private Task ResendEmailLink()
+    {
+        if (_pendingEmailAddress.IsNullOrEmpty())
+        {
+            return Task.CompletedTask;
+        }
+        var email = _pendingEmailAddress;
+        var password = _pendingCurrentPassword;
+        var previous = _emailBeforeChange;
+        return _emailErrand == EmailErrand.Change
+            ? RunEmailErrand((emit, token) => _authManager.BeginChangeEmail(email, password, previous, emit, token))
+            : RunEmailErrand((emit, token) => _authManager.BeginLinkEmail(email, emit, token));
+    }
+
+    /// <summary>
+    /// Runs one letter-and-wait errand under a fresh cancellation token, routing every emit to the UI
+    /// thread. The Telegram login poll is cancelled alongside it: both write
+    /// <see cref="CurrentLoginState"/>, and a stale login poll finishing mid-errand would repaint the
+    /// screen from under it.
+    /// </summary>
+    private async Task RunEmailErrand(Func<Action<LoginState>, CancellationToken, Task> errand)
+    {
+        _telegramCts?.Cancel();
+        _emailErrandCts?.Cancel();
+        var cts = new CancellationTokenSource();
+        _emailErrandCts = cts;
+        // «Отправить снова» приходит уже с экрана ожидания — НЕ уводим с него (там крутится своё
+        // кольцо); первый запрос с формы показывает спиннер на её кнопке.
+        if (CurrentLoginState is not LoginState.AwaitingEmailVerification)
+        {
+            RunOnUi(() => CurrentLoginState = new LoginState.SiteLoading());
+        }
+        await errand(state => RunOnUi(() => CurrentLoginState = state), cts.Token);
+    }
+
+    /// <summary>
+    /// «Придумайте пароль»: POST /client/set-password — МИНИМУМ ШЕСТЬ символов (восемь принадлежат
+    /// регистрации, это другой эндпоинт со своей схемой). On success the profile is re-read so
+    /// <see cref="EmailHasPassword"/> — and with it the row's caption and its action — tell the truth
+    /// without waiting for the next visit to the tab.
+    /// </summary>
+    private async Task SubmitSetPassword()
+    {
+        var password = LoginPassword ?? string.Empty;
+        if (password.Length < MinNewPasswordLength || RegisterConfirmPassword != password)
+        {
+            return;
+        }
+        RunOnUi(() => CurrentLoginState = new LoginState.SiteLoading());
+        var result = await _repo.SetPassword(password);
+        if (result.Error is { } failure)
+        {
+            RunOnUi(() => CurrentLoginState = new LoginState.Error(failure));
+            return;
+        }
+        // The panel has confirmed the password; the profile is only re-read so the cached copy agrees.
+        // A failed re-read is not a failed errand — the account has its password either way, so the
+        // step still ends, on the freshest profile we have.
+        var refreshed = await _repo.RefreshProfile();
+        var profile = refreshed.GetOrNull() ?? AccountSession.CurrentProfile ?? Profile ?? new UserProfileDto();
+        RunOnUi(() =>
+        {
+            LoginPassword = string.Empty;
+            RegisterConfirmPassword = string.Empty;
+            CurrentLoginState = new LoginState.EmailAttached(profile);
+        });
+    }
+
+    /// <summary>The panel's own floor for a first password (setPasswordSchema: «Минимум 6 символов»).</summary>
+    public const int MinNewPasswordLength = 6;
+
+    /// <summary>Pragmatic address check — the same shape the sign-in form gates its submit on.</summary>
+    private static bool LooksLikeEmail(string value)
+    {
+        var at = value.IndexOf('@');
+        var dot = value.LastIndexOf('.');
+        return at > 0 && dot > at + 1 && dot < value.Length - 2 && !value.Any(char.IsWhiteSpace);
     }
 
     /// <summary>Opens the web cabinet already signed in via an app→site SSO handoff code.</summary>
@@ -2274,6 +2517,8 @@ public class AccountViewModel : MyReactiveObject
             ShowLinking = false;
             TelegramLinked = GoogleLinked = EmailLinked = false;
             TelegramLinkedId = GoogleLinkedId = EmailLinkedId = string.Empty;
+            EmailHasPassword = false;
+            EmailActionText = string.Empty;
             TelegramLinkPending = false;
             TelegramCanLink = false;
             TelegramRowValue = string.Empty;
@@ -2309,8 +2554,13 @@ public class AccountViewModel : MyReactiveObject
             TelegramCanLink = !TelegramLinked && !TelegramLinkPending;
             GoogleLinked = profile.GoogleLinked;
             GoogleLinkedId = GoogleLinked ? profile.Email : string.Empty;
-            EmailLinked = profile.HasPassword && profile.Email.IsNotEmpty();
+            // ПРИВЯЗАН — ЗНАЧИТ АДРЕС ЕСТЬ, и ничего больше. Раньше здесь стояло «есть адрес И есть
+            // пароль», и на аккаунте, которому письмо адрес уже привязало, строка продолжала звать
+            // «Добавить» — а панель на это отвечала «Почта уже привязана». Пароль — отдельный факт и
+            // отдельная строка ниже.
+            EmailLinked = profile.Email.IsNotEmpty();
             EmailLinkedId = EmailLinked ? profile.Email : string.Empty;
+            EmailHasPassword = profile.HasPassword;
 
             // Подписи строк «Способы входа». Привязанный метод называет СЕБЯ идентификатором
             // («Привязан · @serumfx»), непривязанный честно говорит «Не привязан» — строка никогда
@@ -2318,10 +2568,18 @@ public class AccountViewModel : MyReactiveObject
             TelegramRowValue = TelegramLinked && TelegramLinkedId.IsNotEmpty()
                 ? L.F("Account_LinkedAs", TelegramLinkedId)
                 : (TelegramLinked ? L.T("Account_Linked") : L.T("Account_NotLinked"));
+            // Подпись называет ИДЕНТИФИКАТОР («Привязан · user@mail.ru»), а чего не хватает — говорит
+            // действие рядом. Строка знает три состояния, и в каждом у неё РОВНО ОДНО дело: адреса
+            // нет — «Добавить»; адрес есть, а пароля нет (войти по нему ещё нельзя) — «Задать пароль»;
+            // есть и то и другое — «Изменить». Три кнопки разом в 56-точечную строку не влезут, да и
+            // выбирать там не из чего: недостающий шаг всегда один.
             var siteId = FirstNonBlank(EmailLinkedId, GoogleLinkedId);
             SiteRowValue = siteId.IsNotEmpty()
                 ? L.F("Account_LinkedAs", siteId)
                 : L.T("Account_NotLinked");
+            EmailActionText = EmailLinkedId.IsNullOrEmpty()
+                ? L.T("Account_AddAction")
+                : (EmailHasPassword ? L.T("Account_ChangeAction") : L.T("Account_SetPasswordAction"));
         }
 
         // Active subscription block (first/root of the merged list)
