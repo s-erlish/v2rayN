@@ -738,7 +738,12 @@ public class BuyViewModel : MyReactiveObject
             ApiError.GoneError => "410",
             ApiError.TimeoutError => "timeout",
             ApiError.NetworkError => "network",
-            _ => "—",
+            ApiError.Parse => "parse",
+            ApiError.NotConfiguredError => "not-configured",
+            // Отказ, у которого нет ни кода, ни имени: диагностической строки просто НЕ БУДЕТ.
+            // Раньше здесь стоял прочерк, и пользователь получал «HTTP —» — слово «HTTP» рядом с
+            // символом, который не значит ничего. Заголовок «Ошибка оплаты» и так на месте.
+            _ => null,
         };
         var detail = error switch
         {
@@ -748,8 +753,9 @@ public class BuyViewModel : MyReactiveObject
         };
 
         PaymentNoticeTitle = Common.L.T("Buy_PaymentError");
-        PaymentNoticeBody = detail.IsNullOrEmpty() ? $"HTTP {code}" : $"HTTP {code}\n{detail}";
-        HasPaymentNoticeBody = true;
+        var head = code.IsNullOrEmpty() ? null : $"HTTP {code}";
+        PaymentNoticeBody = string.Join("\n", new[] { head, detail }.Where(line => line.IsNotEmpty()));
+        HasPaymentNoticeBody = PaymentNoticeBody.IsNotEmpty();
         HasPaymentNotice = true;
     }
 

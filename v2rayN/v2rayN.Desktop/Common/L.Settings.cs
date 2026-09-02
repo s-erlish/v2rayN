@@ -127,6 +127,7 @@ public sealed partial class L
 
         // ── GeoFilesPage ──
         Add("Geo_NotDownloaded", "Не загружен", "Not downloaded");
+        Add("Geo_ReadFailed", "Не удалось прочитать файл", "Could not read the file");
         Add("Geo_SizeUpdated", "{0} МБ · обновлён {1}", "{0} MB · updated {1}");
         Add("Geo_Updating", "Обновление…", "Updating…");
         Add("Geo_Downloading", "Загрузка баз…", "Downloading databases…");
@@ -136,6 +137,8 @@ public sealed partial class L
         // ── AboutPage ──
         Add("About_TitleVersion", "departament · Версия {0}", "departament · Version {0}");
         Add("About_SystemInfo", "ОС: {0}\nАрхитектура: {1}\n.NET: {2}", "OS: {0}\nArchitecture: {1}\n.NET: {2}");
+        // Когда среда не назвала себя. Пишется В СТРОКУ «ОС: …», поэтому строчная и без точки.
+        Add("About_SystemUnknown", "не определена", "not detected");
 
         // ── BackupPage ──
         Add("Backup_Intro", "Файл с серверами и настройками", "A file with your servers and settings");
