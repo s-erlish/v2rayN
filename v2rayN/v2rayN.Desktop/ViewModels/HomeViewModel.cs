@@ -40,6 +40,10 @@ public class HomeViewModel : MyReactiveObject, IDisposable
     /// <summary>Servers grouped by subscription, projected live from <c>Profiles.ProfileItems</c>.</summary>
     public ObservableCollection<HomeServerGroup> ServerGroups { get; } = new();
 
+    //  Указатель «IndexId → отображаемая строка» для FindRowByIndexId. Строится лениво, сбрасывается
+    //  в ReconcileGroups — там и только там меняются ServerGroups и Servers внутри них.
+    private Dictionary<string, ProfileItemModel>? _rowIndex;
+
     private readonly Dictionary<string, bool> _groupExpanded = new();
     // Coalesces the Clear()+AddRange() CollectionChanged burst the engine emits on every
     // refresh/select into ONE deferred reconcile (see OnProfileItemsChanged / ScheduleReconcile).
@@ -731,6 +735,10 @@ public class HomeViewModel : MyReactiveObject, IDisposable
 
         Subtitle = FormatServersProvidersMeta(count, providers);
 
+        //  Список только что мог смениться — указатель «строка по IndexId» строится заново при
+        //  первом же обращении. Это ЕДИНСТВЕННОЕ место, где меняются ServerGroups и их Servers.
+        _rowIndex = null;
+
         // Point the per-item ping/speedtest live-sync at the current (possibly rebuilt) source items.
         ResyncItemSubscriptions();
     }
@@ -792,23 +800,43 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         row.IsActive = src.IsActive;
     }
 
+    /// <summary>
+    /// Строка по IndexId — СЛОВАРЁМ, а не обходом всех групп.
+    ///
+    /// <see cref="OnSourceItemChanged"/> приходит на каждое реактивное поле каждого результата
+    /// пинга (Delay, DelayVal, SpeedVal, IpInfo), и каждый обход просматривал весь список. Один
+    /// прогон «пинг всех» на 150 серверах — это 150 результатов × 4 поля × в среднем 75 сравнений
+    /// строк ≈ 45 000 сравнений, почти всегда ради вывода «найденная строка И ЕСТЬ отправитель,
+    /// копировать нечего». Теперь это 600 поисков в словаре.
+    ///
+    /// Словарь строится лениво и сбрасывается ровно там, где список меняется, — в
+    /// <see cref="ReconcileGroups"/>: ни <see cref="ServerGroups"/>, ни Servers внутри групп не
+    /// меняются нигде больше. Первое совпадение, как и раньше: <c>TryAdd</c> не затирает.
+    /// </summary>
     private ProfileItemModel? FindRowByIndexId(string? indexId)
     {
         if (string.IsNullOrEmpty(indexId))
         {
             return null;
         }
+        var index = _rowIndex ??= BuildRowIndex();
+        return index.TryGetValue(indexId, out var row) ? row : null;
+    }
+
+    private Dictionary<string, ProfileItemModel> BuildRowIndex()
+    {
+        var map = new Dictionary<string, ProfileItemModel>(StringComparer.Ordinal);
         foreach (var g in ServerGroups)
         {
             foreach (var r in g.Servers)
             {
-                if (string.Equals(r.IndexId, indexId, StringComparison.Ordinal))
+                if (r.IndexId.IsNotEmpty())
                 {
-                    return r;
+                    map.TryAdd(r.IndexId!, r);
                 }
             }
         }
-        return null;
+        return map;
     }
 
     /// <summary>
