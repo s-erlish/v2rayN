@@ -65,6 +65,20 @@ public class HomeViewModel : MyReactiveObject, IDisposable
     // the still-running OLD core can't snap the shield straight back to Connected before the switch
     // actually re-establishes. Cleared on the stop event, on the deadline, or on an aborted pick.
     private bool _awaitingCoreCycle;
+
+    //  Идёт переключение сервера с ЖИВОГО подключения: SetDefaultServer перезагружает ядро, и до
+    //  того, как состояние снова определится (подключено / отказ / отключено), туннель находится
+    //  «между» серверами. Держится от тапа до этого момента.
+    private bool _switching;
+
+    //  ОЧЕРЕДЬ НА ОДИН ЭЛЕМЕНТ. Тап по другой строке во время переключения раньше молча пропадал:
+    //  SelectServer читал wasConnected = IsConnected, а первый тап уже уронил IsConnected в false
+    //  ради крутилки, поэтому второй уходил в ветку «просто назначить сервер, не подключать» —
+    //  конфиг менялся, туннель оставался на первом выборе, а список подсвечивал второй. Теперь
+    //  такой тап запоминается ЗДЕСЬ и применяется, когда переключение осядет. Побеждает
+    //  ПОСЛЕДНИЙ выбор, очередь не копится и не переживает отключение или отказ подключения.
+    private string? _pendingServerId;
+
     private ServerSpeedItem? _lastSpeed;
 
     #region Reactive state
@@ -203,6 +217,7 @@ public class HomeViewModel : MyReactiveObject, IDisposable
             // until the next attempt / a successful connect; drives the hero's Error shield — which is
             // the ONLY surface for connect state now (no bottom snack: the owner doesn't want it).
             ConnectFailed = true;
+            ClearSwitchQueue();
         }
         SyncState();
     }
@@ -213,6 +228,9 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         _connectingUntil = null;
         // A deliberate user disconnect ends any mid-switch hold and is not a failure.
         _awaitingCoreCycle = false;
+        //  Отключение отменяет переключение вместе с его очередью: применять запомненный выбор
+        //  на выключенном туннеле значило бы поднять его без спроса.
+        ClearSwitchQueue();
         ConnectFailed = false;
         // byUser:true records sticky user-stop intent and aborts any in-flight auto-restart so the
         // tunnel the user just tore down can never be silently re-established (C1).
@@ -230,6 +248,16 @@ public class HomeViewModel : MyReactiveObject, IDisposable
     {
         if (Profiles == null || indexId.IsNullOrEmpty())
         {
+            return;
+        }
+
+        //  Переключение ещё не осело — тап не теряется и не бежит наперегонки с ним. Запоминаем
+        //  ПОСЛЕДНИЙ выбор (очередь на один элемент) и применяем его в ApplyPendingServer, когда
+        //  состояние определится. Подсветка строки при этом не двигается: её ведёт движок по
+        //  IsActive, а активным сервер станет ровно тогда, когда выбор действительно применится.
+        if (_switching)
+        {
+            _pendingServerId = indexId;
             return;
         }
 
@@ -265,6 +293,7 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         // недостижимы — вместе с вызовом Connect() внутри одной из них.
         if (changed)
         {
+            _switching = true;
             // Переключение сервера с живого подключения — та же крутилка Connecting, что у щита (A5):
             // SetDefaultServer перезагружает ядро, то есть это настоящий реконнект.
             BeginConnecting();
@@ -282,6 +311,7 @@ public class HomeViewModel : MyReactiveObject, IDisposable
             IsConnecting = false;
             _connectingUntil = null;
             _awaitingCoreCycle = false;
+            ClearSwitchQueue();
             SyncState();
             return;
         }
@@ -334,6 +364,10 @@ public class HomeViewModel : MyReactiveObject, IDisposable
             _connectingUntil = null;
             // A successful connect clears any error shield (A4).
             ConnectFailed = false;
+            //  Ядро поднялось и удержания больше нет — переключение ОСЕЛО. Сам запомненный выбор
+            //  применяют обработчики событий (ApplyPendingServer), чтобы не входить в SelectServer
+            //  рекурсивно из SyncState, который SelectServer же и вызывает.
+            _switching = false;
             Uptime = FormatUptime(DateTime.Now - _connectedSince.Value);
 
             var s = _lastSpeed;
@@ -364,8 +398,51 @@ public class HomeViewModel : MyReactiveObject, IDisposable
                 IsConnecting = false;
                 _connectingUntil = null;
                 ConnectFailed = true;
+                ClearSwitchQueue();
+            }
+            else if (!IsConnecting)
+            {
+                //  Ядро стоит и попыток больше нет — оседать нечему.
+                ClearSwitchQueue();
             }
         }
+    }
+
+    /// <summary>Снимает признак переключения вместе с очередью — одной строкой во всех местах,
+    /// где переключение кончилось не подключением (отключение, отказ, отменённый выбор).</summary>
+    private void ClearSwitchQueue()
+    {
+        _switching = false;
+        _pendingServerId = null;
+    }
+
+    /// <summary>
+    /// Применяет выбор, отложенный на время переключения. Зовётся из обработчиков состояния ядра
+    /// ПОСЛЕ <see cref="SyncState"/>, то есть когда состояние уже определилось. Очередь на один
+    /// элемент: значение забирается сразу, поэтому повторных применений быть не может.
+    /// </summary>
+    private void ApplyPendingServer()
+    {
+        if (_switching)
+        {
+            return;   // ещё не осело
+        }
+
+        var pending = _pendingServerId;
+        _pendingServerId = null;
+        if (pending is null)
+        {
+            return;
+        }
+
+        //  Подключения нет — применять нечего: тап по строке никогда не поднимает туннель сам.
+        //  Выбор уже совпал с активным — переподключаться незачем.
+        if (!IsConnected || string.Equals(pending, _config?.IndexId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _ = SelectServer(pending);
     }
 
     private static string FormatUptime(TimeSpan t) =>
@@ -387,6 +464,7 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         }
         SyncState();
         UpdateStateTick();
+        ApplyPendingServer();
     }
 
     /// <summary>
@@ -403,6 +481,7 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         ConnectFailed = false;
         SyncState();
         UpdateStateTick();
+        ApplyPendingServer();
     }
 
     /// <summary>
@@ -433,6 +512,9 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         // Stop once neither connected nor still attempting — covers a normal disconnect, a
         // self-healed silent core crash, and a connect that timed out (SyncState flips the flags).
         UpdateStateTick();
+        //  Страховка на случай, когда событие ядра не пришло вовсе и переключение осело по сроку:
+        //  отложенный выбор не должен зависнуть в очереди до конца сеанса.
+        ApplyPendingServer();
     }
 
     private void StopUptimeTick()

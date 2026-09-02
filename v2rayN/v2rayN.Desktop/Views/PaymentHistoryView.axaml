@@ -139,7 +139,8 @@
             <!--  ==================== Загрузка: те же строки силуэтом ====================  -->
             <Border
                 Margin="0,14,0,0"
-                Classes="SubCard SkeletonPulse"
+                Classes="SubCard"
+                Classes.SkeletonPulse="{Binding ShowLoading}"
                 IsVisible="{Binding ShowLoading}">
                 <StackPanel>
                     <Border Classes="SubRow">
