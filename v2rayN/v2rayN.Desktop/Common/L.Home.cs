@@ -32,7 +32,10 @@ public sealed partial class L
         //  «Нажмите, чтобы повторить»: повторять одно и то же, не зная причины, бессмысленно, а
         //  настоящая причина уходила в журнал, которого никто не видит. Разбор причины —
         //  HomeViewModel.DescribeConnectFailure по ECoreStartFailure и тексту ядра.
-        Add("Home_FailNoServer", "Сервер не выбран. Выберите сервер в списке слева и повторите.", "No server selected. Pick one from the list and try again.");
+        //  Без «слева»: подсказка живёт в ConnectHeroView, а он общий для обеих раскладок — в
+        //  широкой список действительно слева, в компактной он под щитом. Указание на сторону
+        //  отправляло половину пользователей смотреть в пустое место.
+        Add("Home_FailNoServer", "Сервер не выбран. Выберите сервер из списка и повторите.", "No server selected. Pick one from the list and try again.");
         Add("Home_FailCoreMissing", "Не хватает файлов приложения: ядро VPN не найдено. Переустановите приложение.", "The app is missing files: the VPN core wasn't found. Reinstall the app.");
         Add("Home_FailConfig", "Настройки сервера не подходят. Обновите подписку и повторите.", "The server settings don't fit. Refresh the subscription and try again.");
         Add("Home_FailPortBusy", "Локальный порт занят другой программой. Закройте другой VPN и повторите.", "A local port is taken by another program. Close the other VPN and try again.");
@@ -51,9 +54,6 @@ public sealed partial class L
         // tells the concrete "how" and promises immediacy. Home_Welcome/Home_NoSubsHint kept above for
         // any other consumer; the onboarding screen uses these. Divider is the short sentence-case form
         // of Onboarding_OrSignIn (L.Account.cs), inside the two-hairline "или ..." rule.
-        Add("Onboarding_Title", "Добавьте подписку", "Add a subscription");
-        Add("Onboarding_Subtitle", "Отсканируйте QR-код или вставьте ссылку из буфера: доступ появится сразу.", "Scan a QR code or paste a link from the clipboard: access appears right away.");
-        Add("Onboarding_OrSignInShort", "или войдите в аккаунт", "or sign in to your account");
 
         // ── Server-list grouping / meta (HomeViewModel) ──
         // Fallback group name for servers without a subscription remark.

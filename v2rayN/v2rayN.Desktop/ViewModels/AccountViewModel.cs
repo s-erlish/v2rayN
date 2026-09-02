@@ -576,7 +576,7 @@ public class AccountViewModel : MyReactiveObject
     }
 
     /// <summary>Design-time constructor: sample logged-in active state so the previewer renders.</summary>
-    private AccountViewModel(bool design)
+    private AccountViewModel(bool design, bool emailWithoutPassword = false)
     {
         _repo = null!;
         _authManager = null!;
@@ -585,8 +585,9 @@ public class AccountViewModel : MyReactiveObject
         {
             Email = "user@example.com",
             // Дизайнерский аккаунт УКОМПЛЕКТОВАН: есть и адрес, и пароль. Иначе превью показывало бы
-            // строку почты в промежуточном состоянии («Задать пароль») как обычную.
-            HasPassword = true,
+            // строку почты в промежуточном состоянии («Задать пароль») как обычную. Третье состояние
+            // строки смотрится отдельным превью — оно существует только на таком аккаунте.
+            HasPassword = !emailWithoutPassword,
             TelegramUsername = "serumfx",
             Balance = 0.0,
             Currency = "RUB",
@@ -611,6 +612,10 @@ public class AccountViewModel : MyReactiveObject
     }
 
     public static AccountViewModel CreateDesign() => new(true);
+
+    /// <summary>Тот же дизайнерский аккаунт, но с привязанным адресом и БЕЗ пароля — единственное
+    /// состояние, в котором строка «Почта» говорит «Нужен пароль для входа». Только для превью.</summary>
+    public static AccountViewModel CreateDesignEmailWithoutPassword() => new(true, emailWithoutPassword: true);
 
     #region carousel card navigation intents
 
@@ -2395,6 +2400,17 @@ public class AccountViewModel : MyReactiveObject
             RunOnUi(() => CurrentLoginState = new LoginState.Error(failure));
             return;
         }
+        // ФЛАГ — ВТОРАЯ ПОЛОВИНА ПОРУЧЕНИЯ. set-password панель отклоняет только при
+        // `passwordHash && onboardingCompleted`, поэтому без этого вызова эндпоинт остаётся открыт
+        // на аккаунте, у которого пароль уже есть: шаг проходится второй раз, и то, что приложение
+        // думает об аккаунте, расходится с тем, что показывает сайт.
+        //
+        // Обе неудачи — и эта, и перечитывание — проглатываются, и именно в этом порядке. Пароль уже
+        // СОХРАНЁН к моменту, когда любая из них выполняется; назвать неудачу довеска неудачей
+        // поручения значило бы сказать пользователю, что пароль не принят, когда он принят. Профиль
+        // перечитывается последним, чтобы кэш нёс флаг, который этот вызов только что поставил.
+        await _repo.CompleteOnboarding();
+
         // The panel has confirmed the password; the profile is only re-read so the cached copy agrees.
         // A failed re-read is not a failed errand — the account has its password either way, so the
         // step still ends, on the freshest profile we have.
@@ -2568,15 +2584,21 @@ public class AccountViewModel : MyReactiveObject
             TelegramRowValue = TelegramLinked && TelegramLinkedId.IsNotEmpty()
                 ? L.F("Account_LinkedAs", TelegramLinkedId)
                 : (TelegramLinked ? L.T("Account_Linked") : L.T("Account_NotLinked"));
-            // Подпись называет ИДЕНТИФИКАТОР («Привязан · user@mail.ru»), а чего не хватает — говорит
-            // действие рядом. Строка знает три состояния, и в каждом у неё РОВНО ОДНО дело: адреса
-            // нет — «Добавить»; адрес есть, а пароля нет (войти по нему ещё нельзя) — «Задать пароль»;
-            // есть и то и другое — «Изменить». Три кнопки разом в 56-точечную строку не влезут, да и
-            // выбирать там не из чего: недостающий шаг всегда один.
+            // Строка знает ТРИ состояния, и подпись называет каждое своим именем — не только
+            // действие рядом. Адреса нет — «Не привязан» · «Добавить». Адрес есть, а пароля за ним
+            // нет — «Нужен пароль для входа · адрес» · «Задать пароль»: письмо привязки пишет адрес
+            // и ничего больше, поэтому «Привязан» здесь обещало бы вход, которого не существует.
+            // Есть и то и другое — «Привязан · адрес» · «Изменить». Три кнопки разом в 56-точечную
+            // строку не влезут, да и выбирать там не из чего: недостающий шаг всегда один.
+            //
+            // Спрашиваем EmailSignInWorks(), а НЕ CanSetPassword(): строка сообщает, работает ли
+            // вход по почте, и он работает с любым настоящим паролем. Запрет панели на set-password
+            // — другой вопрос, и задан он в одном месте: там, где предлагается шаг.
+            var signInWorks = profile.EmailSignInWorks();
             var siteId = FirstNonBlank(EmailLinkedId, GoogleLinkedId);
-            SiteRowValue = siteId.IsNotEmpty()
-                ? L.F("Account_LinkedAs", siteId)
-                : L.T("Account_NotLinked");
+            SiteRowValue = siteId.IsNullOrEmpty()
+                ? L.T("Account_NotLinked")
+                : (signInWorks ? L.F("Account_LinkedAs", siteId) : L.F("Account_EmailNoPassword", siteId));
             EmailActionText = EmailLinkedId.IsNullOrEmpty()
                 ? L.T("Account_AddAction")
                 : (EmailHasPassword ? L.T("Account_ChangeAction") : L.T("Account_SetPasswordAction"));

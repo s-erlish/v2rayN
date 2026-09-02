@@ -427,7 +427,6 @@ public static class SubscriptionHandler
             //  подписки только при смене DataContext, а он не меняется, пока не поменялось имя:
             //  без этого сигнала свежие трафик и срок лежали бы в базе, а на экране оставались
             //  прежние цифры до перезапуска приложения.
-            Logging.SaveLog($"DBG publish meta {item.Id}");
             AppEvents.SubscriptionMetaChanged.Publish(item.Id);
         }
         catch (Exception ex)

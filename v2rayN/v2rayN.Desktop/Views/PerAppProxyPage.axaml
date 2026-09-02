@@ -207,7 +207,13 @@
                                             Margin="16,0,12,0"
                                             VerticalAlignment="Center">
                                             <TextBlock Classes="SubName" Text="{Binding Display}" />
-                                            <TextBlock Classes="SubSub" Text="{Binding Identifier}" />
+                                            <!--  Вторая строка живёт, только когда она не повторяет
+                                                  первую: у запущенной программы имя процесса И ЕСТЬ
+                                                  идентификатор.  -->
+                                            <TextBlock
+                                                Classes="SubSub"
+                                                IsVisible="{Binding HasDetail}"
+                                                Text="{Binding Detail}" />
                                         </StackPanel>
                                         <Border
                                             Grid.Column="2"

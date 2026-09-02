@@ -184,6 +184,14 @@ public sealed class AccountRepository
     public Task<ApiResult<MessageResponseDto>> SetPassword(string newPassword) => Guard(() => _api.SetPassword(newPassword));
 
     /// <summary>
+    /// The other half of <see cref="SetPassword"/>: marks the first sign-in finished so the panel
+    /// stops accepting set-password on an account that now has a password. Guarded like the rest —
+    /// its failure is never the errand's failure, the password is saved by the time it runs.
+    /// </summary>
+    public Task<ApiResult<bool>> CompleteOnboarding() =>
+        Guard(async () => { await _api.CompleteOnboarding(); return true; });
+
+    /// <summary>
     /// Replace an already-attached address. Note the 401 this can return is NOT a dead session: the
     /// panel answers 401 code INVALID_PASSWORD for a wrong current password. Routing it through
     /// <see cref="Guard"/> keeps that where it belongs — a refusal for the caller to show, never a

@@ -314,6 +314,11 @@ public partial class PerAppProxyPage : UserControl, ISubPage
                          .Distinct(StringComparer.OrdinalIgnoreCase)
                          .ToList();
 
+        // Владение наборами публикуется ЗДЕСЬ, вместе со списком, и на обеих дорогах отсюда: это
+        // две половины одного факта, и разъехаться им нельзя. Запись крошечная, а согласие тумблера
+        // с галочками она гарантирует даже там, где список не изменился.
+        AppPresets.Commit(new HashSet<string>(chosen, StringComparer.OrdinalIgnoreCase));
+
         //  НИЧЕГО НЕ ИЗМЕНИЛОСЬ — НИЧЕГО И НЕ ДЕЛАЕМ. Раньше уход со страницы всегда сохранял,
         //  переписывал правила маршрутизации и публиковал перезагрузку ядра. Перезагрузка — это
         //  разрыв и повторное поднятие туннеля: владелец заходил посмотреть список программ, выходил
@@ -411,6 +416,18 @@ public partial class PerAppProxyPage : UserControl, ISubPage
         public string Identifier { get; set; } = string.Empty;
         public string? Display { get; set; }
         public string? Path { get; set; }
+
+        /// <summary>
+        /// Вторая строка — ТОЛЬКО когда ей есть что добавить. У запущенной программы имя процесса и
+        /// есть идентификатор, и строка повторяла заголовок слово в слово: «bash» над «bash»,
+        /// «claude» над «claude» — на Linux так выглядел почти весь список. Смысл у неё появляется
+        /// у программы, добавленной файлом: там заголовок — имя файла, а идентификатор — полный путь.
+        /// </summary>
+        public string? Detail =>
+            string.Equals(Identifier, Display, StringComparison.Ordinal) ? null : Identifier;
+
+        /// <summary>Есть ли вторая строка. Пустая занимала бы высоту строки текста.</summary>
+        public bool HasDetail => Detail.IsNotEmpty();
 
         /// <summary>Инициал для плитки. Пустое имя даёт «?», а не пустой квадрат.</summary>
         public string Letter =>

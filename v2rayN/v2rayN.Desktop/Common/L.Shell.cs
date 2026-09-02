@@ -32,8 +32,6 @@ public sealed partial class L
 
         // ── Connection status line (shield / tray). Common_CouldntConnect lives in L.Common.cs. ──
         Add("Status_Connecting", "Подключение…", "Connecting…");
-        Add("Status_Disconnected", "Отключено", "Disconnected");
         Add("Status_Connected", "Подключено", "Connected");
-        Add("Status_ConnectedTo", "Подключено · {0}", "Connected · {0}");
     }
 }

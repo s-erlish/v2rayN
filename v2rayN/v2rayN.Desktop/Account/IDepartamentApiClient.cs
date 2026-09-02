@@ -40,6 +40,11 @@ public interface IDepartamentApiClient
     Task<MessageResponseDto> RequestLinkEmail(string email);
     Task<MessageResponseDto> SetPassword(string newPassword);
 
+    /// <summary>Sets `onboardingCompleted` on the account. Always called straight after a successful
+    /// <see cref="SetPassword"/> and never on its own: together they are what «пароль задан» means to
+    /// the panel (its set-password gate reads BOTH flags).</summary>
+    Task CompleteOnboarding();
+
     /// <summary>Replace an already-attached address; <paramref name="currentPassword"/> is required
     /// by the panel exactly when the account has one (see <see cref="UserProfileDto.HasPassword"/>).</summary>
     Task<MessageResponseDto> RequestChangeEmail(string newEmail, string? currentPassword);

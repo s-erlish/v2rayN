@@ -351,7 +351,23 @@ public sealed class UserProfileDto
     // Drive the "Привязки" (linking) rows on the Account tab.
     public bool GoogleLinked { get; set; }
     public bool AppleLinked { get; set; }
+
+    /// <summary>
+    /// <b>Can this account sign in with a password at all?</b> The panel computes it as
+    /// `Boolean(passwordHash)`. Decides two things: whether «Привязать почту» ends with a
+    /// «Придумайте пароль» step, and whether «Сменить почту» has to ask for the current password
+    /// before it sends anything. Defaults to false — the safe end of both.
+    /// </summary>
     public bool HasPassword { get; set; }
+
+    /// <summary>
+    /// False while the account still carries the dummy password an e-mail registration leaves behind.
+    /// The panel's set-password refuses only when `passwordHash &amp;&amp; onboardingCompleted`, so BOTH
+    /// flags decide whether the step is offered — see <see cref="UserProfileExtensions.CanSetPassword"/>.
+    /// Defaults to <c>true</c> so a backend that omits the key reads as «первый вход завершён», which
+    /// with <see cref="HasPassword"/> false still offers the step and with it true correctly does not.
+    /// </summary>
+    public bool OnboardingCompleted { get; set; } = true;
 
     public long? TelegramId { get; set; }
     public string? TelegramUsername { get; set; }
@@ -425,4 +441,34 @@ public sealed class UserProfileDto
             AvatarUrl = value;
         }
     }
+}
+
+/// <summary>
+/// Две РАЗНЫЕ вопроса о пароле, заданные один раз здесь, чтобы экраны их не путали.
+/// </summary>
+public static class UserProfileExtensions
+{
+    /// <summary>
+    /// <b>Примет ли панель POST /client/set-password для этого аккаунта?</b> Повторяет её собственный
+    /// запрет — «Пароль уже установлен» она отвечает ровно тогда, когда пароль настоящий И первый
+    /// вход завершён, — поэтому шаг предлагается там, где он сработает, и молча пропускается там,
+    /// где нет. Повторить запрет, а не спрашивать всегда, — это разница между поручением, которое
+    /// заканчивается, и поручением, которое заканчивается отказом на то, чего никто не просил.
+    /// </summary>
+    public static bool CanSetPassword(this UserProfileDto profile)
+        => !profile.HasPassword || !profile.OnboardingCompleted;
+
+    /// <summary>
+    /// <b>Может ли этот аккаунт на самом деле войти по своей почте?</b> Обе половины, а не любая:
+    /// вход на панели ищет аккаунт по адресу и затем сверяет хэш пароля, поэтому привязанный адрес
+    /// без пароля за ним — идентификатор, а не способ войти.
+    /// <para/>
+    /// Намеренно НЕ <see cref="CanSetPassword"/>. Тот повторяет запрет set-password и истинен для
+    /// аккаунта с настоящим паролем и незавершённым первым входом — аккаунта, который входит
+    /// прекрасно. Строка «Почта» спрашивает это, шаг пароля — то, и единственный случай, где они
+    /// расходятся, — ровно тот, где под адресом, которому ничего не нужно, появилось бы «Нужен
+    /// пароль для входа».
+    /// </summary>
+    public static bool EmailSignInWorks(this UserProfileDto profile)
+        => profile.Email.IsNotEmpty() && profile.HasPassword;
 }

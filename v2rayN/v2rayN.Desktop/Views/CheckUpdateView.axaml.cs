@@ -35,7 +35,14 @@ public partial class CheckUpdateView : ReactiveUserControl<CheckUpdateViewModel>
         // Строки строятся ОДИН раз: у обёртки собственное реактивное IsOn, а Remarks движка уже
         // [Reactive] — значит и тумблер, и живой ответ проверки доезжают до экрана сами.
         // Пересборка списка на каждый тап (как было) моргала всей карточкой.
-        listComponents.ItemsSource = ViewModel.CheckUpdateModels.Select((m, i) => new ComponentRow(m, i > 0)).ToList();
+        // Безымянный компонент СТРОКОЙ НЕ СТАНОВИТСЯ. Раньше такая строка получала подпись «—»:
+        // тумблер без названия, который непонятно что включает. Имя берётся из CoreTypeForStorage,
+        // и оно же — ключ, под которым выбор сохраняется в конфиг; без имени строка не может ни
+        // назваться, ни запомниться.
+        listComponents.ItemsSource = ViewModel.CheckUpdateModels
+            .Where(m => m.CoreTypeForStorage.IsNotEmpty())
+            .Select((m, i) => new ComponentRow(m, i > 0))
+            .ToList();
         txtFoot.Text = L.F("Update_Foot", Utils.GetVersionInfo());
 
         btnBack.Click += (_, _) => BackRequested?.Invoke(this, EventArgs.Empty);
@@ -160,8 +167,8 @@ public partial class CheckUpdateView : ReactiveUserControl<CheckUpdateViewModel>
             "GeoFiles" => L.T("Update_GeoFiles"),
             "v2rayN" => L.T("Update_App"),
             "sing_box" => "sing-box",
-            var other when other.IsNotEmpty() => other,
-            _ => "—",
+            // Пустого варианта здесь больше нет: безымянные строки отсеиваются при сборке списка.
+            var other => other,
         };
     }
 }

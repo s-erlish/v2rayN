@@ -63,32 +63,38 @@ public partial class AboutPage : UserControl, ISubPage
     }
 
     /// <summary>Одна строка для значения справа: ОС и разрядность. Длинное описание ОС уедет в
-    /// многоточие — за полной записью есть кнопка копирования.</summary>
+    /// многоточие — за полной записью есть кнопка копирования.
+    /// <para/>
+    /// Собирается ИЗ ЧАСТЕЙ, а не «всё или прочерк». Разрядность известна всегда — это значение
+    /// перечисления, — а описание ОС теоретически может не прийти; раньше на любой сбой обе половины
+    /// заменялись символом «—», то есть терялось и то, что было известно.</summary>
     private static string SystemLine()
     {
-        try
-        {
-            var arch = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString();
-            var os = System.Runtime.InteropServices.RuntimeInformation.OSDescription.Trim();
-            return $"{os} · {arch}";
-        }
-        catch
-        {
-            return "—";
-        }
+        var arch = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString();
+        var os = OsDescription();
+        return os.IsNotEmpty() ? $"{os} · {arch}" : arch;
     }
 
+    /// <summary>Полная запись для буфера обмена — её несут в поддержку, поэтому каждое поле
+    /// заполнено: ненайденная ОС называет себя словом, а не пустотой после двоеточия.</summary>
     private static string SystemDetails()
+    {
+        var arch = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString();
+        var os = OsDescription();
+        return L.F("About_SystemInfo", os.IsNotEmpty() ? os : L.T("About_SystemUnknown"), arch, Environment.Version);
+    }
+
+    /// <summary>Описание ОС, пустая строка вместо исключения — единственное здесь, что вообще может
+    /// его бросить, и его отсутствие не повод потерять остальные факты.</summary>
+    private static string OsDescription()
     {
         try
         {
-            var arch = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString();
-            var os = System.Runtime.InteropServices.RuntimeInformation.OSDescription.Trim();
-            return L.F("About_SystemInfo", os, arch, Environment.Version);
+            return System.Runtime.InteropServices.RuntimeInformation.OSDescription.Trim();
         }
         catch
         {
-            return "—";
+            return string.Empty;
         }
     }
 
