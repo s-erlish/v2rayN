@@ -14,11 +14,6 @@ public class WindowBase<TViewModel> : ReactiveWindow<TViewModel> where TViewMode
         };
     }
 
-    private void ReactiveWindowBase_Closed(object? sender, EventArgs e)
-    {
-        throw new NotImplementedException();
-    }
-
     protected virtual void OnLoaded(object? sender, RoutedEventArgs e)
     {
         try

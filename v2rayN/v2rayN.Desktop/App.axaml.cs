@@ -307,22 +307,6 @@ public partial class App : Application
         Logging.SaveLog("TaskScheduler_UnobservedTaskException", e.Exception);
     }
 
-    private async void MenuAddServerViaClipboardClick(object? sender, EventArgs e)
-    {
-        try
-        {
-            if (Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime { MainWindow: not null })
-            {
-                AppEvents.AddServerViaClipboardRequested.Publish();
-                await Task.Delay(1000);
-            }
-        }
-        catch (Exception ex)
-        {
-            Logging.SaveLog("MenuAddServerViaClipboardClick", ex);
-        }
-    }
-
     // «Выход». Обработчик события — значит async void: исключение из него НЕКОМУ поймать и оно
     // валит процесс целиком. У трёх соседних пунктов трея try/catch есть, у этого не было — а он
     // как раз останавливает ядро и снимает системный прокси, то есть трогает и процессы, и сеть.
@@ -688,9 +672,6 @@ public partial class App : Application
             ["Brush.Yellow"] = Solid("#9BA1AD"),
             ["Brush.Telegram"] = Solid("#F2F4F8"),
             ["Brush.PopBg"] = Solid("#282A2E"),
-            ["Brush.Ring.Outer"] = Alpha("#F2F4F8", 0.16),
-            ["Brush.Ring.Inner"] = Alpha("#F2F4F8", 0.45),
-            ["Brush.SelectedFill"] = Alpha("#F2F4F8", 0.10),
 
             // ── Плитки иконок: цветные → серые; красная плитка остаётся красной ──
             ["Brush.Tile.Neutral"] = Solid(highest),
