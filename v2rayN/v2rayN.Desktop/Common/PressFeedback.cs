@@ -81,6 +81,24 @@ public static class PressFeedback
     public static readonly AttachedProperty<double> ScaleProperty =
         AvaloniaProperty.RegisterAttached<Control, double>("Scale", typeof(PressFeedback), double.NaN);
 
+    /// <summary>
+    /// Отклик БЕЗ прогиба: только фон нажатия (класс <c>pressed</c> → <c>Brush.PressBg</c>).
+    ///
+    /// Заведено ради строк настроек. У них <see cref="ScaleProperty"/> намеренно погашен (NaN):
+    /// строка — срез поверхности карты, а не свободно стоящий объект, и «продавливаться» не должна;
+    /// вдобавок у строки-якоря масштаб растянул бы раскрытое под ней окошко выбора. Но пока гасился
+    /// масштаб, вместе с ним отключалась и подписка на указатель — и строка не отвечала на нажатие
+    /// ВООБЩЕ: правило <c>Border.SettingRow.pressed</c> в GlobalStyles не срабатывало ни разу,
+    /// потому что класс некому было повесить. Владелец попросил отклик вернуть — фоном.
+    ///
+    /// Поэтому «подписаны» и «прогибаемся» разведены: подписка живёт, если задан рабочий масштаб
+    /// ИЛИ поднят этот флаг; <see cref="Dip"/> вызывается только при рабочем масштабе. Аппаратный
+    /// слой (<see cref="CompositedProperty"/>) остаётся привязан к масштабу — без трансформы глифы
+    /// заново не растрируются, повышать нечего.
+    /// </summary>
+    public static readonly AttachedProperty<bool> InkProperty =
+        AvaloniaProperty.RegisterAttached<Control, bool>("Ink", typeof(PressFeedback), false);
+
     //  Трансформ прогиба, посаженный на РЕБЁНКА строки. Заодно метка «уже подписаны».
     private static readonly AttachedProperty<ScaleTransform?> DipProperty =
         AvaloniaProperty.RegisterAttached<Control, ScaleTransform?>("Dip", typeof(PressFeedback));
@@ -95,11 +113,16 @@ public static class PressFeedback
     {
         CompositedProperty.Changed.AddClassHandler<Control, bool>(OnCompositedChanged);
         ScaleProperty.Changed.AddClassHandler<Control, double>(OnScaleChanged);
+        InkProperty.Changed.AddClassHandler<Control, bool>((c, _) => Rewire(c));
     }
 
     public static bool GetComposited(Control c) => c.GetValue(CompositedProperty);
 
     public static void SetComposited(Control c, bool v) => c.SetValue(CompositedProperty, v);
+
+    public static bool GetInk(Control c) => c.GetValue(InkProperty);
+
+    public static void SetInk(Control c, bool v) => c.SetValue(InkProperty, v);
 
     public static double GetScale(Control c) => c.GetValue(ScaleProperty);
 
@@ -125,14 +148,19 @@ public static class PressFeedback
 
     private static void OnScaleChanged(Control c, AvaloniaPropertyChangedEventArgs<double> e)
     {
-        var wanted = e.NewValue.GetValueOrDefault();
-        var active = IsUsable(wanted);
-
         //  Прогиб = масштаб, значит текст под ним растрируется заново → нужен тот же «аппаратный
         //  слой», что и у кнопок. Ставим его вместе с прогибом, чтобы потребитель не мог забыть.
-        SetComposited(c, active);
+        //  Привязан именно к масштабу: у отклика-фоном трансформы нет, повышать нечего.
+        SetComposited(c, IsUsable(e.NewValue.GetValueOrDefault()));
+        Rewire(c);
+    }
 
-        if (!active)
+    /// <summary>Подписка на указатель нужна, если у контрола есть рабочий прогиб ИЛИ поднят
+    /// <see cref="InkProperty"/>. Идемпотентна: повторный вызов при уже живой подписке ничего не
+    /// делает, целевой масштаб читается на самом нажатии.</summary>
+    private static void Rewire(Control c)
+    {
+        if (!IsUsable(GetScale(c)) && !GetInk(c))
         {
             Unwire(c);
             return;
@@ -185,7 +213,11 @@ public static class PressFeedback
             //  Масштаб он не трогает — иначе трансформ снова сел бы на саму строку.
             c.Classes.Add("pressed");
         }
-        Dip(c, GetScale(c));
+        //  Отклик-фоном (Ink без масштаба): класс повешен, прогибать нечего.
+        if (IsUsable(GetScale(c)))
+        {
+            Dip(c, GetScale(c));
+        }
     }
 
     private static void OnPointerUp(object? sender, RoutedEventArgs e)
@@ -195,7 +227,10 @@ public static class PressFeedback
             return;
         }
         c.Classes.Remove("pressed");
-        Dip(c, 1d);
+        if (c.GetValue(DipProperty) is not null && IsUsable(GetScale(c)))
+        {
+            Dip(c, 1d);
+        }
     }
 
     /// <summary>

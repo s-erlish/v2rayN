@@ -231,6 +231,11 @@
         <Style Selector="Border.SettingRow">
             <Setter Property="Padding" Value="16,9" />
             <Setter Property="loc:PressFeedback.Scale" Value="NaN" />
+            <!--  ...но отклик на нажатие строке нужен — фоном (Brush.PressBg). Пока гасился только
+                  масштаб, вместе с ним отключалась подписка на указатель, и строка не отвечала на
+                  нажатие вообще. Ink разводит эти две вещи: класс .pressed вешается, трансформа
+                  по-прежнему нет.  -->
+            <Setter Property="loc:PressFeedback.Ink" Value="True" />
         </Style>
 
         <!--  Содержимое строки — фиксированные 40 (первый замок единой высоты, см. шапку файла).  -->
