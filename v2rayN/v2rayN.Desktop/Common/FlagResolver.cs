@@ -97,9 +97,41 @@ public static class FlagResolver
             }
         }
 
-        // A standalone 2-letter token like "NL", "US" (word-boundaried).
+        // ==================== Двухбуквенный код страны в имени ====================
+        //  Код берём ТОЛЬКО из начала или из конца имени. Так его и пишут — «IT-Milan», «us-west-1»,
+        //  «nl-ams-3», «UK London», «Poland RU», — а в СЕРЕДИНЕ имени два подряд стоящих латинских
+        //  символа почти всегда обычное слово, а не страна. Прежний сквозной скан брал первое
+        //  попавшееся совпадение где угодно в строке, и рядом с именем вставал флаг чужой страны:
+        //  «Server in EU» → Индия (слово «in» стоит РАНЬШЕ «EU»), «Node at edge» → Австрия,
+        //  «Fast IT node» → Италия.
+        //
+        //  Второе ограничение оставлено прежним: ЧЕТЫРЕ кода (IN · NO · IT · AT) совпадают с
+        //  обычными английскими словами, и их принимаем только записанными ПРОПИСНЫМИ. Одно
+        //  правило другому не мешает: «No limit 01» стоит в начале, но записано не прописными,
+        //  поэтому Норвегией не становится.
+        //
+        //  Границы считаем по ОБРЕЗАННОЙ строке, чтобы пробелы по краям не мешали коду быть
+        //  «в начале» или «в конце».
+        var startBound = 0;
+        while (startBound < remark.Length && char.IsWhiteSpace(remark[startBound]))
+        {
+            startBound++;
+        }
+        var endBound = remark.Length;
+        while (endBound > startBound && char.IsWhiteSpace(remark[endBound - 1]))
+        {
+            endBound--;
+        }
+
         foreach (Match m in TwoLetterToken.Matches(remark))
         {
+            var atStart = m.Index == startBound;
+            var atEnd = m.Index + m.Length == endBound;
+            if (!atStart && !atEnd)
+            {
+                continue;
+            }
+
             var token = m.Groups[1].Value;
             var c = token.ToUpperInvariant();
             if (!Iso2Codes.Contains(c))
@@ -107,13 +139,6 @@ public static class FlagResolver
                 continue;
             }
 
-            //  ЧЕТЫРЕ кода совпадают с обычными английскими словами: IN, NO, IT, AT. Двухбуквенный
-            //  скан ловил их в любом регистре, и имя сервера получало флаг чужой страны:
-            //  «Server in EU» → Индия (слово «in» находится РАНЬШЕ «EU»), «No limit 01» → Норвегия,
-            //  «Node at edge» → Австрия, «Fast IT node» → Италия. Для этих четырёх требуем ЗАПИСЬ
-            //  ПРОПИСНЫМИ — так их и пишут в именах серверов («IT-Milan», «NO-Oslo»), а слово в
-            //  строчных или с заглавной пропускаем и идём дальше по строке. Остальные коды
-            //  (us-west-1, nl, de …) ведут себя как прежде.
             if (AmbiguousWordCodes.Contains(c) && !string.Equals(token, c, StringComparison.Ordinal))
             {
                 continue;
