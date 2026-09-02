@@ -179,6 +179,9 @@ public static class AppPresets
 
     /// <summary>
     /// Запоминает записи, которые набор только что добавил, чтобы <see cref="Release"/> вернул ровно их.
+    ///
+    /// ТОЛЬКО В ПАМЯТИ. На диск владение уходит одним действием со списком процессов — см.
+    /// <see cref="Commit"/>; почему именно так, написано там.
     /// </summary>
     /// <param name="preset">Набор, который включают.</param>
     /// <param name="current">Текущий выбор, без учёта регистра.</param>
@@ -188,9 +191,7 @@ public static class AppPresets
         var added = preset.Processes.Where(p => !current.Contains(p)).ToList();
         lock (_lock)
         {
-            var owned = Load();
-            owned[preset.Key] = added;
-            Persist();
+            Load()[preset.Key] = added;
         }
         return added;
     }
@@ -200,6 +201,8 @@ public static class AppPresets
     ///
     /// Процесс, выбранный человеком до применения набора, набору не принадлежит и остаётся — снятие
     /// набора не имеет права отнимать решение, которое человек принял сам.
+    ///
+    /// Тоже только в памяти: пара «включил и выключил» не должна оставлять на диске ни следа.
     /// </summary>
     public static IReadOnlyList<string> Release(AppPreset preset)
     {
@@ -208,8 +211,43 @@ public static class AppPresets
             var owned = Load();
             var list = owned.TryGetValue(preset.Key, out var v) ? v : [];
             owned.Remove(preset.Key);
-            Persist();
             return list;
+        }
+    }
+
+    /// <summary>
+    /// Приводит владение к ИТОГОВОМУ выбору и публикует его — одним действием с сохранением списка
+    /// процессов.
+    ///
+    /// Раньше <see cref="Apply"/> и <see cref="Release"/> писали файл в момент тумблера, а список
+    /// процессов сохранялся только при уходе со страницы. Две половины одного факта расходились на
+    /// любом выходе мимо стрелки «назад»: включить набор и закрыть приложение прямо на этом экране
+    /// значило получить при следующем запуске включённый тумблер и НИ ОДНОЙ отмеченной программы.
+    /// Тумблер обещал применённый набор, которого нет.
+    ///
+    /// Обрезка по <paramref name="chosen"/> закрывает вторую дорогу к тому же вранью: набор был
+    /// включён, а человек снял его галочки руками, не трогая тумблер. Владение не переживает выбор —
+    /// набор, у которого не осталось ни одной своей записи, больше не применён.
+    /// </summary>
+    /// <param name="chosen">Итоговый выбор без учёта регистра — ровно то, что уходит в конфиг.</param>
+    public static void Commit(ISet<string> chosen)
+    {
+        lock (_lock)
+        {
+            var owned = Load();
+            foreach (var key in owned.Keys.ToList())
+            {
+                var kept = owned[key].Where(chosen.Contains).ToList();
+                if (kept.Count == 0)
+                {
+                    owned.Remove(key);
+                }
+                else
+                {
+                    owned[key] = kept;
+                }
+            }
+            Persist();
         }
     }
 
@@ -237,15 +275,49 @@ public static class AppPresets
         return _owned ??= new Dictionary<string, List<string>>();
     }
 
+    /// <summary>
+    /// Запись владения — во временный файл, потом переименование, как <c>ConfigHandler.SaveConfig</c>.
+    ///
+    /// Прямой <c>File.WriteAllText</c> сначала обрезает файл до нуля и только потом пишет: падение,
+    /// выключение питания или закрытие крышки в этом промежутке оставляли на диске ПУСТОЙ или
+    /// оборванный JSON. Читается он как «набор не применён» (см. <see cref="Load"/>), а значит
+    /// приложение забывает, какие процессы оно добавило само, и снять их выключением набора уже
+    /// нечем — они остаются в списке пользователя навсегда.
+    ///
+    /// Имя временного файла уникально по процессу и вызову: два экземпляра приложения на одном
+    /// каталоге настроек (единственность может быть потеряна, а переносимую сборку просто запускают
+    /// дважды) иначе перезаписали бы общий черновик друг друга. Переименование — единственный шаг
+    /// публикации, поэтому читатель видит либо старый файл, либо новый, но не половину.
+    /// </summary>
     private static void Persist()
     {
+        var path = Utils.GetConfigPath(FileName);
+        var tempPath = $"{path}.{Environment.ProcessId}.{Guid.NewGuid():N}.tmp";
         try
         {
-            File.WriteAllText(Utils.GetConfigPath(FileName), JsonSerializer.Serialize(_owned ?? []));
+            File.WriteAllText(tempPath, JsonSerializer.Serialize(_owned ?? []));
+            File.Move(tempPath, path, true);
+            tempPath = string.Empty;
         }
         catch (Exception ex)
         {
             Logging.SaveLog(Tag, ex);
+        }
+        finally
+        {
+            // Неудавшаяся запись не оставляет черновик: имена уникальны, иначе они копились бы в
+            // каталоге настроек навсегда.
+            if (tempPath.IsNotEmpty())
+            {
+                try
+                {
+                    File.Delete(tempPath);
+                }
+                catch (Exception ex)
+                {
+                    Logging.SaveLog(Tag, ex);
+                }
+            }
         }
     }
 
