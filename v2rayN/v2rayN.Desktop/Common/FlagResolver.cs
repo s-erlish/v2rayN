@@ -100,11 +100,26 @@ public static class FlagResolver
         // A standalone 2-letter token like "NL", "US" (word-boundaried).
         foreach (Match m in TwoLetterToken.Matches(remark))
         {
-            var c = m.Groups[1].Value.ToUpperInvariant();
-            if (Iso2Codes.Contains(c))
+            var token = m.Groups[1].Value;
+            var c = token.ToUpperInvariant();
+            if (!Iso2Codes.Contains(c))
             {
-                return c;
+                continue;
             }
+
+            //  ЧЕТЫРЕ кода совпадают с обычными английскими словами: IN, NO, IT, AT. Двухбуквенный
+            //  скан ловил их в любом регистре, и имя сервера получало флаг чужой страны:
+            //  «Server in EU» → Индия (слово «in» находится РАНЬШЕ «EU»), «No limit 01» → Норвегия,
+            //  «Node at edge» → Австрия, «Fast IT node» → Италия. Для этих четырёх требуем ЗАПИСЬ
+            //  ПРОПИСНЫМИ — так их и пишут в именах серверов («IT-Milan», «NO-Oslo»), а слово в
+            //  строчных или с заглавной пропускаем и идём дальше по строке. Остальные коды
+            //  (us-west-1, nl, de …) ведут себя как прежде.
+            if (AmbiguousWordCodes.Contains(c) && !string.Equals(token, c, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            return c;
         }
 
         return null;
@@ -227,6 +242,9 @@ public static class FlagResolver
         ("emirates", "AE"), ("dubai", "AE"),
         ("european union", "EU"), ("europe", "EU"),
     };
+
+    //  Коды, неотличимые от обычных английских слов: их принимаем только прописными (см. выше).
+    private static readonly HashSet<string> AmbiguousWordCodes = new(StringComparer.Ordinal) { "IN", "NO", "IT", "AT" };
 
     // Whitelist for the standalone 2-letter token match. Port of FlagUtil.ISO2_CODES (+ EU).
     private static readonly HashSet<string> Iso2Codes = new(StringComparer.Ordinal)
