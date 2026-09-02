@@ -2537,10 +2537,18 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
 
     public void ShowHideWindow(bool? blShow)
     {
-        var bl = blShow ??
-                    (Utils.IsLinux() || Utils.IsMacOS()
-                    ? (!AppManager.Instance.ShowInTaskbar ^ (WindowState == WindowState.Minimized))
-                    : !AppManager.Instance.ShowInTaskbar);
+        // ОКНО САМО ЗНАЕТ, ВИДНО ЛИ ЕГО. Переключатель (двойной клик по трею, горячая клавиша)
+        // раньше восстанавливал этот факт из флага AppManager.ShowInTaskbar, добавляя к нему через
+        // XOR «свёрнуто ли окно» — потому что на Linux ветка «сворачивать, а не прятать» уходила из
+        // метода, НЕ обновив флаг, и XOR эту дыру компенсировал.
+        //
+        // Компенсация ломалась ровно там, где обе половины говорят «не видно»: окно свернули, а
+        // потом спрятали в трей — флаг false, состояние Minimized, XOR даёт «прятать», и
+        // переключатель из трея прятал уже спрятанное окно. Двойной клик по значку не делал ничего,
+        // и вернуть окно можно было только пунктом меню «Показать».
+        //
+        // Два вопроса к самому окну отвечают на это без флагов и на всех системах одинаково.
+        var bl = blShow ?? (!IsVisible || WindowState == WindowState.Minimized);
         if (bl)
         {
             Show();
@@ -2569,15 +2577,20 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
 
             if (Utils.IsLinux() && _config.UiItem.Hide2TrayWhenClose == false)
             {
+                // «Сворачивать, а не прятать» — но флаг всё равно публикуется (ниже). Он значит
+                // «интерфейс поднят», а не «есть строка в панели задач»: по нему простаивающие циклы
+                // решают, есть ли кому смотреть на их работу. Ранний выход отсюда оставлял флаг
+                // прежним, и они продолжали крутиться над свёрнутым окном.
                 WindowState = WindowState.Minimized;
-                return;
             }
-
-            foreach (var ownedWindow in OwnedWindows)
+            else
             {
-                ownedWindow.Close();
+                foreach (var ownedWindow in OwnedWindows)
+                {
+                    ownedWindow.Close();
+                }
+                Hide();
             }
-            Hide();
         }
 
         AppManager.Instance.ShowInTaskbar = bl;
