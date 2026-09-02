@@ -316,6 +316,22 @@ public sealed class SubscriptionSyncManager
         return set;
     }
 
+    /// <summary>
+    /// Имя подписки, годное ДЛЯ ПОКАЗА, или null. Последний рубеж перед экраном.
+    ///
+    /// Заглушка может лежать в базе по причинам, которые синхронизация уже не исправит: подписку
+    /// добавили вручную из буфера (импорт штампует своё «import sub»), запись пришла от старой
+    /// сборки, панель ещё не ответила после переустановки. Пока имя брали из базы как есть, на
+    /// месте названия подписки — и в шапке группы, и в самой карточке — появлялось служебное
+    /// «import sub», и уходило только после ручного обновления.
+    ///
+    /// Поэтому фильтр стоит именно на выводе: в базе пусть лежит что угодно, показать заглушку
+    /// нельзя. Тариф в список не подставляем — он называет план, а не подписку, и на выводе его
+    /// имени взяться неоткуда.
+    /// </summary>
+    public static string? DisplayName(string? candidate) =>
+        IsRealName(candidate, _placeholderNames) ? candidate!.Trim() : null;
+
     /// <summary><paramref name="candidate"/> when it actually names a subscription (not blank, not a placeholder).</summary>
     private static bool IsRealName(string? candidate, HashSet<string> placeholders)
     {

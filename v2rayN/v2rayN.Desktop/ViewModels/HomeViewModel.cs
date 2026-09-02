@@ -3,6 +3,7 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using ServiceLib.Handler.SysProxy;
+using v2rayN.Desktop.Account;
 using v2rayN.Desktop.Common;
 
 namespace v2rayN.Desktop.ViewModels;
@@ -658,7 +659,9 @@ public class HomeViewModel : MyReactiveObject, IDisposable
             .GroupBy(i => new
             {
                 Key = i.Subid ?? string.Empty,
-                Name = string.IsNullOrEmpty(i.SubRemarks) ? L.T("Home_MyServers") : i.SubRemarks,
+                //  Заглушку («import sub» и родню) показывать нельзя — под ней та же группа
+                //  серверов, что и без имени, поэтому идёт общий заголовок. См. DisplayName.
+                Name = SubscriptionSyncManager.DisplayName(i.SubRemarks) ?? L.T("Home_MyServers"),
             })
             .ToList();
 

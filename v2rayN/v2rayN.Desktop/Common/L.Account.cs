@@ -194,8 +194,8 @@ public sealed partial class L
         // Email-pending states (verify email · magic link sent · reset sent). {0} = the address.
         Add("Login_VerifyTitle", "Подтвердите почту", "Confirm your email");
         Add("Login_VerifyHint",
-            "Мы отправили ссылку на {0}. Откройте её, чтобы подтвердить вход — остальное сделаем сами.",
-            "We've sent a link to {0}. Open it to confirm your sign-in — we'll take care of the rest.");
+            "Мы отправили код на {0}. Введите его ниже — или откройте ссылку из письма, если удобнее.",
+            "We've sent a code to {0}. Enter it below — or open the link from the email if you prefer.");
         Add("Login_MagicSentTitle", "Ссылка отправлена", "Link sent");
         Add("Login_MagicSentHint",
             "Если аккаунт с {0} существует, мы отправили ссылку для входа. Откройте её в браузере.",

@@ -26,6 +26,8 @@ public interface IDepartamentApiClient
     // Auth — start-page register + passwordless flows
     Task<RegisterResult> Register(string email, string password, string? referralCode = null);
     Task<LoginResult> VerifyEmail(string token);
+
+    Task<LoginResult> VerifyEmailCode(string email, string code);
     Task<MessageResponseDto> RequestMagicLink(string email);
     Task<LoginResult> ConsumeMagicLink(string token, string? referralCode = null);
     Task<MessageResponseDto> RequestPasswordReset(string email);

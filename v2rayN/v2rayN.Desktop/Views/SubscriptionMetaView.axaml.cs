@@ -5,6 +5,7 @@ using Avalonia.Animation.Easings;
 using Avalonia.Controls.Documents;
 using Avalonia.Layout;
 using ServiceLib.Helper;
+using v2rayN.Desktop.Account;
 using v2rayN.Desktop.Common;
 using v2rayN.Desktop.ViewModels;
 
@@ -371,8 +372,12 @@ public partial class SubscriptionMetaView : UserControl
         _currentSubId = sub.Id;
         _boundSub = sub;
 
-        // Title: profile-title -> remarks -> group name (never fabricated).
-        var title = sub.ProfileTitle.IsNotEmpty() ? sub.ProfileTitle : (sub.Remarks ?? string.Empty);
+        // Title: profile-title -> remarks -> group name (never fabricated). Заглушка («import sub»
+        // и родня) на экран не проходит: она не называет подписку, а выглядит как её название —
+        // именно это и висело в шапке карточки до первого ручного обновления.
+        var title = SubscriptionSyncManager.DisplayName(sub.ProfileTitle)
+            ?? SubscriptionSyncManager.DisplayName(sub.Remarks)
+            ?? string.Empty;
         TitleText.Text = title.IsNotEmpty() ? title : (_group?.Name ?? string.Empty);
 
         // Subtitle: last-update time + auto-update interval (интервал уходит на узкой карточке).

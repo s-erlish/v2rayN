@@ -182,6 +182,16 @@ public sealed class DepartamentApiClient : IDepartamentApiClient
         return MapLoginResponse(raw);
     }
 
+    /// <summary>
+    /// Тот же <see cref="Endpoints.VerifyEmail"/>, но кодом из письма вместо ссылки — так
+    /// регистрация заканчивается в приложении, а не в браузере. Ответ идентичен: сессия и профиль.
+    /// </summary>
+    public async Task<LoginResult> VerifyEmailCode(string email, string code)
+    {
+        var raw = await PostJson<LoginResponseDto>(Endpoints.VerifyEmail, Serialize(new EmailCodeRequestDto(email, code)));
+        return MapLoginResponse(raw);
+    }
+
     public Task<MessageResponseDto> RequestMagicLink(string email) =>
         PostJson<MessageResponseDto>(Endpoints.MagicLinkRequest, Serialize(new EmailRequestDto(email)));
 
