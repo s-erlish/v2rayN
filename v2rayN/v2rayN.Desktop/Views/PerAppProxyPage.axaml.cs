@@ -417,6 +417,18 @@ public partial class PerAppProxyPage : UserControl, ISubPage
         public string? Display { get; set; }
         public string? Path { get; set; }
 
+        /// <summary>
+        /// Вторая строка — ТОЛЬКО когда ей есть что добавить. У запущенной программы имя процесса и
+        /// есть идентификатор, и строка повторяла заголовок слово в слово: «bash» над «bash»,
+        /// «claude» над «claude» — на Linux так выглядел почти весь список. Смысл у неё появляется
+        /// у программы, добавленной файлом: там заголовок — имя файла, а идентификатор — полный путь.
+        /// </summary>
+        public string? Detail =>
+            string.Equals(Identifier, Display, StringComparison.Ordinal) ? null : Identifier;
+
+        /// <summary>Есть ли вторая строка. Пустая занимала бы высоту строки текста.</summary>
+        public bool HasDetail => Detail.IsNotEmpty();
+
         /// <summary>Инициал для плитки. Пустое имя даёт «?», а не пустой квадрат.</summary>
         public string Letter =>
             Display.IsNullOrEmpty() ? "?" : Display!.Trim()[..1].ToUpperInvariant();
