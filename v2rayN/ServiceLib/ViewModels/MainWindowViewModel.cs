@@ -13,8 +13,17 @@ public class MainWindowViewModel : MyReactiveObject
 
     public ProfilesViewModel ProfilesViewModel { get; } = new();
     public MsgViewModel MsgViewModel { get; } = new();
-    public ClashProxiesViewModel ClashProxiesViewModel { get; } = new();
-    public ClashConnectionsViewModel ClashConnectionsViewModel { get; } = new();
+    // Оба вида Clash создаются ЛЕНИВО и только там, где для них есть экраны (Global.ClashUiAvailable).
+    // Полем-инициализатором они строились при каждом запуске любой оболочки, и каждый в конструкторе
+    // запускал бесконечный цикл опроса — на ПК, где панели Clash нет вовсе, эти циклы просыпались
+    // 780 раз в час ради проверки, которая всегда отвечала «смотреть некому».
+    private ClashProxiesViewModel? _clashProxiesViewModel;
+
+    public ClashProxiesViewModel ClashProxiesViewModel => _clashProxiesViewModel ??= new();
+
+    private ClashConnectionsViewModel? _clashConnectionsViewModel;
+
+    public ClashConnectionsViewModel ClashConnectionsViewModel => _clashConnectionsViewModel ??= new();
     public CheckUpdateViewModel CheckUpdateViewModel { get; } = new();
     public BackupAndRestoreViewModel BackupAndRestoreViewModel { get; } = new();
     public StatusBarViewModel StatusBarViewModel { get; } = StatusBarViewModel.Instance;
@@ -915,7 +924,9 @@ public class MainWindowViewModel : MyReactiveObject
                 await StatusBarViewModel.TestServerAvailability();
             });
 
-            var showClashUI = AppManager.Instance.IsRunningCore(ECoreType.sing_box);
+            // Проверка «есть ли куда показывать» стоит ПЕРВОЙ: без неё обращение к ClashProxiesViewModel
+            // ниже создало бы вид (и его вечный цикл) в оболочке, где экранов Clash нет.
+            var showClashUI = Global.ClashUiAvailable && AppManager.Instance.IsRunningCore(ECoreType.sing_box);
             if (showClashUI)
             {
                 //await Observable.Start(async () =>
@@ -999,7 +1010,9 @@ public class MainWindowViewModel : MyReactiveObject
                 await StatusBarViewModel.TestServerAvailability();
             });
 
-            var showClashUI = AppManager.Instance.IsRunningCore(ECoreType.sing_box);
+            // Проверка «есть ли куда показывать» стоит ПЕРВОЙ: без неё обращение к ClashProxiesViewModel
+            // ниже создало бы вид (и его вечный цикл) в оболочке, где экранов Clash нет.
+            var showClashUI = Global.ClashUiAvailable && AppManager.Instance.IsRunningCore(ECoreType.sing_box);
             if (showClashUI)
             {
                 RxSchedulers.MainThreadScheduler.Schedule(async () =>

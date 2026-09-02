@@ -25,6 +25,22 @@ public class Global
     /// </summary>
     public static Func<string?>? SubscriptionHwidProvider;
 
+    /// <summary>
+    /// <b>Есть ли в этой оболочке экраны Clash?</b> В WPF-приложении есть (вкладки «Proxies» и
+    /// «Connections»), в departament для ПК — нет: его «Главная» показывает свой список серверов, а
+    /// панели Clash не существует ни в одном виде.
+    ///
+    /// Пока флаг был неявным, <see cref="ViewModels.MainWindowViewModel"/> создавал ОБА вида Clash
+    /// в поле-инициализаторе, то есть при каждом запуске любой оболочки, а каждый из них в своём
+    /// конструкторе запускал бесконечный цикл (<c>while (true)</c> с задержкой 5 и 60 секунд).
+    /// На ПК эти циклы просыпались 780 раз в час ради проверки, которая всегда отвечала «смотреть
+    /// некому».
+    ///
+    /// Оболочка ПК ставит здесь false ДО создания MainWindowViewModel; по умолчанию true, поэтому
+    /// WPF-приложение и любой будущий хост ведут себя ровно как раньше.
+    /// </summary>
+    public static bool ClashUiAvailable = true;
+
     public const string GithubUrl = "https://github.com";
     public const string GithubApiUrl = "https://api.github.com/repos";
     public const string GeoUrl = "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/{0}.dat";
