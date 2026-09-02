@@ -152,22 +152,33 @@ public partial class BuyView : UserControl
             : new List<PriceOptionDto> { new() { Id = tariff.Id, DurationDays = tariff.DurationDays, Price = tariff.Price } };
 
     /// <summary>
-    /// Самая выгодная цена за месяц среди сроков, которые каталог реально вернул (порт monthlyRate).
+    /// Цена входа в тариф: стоимость САМОГО КОРОТКОГО срока, ровно как её задали в панели.
+    ///
+    /// Здесь считалась самая выгодная ставка за месяц по всем срокам — и заголовок карточки врал.
+    /// У тарифа с ценами 150 за месяц и 400 за три на карточке стояло «135», потому что 400 делили
+    /// на 2,96 месяца; человек видел число, которого нет ни в одном ценнике, и не мог купить за
+    /// него. Владелец: «надо ровные цены вернуть».
+    ///
+    /// Выгода длинных сроков никуда не делась — она подписана у самих сроков внутри карточки
+    /// (<see cref="Saving"/>), где рядом стоит и настоящая цена, и срок, за который её платят.
+    ///
     /// Тариф без пригодных сроков не показывает НИЧЕГО — лучше пустое место, чем ноль.
     /// </summary>
-    internal static double? MonthlyRate(TariffDto tariff)
+    internal static PriceOptionDto? EntryOption(TariffDto tariff)
     {
-        double? best = null;
+        PriceOptionDto? entry = null;
         foreach (var option in OptionsOf(tariff))
         {
             if (option.DurationDays <= 0 || option.Price <= 0.0)
             {
                 continue;
             }
-            var rate = option.Price / (option.DurationDays / DaysPerMonth);
-            best = best is null ? rate : Math.Min(best.Value, rate);
+            if (entry is null || option.DurationDays < entry.DurationDays)
+            {
+                entry = option;
+            }
         }
-        return best;
+        return entry;
     }
 
     /// <summary>
@@ -388,15 +399,31 @@ public sealed class BuyMonthlyRateConverter : IValueConverter
 {
     public bool AsFlag { get; set; }
 
+    /// <summary><c>AsFlag</c> — видимость блока цены; <c>AsPeriod</c> — подпись под ценой (за какой
+    /// срок её платят); иначе — сама цена.</summary>
+    public bool AsPeriod { get; set; }
+
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         var tariff = value as TariffDto;
-        var rate = tariff is null ? null : BuyView.MonthlyRate(tariff);
+        var entry = tariff is null ? null : BuyView.EntryOption(tariff);
         if (AsFlag)
         {
-            return rate is not null;
+            return entry is not null;
         }
-        return rate is null ? string.Empty : BuyView.Money(rate.Value, tariff!.Currency);
+        if (entry is null)
+        {
+            return string.Empty;
+        }
+        if (!AsPeriod)
+        {
+            return BuyView.Money(entry.Price, tariff!.Currency);
+        }
+        //  «в месяц» пишем только когда срок и есть месяц. Иначе подпись называет настоящий срок:
+        //  цена за 90 дней с подписью «в месяц» — то же враньё, только другими словами.
+        return entry.DurationDays == 30
+            ? Common.L.T("Buy_PerMonth")
+            : Common.L.F("Common_DaysShort", entry.DurationDays);
     }
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>

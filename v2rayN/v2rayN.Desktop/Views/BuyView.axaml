@@ -60,6 +60,7 @@
               Считает code-behind по формулам Android; здесь — только точки подключения.  -->
         <v:BuyMonthlyRateConverter x:Key="Buy.Monthly" />
         <v:BuyMonthlyRateConverter x:Key="Buy.HasMonthly" AsFlag="True" />
+        <v:BuyMonthlyRateConverter x:Key="Buy.Period" AsPeriod="True" />
         <v:BuySavingConverter x:Key="Buy.Saving" />
         <v:BuySavingConverter x:Key="Buy.HasSaving" AsFlag="True" />
         <v:BuyCurrentTariffConverter x:Key="Buy.IsCurrent" />
@@ -551,7 +552,7 @@
                                                         VerticalAlignment="Top"
                                                         IsVisible="{Binding Tariff, Converter={StaticResource Buy.HasMonthly}}">
                                                         <TextBlock Classes="TariffMonth" Text="{Binding Tariff, Converter={StaticResource Buy.Monthly}}" />
-                                                        <TextBlock Classes="TariffPer" Text="{loc:T Buy_PerMonth}" />
+                                                        <TextBlock Classes="TariffPer" Text="{Binding Tariff, Converter={StaticResource Buy.Period}}" />
                                                     </StackPanel>
 
                                                     <Panel Grid.Column="2" Classes="TariffCaretSlot">
