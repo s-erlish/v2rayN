@@ -110,10 +110,23 @@ public partial class GeoFilesPage : UserControl, ISubPage
         SetActionText(L.T("Geo_Updating"), busy: true);
         SetStatus(L.T("Geo_Downloading"));
 
+        //  ПОСЛЕДНИЙ ОТКАЗ, О КОТОРОМ СКАЗАЛА СЛУЖБА. Загрузка geo-файлов исключений не бросает:
+        //  про неудачу она сообщает вызовом обратно с success = false, а в конце всё равно шлёт
+        //  собственное «geo загружены успешно». Без этой переменной экран писал «Готово. Базы
+        //  обновлены.» поверх сообщения об отказе — при выключенной сети пользователь получал
+        //  обещание обновления, которого не было, и старые даты файлов под ним.
+        //  Все вызовы обратно завершаются до возврата из UpdateGeoFileAll, поэтому обычной
+        //  захваченной переменной здесь достаточно.
+        var failure = string.Empty;
+
         try
         {
             var svc = new UpdateService(_config, (success, msg) =>
             {
+                if (!success && msg.IsNotEmpty())
+                {
+                    failure = msg;
+                }
                 Dispatcher.UIThread.Post(() =>
                 {
                     if (msg.IsNotEmpty())
@@ -128,7 +141,7 @@ public partial class GeoFilesPage : UserControl, ISubPage
                 return Task.CompletedTask;
             });
             await svc.UpdateGeoFileAll();
-            SetStatus(L.T("Geo_Done"));
+            SetStatus(failure.IsNotEmpty() ? L.T("Geo_Failed") + failure : L.T("Geo_Done"));
         }
         catch (Exception ex)
         {
