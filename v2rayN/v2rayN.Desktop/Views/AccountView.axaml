@@ -398,7 +398,7 @@
                               селектор пульса не совпадает и силуэт стоит статично.  -->
                         <StackPanel
                             HorizontalAlignment="Center"
-                            Classes="SkeletonPulse"
+                            Classes.SkeletonPulse="{Binding ShowSkeleton}"
                             IsVisible="{Binding ShowSkeleton}"
                             Spacing="8"
                             VerticalAlignment="Center">
@@ -565,7 +565,7 @@
                             <!--  Выбор способа продления — раскрывается только по «Продлить».  -->
                             <StackPanel
                                 Margin="0,9,0,0"
-                                Classes="RenewReveal"
+                                Classes.RenewReveal="{Binding ActiveCard.RenewExpanded}"
                                 IsVisible="{Binding ActiveCard.RenewExpanded}"
                                 Spacing="8">
                                 <Button
@@ -650,7 +650,7 @@
                               подпрыгивает, когда данные приходят.  -->
                         <StackPanel
                             x:Name="PlanSkeleton"
-                            Classes="SkeletonPulse"
+                            Classes.SkeletonPulse="{Binding ShowSkeleton}"
                             IsVisible="{Binding ShowSkeleton}">
                             <Border
                                 Width="196"

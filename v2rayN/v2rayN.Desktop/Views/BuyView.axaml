@@ -435,7 +435,7 @@
                 <!--  ==================== Загрузка ====================  -->
                 <StackPanel
                     Margin="0,16,0,0"
-                    Classes="SkeletonPulse"
+                    Classes.SkeletonPulse="{Binding ShowSkeleton}"
                     IsVisible="{Binding ShowSkeleton}"
                     Spacing="10">
                     <Border Height="76" Classes="SkelCard" />
