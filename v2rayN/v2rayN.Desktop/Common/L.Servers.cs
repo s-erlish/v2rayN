@@ -12,7 +12,6 @@ public sealed partial class L
     partial void RegisterServers()
     {
         // ── Server list (ServerListView, CompactServersView) ──
-        Add("Servers_Title", "Сервера", "Servers");
         Add("Servers_MakeDefault", "Сделать основным", "Make default");
         Add("Servers_Duplicate", "Дублировать", "Duplicate");
         Add("Servers_ShareQr", "Поделиться · QR-код", "Share · QR code");
@@ -31,15 +30,11 @@ public sealed partial class L
         Add("Servers_PingNa", "n/a", "n/a");
 
         // ── Subscription meta-bar (SubscriptionMetaView) ──
-        Add("Sub_CollapseServers", "Свернуть серверы", "Collapse servers");
-        Add("Sub_Pin", "Закрепить", "Pin");
         Add("Sub_Delete", "Удалить подписку", "Delete subscription");
         Add("Sub_DeleteConfirm", "Удалить подписку?", "Delete subscription?");
-        Add("Sub_OpenSupport", "Открыть поддержку", "Open support");
         Add("Sub_Support", "Поддержка", "Support");
         Add("Sub_Expired", "Просрочено", "Expired");
         Add("Sub_Until", "до {0:dd.MM.yyyy}", "until {0:dd.MM.yyyy}");
-        Add("Sub_AutoUpdate", "Автообновление · {0}", "Auto-update · {0}");
 
         // ── Подтверждения пинга и обновления подписки (motion.md «Пинг и обновление подписки») ──
         Add("Sub_ToastPinged", "Задержка обновлена", "Latency updated");

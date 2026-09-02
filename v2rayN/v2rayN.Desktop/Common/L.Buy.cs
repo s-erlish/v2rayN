@@ -16,7 +16,6 @@ public sealed partial class L
         // ── Buy («Купить подписку») ──
         Add("Buy_Paid", "Подписка оплачена", "Subscription paid");
         Add("Buy_PaidSubtitle", "Серверы уже добавлены, можно подключаться", "Servers are already added, you can connect");
-        Add("Buy_ChoosePlan", "Выберите тариф", "Choose a plan");
         // Пояснение под заголовком подэкрана (лекало: заголовок 22/700 → пояснение 13).
         Add("Buy_Note", "Выберите тариф и срок", "Choose a plan and a term");
         Add("Buy_ErrTitle", "Тарифы не загрузились", "Plans didn't load");
@@ -27,7 +26,6 @@ public sealed partial class L
         // Выгода длинного срока против самого короткого (Android buy_saving).
         Add("Buy_Saving", "Выгода {0}", "Save {0}");
         Add("Buy_AdditionalDevices", "Дополнительные устройства", "Additional devices");
-        Add("Buy_RemoveDevice", "Убрать устройство", "Remove device");
         Add("Buy_AddDevice", "Добавить устройство", "Add device");
         Add("Buy_Total", "Итого", "Total");
         Add("Buy_Pay", "Оплатить", "Pay");
@@ -75,7 +73,6 @@ public sealed partial class L
         Add("History_StatusCanceled", "Отменён", "Canceled");
 
         // Design-time sample rows (previewer only; never shipped to users).
-        Add("History_SampleRenewal", "Продление подписки", "Subscription renewal");
         Add("History_SampleTopUp", "Пополнение баланса", "Balance top-up");
         Add("History_SamplePlan", "Тариф Base", "Base plan");
     }

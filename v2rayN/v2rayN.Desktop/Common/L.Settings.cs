@@ -32,11 +32,7 @@ public sealed partial class L
         Add("Settings_Ping", "Пинг", "Ping");
         Add("Settings_LocalProxy", "Локальный прокси", "Local proxy");
         Add("Settings_LocalProxyHint", "Порт и SOCKS5-авторизация", "Port and SOCKS5 authentication");
-        Add("Settings_Port", "Порт", "Port");
         Add("Settings_Socks5Auth", "SOCKS5-авторизация", "SOCKS5 authentication");
-        Add("Settings_Username", "Логин", "Username");
-        Add("Settings_NotSet", "Не задан", "Not set");
-        Add("Settings_Socks5Hint", "Адрес: 127.0.0.1. Пустые логин и пароль отключают SOCKS5-авторизацию.", "Address: 127.0.0.1. Empty username and password disable SOCKS5 authentication.");
 
         Add("Settings_SecBypass", "Обход блокировок", "Bypass censorship");
         Add("Settings_Mux", "Мультиплексирование (Mux)", "Multiplexing (Mux)");
@@ -52,7 +48,6 @@ public sealed partial class L
         Add("Settings_SecInterface", "Интерфейс", "Interface");
         Add("Settings_Appearance", "Оформление", "Appearance");
         Add("Settings_Language", "Язык", "Language");
-        Add("Settings_FontSize", "Размер шрифта", "Font size");
         Add("Settings_UiScale", "Масштаб интерфейса", "Interface scale");
         Add("Settings_Autostart", "Запуск с системой", "Launch with the system");
         Add("Settings_AutostartHint", "Открывать при входе в систему", "Open when you sign in");
@@ -86,14 +81,6 @@ public sealed partial class L
         Add("Settings_LangRussian", "Русский", "Russian");
         Add("Settings_LangSystem", "Системный", "System");
 
-        // ── DnsSubView ──
-        Add("Dns_Intro", "Через какой сервер приложение разрешает имена", "Which server the app uses to resolve names");
-        Add("Dns_Provider", "Провайдер", "Provider");
-        Add("Dns_CustomAddress", "Свой DNS-адрес", "Custom DNS address");
-        Add("Dns_CustomHint", "DoH-адрес (https://…/dns-query), DoT или обычный IP: 1.1.1.1", "DoH address (https://…/dns-query), DoT, or a plain IP: 1.1.1.1");
-        Add("Dns_Advanced", "Дополнительно", "Advanced");
-        Add("Dns_AdvancedHint", "Ускоряет соединение, отвечая на DNS-запросы локально (sing-box)", "Speeds up connections by answering DNS queries locally (sing-box)");
-
         // ── RoutingSubView ──
         Add("Routing_RuleSets", "Наборы правил", "Rule sets");
         Add("Routing_RulesCount", "{0} правил", "{0} rules");
@@ -116,19 +103,13 @@ public sealed partial class L
         Add("PerApp_ProgramFileType", "Программа", "Program");
 
         // ── PingSettingsPage (only Real / TCP rows) ──
-        Add("Ping_Intro", "Как измеряется задержка до серверов", "How latency to servers is measured");
         Add("Ping_RealTitle", "Реальная задержка", "Real latency");
-        Add("Ping_RealHint", "Замер через туннель: точнее, но медленнее", "Measured through the tunnel: more accurate, but slower");
-        Add("Ping_TcpHint", "tcping до адреса сервера", "tcping to the server address");
-        Add("Ping_TestAddress", "Адрес проверки задержки", "Latency test address");
-        Add("Ping_Timeout", "Тайм-аут проверки, сек", "Test timeout, sec");
         // Short row label used by SettingsViewModel.ResolvePingMethodText («Реальная»); TCP/HTTP/ICMP stay as tokens.
         Add("Ping_Real", "Реальная", "Real");
 
         // ── GeoFilesPage ──
         Add("Geo_NotDownloaded", "Не загружен", "Not downloaded");
         Add("Geo_ReadFailed", "Не удалось прочитать файл", "Could not read the file");
-        Add("Geo_SizeUpdated", "{0} МБ · обновлён {1}", "{0} MB · updated {1}");
         Add("Geo_Updating", "Обновление…", "Updating…");
         Add("Geo_Downloading", "Загрузка баз…", "Downloading databases…");
         Add("Geo_Done", "Готово. Базы обновлены.", "Done. Databases updated.");
@@ -155,36 +136,18 @@ public sealed partial class L
         Add("UrlSchemes_Stop", "Остановить соединение", "Stop the connection");
         Add("UrlSchemes_Toggle", "Переключить соединение", "Toggle the connection");
         Add("UrlSchemes_Import", "Импорт (автоопределение типа)", "Import (auto-detect type)");
-        Add("UrlSchemes_WindowsOnly", "Регистрация схемы доступна только на Windows.", "Scheme registration is available on Windows only.");
         Add("UrlSchemes_Registered", "Схема зарегистрирована. Ссылки depv:// открывают departament.", "Scheme registered. depv:// links open departament.");
         Add("UrlSchemes_NotRegistered", "Схема не зарегистрирована.", "Scheme not registered.");
         Add("UrlSchemes_NoPath", "Не удалось определить путь к программе.", "Couldn't determine the app's path.");
         Add("UrlSchemes_RegisterFailed", "Не удалось зарегистрировать: ", "Registration failed: ");
         Add("UrlSchemes_RemoveFailed", "Не удалось удалить: ", "Removal failed: ");
 
-        // ── ProviderSettingsPage ──
-        Add("Provider_Title", "Настройки подписок", "Subscription settings");
-        Add("Provider_SecUpdates", "Обновление", "Updates");
-        Add("Provider_AutoUpdate", "Автообновление", "Auto-update");
-        Add("Provider_AutoUpdateHint", "Автоматически обновлять подписки", "Update subscriptions automatically");
-        Add("Provider_Interval", "Интервал обновления", "Update interval");
-        Add("Provider_SecNetwork", "Сеть", "Network");
-        Add("Provider_Hwid", "Идентификатор устройства (HWID)", "Device ID (HWID)");
-        Add("Provider_UserAgentHint", "Отправляется ядром на исходящих соединениях.", "Sent by the core on outbound connections.");
-
         // ═════════════════════════════════════════════════════════════════════════════════════════
         // Подэкраны настроек по единому лекалу (screens.md «Подэкраны»). Строки как в спецификации.
         // ═════════════════════════════════════════════════════════════════════════════════════════
 
-        // ── DNS ──
-        Add("Dns_Presets", "Пресеты", "Presets");
-        Add("Dns_Custom", "Свой сервер", "Custom server");
-        Add("Dns_CustomSub", "Указать вручную", "Enter manually");
-
         // ── Пинг ──
         Add("Ping_TcpTitle", "TCP-соединение", "TCP connection");
-        Add("Ping_Params", "Параметры проверки", "Test parameters");
-        Add("Ping_Unsupported", "HTTP-запрос и ICMP ядром не измеряются. Доступны реальная задержка и TCP.", "HTTP request and ICMP aren't measured by the core. Real latency and TCP are available.");
 
         // ── Прокси по приложениям ──
         Add("PerApp_Mode", "Режим", "Mode");
@@ -248,7 +211,6 @@ public sealed partial class L
         Add("Update_PreRelease", "Искать предварительный выпуск", "Look for pre-releases");
         Add("Update_PreReleaseHint", "Ранние сборки с новыми функциями", "Early builds with new features");
         Add("Update_Check", "Проверить обновление", "Check for updates");
-        Add("Update_Checking", "Проверяем…", "Checking…");
         Add("Update_Components", "Компоненты", "Components");
         Add("Update_Now", "Обновить сейчас", "Update now");
         Add("Update_App", "Приложение", "Application");
@@ -296,7 +258,5 @@ public sealed partial class L
         Add("About_Site", "Сайт departament", "departament website");
         Add("About_System", "Система", "System");
 
-        // ── Настройки подписок ──
-        Add("Provider_Intro", "Как приложение обновляет подписки и представляется серверу", "How the app updates subscriptions and identifies itself to the server");
     }
 }

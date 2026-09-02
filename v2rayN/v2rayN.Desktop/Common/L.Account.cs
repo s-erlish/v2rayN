@@ -14,7 +14,6 @@ public sealed partial class L
     partial void RegisterAccount()
     {
         // ── Account screen (AccountView) ──
-        Add("Account_Balance", "Баланс", "Balance");
         Add("Account_TopUp", "Пополнить", "Top up");
         Add("Account_TopUpTitle", "Пополнение баланса", "Top up balance");
         Add("Account_TopUpHint",
@@ -24,7 +23,6 @@ public sealed partial class L
         Add("Account_Continue", "Продолжить", "Continue");
         Add("Account_TopUpMethod", "Способ оплаты", "Payment method");
         Add("Account_TopUpVia", "Оплата · {0}", "Payment · {0}");
-        Add("Account_CopyReferralCode", "Скопировать код", "Copy code");
         // На «вы», как весь остальной интерфейс. Обе строки лежали на «ты» ровно потому, что их
         // НИКТО НЕ ПОКАЗЫВАЛ: пустое состояние «Аккаунта» не было привязано к разметке. Теперь оно
         // на экране, значит и голос обязан совпасть с остальным приложением.
@@ -44,7 +42,6 @@ public sealed partial class L
         // ── Account view-model (imperative / computed) ──
         Add("Account_AmountGtZero", "Введите сумму больше 0", "Enter an amount greater than 0");
         Add("Account_ReferralCode", "Реф-код {0}", "Referral code {0}");
-        Add("Account_ReferralBenefit", "Код друга", "Referral code");
         Add("Account_MySubs", "Мои подписки", "My subscriptions");
         Add("Account_ValidUntil", "Действует до {0}", "Valid until {0}");
         Add("Account_DevicesCount", "Устройства: {0} / {1}", "Devices: {0} / {1}");
@@ -55,15 +52,11 @@ public sealed partial class L
         Add("Account_HealthActive", "Активна", "Active");
         Add("Account_HealthExpiring", "Истекает", "Expiring");
         Add("Account_HealthExpired", "Истекла", "Expired");
-        Add("Account_ExpiresUntil", "До {0}", "Until {0}");
         Add("Account_ExpiresInDays", "Осталось {0} дн.", "{0} days left");
         Add("Account_ExpiredOn", "Истекла", "Expired");
         Add("Account_Perpetual", "Бессрочно", "No expiry");
-        Add("Account_DevicesUsage", "{0} из {1} устройств", "{0} of {1} devices");
         Add("Account_DevicesTotal", "{0} устройств", "{0} devices");
         Add("Account_Renew", "Продлить", "Renew");
-        Add("Account_PrevSub", "Предыдущая", "Previous");
-        Add("Account_NextSub", "Следующая", "Next");
 
         // ── Subscription card (redesign: named sub · state-led meters · auto-renew · renew flow) ──
         Add("Account_YourSubscription", "Ваша подписка", "Your subscription");
@@ -84,26 +77,15 @@ public sealed partial class L
         Add("Account_RenewFromBalance", "С баланса · {0}", "From balance · {0}");
         Add("Account_RenewWithCard", "Оплатить картой", "Pay by card");
         Add("Account_RenewDone", "Подписка продлена", "Subscription renewed");
-        Add("Account_PickPlan", "Выбрать тариф", "Pick a plan");
 
         // ── Overflow «Ещё»: докупка устройств + улучшение тарифа ──
-        Add("Account_More", "Ещё", "More");
-        Add("Account_AddDevices", "Докупить устройства", "Add devices");
-        Add("Account_UpgradeTariff", "Улучшить тариф", "Upgrade plan");
-        Add("Account_ExtraDevicesN", "+{0} к устройствам", "+{0} devices");
         // Client-side estimate («≈»): the final amount is computed by the backend at payment.
         Add("Account_DeviceEstimate", "≈ {0}", "≈ {0}");
-        Add("Account_EstimateNote",
-            "Примерная сумма: точную посчитаем при оплате",
-            "Approximate: the exact amount is set at checkout");
-        Add("Account_PayFromBalance", "С баланса", "From balance");
-        Add("Account_PayWithCard", "Картой", "By card");
         Add("Account_DevicesAdded", "Устройства добавлены", "Devices added");
         Add("Account_UpgradeTo", "Улучшить до {0}", "Upgrade to {0}");
         // {0} = amount, {1} = effective days.
         Add("Account_UpgradeQuote", "{0} · +{1} дн.", "{0} · +{1} days");
         Add("Account_UpgradeDone", "Тариф улучшен", "Plan upgraded");
-        Add("Account_NoUpgrades", "Вы на максимальном тарифе", "You're on the top plan");
         Add("Account_BackAction", "Назад", "Back");
 
         // ── Вкладка «Аккаунт», редизайн: семь полос (screens.md «Вкладка Аккаунт») ──
@@ -127,15 +109,12 @@ public sealed partial class L
         // ── Linking block (Способы входа) ──
         Add("Account_LinkingTitle", "Способы входа", "Sign-in methods");
         Add("Account_LinkEmail", "Email и пароль", "Email & password");
-        Add("Account_WebCabinet", "Веб-кабинет", "Web cabinet");
         Add("Account_Linked", "Привязан", "Linked");
         Add("Account_LinkAction", "Привязать", "Link");
         Add("Account_AddAction", "Добавить", "Add");
         Add("Account_OpenAction", "Открыть", "Open");
-        Add("Account_SoonAction", "Скоро", "Soon");
         Add("Account_TgLinkCode", "Код: {0}", "Code: {0}");
         Add("Account_OpenBot", "Открыть бота", "Open the bot");
-        Add("Account_TgLinkWaiting", "Ждём подтверждения в Telegram…", "Waiting for Telegram…");
         // Строк флайаута привязки почты («Привязать почту» · «Пришлём ссылку…» · «Отправить» ·
         // «Письмо отправлено на …») здесь больше нет: сам флайаут снят. Он умел ровно половину дела:
         // отправить письмо и сказать об этом всплывашкой, а ждать ответа было негде. Привязка живёт
@@ -210,7 +189,6 @@ public sealed partial class L
             "Enter the 6-digit code from your app");
         Add("Login_CodeIs6", "Код состоит из 6 цифр", "The code is 6 digits");
         Add("Login_Confirm", "Подтвердить", "Confirm");
-        Add("Login_SignUp", "Регистрация на сайте", "Sign up on the website");
         // Строк экрана ожидания Telegram здесь больше нет («Ожидаем подтверждения в Telegram»,
         // «Открыть Telegram», «Начать заново», «Другой способ входа»): владелец убрал сам экран,
         // ждать подтверждения теперь шаг 0 экрана прогрузки (Flow_TgTitle0/Flow_TgNote0).
@@ -268,12 +246,7 @@ public sealed partial class L
             "Что-то пошло не так, попробуйте снова",
             "Something went wrong, try again");
 
-        // ── Onboarding (OnboardingView) ──
-        // Welcome/hint dedup to WP1's Home_Welcome / Home_NoSubsHint (see plan §2.4).
-        Add("Onboarding_OrSignIn", "Или войдите в свой аккаунт", "Or sign in to your account");
-
         // ── Account sync overlay (AccountSyncView) ──
-        Add("Account_SyncTitle", "Добавляем аккаунт", "Adding your account");
         // Live stage line: tracks the real post-login phase (checking, subscriptions, servers).
         Add("Account_SyncStageAccount", "Проверяем аккаунт", "Checking your account");
         Add("Account_SyncSubtitle", "Загружаем подписки…", "Loading subscriptions…");

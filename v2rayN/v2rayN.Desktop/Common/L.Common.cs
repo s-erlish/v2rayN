@@ -18,7 +18,6 @@ public sealed partial class L
         Add("Common_Edit", "Изменить", "Edit");
         Add("Common_Add", "Добавить", "Add");
         Add("Common_Copy", "Копировать", "Copy");
-        Add("Common_Open", "Открыть", "Open");
         Add("Common_Refresh", "Обновить", "Refresh");
         Add("Common_Manage", "Управление", "Manage");
 
@@ -26,7 +25,6 @@ public sealed partial class L
         Add("Common_AddSubscription", "Добавить подписку", "Add subscription");
         Add("Common_AddFromClipboard", "Добавить из буфера обмена", "Add from clipboard");
         Add("Common_AddViaQr", "Добавить по QR-коду", "Add via QR code");
-        Add("Common_UpdateSubscription", "Обновить подписку", "Update subscription");
         Add("Common_TestLatency", "Проверить задержку", "Test latency");
 
         // ── Auth / commerce ──
@@ -34,18 +32,15 @@ public sealed partial class L
         Add("Common_SignInWebsite", "Войти через сайт", "Sign in via website");
         Add("Common_BuySubscription", "Купить подписку", "Buy subscription");
         Add("Common_PaymentHistory", "История платежей", "Payment history");
-        Add("Common_Copied", "Скопировано", "Copied");
 
         // ── Field / value tokens ──
         Add("Common_Default", "По умолчанию", "Default");
         Add("Common_Custom", "Свой", "Custom");
         Add("Common_On", "Вкл", "On");
         Add("Common_Off", "Выкл", "Off");
-        Add("Common_SearchPlaceholder", "Поиск…", "Search…");
 
         // ── Error / status family (API + connection) ──
         Add("Common_CouldntConnect", "Не удалось подключиться", "Couldn't connect");
-        Add("Common_CouldntLoad", "Не удалось загрузить", "Couldn't load");
         Add("Common_CouldntOpenPayment", "Не удалось открыть страницу оплаты", "Couldn't open the payment page");
         Add("Common_CompletePaymentInBrowser", "Завершите оплату в браузере", "Complete the payment in your browser");
         Add("Common_ServiceUnavailable", "Сервис временно недоступен", "Service is temporarily unavailable");

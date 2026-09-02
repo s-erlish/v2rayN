@@ -54,9 +54,6 @@ public sealed partial class L
         // tells the concrete "how" and promises immediacy. Home_Welcome/Home_NoSubsHint kept above for
         // any other consumer; the onboarding screen uses these. Divider is the short sentence-case form
         // of Onboarding_OrSignIn (L.Account.cs), inside the two-hairline "или ..." rule.
-        Add("Onboarding_Title", "Добавьте подписку", "Add a subscription");
-        Add("Onboarding_Subtitle", "Отсканируйте QR-код или вставьте ссылку из буфера: доступ появится сразу.", "Scan a QR code or paste a link from the clipboard: access appears right away.");
-        Add("Onboarding_OrSignInShort", "или войдите в аккаунт", "or sign in to your account");
 
         // ── Server-list grouping / meta (HomeViewModel) ──
         // Fallback group name for servers without a subscription remark.
