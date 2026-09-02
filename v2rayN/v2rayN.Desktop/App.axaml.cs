@@ -49,6 +49,12 @@ public partial class App : Application
                 ServiceLib.Global.SubscriptionHwidProvider = () => v2rayN.Desktop.Account.AuthTokenStore.DeviceId();
             }
 
+            // Экранов Clash в departament для ПК нет ни в каком виде — ни вкладок, ни списка прокси.
+            // Флаг ставится ДО создания MainWindowViewModel: иначе он успеет построить оба вида Clash,
+            // а каждый из них в конструкторе запускает бесконечный цикл опроса (5 и 60 секунд).
+            // Ставится и в дизайн-режиме тоже: превьювер поднимает ту же модель.
+            ServiceLib.Global.ClashUiAvailable = false;
+
             var mainWindowViewModel = new MainWindowViewModel();
             var mainWindow = (MainWindow)viewLocator.Build(mainWindowViewModel);
             mainWindow.ViewModel = mainWindowViewModel;
