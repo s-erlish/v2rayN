@@ -47,6 +47,9 @@ public partial class SubscriptionMetaView : UserControl
     //  Живая ширина трека линии трафика → пиксели заливки из доли.
     private IDisposable? _trackBoundsSub;
 
+    //  Подписка на обновление сведений подписки движком (AppEvents.SubscriptionMetaChanged).
+    private IDisposable? _metaSub;
+
     private HomeServerGroup? _group;
     private string _supportUrl = string.Empty;
     private string _webPageUrl = string.Empty;
@@ -107,6 +110,13 @@ public partial class SubscriptionMetaView : UserControl
     private void OnMetaAttached(object? sender, VisualTreeAttachmentEventArgs e)
     {
         MotionState.Changed += OnMotionStateChanged;
+        //  Свежие сведения подписки (имя провайдера, трафик, срок) — откуда бы их ни привезли:
+        //  добавление ссылки, разовая дозагрузка при запуске, расписание. Смены DataContext при
+        //  этом не происходит, поэтому шапка узнаёт об обновлении только отсюда.
+        _metaSub = AppEvents.SubscriptionMetaChanged
+            .AsObservable()
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .Subscribe(OnSubscriptionMetaChanged);
         //  Live language switch re-renders the imperative fields (expiry / subtitle / traffic) in place.
         L.Instance.LanguageChanged += OnLanguageChanged;
         //  Reactive theme: rebuild the traffic-fill gradient from the live accent when the theme
@@ -130,7 +140,35 @@ public partial class SubscriptionMetaView : UserControl
         _boundsSub = null;
         _trackBoundsSub?.Dispose();
         _trackBoundsSub = null;
+        _metaSub?.Dispose();
+        _metaSub = null;
         Unhook();
+    }
+
+    /// <summary>
+    /// Движок перезаписал сведения ЭТОЙ подписки — перечитываем запись и перерисовываем шапку на
+    /// месте. Чужие подписки пропускаем; до первого связывания (_currentSubId пуст) реагировать
+    /// не на что — тогда шапку заполнит обычный Rebind.
+    /// </summary>
+    private async void OnSubscriptionMetaChanged(string? subId)
+    {
+        if (_currentSubId.IsNullOrEmpty() || subId.IsNullOrEmpty() || subId != _currentSubId)
+        {
+            return;
+        }
+
+        try
+        {
+            var fresh = await AppManager.Instance.GetSubItem(_currentSubId);
+            if (fresh is not null && fresh.Id == _currentSubId)
+            {
+                BindSub(fresh);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog("SubscriptionMetaView.MetaChanged", ex);
+        }
     }
 
     //  Тема сменилась → пересобрать градиент заливки из НОВОГО Brush.Accent (тёмная/светлая/mono).

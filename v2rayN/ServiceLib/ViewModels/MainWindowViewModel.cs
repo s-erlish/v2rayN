@@ -338,6 +338,10 @@ public class MainWindowViewModel : MyReactiveObject
         }
         await RefreshServersDispatcherAsync();
 
+        //  Сведения подписки при запуске — сами, без «Обновить». Одноразово и в фоне: окно уже
+        //  собрано и ждать сеть ему незачем.
+        _ = RefreshStaleSubscriptionsOnStartupAsync();
+
         // Consumer-VPN (Happ) model: the app starts DISCONNECTED. Do NOT auto-connect the core on
         // startup. The core is started only on an explicit user action — tapping the Home shield
         // (HomeViewModel.ConnectToggle → Reload) or picking a server (SetDefaultServer → Reload).
@@ -714,6 +718,60 @@ public class MainWindowViewModel : MyReactiveObject
     public async Task UpdateSubscriptionProcess(string subId, bool blProxy)
     {
         await Task.Run(async () => await SubscriptionHandler.UpdateProcess(_config, subId, blProxy, UpdateTaskHandler));
+    }
+
+    /// <summary>
+    /// Насколько старыми могут быть сведения подписки, чтобы при запуске их НЕ перезапрашивать.
+    /// Десять минут защищают от частых перезапусков подряд (и от цикла падений), но не превращают
+    /// дозагрузку в постоянную фоновую работу: за один сеанс это ровно один запрос на подписку.
+    /// </summary>
+    private const long StartupSubscriptionMaxAgeMs = 10 * 60 * 1000;
+
+    /// <summary>
+    /// РАЗОВАЯ ДОЗАГРУЗКА ПОДПИСОК ПРИ ЗАПУСКЕ. Имя провайдера, остаток трафика и срок приезжают
+    /// заголовком <c>subscription-userinfo</c> вместе со списком серверов, и до этой правки их не
+    /// запрашивал НИКТО: расписание просыпается через минуту и только для подписок с заданным
+    /// интервалом автообновления, а он по умолчанию не задан. Приложение открывалось с цифрами
+    /// прошлого сеанса и молчало, пока человек сам не жал «Обновить».
+    ///
+    /// Свежие сведения не трогаем: обновляем только те подписки, чьи данные старше
+    /// <see cref="StartupSubscriptionMaxAgeMs"/> или не приходили ни разу. Ядро при этом не
+    /// запускается — обработчик здесь только пишет в журнал (в отличие от расписания, которое
+    /// перезагружает ядро); список и шапки обновляются один раз по завершении.
+    /// </summary>
+    private async Task RefreshStaleSubscriptionsOnStartupAsync()
+    {
+        try
+        {
+            var subs = await AppManager.Instance.SubItems();
+            if (subs is not { Count: > 0 })
+            {
+                return;
+            }
+
+            var now = DateTimeOffset.Now.ToUnixTimeMilliseconds();
+            var stale = subs
+                .Where(t => t.Enabled
+                            && t.Url.IsNotEmpty()
+                            && now - t.UserInfoUpdated >= StartupSubscriptionMaxAgeMs)
+                .ToList();
+            if (stale.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var item in stale)
+            {
+                await SubscriptionHandler.UpdateProcess(_config, item.Id, false, SubscriptionImportLogHandler);
+            }
+
+            await RefreshSubscriptions();
+            await RefreshServersDispatcherAsync();
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog("RefreshStaleSubscriptionsOnStartup", ex);
+        }
     }
 
     #endregion Subscription
