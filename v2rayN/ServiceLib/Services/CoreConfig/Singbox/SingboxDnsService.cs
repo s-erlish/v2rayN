@@ -165,10 +165,10 @@ public partial class CoreConfigSingboxService
     /// <summary>
     /// First DNS rule: send the domains the `hosts` server can actually answer to that server.
     ///
-    /// The old form was <c>{ ip_accept_any: true, server: hosts }</c> — «route here, and only keep
-    /// the answer if an address came back». That is a Legacy Address Filter Field. sing-box 1.14
+    /// The old form was <c>{ ip_accept_any: true, server: hosts }</c> — "route here, and only keep
+    /// the answer if an address came back". That is a Legacy Address Filter Field. sing-box 1.14
     /// turns its legacy DNS mode OFF as soon as ANY rule (or sub-rule of a logical rule) carries
-    /// <c>query_type</c> or <c>ip_version</c> — which our own rules do, for блокировка HTTPS/SVCB
+    /// <c>query_type</c> or <c>ip_version</c> — which our own rules do, both to block HTTPS/SVCB
     /// and for fakeip — and with legacy mode off a rule carrying ip_accept_any / ip_cidr /
     /// ip_is_private without <c>match_response</c> is fatal:
     ///   FATAL create service: initialize dns router: validate dns rule[0]: Response Match Fields
