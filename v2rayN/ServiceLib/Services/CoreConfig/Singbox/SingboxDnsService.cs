@@ -17,7 +17,11 @@ public partial class CoreConfigSingboxService
             GenDnsRules();
 
             _coreConfig.dns ??= new Dns4Sbox();
-            _coreConfig.dns.independent_cache = true;
+
+            // NB: `independent_cache` is deliberately NOT set here. sing-box 1.14 always keys the
+            // DNS cache by transport name, so the option became a no-op, was deprecated with a
+            // startup WARN and is scheduled for removal in 1.16 — where an unknown field aborts
+            // the core. Omitting it is the one form both old and new cores accept.
 
             // final dns
             var routing = context.RoutingItem;
@@ -158,13 +162,54 @@ public partial class CoreConfigSingboxService
         return finalDns;
     }
 
+    /// <summary>
+    /// First DNS rule: send the domains the `hosts` server can actually answer to that server.
+    ///
+    /// The old form was <c>{ ip_accept_any: true, server: hosts }</c> — «route here, and only keep
+    /// the answer if an address came back». That is a Legacy Address Filter Field. sing-box 1.14
+    /// turns its legacy DNS mode OFF as soon as ANY rule (or sub-rule of a logical rule) carries
+    /// <c>query_type</c> or <c>ip_version</c> — which our own rules do, for блокировка HTTPS/SVCB
+    /// and for fakeip — and with legacy mode off a rule carrying ip_accept_any / ip_cidr /
+    /// ip_is_private without <c>match_response</c> is fatal:
+    ///   FATAL create service: initialize dns router: validate dns rule[0]: Response Match Fields
+    ///   (…, ip_accept_any, …) require match_response to be enabled
+    /// The core then exits at startup and the tunnel never comes up.
+    ///
+    /// sing-box's own migration offers <c>preferred_by</c>, but that DNS rule item only exists from
+    /// 1.14, so it would break every older core. Listing the domains explicitly needs nothing newer
+    /// than a plain <c>domain</c> matcher, so one config satisfies old and new cores alike — and the
+    /// list is exact, because the `hosts` server answers precisely these predefined entries.
+    /// </summary>
+    private void AddHostsDnsRule()
+    {
+        var hostsDomains = _coreConfig.dns?.servers?
+            .FirstOrDefault(t => t.tag == Global.SingboxHostsDNSTag)?
+            .predefined?
+            .Where(t => t.Value is { Count: > 0 })
+            .Select(t => t.Key)
+            .ToList() ?? [];
+
+        // No predefined entry means the hosts server has nothing to answer; a rule without a
+        // matcher would swallow every query and NXDOMAIN it, so leave it out entirely.
+        if (hostsDomains.Count == 0)
+        {
+            return;
+        }
+
+        _coreConfig.dns.rules.Add(new()
+        {
+            server = Global.SingboxHostsDNSTag,
+            domain = hostsDomains,
+        });
+    }
+
     private void GenDnsRules()
     {
         var simpleDnsItem = context.SimpleDnsItem;
         _coreConfig.dns ??= new Dns4Sbox();
         _coreConfig.dns.rules ??= [];
 
-        _coreConfig.dns.rules.Add(new() { ip_accept_any = true, server = Global.SingboxHostsDNSTag });
+        AddHostsDnsRule();
 
         if (context.ProtectDomainList.Count > 0)
         {
