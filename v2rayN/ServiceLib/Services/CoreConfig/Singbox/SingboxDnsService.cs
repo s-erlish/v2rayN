@@ -200,6 +200,11 @@ public partial class CoreConfigSingboxService
         {
             server = Global.SingboxHostsDNSTag,
             domain = hostsDomains,
+            // The hosts server only ever answers A and AAAA; every other type it turns into
+            // NXDOMAIN. ip_accept_any used to let those fall through to real DNS, so pin the rule
+            // to A/AAAA to keep exactly that behaviour instead of NXDOMAIN-ing, say, an HTTPS
+            // query for a domain the owner pinned in Hosts.
+            query_type = new List<int> { 1, 28 },
         });
     }
 
