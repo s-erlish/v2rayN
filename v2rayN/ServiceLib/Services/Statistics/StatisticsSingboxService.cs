@@ -20,19 +20,31 @@ public class StatisticsSingboxService
         _ = Task.Run(Run);
     }
 
+    // idle/perf B2: cadence when sing-box is the active core AND the window is visible (1 s speed);
+    // idle/perf B2: back-off cadence when sing-box is NOT running so the loop stops waking every
+    // second (and holding a websocket) for the whole app lifetime while disconnected / Xray-active.
+    private const int ActiveDelayMs = 1000;
+    private const int IdleDelayMs = 5000;
+
+    // Connect lazily, only once sing-box owns the tunnel (called from Run). On failure the socket is
+    // dropped so the loop retries on a later tick — no perpetual reconnect spin while disconnected.
     private async Task Init()
     {
-        await Task.Delay(5000);
-
         try
         {
-            if (webSocket == null)
-            {
-                webSocket = new ClientWebSocket();
-                await webSocket.ConnectAsync(new Uri(Url), CancellationToken.None);
-            }
+            webSocket?.Abort();
+            webSocket = new ClientWebSocket();
+            await webSocket.ConnectAsync(new Uri(Url), CancellationToken.None);
         }
-        catch { }
+        catch
+        {
+            try
+            {
+                webSocket?.Abort();
+            }
+            catch { }
+            webSocket = null;
+        }
     }
 
     public void Close()
@@ -54,49 +66,70 @@ public class StatisticsSingboxService
 
     private async Task Run()
     {
-        await Init();
-
         while (!_exitFlag)
         {
-            await Task.Delay(1000);
+            // Sample at 1 s only while sing-box actually owns the tunnel; otherwise idle at 5 s. The
+            // websocket is created lazily (below) once the core is up, and dropped on disconnect.
+            var active = AppManager.Instance.IsRunningCore(ECoreType.sing_box);
+            await Task.Delay(active ? ActiveDelayMs : IdleDelayMs);
+            if (_exitFlag)
+            {
+                break;
+            }
             try
             {
                 if (!AppManager.Instance.IsRunningCore(ECoreType.sing_box))
                 {
                     continue;
                 }
-                if (webSocket != null)
+
+                // Lazily connect / reconnect only once sing-box is running.
+                if (webSocket == null)
                 {
-                    if (webSocket.State is WebSocketState.Aborted or WebSocketState.Closed)
-                    {
-                        webSocket.Abort();
-                        webSocket = null;
-                        await Init();
-                        continue;
-                    }
+                    await Init();
+                    continue;
+                }
+                if (webSocket.State is WebSocketState.Aborted or WebSocketState.Closed)
+                {
+                    webSocket.Abort();
+                    webSocket = null;
+                    continue;
+                }
+                if (webSocket.State != WebSocketState.Open)
+                {
+                    continue;
+                }
 
-                    if (webSocket.State != WebSocketState.Open)
-                    {
-                        continue;
-                    }
+                // idle/perf B2+B5: hidden to tray OR minimized → the sample is discarded downstream,
+                // so don't pump traffic frames (read/parse/marshal). The socket is left open and reads
+                // resume on the next visible tick.
+                if (AppManager.Instance.IsUiHidden)
+                {
+                    continue;
+                }
 
-                    var buffer = new byte[1024];
-                    var res = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
-                    while (!res.CloseStatus.HasValue)
+                var buffer = new byte[1024];
+                var res = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
+                while (!res.CloseStatus.HasValue)
+                {
+                    var result = Encoding.UTF8.GetString(buffer, 0, res.Count);
+                    if (result.IsNotEmpty())
                     {
-                        var result = Encoding.UTF8.GetString(buffer, 0, res.Count);
-                        if (result.IsNotEmpty())
+                        ParseOutput(result, out var up, out var down);
+
+                        await _updateFunc?.Invoke(new ServerSpeedItem()
                         {
-                            ParseOutput(result, out var up, out var down);
-
-                            await _updateFunc?.Invoke(new ServerSpeedItem()
-                            {
-                                ProxyUp = (long)(up / 1000),
-                                ProxyDown = (long)(down / 1000)
-                            });
-                        }
-                        res = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
+                            ProxyUp = (long)(up / 1000),
+                            ProxyDown = (long)(down / 1000)
+                        });
                     }
+                    // Stop draining the moment the app exits or goes hidden/minimized; the outer loop
+                    // re-guards (idle back-off + hidden skip) instead of blocking on ReceiveAsync.
+                    if (_exitFlag || AppManager.Instance.IsUiHidden)
+                    {
+                        break;
+                    }
+                    res = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
                 }
             }
             catch

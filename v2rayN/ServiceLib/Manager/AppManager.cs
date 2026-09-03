@@ -8,6 +8,7 @@ public sealed class AppManager
     private Config _config;
     private int? _statePort;
     private int? _statePort2;
+    private int? _apiPort;
     public static AppManager Instance => _instance.Value;
     public Config Config => _config;
     public IWindowDialog WindowDialog { get; set; } = null!;
@@ -30,9 +31,37 @@ public sealed class AppManager
         }
     }
 
+    // Seamless server switch (Tier 2 hot-swap): the deterministic local port of the Xray
+    // HandlerService `api` inbound (a dokodemo-door). The generated Xray config binds this port and
+    // CoreManager spawns `xray api ado/rmo --server=127.0.0.1:ApiPort ...` against it to swap the
+    // proxy outbound at runtime with no core restart. Seeded well clear of the metrics StatePort
+    // (api slot) and clash/singbox StatePort2 (api2 slot) so it never collides with them, and wrapped
+    // in GetFreePort so a busy seed falls back to a free port. Memoised once per process so config
+    // generation and the runtime api call always agree on the same port for the life of the session.
+    public int ApiPort
+    {
+        get
+        {
+            _apiPort ??= Utils.GetFreePort(GetLocalPort(EInboundProtocol.api) + 100);
+            return _apiPort.Value;
+        }
+    }
+
     public string LinuxSudoPwd { get; set; }
 
     public bool ShowInTaskbar { get; set; }
+
+    // departament (idle/perf B5): true while the main window is minimized to the taskbar/tray.
+    // ShowInTaskbar alone only flips false when the window is HIDDEN to tray, never on a plain
+    // minimize, so idle guards keyed on ShowInTaskbar kept doing work for a window the user cannot
+    // see. This flag is set from App (which observes Window.WindowStateProperty) and lets the idle
+    // guards treat "minimized" as "hidden": effective-hidden == (!ShowInTaskbar || IsWindowMinimized).
+    // Additive + defaults false, so nothing regresses if it is never written.
+    public bool IsWindowMinimized { get; set; }
+
+    // departament (idle/perf B5): the app UI is effectively invisible when hidden to tray OR minimized.
+    // Idle work (stats fetch/parse) can safely skip while this is true.
+    public bool IsUiHidden => !ShowInTaskbar || IsWindowMinimized;
 
     public ECoreType RunningCoreType { get; set; }
 
@@ -132,7 +161,9 @@ public sealed class AppManager
             await ConfigHandler.SaveConfig(_config);
             await ProfileExManager.Instance.SaveTo();
             await StatisticsManager.Instance.SaveTo();
-            await CoreManager.Instance.CoreStop();
+            // byUser:true — app exit is a deliberate stop; abort any in-flight auto-restart so a crash
+            // loop can't fight the shutdown.
+            await CoreManager.Instance.CoreStop(byUser: true);
             StatisticsManager.Instance.Close();
 
             Logging.SaveLog("AppExitAsync End");
@@ -501,7 +532,9 @@ public sealed class AppManager
                         extra = extra with
                         {
                             Flow = item.Flow.NullIfEmpty(),
-                            VlessEncryption = item.Security,
+                            //  У старых профилей Security мог быть пустым, а пустой encryption
+                            //  Xray не принимает и не запускается вовсе. Переносим «none».
+                            VlessEncryption = item.Security.IsNullOrEmpty() ? Global.None : item.Security,
                         };
                         break;
 

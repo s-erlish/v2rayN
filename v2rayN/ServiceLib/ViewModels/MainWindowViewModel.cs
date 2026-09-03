@@ -13,8 +13,17 @@ public class MainWindowViewModel : MyReactiveObject
 
     public ProfilesViewModel ProfilesViewModel { get; } = new();
     public MsgViewModel MsgViewModel { get; } = new();
-    public ClashProxiesViewModel ClashProxiesViewModel { get; } = new();
-    public ClashConnectionsViewModel ClashConnectionsViewModel { get; } = new();
+    // Оба вида Clash создаются ЛЕНИВО и только там, где для них есть экраны (Global.ClashUiAvailable).
+    // Полем-инициализатором они строились при каждом запуске любой оболочки, и каждый в конструкторе
+    // запускал бесконечный цикл опроса — на ПК, где панели Clash нет вовсе, эти циклы просыпались
+    // 780 раз в час ради проверки, которая всегда отвечала «смотреть некому».
+    private ClashProxiesViewModel? _clashProxiesViewModel;
+
+    public ClashProxiesViewModel ClashProxiesViewModel => _clashProxiesViewModel ??= new();
+
+    private ClashConnectionsViewModel? _clashConnectionsViewModel;
+
+    public ClashConnectionsViewModel ClashConnectionsViewModel => _clashConnectionsViewModel ??= new();
     public CheckUpdateViewModel CheckUpdateViewModel { get; } = new();
     public BackupAndRestoreViewModel BackupAndRestoreViewModel { get; } = new();
     public StatusBarViewModel StatusBarViewModel { get; } = StatusBarViewModel.Instance;
@@ -277,6 +286,13 @@ public class MainWindowViewModel : MyReactiveObject
                 .Subscribe(async _ => await Reload());
         }
 
+        // Seamless server switch: a live server change routes here instead of Reload() so the tunnel
+        // does not visibly drop (make-before-break; see MainWindowViewModel.SwitchServer).
+        ProfilesViewModel.SwitchRequested
+            .AsObservable()
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .Subscribe(async _ => await SwitchServer());
+
         StatusBarViewModel.AddServerViaScanRequested
             .AsObservable()
             .ObserveOn(RxSchedulers.MainThreadScheduler)
@@ -331,7 +347,15 @@ public class MainWindowViewModel : MyReactiveObject
         }
         await RefreshServersDispatcherAsync();
 
-        await Reload();
+        //  Сведения подписки при запуске — сами, без «Обновить». Одноразово и в фоне: окно уже
+        //  собрано и ждать сеть ему незачем.
+        _ = RefreshStaleSubscriptionsOnStartupAsync();
+
+        // Consumer-VPN (Happ) model: the app starts DISCONNECTED. Do NOT auto-connect the core on
+        // startup. The core is started only on an explicit user action — tapping the Home shield
+        // (HomeViewModel.ConnectToggle → Reload) or picking a server (SetDefaultServer → Reload).
+        // The connect/disconnect paths (Reload / CoreManager.CoreStop) remain fully intact.
+        SetReloadEnabled(true);
     }
 
     #endregion Init
@@ -356,18 +380,29 @@ public class MainWindowViewModel : MyReactiveObject
             var indexIdOld = _config.IndexId;
             await RefreshServersDispatcherAsync();
 
-            // If indexId changed or subIndexId is empty, directly reload.
-            if (indexIdOld != _config.IndexId || _config.SubIndexId.IsNullOrEmpty())
+            // OFF-model guard (A2): a subscription refresh/update must NEVER auto-connect the VPN.
+            // The servers/profiles are already refreshed above; only reload (which restarts the
+            // core with the updated config) when a core was ALREADY running before the refresh, so
+            // an active tunnel picks up the new server list. When disconnected we stop here — no
+            // Reload, no core start. Without this guard the reload below fired on every Home refresh
+            // (SubIndexId is empty on the Home shell), silently connecting a disconnected user.
+            var wasRunning = AppManager.Instance.IsRunningCore(ECoreType.Xray)
+                || AppManager.Instance.IsRunningCore(ECoreType.sing_box);
+            if (wasRunning)
             {
-                await Reload();
-            }
-            else
-            {
-                // The activity config belongs to the current group.
-                var profile = await AppManager.Instance.GetProfileItem(_config.IndexId);
-                if (profile != null && profile.Subid == _config.SubIndexId)
+                // If indexId changed or subIndexId is empty, directly reload.
+                if (indexIdOld != _config.IndexId || _config.SubIndexId.IsNullOrEmpty())
                 {
                     await Reload();
+                }
+                else
+                {
+                    // The activity config belongs to the current group.
+                    var profile = await AppManager.Instance.GetProfileItem(_config.IndexId);
+                    if (profile != null && profile.Subid == _config.SubIndexId)
+                    {
+                        await Reload();
+                    }
                 }
             }
 
@@ -380,7 +415,10 @@ public class MainWindowViewModel : MyReactiveObject
 
     private async Task UpdateStatisticsHandler(ServerSpeedItem update)
     {
-        if (!AppManager.Instance.ShowInTaskbar)
+        // Idle guard (B5): don't publish stats when the UI can't display them. IsUiHidden covers
+        // both hidden-to-tray (ShowInTaskbar == false) AND minimized, so the whole 3-subscriber
+        // fan-out is skipped for a window the user cannot see (previously only paused when tray-hidden).
+        if (AppManager.Instance.IsUiHidden)
         {
             return;
         }
@@ -451,27 +489,70 @@ public class MainWindowViewModel : MyReactiveObject
 
     public async Task AddServerViaClipboardAsync(string? clipboardData)
     {
-        var stringData = clipboardData;
-        if (clipboardData == null)
+        // Bug 8: every add outcome must be OBSERVABLE. The bottom snack (Enqueue) is a no-op sink on
+        // this build, and a subscription-URL add deliberately raises no snack at all, so each branch
+        // below ALSO writes a concise inline status line to the message panel (SendMessageEx) — the
+        // user always sees that the tap did something. Exceptions are caught + logged, never swallowed.
+        try
         {
-            var result = await ReadTextFromClipboardInteraction.Handle(Unit.Default);
-            if (result.IsNullOrEmpty())
+            var stringData = clipboardData;
+            if (clipboardData == null)
             {
-                NoticeManager.Instance.Enqueue(ResUI.OperationFailed);
-                return;
+                var result = await ReadTextFromClipboardInteraction.Handle(Unit.Default);
+                if (result.IsNullOrEmpty())
+                {
+                    // Empty/unavailable clipboard — surface it instead of a silent no-op.
+                    NoticeManager.Instance.SendMessageEx("Нет данных для добавления");
+                    NoticeManager.Instance.Enqueue(ResUI.OperationFailed);
+                    return;
+                }
+                stringData = result;
             }
-            stringData = result;
+
+            // Detect a subscription-URL paste and whether that URL is already stored, so a duplicate
+            // re-paste surfaces "подписка уже добавлена" instead of silently re-fetching. (AddSubItem
+            // returns 0 for an existing URL too, so ret alone cannot tell new from duplicate.)
+            var isSubUrl = ContainsSubscriptionUrl(stringData);
+            var alreadyExists = isSubUrl && await SubscriptionUrlAlreadyExistsAsync(stringData);
+
+            var ret = await ConfigHandler.AddBatchServers(_config, stringData, _config.SubIndexId, false);
+            if (ret > 0)
+            {
+                await RefreshSubscriptions();
+                await RefreshServersDispatcherAsync();
+                if (isSubUrl)
+                {
+                    // Subscription add: no bottom notification (owner request) — its download progress
+                    // streams into the message panel below; here we mark the add itself.
+                    NoticeManager.Instance.SendMessageEx(alreadyExists
+                        ? "Подписка уже добавлена, обновляю данные"
+                        : "Подписка добавлена, загружаю серверы");
+                }
+                else
+                {
+                    // Direct server-link import — keep the snack AND mirror it inline.
+                    var msg = string.Format(ResUI.SuccessfullyImportedServerViaClipboard, ret);
+                    NoticeManager.Instance.Enqueue(msg);
+                    NoticeManager.Instance.SendMessageEx(msg);
+                }
+                // A pasted http(s) URL only creates a SubItem — no servers were fetched yet. Download
+                // them now so ProfileItems populates and onboarding is replaced (Android does this
+                // immediately after import). Never starts the core (OFF-model).
+                await DownloadImportedSubscriptionAsync(stringData);
+            }
+            else
+            {
+                // Nothing recognised in the pasted data (invalid / unsupported / already-present with
+                // nothing new). Surface it inline as well as via the snack sink.
+                NoticeManager.Instance.SendMessageEx("Нет данных для добавления");
+                NoticeManager.Instance.Enqueue(ResUI.OperationFailed);
+            }
         }
-        var ret = await ConfigHandler.AddBatchServers(_config, stringData, _config.SubIndexId, false);
-        if (ret > 0)
+        catch (Exception ex)
         {
-            await RefreshSubscriptions();
-            await RefreshServersDispatcherAsync();
-            NoticeManager.Instance.Enqueue(string.Format(ResUI.SuccessfullyImportedServerViaClipboard, ret));
-        }
-        else
-        {
-            NoticeManager.Instance.Enqueue(ResUI.OperationFailed);
+            // Never let the import path throw into an unobserved fire-and-forget task.
+            Logging.SaveLog("AddServerViaClipboardAsync", ex);
+            NoticeManager.Instance.SendMessageEx(ResUI.OperationFailed);
         }
     }
 
@@ -506,24 +587,128 @@ public class MainWindowViewModel : MyReactiveObject
 
     private async Task AddScanResultAsync(string? result)
     {
-        if (result.IsNullOrEmpty())
+        // Bug 8: mirror the clipboard path — every outcome is surfaced inline (message panel) so a
+        // scan is never a silent no-op, and the whole flow is wrapped so nothing throws unobserved.
+        try
         {
-            NoticeManager.Instance.Enqueue(ResUI.NoValidQRcodeFound);
-        }
-        else
-        {
+            if (result.IsNullOrEmpty())
+            {
+                NoticeManager.Instance.SendMessageEx(ResUI.NoValidQRcodeFound);
+                NoticeManager.Instance.Enqueue(ResUI.NoValidQRcodeFound);
+                return;
+            }
+
+            var isSubUrl = ContainsSubscriptionUrl(result);
+            var alreadyExists = isSubUrl && await SubscriptionUrlAlreadyExistsAsync(result);
+
             var ret = await ConfigHandler.AddBatchServers(_config, result, _config.SubIndexId, false);
             if (ret > 0)
             {
                 await RefreshSubscriptions();
                 await RefreshServersDispatcherAsync();
-                NoticeManager.Instance.Enqueue(ResUI.SuccessfullyImportedServerViaScan);
+                if (isSubUrl)
+                {
+                    // Subscription add: no bottom notification (owner request) — mark it inline instead.
+                    NoticeManager.Instance.SendMessageEx(alreadyExists
+                        ? "Подписка уже добавлена, обновляю данные"
+                        : "Подписка добавлена, загружаю серверы");
+                }
+                else
+                {
+                    // Direct server-link scan — keep the snack AND mirror it inline.
+                    NoticeManager.Instance.Enqueue(ResUI.SuccessfullyImportedServerViaScan);
+                    NoticeManager.Instance.SendMessageEx(ResUI.SuccessfullyImportedServerViaScan);
+                }
+                // A scanned http(s) URL only creates a SubItem — fetch its servers now (OFF-model:
+                // never starts the core) so the list populates and onboarding is replaced.
+                await DownloadImportedSubscriptionAsync(result);
             }
             else
             {
+                NoticeManager.Instance.SendMessageEx("Нет данных для добавления");
                 NoticeManager.Instance.Enqueue(ResUI.OperationFailed);
             }
         }
+        catch (Exception ex)
+        {
+            Logging.SaveLog("AddScanResultAsync", ex);
+            NoticeManager.Instance.SendMessageEx(ResUI.OperationFailed);
+        }
+    }
+
+    /// <summary>
+    /// When freshly-imported clipboard/QR content contains an http(s) subscription URL, download its
+    /// servers right away (the import step only created a SubItem). This mirrors Android, which
+    /// downloads immediately after import so the first-run onboarding flow does not dead-lock with an
+    /// empty server list. OFF-model contract: this path NEVER starts the core — the dedicated
+    /// log-only handler refreshes the list/meta without a Reload(), unlike the scheduled-update path.
+    /// </summary>
+    private async Task DownloadImportedSubscriptionAsync(string? importedData)
+    {
+        if (!ContainsSubscriptionUrl(importedData))
+        {
+            return;
+        }
+
+        // No bottom toast on subscription add — the engine progress already streams into the message
+        // panel via SubscriptionImportLogHandler. (Owner request: adding a subscription must raise no
+        // bottom notifications.)
+        await Task.Run(async () => await SubscriptionHandler.UpdateProcess(_config, "", false, SubscriptionImportLogHandler));
+
+        await RefreshSubscriptions();
+        await RefreshServersDispatcherAsync();
+    }
+
+    private static bool ContainsSubscriptionUrl(string? data)
+    {
+        if (data.IsNullOrEmpty())
+        {
+            return false;
+        }
+        return data.Split('\n', '\r')
+            .Any(line => line.Trim().StartsWith(Global.HttpsProtocol) || line.Trim().StartsWith(Global.HttpProtocol));
+    }
+
+    /// <summary>
+    /// True when every http(s) subscription URL contained in <paramref name="data"/> is already
+    /// stored as a <c>SubItem</c> — i.e. a re-paste/re-scan of a subscription that was added before.
+    /// <see cref="ConfigHandler.AddSubItem(Config, string)"/> returns 0 for an already-existing URL as
+    /// well as for a freshly-added one, so the add counter cannot distinguish them; this pre-check
+    /// lets the add path surface "подписка уже добавлена" instead of silently re-fetching.
+    /// </summary>
+    private static async Task<bool> SubscriptionUrlAlreadyExistsAsync(string? data)
+    {
+        if (data.IsNullOrEmpty())
+        {
+            return false;
+        }
+        var urls = data.Split('\n', '\r')
+            .Select(line => line.Trim())
+            .Where(line => line.StartsWith(Global.HttpsProtocol) || line.StartsWith(Global.HttpProtocol))
+            .ToList();
+        if (urls.Count == 0)
+        {
+            return false;
+        }
+        var subItems = await AppManager.Instance.SubItems();
+        if (subItems is null || subItems.Count == 0)
+        {
+            return false;
+        }
+        var existing = subItems.Select(s => s.Url).Where(u => u.IsNotEmpty()).ToHashSet();
+        return urls.All(existing.Contains);
+    }
+
+    /// <summary>
+    /// Log-only completion handler for an import-triggered subscription download. Routes engine
+    /// progress to the message panel (no toast spam) exactly like <c>UpdateTaskHandler</c>, but
+    /// deliberately omits its <c>Reload()</c> so importing a subscription on a disconnected app does
+    /// not silently connect it (OFF-model). The list/meta refresh is done by the caller once.
+    /// </summary>
+    private static async Task SubscriptionImportLogHandler(bool success, string msg)
+    {
+        NoticeManager.Instance.SendMessageEx(msg);
+        await Task.CompletedTask;
     }
 
     #endregion Add Servers
@@ -542,6 +727,60 @@ public class MainWindowViewModel : MyReactiveObject
     public async Task UpdateSubscriptionProcess(string subId, bool blProxy)
     {
         await Task.Run(async () => await SubscriptionHandler.UpdateProcess(_config, subId, blProxy, UpdateTaskHandler));
+    }
+
+    /// <summary>
+    /// Насколько старыми могут быть сведения подписки, чтобы при запуске их НЕ перезапрашивать.
+    /// Десять минут защищают от частых перезапусков подряд (и от цикла падений), но не превращают
+    /// дозагрузку в постоянную фоновую работу: за один сеанс это ровно один запрос на подписку.
+    /// </summary>
+    private const long StartupSubscriptionMaxAgeMs = 10 * 60 * 1000;
+
+    /// <summary>
+    /// РАЗОВАЯ ДОЗАГРУЗКА ПОДПИСОК ПРИ ЗАПУСКЕ. Имя провайдера, остаток трафика и срок приезжают
+    /// заголовком <c>subscription-userinfo</c> вместе со списком серверов, и до этой правки их не
+    /// запрашивал НИКТО: расписание просыпается через минуту и только для подписок с заданным
+    /// интервалом автообновления, а он по умолчанию не задан. Приложение открывалось с цифрами
+    /// прошлого сеанса и молчало, пока человек сам не жал «Обновить».
+    ///
+    /// Свежие сведения не трогаем: обновляем только те подписки, чьи данные старше
+    /// <see cref="StartupSubscriptionMaxAgeMs"/> или не приходили ни разу. Ядро при этом не
+    /// запускается — обработчик здесь только пишет в журнал (в отличие от расписания, которое
+    /// перезагружает ядро); список и шапки обновляются один раз по завершении.
+    /// </summary>
+    private async Task RefreshStaleSubscriptionsOnStartupAsync()
+    {
+        try
+        {
+            var subs = await AppManager.Instance.SubItems();
+            if (subs is not { Count: > 0 })
+            {
+                return;
+            }
+
+            var now = DateTimeOffset.Now.ToUnixTimeMilliseconds();
+            var stale = subs
+                .Where(t => t.Enabled
+                            && t.Url.IsNotEmpty()
+                            && now - t.UserInfoUpdated >= StartupSubscriptionMaxAgeMs)
+                .ToList();
+            if (stale.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var item in stale)
+            {
+                await SubscriptionHandler.UpdateProcess(_config, item.Id, false, SubscriptionImportLogHandler);
+            }
+
+            await RefreshSubscriptions();
+            await RefreshServersDispatcherAsync();
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog("RefreshStaleSubscriptionsOnStartup", ex);
+        }
     }
 
     #endregion Subscription
@@ -629,11 +868,108 @@ public class MainWindowViewModel : MyReactiveObject
     private bool _hasNextReloadJob = false;
     private readonly SemaphoreSlim _reloadSemaphore = new(1, 1);
 
-    public async Task Reload()
+    /// <summary>
+    /// Returns true when THIS call actually ran the core-load attempt to completion (whatever its
+    /// outcome), false ONLY when it deferred to an already-in-flight reload (semaphore contended). The
+    /// connect UI uses this so a deferred call is NOT mistaken for a connect failure: the in-flight
+    /// owner's follow-up job (_hasNextReloadJob) will still bring the core up, so judging "not connected"
+    /// the instant this deferred call returns would paint a false error though a connect is still coming.
+    /// </summary>
+    public async Task<bool> Reload()
     {
         //If there are unfinished reload job, marked with next job.
         if (!await _reloadSemaphore.WaitAsync(0))
         {
+            _hasNextReloadJob = true;
+            return false;
+        }
+
+        if (DesignMode)
+        {
+            _reloadSemaphore.Release();
+            return true;
+        }
+
+        try
+        {
+            SetReloadEnabled(false);
+            //  Новая попытка — прошлая причина отказа к ней не относится. Ветки ниже отбраковывают
+            //  попытку ДО запуска ядра, поэтому причину для щита записывают здесь сами.
+            CoreManager.Instance.ClearStartFailure();
+
+            var profileItem = await ConfigHandler.GetDefaultServer(_config);
+            if (profileItem == null)
+            {
+                CoreManager.Instance.ReportStartFailure(ECoreStartFailure.NoServer, ResUI.CheckServerSettings);
+                NoticeManager.Instance.Enqueue(ResUI.CheckServerSettings);
+                return true;
+            }
+            var allResult = await CoreConfigContextBuilder.BuildAll(_config, profileItem);
+            if (NoticeManager.Instance.NotifyValidatorResult(allResult.CombinedValidatorResult) && !allResult.Success)
+            {
+                CoreManager.Instance.ReportStartFailure(
+                    ECoreStartFailure.ConfigFailed,
+                    Utils.List2String(allResult.CombinedValidatorResult.Errors.Take(3).ToList(), true));
+                return true;
+            }
+
+            await Task.Run(async () =>
+            {
+                await LoadCore(allResult.MainResult.Context, allResult.PreSocksResult?.Context);
+                await SysProxyHandler.UpdateSysProxy(_config, false);
+                await Task.Delay(1000);
+            });
+            RxSchedulers.MainThreadScheduler.Schedule(async () =>
+            {
+                await StatusBarViewModel.TestServerAvailability();
+            });
+
+            // Проверка «есть ли куда показывать» стоит ПЕРВОЙ: без неё обращение к ClashProxiesViewModel
+            // ниже создало бы вид (и его вечный цикл) в оболочке, где экранов Clash нет.
+            var showClashUI = Global.ClashUiAvailable && AppManager.Instance.IsRunningCore(ECoreType.sing_box);
+            if (showClashUI)
+            {
+                //await Observable.Start(async () =>
+                //{
+                //    await ClashProxiesViewModel.ProxiesReload();
+                //}, RxSchedulers.MainThreadScheduler);
+                RxSchedulers.MainThreadScheduler.Schedule(async () =>
+                {
+                    await ClashProxiesViewModel.ProxiesReload();
+                });
+            }
+
+            ReloadResult(showClashUI);
+        }
+        finally
+        {
+            SetReloadEnabled(true);
+            _reloadSemaphore.Release();
+            //If there is a next reload job, execute it.
+            if (_hasNextReloadJob)
+            {
+                _hasNextReloadJob = false;
+                await Reload();
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Seamless live server switch. Mirrors <see cref="Reload"/> but routes to
+    /// <see cref="CoreManager.SwitchServer"/> (make-before-break: hot-swap → Xray-only restart → full
+    /// restart) instead of <see cref="LoadCore"/>, and drops the unconditional 1 s settle delay — a
+    /// switch keeps the same deterministic ports/TUN, so there is nothing to wait for. The core path
+    /// never calls CoreStop nor resets RunningCoreType, so the Home shield/tray/status bar keep reading
+    /// "connected" (the shield's own Connecting spin masks the swap) and never flash disconnected.
+    /// Shares the reload semaphore so a switch and a reload can never run concurrently.
+    /// </summary>
+    public async Task SwitchServer()
+    {
+        if (!await _reloadSemaphore.WaitAsync(0))
+        {
+            // A reload/switch is already in flight; mark a follow-up so the newest target still lands.
             _hasNextReloadJob = true;
             return;
         }
@@ -662,22 +998,23 @@ public class MainWindowViewModel : MyReactiveObject
 
             await Task.Run(async () =>
             {
-                await LoadCore(allResult.MainResult.Context, allResult.PreSocksResult?.Context);
+                // SwitchServer internally falls back to a full LoadCore when a seamless tier is not
+                // possible or fails, so the user is never left disconnected.
+                await CoreManager.Instance.SwitchServer(allResult.MainResult.Context, allResult.PreSocksResult?.Context);
+                // Ports are unchanged across a switch, so re-asserting the system proxy is idempotent;
+                // keep it so direct/system-proxy mode stays correct. No Task.Delay here (unlike Reload).
                 await SysProxyHandler.UpdateSysProxy(_config, false);
-                await Task.Delay(1000);
             });
             RxSchedulers.MainThreadScheduler.Schedule(async () =>
             {
                 await StatusBarViewModel.TestServerAvailability();
             });
 
-            var showClashUI = AppManager.Instance.IsRunningCore(ECoreType.sing_box);
+            // Проверка «есть ли куда показывать» стоит ПЕРВОЙ: без неё обращение к ClashProxiesViewModel
+            // ниже создало бы вид (и его вечный цикл) в оболочке, где экранов Clash нет.
+            var showClashUI = Global.ClashUiAvailable && AppManager.Instance.IsRunningCore(ECoreType.sing_box);
             if (showClashUI)
             {
-                //await Observable.Start(async () =>
-                //{
-                //    await ClashProxiesViewModel.ProxiesReload();
-                //}, RxSchedulers.MainThreadScheduler);
                 RxSchedulers.MainThreadScheduler.Schedule(async () =>
                 {
                     await ClashProxiesViewModel.ProxiesReload();
@@ -690,7 +1027,6 @@ public class MainWindowViewModel : MyReactiveObject
         {
             SetReloadEnabled(true);
             _reloadSemaphore.Release();
-            //If there is a next reload job, execute it.
             if (_hasNextReloadJob)
             {
                 _hasNextReloadJob = false;

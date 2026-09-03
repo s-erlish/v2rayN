@@ -7,7 +7,13 @@ public class SpeedtestService(Config config, Func<SpeedTestResult, Task> updateF
     private static readonly string _tag = "SpeedtestService";
     private readonly Config? _config = config;
     private readonly Func<SpeedTestResult, Task>? _updateFunc = updateFunc;
-    private static readonly ConcurrentBag<string> _lstExitLoop = [];
+    // Ключи ИДУЩИХ прогонов. Раньше это был ConcurrentBag, из которого нельзя удалить один элемент:
+    // каждый замер добавлял свой GUID и НИКОГДА его не убирал — очистить набор умел только ExitLoop,
+    // то есть кнопка «остановить ВСЁ». За сеанс с двадцатью пингами в наборе копилось двадцать
+    // мёртвых ключей, а ShouldStopTest — он вызывается на КАЖДЫЙ сервер в КАЖДОМ пакете — линейно
+    // просматривал их все. Словарь позволяет прогону снять СВОЙ ключ по завершении и проверять
+    // остановку за O(1).
+    private static readonly ConcurrentDictionary<string, byte> _lstExitLoop = new();
     private readonly int _speedTestPageSize = config.SpeedTestItem.SpeedTestPageSize ?? Global.SpeedTestPageSize;
     private readonly TimeSpan _delayInterval = TimeSpan.FromSeconds(config.SpeedTestItem.SpeedTestDelayInterval ?? 1);
 
@@ -33,14 +39,26 @@ public class SpeedtestService(Config config, Func<SpeedTestResult, Task> updateF
 
     private static bool ShouldStopTest(string exitLoopKey)
     {
-        return _lstExitLoop.All(p => p != exitLoopKey);
+        return !_lstExitLoop.ContainsKey(exitLoopKey);
     }
 
     private async Task RunAsync(ESpeedActionType actionType, List<ProfileItem> selecteds)
     {
         var exitLoopKey = Utils.GetGuid(false);
-        _lstExitLoop.Add(exitLoopKey);
+        _lstExitLoop[exitLoopKey] = 0;
+        try
+        {
+            await RunActionAsync(actionType, selecteds, exitLoopKey);
+        }
+        finally
+        {
+            // Прогон закончился (сам или по «остановить») — ключ больше не нужен.
+            _lstExitLoop.TryRemove(exitLoopKey, out _);
+        }
+    }
 
+    private async Task RunActionAsync(ESpeedActionType actionType, List<ProfileItem> selecteds, string exitLoopKey)
+    {
         var lstSelected = await GetClearItem(actionType, selecteds);
 
         switch (actionType)
@@ -70,8 +88,9 @@ public class SpeedtestService(Config config, Func<SpeedTestResult, Task> updateF
     private async Task<List<ServerTestItem>> GetClearItem(ESpeedActionType actionType, List<ProfileItem> selecteds)
     {
         var lstSelected = new List<ServerTestItem>(selecteds.Count);
+        // CUSTOM (raw xray-json) nodes are wrapped configs — they have no typed Port on the row but
+        // DO carry a real proxy outbound, so they are testable (IsComplexType() covers them).
         var ids = selecteds.Where(it => !it.IndexId.IsNullOrEmpty()
-            && it.ConfigType != EConfigType.Custom
             && (it.ConfigType.IsComplexType() || it.Port > 0))
             .Select(it => it.IndexId)
             .ToList();
@@ -79,22 +98,32 @@ public class SpeedtestService(Config config, Func<SpeedTestResult, Task> updateF
         for (var i = 0; i < selecteds.Count; i++)
         {
             var it = selecteds[i];
-            if (it.ConfigType == EConfigType.Custom)
-            {
-                continue;
-            }
-
             if (!it.ConfigType.IsComplexType() && it.Port <= 0)
             {
                 continue;
             }
 
             var profile = profileMap.GetValueOrDefault(it.IndexId, it);
+
+            // For a CUSTOM node, resolve the wrapped proxy outbound's real server address/port so a
+            // tcping test has a target (real-ping later rewrites Port to a local inbound port).
+            var address = it.Address;
+            var port = it.Port;
+            if (it.ConfigType == EConfigType.Custom)
+            {
+                var info = XrayJsonTemplateFmt.Introspect(profile);
+                if (info != null)
+                {
+                    address = info.Address.IsNullOrEmpty() ? address : info.Address;
+                    port = info.Port > 0 ? info.Port : port;
+                }
+            }
+
             lstSelected.Add(new ServerTestItem()
             {
                 IndexId = it.IndexId,
-                Address = it.Address,
-                Port = it.Port,
+                Address = address,
+                Port = port,
                 ConfigType = it.ConfigType,
                 QueueNum = i,
                 Profile = profile,
@@ -229,12 +258,20 @@ public class SpeedtestService(Config config, Func<SpeedTestResult, Task> updateF
     private async Task<bool> RunRealPingAsync(List<ServerTestItem> selecteds, string exitLoopKey)
     {
         ProcessService processService = null;
+        // departament: snapshot each node's REAL server address/port BEFORE GenerateClientSpeedtestConfig
+        // rewrites ServerTestItem.Port to a local inbound. If the test core can't be started (e.g.
+        // «Реальная задержка» chosen from a fresh start / while disconnected), we probe these originals
+        // with a direct TCP handshake so the row still shows a latency value instead of «—»
+        // (graceful Realping→Tcping fallback — ping works out of the box).
+        var realTargets = selecteds.ToDictionary(it => it, it => (it.Address, it.Port));
         try
         {
             processService = await CoreManager.Instance.LoadCoreConfigSpeedtest(selecteds);
             if (processService is null)
             {
-                return false;
+                // Core not running / config could not be built → TCP-handshake fallback, then report done.
+                await RunRealPingTcpFallbackAsync(selecteds, realTargets, exitLoopKey);
+                return true;
             }
             await Task.Delay(1000);
 
@@ -271,6 +308,45 @@ public class SpeedtestService(Config config, Func<SpeedTestResult, Task> updateF
             }
         }
         return true;
+    }
+
+    // departament: Realping→Tcping graceful fallback. When the speedtest core can't be started, probe
+    // each node's real address/port with the SAME TCP handshake as Tcping (GetTcpingTime) so «Реальная
+    // задержка» still returns a value while disconnected. No AllowTest gate — that flag is only set while
+    // BUILDING the (here-absent) core config, so we probe every node that carries a real address/port.
+    private async Task RunRealPingTcpFallbackAsync(List<ServerTestItem> selecteds, Dictionary<ServerTestItem, (string? Address, int Port)> realTargets, string exitLoopKey)
+    {
+        List<Task> tasks = [];
+        foreach (var it in selecteds)
+        {
+            if (ShouldStopTest(exitLoopKey))
+            {
+                return;
+            }
+
+            var target = realTargets.GetValueOrDefault(it);
+            if (target.Address.IsNullOrEmpty() || target.Port <= 0)
+            {
+                await UpdateFunc(it.IndexId, ResUI.SpeedtestingSkip);
+                continue;
+            }
+
+            tasks.Add(Task.Run(async () =>
+            {
+                try
+                {
+                    var responseTime = await GetTcpingTime(target.Address, target.Port);
+                    ProfileExManager.Instance.SetTestDelay(it.IndexId, responseTime);
+                    await UpdateFunc(it.IndexId, responseTime.ToString());
+                }
+                catch (Exception ex)
+                {
+                    Logging.SaveLog(_tag, ex);
+                }
+            }));
+        }
+
+        await Task.WhenAll(tasks);
     }
 
     private async Task RunUdpTestBatchAsync(List<ServerTestItem> lstSelected, string exitLoopKey, int pageSize = 0)
@@ -506,19 +582,33 @@ public class SpeedtestService(Config config, Func<SpeedTestResult, Task> updateF
         return responseTime;
     }
 
+    /// <summary>
+    /// Режет список на пакеты по ядру: замер поднимает ОДНО ядро на пакет, поэтому смешивать их
+    /// нельзя. Раньше здесь отбирались ровно два ядра — Xray и sing_box, — а узел с любым другим
+    /// (v2fly, mihomo и т.п.) не попадал НИ В ОДИН пакет и молча исчезал из замера: строка навсегда
+    /// оставалась без значения, и об этом никто не сообщал. Теперь группируем по всем ядрам, что
+    /// реально встретились, сохраняя прежний порядок (сначала Xray, затем sing_box, затем остальные),
+    /// — для списков из двух известных ядер поведение ровно прежнее.
+    /// </summary>
     private List<List<ServerTestItem>> GetTestBatchItem(List<ServerTestItem> lstSelected, int pageSize)
     {
         List<List<ServerTestItem>> lstTest = [];
-        var lst1 = lstSelected.Where(t => t.CoreType == ECoreType.Xray).ToList();
-        var lst2 = lstSelected.Where(t => t.CoreType == ECoreType.sing_box).ToList();
+        var groups = lstSelected
+            .GroupBy(t => t.CoreType)
+            .OrderBy(g => g.Key switch
+            {
+                ECoreType.Xray => 0,
+                ECoreType.sing_box => 1,
+                _ => 2,
+            });
 
-        for (var num = 0; num < (int)Math.Ceiling(lst1.Count * 1.0 / pageSize); num++)
+        foreach (var group in groups)
         {
-            lstTest.Add(lst1.Skip(num * pageSize).Take(pageSize).ToList());
-        }
-        for (var num = 0; num < (int)Math.Ceiling(lst2.Count * 1.0 / pageSize); num++)
-        {
-            lstTest.Add(lst2.Skip(num * pageSize).Take(pageSize).ToList());
+            var lst = group.ToList();
+            for (var num = 0; num < (int)Math.Ceiling(lst.Count * 1.0 / pageSize); num++)
+            {
+                lstTest.Add(lst.Skip(num * pageSize).Take(pageSize).ToList());
+            }
         }
 
         return lstTest;

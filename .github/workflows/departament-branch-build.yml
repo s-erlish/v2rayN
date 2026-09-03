@@ -1,0 +1,103 @@
+name: departament desktop (branch build)
+
+# Builds a ready-to-run, self-contained Windows x64 build of the departament VPN
+# desktop app and bundles the Xray core + geo assets, then uploads it as a
+# downloadable artifact. Trigger: push to the dev branch, or run manually.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/dp-desktop-incy
+
+permissions:
+  contents: read
+
+jobs:
+  win-x64:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish (self-contained win-x64)
+        working-directory: ./v2rayN
+        run: dotnet publish ./v2rayN.Desktop/v2rayN.Desktop.csproj -c Release -r win-x64 -p:SelfContained=true -p:EnableWindowsTargeting=true -o "${{ github.workspace }}/dist"
+
+      - name: Strip debug symbols
+        shell: pwsh
+        run: Get-ChildItem "${{ github.workspace }}/dist" -Filter *.pdb -Recurse | Remove-Item -Force -ErrorAction SilentlyContinue
+
+      - name: Verify departament executable
+        shell: pwsh
+        run: |
+          # The project's AssemblyName is now "departament", so publish emits
+          # departament.exe natively (correct filename AND baked FileDescription).
+          # No rename needed; just fail fast if the expected host is missing.
+          $exe = Join-Path "${{ github.workspace }}/dist" 'departament.exe'
+          if (Test-Path $exe) {
+            Write-Host 'Found departament.exe (native, no rename needed)'
+          } else {
+            # Fallback: a stale v2rayN.exe would mean AssemblyName regressed.
+            $legacy = Join-Path "${{ github.workspace }}/dist" 'v2rayN.exe'
+            if (Test-Path $legacy) {
+              Rename-Item $legacy 'departament.exe' -Force
+              Write-Host 'AssemblyName regressed; renamed v2rayN.exe -> departament.exe'
+            } else {
+              throw 'departament.exe not found in publish output'
+            }
+          }
+
+      - name: Bundle Xray core + geo assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ 'User-Agent' = 'gh-actions'; 'Authorization' = "Bearer $env:GH_TOKEN" }
+          $rel = Invoke-RestMethod -Uri 'https://api.github.com/repos/XTLS/Xray-core/releases/latest' -Headers $headers
+          $asset = $rel.assets | Where-Object { $_.name -eq 'Xray-windows-64.zip' } | Select-Object -First 1
+          if (-not $asset) { throw 'Xray-windows-64.zip not found in latest release' }
+          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile xray.zip
+          Expand-Archive xray.zip -DestinationPath xray -Force
+          New-Item -ItemType Directory -Force -Path "${{ github.workspace }}/dist/bin/Xray" | Out-Null
+          Copy-Item xray/xray.exe "${{ github.workspace }}/dist/bin/Xray/xray.exe" -Force
+          Copy-Item xray/geoip.dat "${{ github.workspace }}/dist/bin/geoip.dat" -Force
+          Copy-Item xray/geosite.dat "${{ github.workspace }}/dist/bin/geosite.dat" -Force
+          Write-Host 'Bundled Xray core:' (Get-Item "${{ github.workspace }}/dist/bin/Xray/xray.exe").Length 'bytes'
+
+      - name: Bundle sing-box core (TUN pre-service, embeds wintun)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ 'User-Agent' = 'gh-actions'; 'Authorization' = "Bearer $env:GH_TOKEN" }
+          $rel = Invoke-RestMethod -Uri 'https://api.github.com/repos/SagerNet/sing-box/releases/latest' -Headers $headers
+          # Prefer the plain windows-amd64 zip (not the -legacy / -installer variants).
+          $asset = $rel.assets | Where-Object { $_.name -match '^sing-box-.*-windows-amd64\.zip$' } | Select-Object -First 1
+          if (-not $asset) { throw 'sing-box windows-amd64 zip not found in latest release' }
+          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile singbox.zip
+          Expand-Archive singbox.zip -DestinationPath singbox -Force
+          $exe = Get-ChildItem singbox -Recurse -Filter 'sing-box.exe' | Select-Object -First 1
+          if (-not $exe) { throw 'sing-box.exe not found in the downloaded archive' }
+          New-Item -ItemType Directory -Force -Path "${{ github.workspace }}/dist/bin/sing_box" | Out-Null
+          Copy-Item $exe.FullName "${{ github.workspace }}/dist/bin/sing_box/sing-box.exe" -Force
+          # sing-box embeds wintun; also copy a wintun.dll if the archive ships one, just in case.
+          $wintun = Get-ChildItem singbox -Recurse -Filter 'wintun.dll' | Select-Object -First 1
+          if ($wintun) { Copy-Item $wintun.FullName "${{ github.workspace }}/dist/bin/wintun.dll" -Force }
+          Write-Host 'Bundled sing-box core:' (Get-Item "${{ github.workspace }}/dist/bin/sing_box/sing-box.exe").Length 'bytes'
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: departament-vpn-win-x64
+          path: dist
+          if-no-files-found: error

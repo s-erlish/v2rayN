@@ -12,6 +12,12 @@ public class ProfilesViewModel : MyReactiveObject
 
     public EventChannel<Unit> ReloadRequested { get; } = new();
 
+    // Seamless server switch: raised INSTEAD of ReloadRequested when a core is already running and the
+    // user picks a different server. MainWindowViewModel routes this to the make-before-break switch
+    // path (hot-swap → Xray-only restart → full restart) so the tunnel does not visibly drop. A fresh
+    // connect from disconnected still goes through ReloadRequested (a normal start).
+    public EventChannel<Unit> SwitchRequested { get; } = new();
+
     #region private prop
 
     private List<ProfileItem> _lstProfile;
@@ -432,16 +438,21 @@ public class ProfilesViewModel : MyReactiveObject
                     from t22 in t2b.DefaultIfEmpty()
                     join t3 in lstProfileExs on t.IndexId equals t3.IndexId into t3b
                     from t33 in t3b.DefaultIfEmpty()
+                    // For CUSTOM (raw xray-json) nodes, introspect the wrapped proxy outbound once
+                    // here so the row shows the real protocol/transport (VLESS · TCP·REALITY) instead
+                    // of a bare "CUSTOM". Cached per stored-file path, so not re-read on every bind.
+                    let custom = t.ConfigType == EConfigType.Custom ? XrayJsonTemplateFmt.Introspect(t) : null
                     select new ProfileItemModel
                     {
                         IndexId = t.IndexId,
                         ConfigType = t.ConfigType,
+                        ProtocolDisplay = custom?.Protocol,
                         Remarks = t.Remarks,
                         Address = t.Address,
                         Port = t.Port,
                         //Security = t.Security,
-                        Network = t.Network,
-                        StreamSecurity = t.StreamSecurity,
+                        Network = custom != null ? custom.Network : t.Network,
+                        StreamSecurity = custom != null ? custom.Security : t.StreamSecurity,
                         Subid = t.Subid,
                         SubRemarks = t.SubRemarks,
                         IsActive = t.IndexId == _config.IndexId,
@@ -590,28 +601,60 @@ public class ProfilesViewModel : MyReactiveObject
         await SetDefaultServer(SelectedProfile.IndexId);
     }
 
-    public async Task SetDefaultServer(string? indexId)
+    // Returns TRUE when <paramref name="indexId"/> is the active default and is ready to be
+    // connected; FALSE on an invalid / missing / failed pick. See the A5 contract below.
+    /// <param name="startWhenIdle">
+    /// Поднимать ли ядро, если туннель СЕЙЧАС выключен. По умолчанию да — так ведут себя старые
+    /// вызовы. «Главная» передаёт false: владелец потребовал, чтобы тап по локации только ВЫБИРАЛ
+    /// сервер, а включение оставалось за щитом. Раньше этого параметра не было, и выбор поднимал
+    /// туннель отсюда, из Reload(), — сколько бы вызывающий ни воздерживался от Connect().
+    /// На ЖИВОЙ туннель это не влияет: там по-прежнему бесшовное переключение.
+    /// </param>
+    public async Task<bool> SetDefaultServer(string? indexId, bool startWhenIdle = true)
     {
         if (indexId.IsNullOrEmpty())
         {
-            return;
+            return false;
         }
+        // A5: tapping the ALREADY-active server must not be a dead action. This previously
+        // early-returned with no signal, which blocked the connect path (a disconnected user
+        // tapping the active server got nothing). Now we report success WITHOUT reloading:
+        // the default is already correct, so there is nothing to persist and a running core
+        // must not be bounced. The connect decision belongs to the caller —
+        // HomeViewModel.SelectServer connects when it is disconnected. Callers that only set
+        // the default (status-bar picker / context-menu «Сделать основным») ignore the result,
+        // so their behaviour is unchanged (still a no-op in this branch).
         if (indexId == _config.IndexId)
         {
-            return;
+            return true;
         }
         var item = await AppManager.Instance.GetProfileItem(indexId);
         if (item is null)
         {
             NoticeManager.Instance.Enqueue(ResUI.PleaseSelectServer);
-            return;
+            return false;
         }
 
         if (await ConfigHandler.SetDefaultServerIndex(_config, indexId) == 0)
         {
             await RefreshServers();
-            Reload();
+            // When a core is ALREADY running, this is a live server switch — take the seamless
+            // make-before-break path (no visible drop). When disconnected it is a fresh connect, so
+            // keep today's Reload() (a normal start). Only the outbound/server changes on a switch;
+            // the inbound/ports/TUN are deterministic and identical, which is what makes it seamless.
+            var running = AppManager.Instance.IsRunningCore(ECoreType.Xray)
+                || AppManager.Instance.IsRunningCore(ECoreType.sing_box);
+            if (running)
+            {
+                SwitchRequested.Publish();
+            }
+            else if (startWhenIdle)
+            {
+                Reload();
+            }
+            return true;
         }
+        return false;
     }
 
     public async Task ShareServerAsync()

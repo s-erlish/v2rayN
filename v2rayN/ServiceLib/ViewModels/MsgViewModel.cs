@@ -45,7 +45,11 @@ public class MsgViewModel : MyReactiveObject
 
         EnqueueQueueMsg(msg);
 
-        if (!AppManager.Instance.ShowInTaskbar)
+        // Idle guard (B5): pause the log pump whenever the UI is not visible. IsUiHidden covers
+        // both hidden-to-tray (ShowInTaskbar == false) AND minimized — the queue is still filled
+        // above (so nothing is lost), but the expensive dispatcher pump is skipped for a window the
+        // user cannot see.
+        if (AppManager.Instance.IsUiHidden)
         {
             return;
         }
@@ -65,7 +69,18 @@ public class MsgViewModel : MyReactiveObject
                 sb.Append(line);
             }
 
-            await DispatcherShowMsgInteraction.Handle(sb.ToString());
+            try
+            {
+                await DispatcherShowMsgInteraction.Handle(sb.ToString());
+            }
+            catch (UnhandledInteractionException<string, Unit>)
+            {
+                // No handler is registered: this shell builds no MsgView on the Home/Account layout
+                // (only sub-screens that host one register it). The batch has nowhere to render and is
+                // dropped — same net effect as before — but WITHOUT the throw: it used to escape from
+                // this fire-and-forget task as a TaskScheduler UnobservedTaskException on EVERY
+                // subscription sync/update message (observed twice per cold start in guiLogs).
+            }
         }
         finally
         {

@@ -5,6 +5,42 @@ public class Global
     #region const
 
     public const string AppName = "v2rayN";
+
+    /// <summary>
+    /// The ONE User-Agent every subscription fetch sends. The departament / Remnawave panel serves its
+    /// server list to a recognised v2rayNG-family client. Single source of truth shared by BOTH the
+    /// manual subscription-add path (SubscriptionHandler.ResolveSubUserAgent) and the Telegram/account
+    /// path (SubscriptionSyncManager) so the two can never drift.
+    /// </summary>
+    public const string SubscriptionUserAgent = "v2rayNG/1.10.6";
+
+    /// <summary>
+    /// Remnawave HWID device-limit headers. When the panel has HWID device-limit enabled it REQUIRES an
+    /// <c>x-hwid</c> header on the subscription request; without it the panel answers with the
+    /// «Приложение не поддерживается» ("app not supported") placeholder node (verified on the wire).
+    /// With a valid HWID the real server list is served (subject to the device-slot limit). The Desktop
+    /// layer wires this to AuthTokenStore.DeviceId() — the SAME stable per-machine id the account API
+    /// already uses (X-HWID) — so the app is one consistent device for both the API and the sub fetch.
+    /// Null provider (or empty result) → no HWID header sent (unchanged legacy behaviour).
+    /// </summary>
+    public static Func<string?>? SubscriptionHwidProvider;
+
+    /// <summary>
+    /// <b>Есть ли в этой оболочке экраны Clash?</b> В WPF-приложении есть (вкладки «Proxies» и
+    /// «Connections»), в departament для ПК — нет: его «Главная» показывает свой список серверов, а
+    /// панели Clash не существует ни в одном виде.
+    ///
+    /// Пока флаг был неявным, <see cref="ViewModels.MainWindowViewModel"/> создавал ОБА вида Clash
+    /// в поле-инициализаторе, то есть при каждом запуске любой оболочки, а каждый из них в своём
+    /// конструкторе запускал бесконечный цикл (<c>while (true)</c> с задержкой 5 и 60 секунд).
+    /// На ПК эти циклы просыпались 780 раз в час ради проверки, которая всегда отвечала «смотреть
+    /// некому».
+    ///
+    /// Оболочка ПК ставит здесь false ДО создания MainWindowViewModel; по умолчанию true, поэтому
+    /// WPF-приложение и любой будущий хост ведут себя ровно как раньше.
+    /// </summary>
+    public static bool ClashUiAvailable = true;
+
     public const string GithubUrl = "https://github.com";
     public const string GithubApiUrl = "https://api.github.com/repos";
     public const string GeoUrl = "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/{0}.dat";
@@ -56,6 +92,7 @@ public class Global
     public const string DefaultXhttpMode = "auto";
     public const string ProxyTag = "proxy";
     public const string DirectTag = "direct";
+    public const string ApiTag = "api";
     public const string BlockTag = "block";
     public const string DnsOutboundTag = "dns";
     public const string DnsTag = "dns-module";
@@ -88,7 +125,7 @@ public class Global
     public const int MinFontSize = 8;
     public const int MinFontSizeCount = 13;
     public const string RebootAs = "rebootas";
-    public const string AvaAssets = "avares://v2rayN/Assets/";
+    public const string AvaAssets = "avares://departament/Assets/";
     public const string LocalAppData = "V2RAYN_LOCAL_APPLICATION_DATA_V2";
     public const string V2RayLocalAsset = "V2RAY_LOCATION_ASSET";
     public const string XrayLocalAsset = "XRAY_LOCATION_ASSET";

@@ -42,6 +42,11 @@ public class StatusBarViewModel : MyReactiveObject
     public ReactiveCommand<Unit, Unit> ShowWindowCmd { get; }
     public ReactiveCommand<Unit, Unit> HideWindowCmd { get; }
 
+    // departament (A6): user explicitly opts into elevation to restore the requested all-traffic TUN
+    // mode when it was unavailable (unelevated). Re-drives the normal TUN enable path (RebootAsAdmin on
+    // Windows / sudo prompt on Linux/macOS) rather than leaving traffic silently on system-proxy.
+    public ReactiveCommand<Unit, Unit> RequestTunElevationCmd { get; }
+
     #region System Proxy
 
     [Reactive]
@@ -101,7 +106,32 @@ public class StatusBarViewModel : MyReactiveObject
     [Reactive]
     public bool BlIsNonWindows { get; set; }
 
+    // departament (A6): the ACTUAL routing mode in effect, surfaced so a TUN request is never silently
+    // downgraded to system-proxy behind the user's back. "Весь трафик · TUN" when the OS-level tunnel
+    // is active; "Через системный прокси" otherwise. Bindable to a status line (UI hookup is Wave 2).
+    [Reactive]
+    public string RoutingModeDisplay { get; set; }
+
+    // departament (A6): true when TUN (all-traffic) can actually be enabled in THIS session — the
+    // process is elevated (Windows admin) / has a sudo password (Linux/macOS). When false, TUN would
+    // silently fall back to system-proxy, so the UI should offer elevation instead of leaking.
+    [Reactive]
+    public bool TunAvailable { get; set; }
+
+    // departament (A6): true when the persisted config / user toggle REQUESTED TUN but it is
+    // unavailable (not elevated) — traffic is really going through the system proxy, NOT the tunnel.
+    // The UI shows a clear notice + a "grant elevation" affordance (RequestTunElevationCmd) instead of
+    // silently routing only a subset of traffic. Cleared once TUN becomes available or the user
+    // accepts system-proxy (turns the toggle off).
+    [Reactive]
+    public bool TunRequestedButUnavailable { get; set; }
+
     #endregion UI
+
+    // departament (A6): remembers the last requested TUN intent (config at startup, or the user's
+    // toggle) so RoutingModeDisplay / TunRequestedButUnavailable can report an honest routing state
+    // even after the in-memory config is downgraded to false (so core-config generation stays valid).
+    private bool _tunRequested;
 
     public StatusBarViewModel()
     {
@@ -112,14 +142,20 @@ public class StatusBarViewModel : MyReactiveObject
         BlSystemProxyPacVisible = Utils.IsWindows();
         BlIsNonWindows = Utils.IsNonWindows();
 
+        // A6: capture whether TUN was requested BEFORE the in-memory downgrade below, so we can
+        // surface "requested but unavailable" instead of silently switching to system-proxy.
+        _tunRequested = _config.TunModeItem.EnableTun;
         if (_config.TunModeItem.EnableTun && AllowEnableTun())
         {
             EnableTun = true;
         }
         else
         {
+            // Downgrade the EFFECTIVE config to false (so the generated core config doesn't request a
+            // tunnel it can't create) — but _tunRequested still records the user's real intent.
             _config.TunModeItem.EnableTun = EnableTun = false;
         }
+        UpdateRoutingModeStatus();
 
         #region WhenAnyValue && ReactiveCommand
 
@@ -163,6 +199,22 @@ public class StatusBarViewModel : MyReactiveObject
         {
             ShowHideWindowRequested.Publish(false);
             await Task.CompletedTask;
+        });
+
+        RequestTunElevationCmd = ReactiveCommand.CreateFromTask(async () =>
+        {
+            // A6: honour an explicit opt-in to elevation. Record the intent and drive the same TUN
+            // enable path the toggle uses. If the toggle is already on (config off = unavailable),
+            // call DoEnableTun directly since WhenAnyValue won't re-fire on an unchanged value.
+            _tunRequested = true;
+            if (EnableTun)
+            {
+                await DoEnableTun(true);
+            }
+            else
+            {
+                EnableTun = true;
+            }
         });
 
         AddServerViaClipboardCmd = ReactiveCommand.CreateFromTask(async () =>
@@ -462,6 +514,9 @@ public class StatusBarViewModel : MyReactiveObject
             return;
         }
 
+        // A6: the toggle value is the user's routing intent — remember it so the UI can honestly
+        // report a downgrade to system-proxy when TUN turns out to be unavailable.
+        _tunRequested = EnableTun;
         _config.TunModeItem.EnableTun = EnableTun;
 
         if (EnableTun && AllowEnableTun() == false)
@@ -470,6 +525,7 @@ public class StatusBarViewModel : MyReactiveObject
             if (Utils.IsWindows())
             {
                 _config.TunModeItem.EnableTun = false;
+                UpdateRoutingModeStatus();
                 await AppManager.Instance.RebootAsAdmin();
                 return;
             }
@@ -479,13 +535,25 @@ public class StatusBarViewModel : MyReactiveObject
                 if (password.IsNullOrEmpty())
                 {
                     _config.TunModeItem.EnableTun = false;
+                    UpdateRoutingModeStatus();
                     return;
                 }
             }
         }
 
         await ConfigHandler.SaveConfig(_config);
+        UpdateRoutingModeStatus();
         ReloadRequested.Publish();
+    }
+
+    // departament (A6): recompute the surfaced routing mode + the "TUN requested but unavailable"
+    // notice from the current effective state. Called from the constructor and after every TUN change.
+    private void UpdateRoutingModeStatus()
+    {
+        var tunActive = _config.TunModeItem.EnableTun && EnableTun;
+        RoutingModeDisplay = tunActive ? "Весь трафик · TUN" : "Через системный прокси";
+        TunAvailable = AllowEnableTun();
+        TunRequestedButUnavailable = _tunRequested && !TunAvailable;
     }
 
     private bool AllowEnableTun()

@@ -429,7 +429,7 @@ public class ClashProxiesViewModel : MyReactiveObject
               {
                   await Task.Delay(1000 * 60);
                   numOfExecuted++;
-                  if (!(AutoRefresh && AppManager.Instance.ShowInTaskbar && AppManager.Instance.IsRunningCore(ECoreType.sing_box)))
+                  if (!(AutoRefresh && !AppManager.Instance.IsUiHidden && AppManager.Instance.IsRunningCore(ECoreType.sing_box)))
                   {
                       continue;
                   }

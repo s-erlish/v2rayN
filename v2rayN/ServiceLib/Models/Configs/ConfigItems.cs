@@ -67,10 +67,18 @@ public class GrpcItem
 public class GUIItem
 {
     public bool AutoRun { get; set; }
-    public bool EnableStatistics { get; set; }
-    public bool DisplayRealTimeSpeed { get; set; }
+
+    // departament: traffic stats ON by default so the ↑/↓ speed widget (Home stats row, both compact
+    // and widescreen) actually updates — a fresh config previously left both false, so the stats event
+    // was never published and speed stayed frozen at 0 KB/s even while connected.
+    public bool EnableStatistics { get; set; } = true;
+    public bool DisplayRealTimeSpeed { get; set; } = true;
     public bool KeepOlderDedupl { get; set; }
-    public int AutoUpdateInterval { get; set; }
+
+    // departament: subscription/geo auto-update cadence in MINUTES. Default 60 (= 1 час) so a fresh
+    // config auto-refreshes hourly out of the box; the Settings «Автообновление подписки» row cycles
+    // 60/360/720/1440 (1/6/12/24 ч.). 0 disables. Kept in minutes to match the per-sub interval unit.
+    public int AutoUpdateInterval { get; set; } = 60;
     public int TrayMenuServersLimit { get; set; } = 20;
     public bool EnableHWA { get; set; } = false;
     public bool EnableLog { get; set; } = true;
@@ -92,7 +100,16 @@ public class UIItem
     public int MainGirdHeight2 { get; set; }
     public EGirdOrientation MainGirdOrientation { get; set; } = EGirdOrientation.Vertical;
     public string? ColorPrimaryName { get; set; }
+
+    // departament: base appearance variant — Тёмная (Dark, default) / Светлая (Light). Persisted as the
+    // ETheme name string and applied as the Avalonia RequestedThemeVariant (App.ApplyTheme).
     public string? CurrentTheme { get; set; }
+
+    // departament: «Чёрная (AMOLED)» — a SEPARATE toggle that composes ON TOP of the Dark/Light base
+    // (mirrors Android's Mono overlay applied over day/night). When true, App.ApplyTheme merges a
+    // true-black overlay (pure #000000 surfaces + high-contrast ink) over whichever base variant is
+    // active. Additive + defaults false, so existing JSON configs deserialize unchanged (black off).
+    public bool BlackTheme { get; set; }
     public string CurrentLanguage { get; set; }
     public string CurrentFontFamily { get; set; }
     public int CurrentFontSize { get; set; }
@@ -100,10 +117,41 @@ public class UIItem
     public bool DoubleClick2Activate { get; set; }
     public bool AutoHideStartup { get; set; }
     public bool Hide2TrayWhenClose { get; set; }
+
+    /// <summary>
+    /// Прятать значок в области уведомлений. Значок нужен не всем: у кого-то трей и так забит, а
+    /// приложение живёт в панели задач. Выключенный значок НЕ меняет поведения окна — закрытие
+    /// по-прежнему сворачивает или завершает по своей настройке.
+    /// </summary>
+    public bool HideTrayIcon { get; set; }
     public bool MacOSShowInDock { get; set; }
     public List<ColumnItem> MainColumnItem { get; set; }
     public List<WindowSizeItem> WindowSizeItem { get; set; }
     public bool HideColumnIpInfo { get; set; }
+
+    // departament: «Облегчённый режим» (lite / performance). Persisted source of truth for
+    // reduced-motion across the desktop shell: when true the connect choreography, page
+    // cross-fade and press/hover transitions are suppressed. Read by App/MainWindow/ConnectHeroView
+    // AND written by the Settings «Облегчённый режим» toggle (SettingsViewModel.LiteMode) — one
+    // shared flag, additive + defaults false, so existing JSON configs deserialize unchanged.
+    public bool LiteMode { get; set; }
+
+    // departament: «Масштаб интерфейса» (in-app UI zoom) — a pure UI factor the user controls to make the
+    // WHOLE desktop interface larger/smaller INDEPENDENT of the OS DPI scale. Fixes «всё крошечное» on a 4K
+    // monitor left at 100% OS scaling: the OS renders 1:1 (physically small), so instead of fighting the OS
+    // scale we let the user zoom the app itself. The desktop shell wraps its root content in a
+    // LayoutTransformControl whose ScaleTransform reads this factor (range 0.8–2.0, default 1.0). Additive:
+    // the default 1.0 initializer means old JSON configs (missing the field) deserialize as 1.0, and the
+    // consumer (UiScaleState.Clamp) treats any 0/out-of-range value as 1.0 too, so nothing breaks.
+    public double UiScale { get; set; } = 1.0;
+
+    // departament: «Прокси по приложениям» (split-tunnel) UI state for the desktop Settings screen.
+    // The EFFECTIVE routing lives in the active RoutingItem.RuleSet (managed RulesItem with
+    // process_name/process_path, injected on save); these fields only persist what the picker shows.
+    // Additive + safe defaults, so existing JSON configs deserialize unchanged.
+    public bool PerAppProxyEnabled { get; set; }
+    public bool PerAppProxyBypass { get; set; } = true; // true = exclude/bypass listed apps; false = only listed apps via VPN
+    public List<string>? PerAppProxyList { get; set; }
 }
 
 [Serializable]
@@ -140,7 +188,7 @@ public class CoreTypeItem
 [Serializable]
 public class TunModeItem
 {
-    public bool EnableTun { get; set; }
+    public bool EnableTun { get; set; } = true;
     public bool AutoRoute { get; set; } = true;
     public bool StrictRoute { get; set; } = true;
     public string Stack { get; set; }
@@ -162,6 +210,14 @@ public class SpeedTestItem
     public string UdpTestTarget { get; set; }
     public int? SpeedTestPageSize { get; set; }
     public int? SpeedTestDelayInterval { get; set; }
+
+    // departament: selected latency-probe method for the server list, mirroring Android
+    // (Realping = реальная задержка через ядро / Tcping = TCP / Httping = HTTP / Icmping = ICMP).
+    // Persisted as the method key. Default = Tcping so a FRESH install pings successfully out of the box
+    // (a TCP handshake needs no running core — Realping-through-the-core returns «—» while disconnected).
+    // Read by the ping trigger + Settings «Пинг» row. (Realping additionally falls back to a TCP probe
+    // when the core can't be started — see SpeedtestService.RunRealPingAsync.)
+    public string? PingMethod { get; set; } = nameof(ESpeedActionType.Tcping);
 }
 
 [Serializable]
