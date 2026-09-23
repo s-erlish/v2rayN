@@ -1219,6 +1219,11 @@ public partial class ConnectHeroView : UserControl
         }
     }
 
+    //  Сколько живёт двойной пинг целиком: ведущее кольцо Emphasis (600), эхо стартует на 120 позже,
+    //  плюс запас на оборот диспетчера, которым навешивается ведущий класс.
+    private static readonly TimeSpan SonarEchoDelay = TimeSpan.FromMilliseconds(120);
+    private static readonly TimeSpan SonarLifetime = Motion.Dur.Emphasis + SonarEchoDelay + TimeSpan.FromMilliseconds(100);
+
     private void PlaySonar()
     {
         //  Осевший ДВОЙНОЙ пинг (≤2 кольца): ведущее 1.0→1.6 + alpha 1→0 (600мс quint), затем тихое
@@ -1249,7 +1254,20 @@ public partial class ConnectHeroView : UserControl
                     SonarPulseEcho.Classes.Add("pulsing-echo");
                 }
             },
-            TimeSpan.FromMilliseconds(120));
+            SonarEchoDelay);
+
+        //  Отыгравший пинг убирает себя сам: одноразовому классу незачем висеть на кольце до
+        //  следующего отключения. К концу пинга оба кольца уже прозрачны, поэтому снятие классов
+        //  и скрытие на экране ничего не меняют.
+        DispatcherTimer.RunOnce(
+            () =>
+            {
+                if (run == _sonarRun)
+                {
+                    HideSonar();
+                }
+            },
+            SonarLifetime);
     }
 
     //  Номер текущего запуска сонара. HideSonar его сдвигает, и отложенные старты уже снятого запуска
