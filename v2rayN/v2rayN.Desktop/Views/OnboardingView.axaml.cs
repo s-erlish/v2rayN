@@ -45,10 +45,18 @@ public partial class OnboardingView : UserControl
     private static readonly TimeSpan _bloomDuration = TimeSpan.FromMilliseconds(620);
     private static readonly TimeSpan _liftDuration = TimeSpan.FromMilliseconds(460);
 
-    // Отступ блока кнопок: 26 без карточки, 14 с карточкой (карточка приносит свои 24 сверху,
-    // иначе разрыв сложился бы в 50 и блок кнопок «отвалился» бы от подзаголовка).
-    private static readonly Thickness _actionsGapPlain = new(0, 26, 0, 0);
-    private static readonly Thickness _actionsGapWithCard = new(0, 14, 0, 0);
+    // Отступ блока кнопок: 24 без карточки, 12 с карточкой (карточка приносит свои 24 сверху,
+    // иначе разрыв сложился бы в 48 и блок кнопок «отвалился» бы от подзаголовка). Оба — из шкалы
+    // отступов; прежние 26 и 14 были подобраны на глаз.
+    private static readonly Thickness _actionsGapPlain = new(0, 24, 0, 0);
+    private static readonly Thickness _actionsGapWithCard = new(0, 12, 0, 0);
+
+    // Щит на низком окне: 3/4 от 118 освобождают колонке ~30 точек — ровно то, чего не хватало на
+    // минимальном окне 420×560 с карточкой найденной ссылки. Темп — тот же, что у раскрытий (340).
+    private const double ShieldTightScale = 0.75;
+    private static readonly TimeSpan _shieldFitDuration = TimeSpan.FromMilliseconds(340);
+    private bool _shieldTight;
+    private readonly ScaleTransform _shieldFitScale = new(1, 1);
 
     private bool _entryPending;
     private bool _moreOpen;
@@ -105,15 +113,35 @@ public partial class OnboardingView : UserControl
 
         ClipRevealHost.SizeChanged += OnRevealHostSizeChanged;
         MoreRevealHost.SizeChanged += OnRevealHostSizeChanged;
+        PillRevealHost.SizeChanged += OnRevealHostSizeChanged;
 
         ActionsBlock.Margin = _actionsGapPlain;
+        ShieldFit.LayoutTransform = _shieldFitScale;
+
+        // Хватает ли колонке высоты, решает её собственная высота против высоты окна скролла —
+        // так решение само следует за шрифтом, языком, масштабом и раскрытиями. Пересчёт — когда
+        // меняется любая из двух высот (раскрытие карточки, «Другие способы», размер окна).
+        Column.SizeChanged += (_, e) =>
+        {
+            if (e.HeightChanged)
+            {
+                UpdateShieldFit();
+            }
+        };
+        Scroll.SizeChanged += (_, e) =>
+        {
+            if (e.HeightChanged)
+            {
+                UpdateShieldFit();
+            }
+        };
 
         // Пред-скрываем анимируемые блоки, чтобы появление не «вспыхивало» из готового кадра.
         // ТОЛЬКО при включённом движении: под lite/preview/дизайном экран обязан быть виден сразу —
         // появление УЛУЧШАЕТ уже видимый дефолт, а не создаёт его.
         if (!IsReducedMotion())
         {
-            ShieldRing.Opacity = 0;
+            ShieldFit.Opacity = 0;
             TitleText.Opacity = 0;
             SubtitleText.Opacity = 0;
             ActionsBlock.Opacity = 0;
@@ -148,7 +176,10 @@ public partial class OnboardingView : UserControl
         }
 
         // Щит — bloom: 620 мс из 0.82×, кривая появления (0.22,1,0.36,1) = Ease.OutQuint.
-        PlayReveal(ShieldRing, TimeSpan.Zero, _bloomDuration, _scale082, _scale1);
+        // Щит «расцветает» на ОБЁРТКЕ, а не на самом кольце: обёртка ужимает кольцо собственным
+        // трансформом кольца (так устроен LayoutTransformControl), и появление, обнулявшее этот
+        // трансформ по окончании, оставляло кольцо полноразмерным в ужатом слоте — его обрезало.
+        PlayReveal(ShieldFit, TimeSpan.Zero, _bloomDuration, _scale082, _scale1);
         // Остальное — подъём translateY 16→0 + проявление, 460 мс, со сдвигом по смыслу.
         PlayReveal(TitleText, TimeSpan.FromMilliseconds(80), _liftDuration, _lift16, _lift0);
         PlayReveal(SubtitleText, TimeSpan.FromMilliseconds(140), _liftDuration, _lift16, _lift0);
@@ -211,7 +242,7 @@ public partial class OnboardingView : UserControl
 
     private void RestoreAll()
     {
-        foreach (var el in new Control[] { ShieldRing, TitleText, SubtitleText, ActionsBlock })
+        foreach (var el in new Control[] { ShieldFit, TitleText, SubtitleText, ActionsBlock })
         {
             el.Transitions = null;
             el.Opacity = 1;
@@ -312,6 +343,57 @@ public partial class OnboardingView : UserControl
         _clipCardShown = show;
         ActionsBlock.Margin = show ? _actionsGapWithCard : _actionsGapPlain;
         SetReveal(ClipRevealHost, ClipCard, show);
+
+        // Карточка и пилюля «Добавить из буфера обмена» ведут в одно действие: пока видна карточка,
+        // пилюля схлопывается тем же темпом, каким карточка раскрывается, — одно движение, а не два.
+        SetReveal(PillRevealHost, ClipboardButton, !show);
+        KeyboardNavigation.SetIsTabStop(ClipboardButton, !show);
+    }
+
+    /// <summary>
+    /// Ужимает щит до 3/4, когда колонка не помещается по высоте, и возвращает его, как только
+    /// полный щит снова влезает. Порог — не число, а сама колонка против видимой высоты скролла.
+    /// Мерить по Extent скролла нельзя: короткое содержимое скролл растягивает до своей высоты,
+    /// и «влезло обратно» по нему не видно никогда. Обратно разжимаем с запасом ровно на
+    /// освобождённую щитом высоту, иначе щит дёргался бы туда-обратно на границе.
+    /// </summary>
+    private void UpdateShieldFit()
+    {
+        var viewport = Scroll.Viewport.Height > 0 ? Scroll.Viewport.Height : Scroll.Bounds.Height;
+        if (viewport <= 0)
+        {
+            return;
+        }
+        var need = Column.Bounds.Height + Column.Margin.Top + Column.Margin.Bottom;
+        var saving = ShieldRing.Height * (1 - ShieldTightScale);
+        if (!_shieldTight && need > viewport + 0.5)
+        {
+            SetShieldTight(true);
+        }
+        else if (_shieldTight && need + saving < viewport - 0.5)
+        {
+            SetShieldTight(false);
+        }
+    }
+
+    private void SetShieldTight(bool tight)
+    {
+        _shieldTight = tight;
+        if (IsReducedMotion())
+        {
+            _shieldFitScale.Transitions = null;
+        }
+        else if (_shieldFitScale.Transitions is null)
+        {
+            _shieldFitScale.Transitions =
+            [
+                new DoubleTransition { Property = ScaleTransform.ScaleXProperty, Duration = _shieldFitDuration, Easing = Motion.Ease.OutQuart },
+                new DoubleTransition { Property = ScaleTransform.ScaleYProperty, Duration = _shieldFitDuration, Easing = Motion.Ease.OutQuart },
+            ];
+        }
+        var scale = tight ? ShieldTightScale : 1.0;
+        _shieldFitScale.ScaleX = scale;
+        _shieldFitScale.ScaleY = scale;
     }
 
     // ==================== «Другие способы» ====================
@@ -328,6 +410,21 @@ public partial class OnboardingView : UserControl
             MoreCaret.Classes.Remove("open");
         }
         SetReveal(MoreRevealHost, (Control)MoreRevealHost.Child!, _moreOpen);
+
+        // Раскрытые строки на низком окне уходили под нижний край: доводим их в поле зрения, когда
+        // раскрытие доехало (раньше мерить нечего — высота ещё растёт).
+        if (_moreOpen)
+        {
+            DispatcherTimer.RunOnce(
+                () =>
+                {
+                    if (_moreOpen)
+                    {
+                        MoreRevealHost.BringIntoView();
+                    }
+                },
+                TimeSpan.FromMilliseconds(340));
+        }
     }
 
     /// <summary>
@@ -347,6 +444,24 @@ public partial class OnboardingView : UserControl
     {
         if (!open)
         {
+            // Хост, который ещё ни разу не схлопывался, стоит на авто-высоте, а из «авто» переход
+            // не едет — сперва фиксируем текущую высоту, и уже со следующего оборота уводим в ноль.
+            if (double.IsNaN(host.Height))
+            {
+                host.Height = host.Bounds.Height;
+                host.IsHitTestVisible = false;
+                Dispatcher.UIThread.Post(
+                    () =>
+                    {
+                        // Пока ждали оборот, хост могли снова раскрыть — тогда схлопывать нечего.
+                        if (!host.IsHitTestVisible)
+                        {
+                            SetReveal(host, content, false);
+                        }
+                    },
+                    DispatcherPriority.Background);
+                return;
+            }
             host.Height = 0;
             host.Opacity = 0;
             host.IsHitTestVisible = false;
