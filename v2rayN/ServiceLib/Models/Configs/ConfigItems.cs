@@ -306,8 +306,6 @@ public class CheckUpdateItem
     /// Конфиг без этого поля (прежние версии) читается как «включено» — значение по умолчанию здесь.
     /// </summary>
     public bool AutoCheck { get; set; } = true;
-
-    public List<string>? SelectedCoreTypes { get; set; }
 }
 
 [Serializable]

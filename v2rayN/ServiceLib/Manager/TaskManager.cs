@@ -70,9 +70,9 @@ public class TaskManager
                 }
             }
 
-            // Core/app update check intentionally disabled: this is a consumer VPN with bundled
-            // cores, so we never surface "new cores available" notices nor run a background
-            // network update check.
+            // Проверки новых ядер здесь нет и не будет: ядра едут вместе с приложением и закреплены в
+            // выпуске. Проверка новой версии самого приложения — AppUpdateManager.StartSchedule: её
+            // запускает оболочка после первого кадра окна, а не этот цикл.
             numOfExecuted++;
         }
     }

@@ -696,7 +696,8 @@ public class Global
         { ECoreType.overtls, "ShadowsocksR-Live/overtls" },
         { ECoreType.shadowquic, "spongebob888/shadowquic" },
         { ECoreType.mieru, "enfein/mieru" },
-        { ECoreType.v2rayN, "2dust/v2rayN" },
+        // Выпуски самого departament для ПК (не апстрим 2dust/v2rayN): см. AppUpdateChannel.
+        { ECoreType.v2rayN, "s-erlish/v2rayN" },
     };
 
     public static readonly List<string> OtherGeoUrls =

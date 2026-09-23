@@ -78,13 +78,6 @@ public sealed class AppManager
         }
     }
 
-    public Dictionary<ECoreType, string> LastCheckUpdateResults { get; set; } = new();
-
-    public void SetLastCheckUpdateResult(ECoreType coreType, string result)
-    {
-        LastCheckUpdateResults[coreType] = result;
-    }
-
     #endregion Property
 
     #region App
