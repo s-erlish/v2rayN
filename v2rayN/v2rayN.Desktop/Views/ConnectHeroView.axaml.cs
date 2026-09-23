@@ -354,7 +354,6 @@ public partial class ConnectHeroView : UserControl
 
         //  Сонар расходится ОТ активного кольца — значит стартует на нём же.
         SetCircle(SonarPulse, frame - (4 * g));
-        SetCircle(SonarPulseEcho, frame - (4 * g));
 
         //  Ambient: волна стартует от активного кольца, дышащее кольцо — чуть внутри внешнего.
         SetCircle(AmbientSonar, frame - (4 * g));
@@ -582,7 +581,7 @@ public partial class ConnectHeroView : UserControl
                 ServerInfo.IsVisible = true;
                 SetGlow(connecting: false, connected: true);
                 //  Payoff — одноразовый; играется ТОЛЬКО на живом переходе (motion) и на экране: дуга
-                //  растворяется (не моргает), диск «приземляется» bloom-ом, двойной пинг сонара. На
+                //  растворяется (не моргает), диск «приземляется» bloom-ом, одно кольцо сонара. На
                 //  восстановлении/rebind (animate:false) — прыжок в конечный вид без повтора payoff.
                 if (motion && !MotionSuppressed)
                 {
@@ -590,11 +589,17 @@ public partial class ConnectHeroView : UserControl
                     PlaySonar();
                     PlayConnectBloom();
                 }
-                else
+                else if (_visualState != ConnectVisualState.Connected)
                 {
                     SetArc(false);
                     HideSonar();
                 }
+                //  Иначе это ПОВТОРНОЕ применение того же connected, и идущий payoff не трогаем: он
+                //  доигрывает и убирает себя сам. Подключение приходит в презентер двумя изменениями
+                //  подряд (IsConnected, затем IsConnecting=false), и второе раньше снимало сонар и
+                //  обрывало растворение дуги до первого кадра: подтверждения подключения не видел никто.
+                //  Смена языка и темы тоже применяют состояние заново и тоже не должны его обрывать;
+                //  облегчённый режим и скрытое окно снимают сонар сами, до повторного применения.
 
                 break;
 
@@ -1251,20 +1256,17 @@ public partial class ConnectHeroView : UserControl
         }
     }
 
-    //  Сколько живёт двойной пинг целиком: ведущее кольцо Emphasis (600), эхо стартует на 120 позже,
-    //  плюс запас на оборот диспетчера, которым навешивается ведущий класс.
-    private static readonly TimeSpan SonarEchoDelay = TimeSpan.FromMilliseconds(120);
-    private static readonly TimeSpan SonarLifetime = Motion.Dur.Emphasis + SonarEchoDelay + TimeSpan.FromMilliseconds(100);
+    //  Сколько живёт пинг: Emphasis (600) плюс запас на оборот диспетчера, которым навешивается класс.
+    private static readonly TimeSpan SonarLifetime = Motion.Dur.Emphasis + TimeSpan.FromMilliseconds(100);
 
     private void PlaySonar()
     {
-        //  Осевший ДВОЙНОЙ пинг (≤2 кольца): ведущее 1.0→1.6 + alpha 1→0 (600мс quint), затем тихое
-        //  эхо (старт α 0.5, 1→1.5) с задержкой ~120мс → «залочено», не радар-петля. Классы снимаем и
-        //  вешаем на следующем цикле диспетчера, чтобы одноразовые анимации чисто перезапускались.
+        //  Подтверждение подключения, единственный 600-мс момент продукта (master plan 5.3.6): ОДНО
+        //  кольцо от активного кольца, 1.0→1.35 и α 0.6→0 за Emphasis, OutQuint, ОДИН раз на
+        //  подключение, без повторов и без второго кольца. Класс снимаем и вешаем на следующем цикле
+        //  диспетчера, чтобы одноразовая анимация чисто перезапускалась.
         SonarPulse.Classes.Remove("pulsing");
-        SonarPulseEcho.Classes.Remove("pulsing-echo");
         SonarPulse.IsVisible = true;
-        SonarPulseEcho.IsVisible = true;
         var run = ++_sonarRun;
         Dispatcher.UIThread.Post(
             () =>
@@ -1276,21 +1278,9 @@ public partial class ConnectHeroView : UserControl
             },
             DispatcherPriority.Background);
 
-        //  Эхо +120мс. Re-guard: если за это время ушли из connected или окно скрылось — не запускаем
-        //  (не тикаем компоновщик за экраном одноразовым эхо).
-        DispatcherTimer.RunOnce(
-            () =>
-            {
-                if (run == _sonarRun && _visualState == ConnectVisualState.Connected && !MotionSuppressed)
-                {
-                    SonarPulseEcho.Classes.Add("pulsing-echo");
-                }
-            },
-            SonarEchoDelay);
-
         //  Отыгравший пинг убирает себя сам: одноразовому классу незачем висеть на кольце до
-        //  следующего отключения. К концу пинга оба кольца уже прозрачны, поэтому снятие классов
-        //  и скрытие на экране ничего не меняют.
+        //  следующего отключения. К концу пинга кольцо уже прозрачно, поэтому снятие класса и
+        //  скрытие на экране ничего не меняют, а часы анимаций после этого пусты.
         DispatcherTimer.RunOnce(
             () =>
             {
@@ -1315,9 +1305,7 @@ public partial class ConnectHeroView : UserControl
     {
         _sonarRun++;
         SonarPulse.Classes.Remove("pulsing");
-        SonarPulseEcho.Classes.Remove("pulsing-echo");
         SonarPulse.IsVisible = false;
-        SonarPulseEcho.IsVisible = false;
     }
 
     //  Connect-bloom (P1-1): диск «приземляется» — 1.0→1.04 (180мс) → 1.04→1.0 (260мс), ОБЕ ноги
