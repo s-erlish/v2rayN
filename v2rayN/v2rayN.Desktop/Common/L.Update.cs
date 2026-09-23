@@ -99,7 +99,7 @@ public sealed partial class L
         Add("Update_ConfirmTitle", "Перезапустить сейчас?", "Restart now?");
         Add("Update_ConfirmConnected", "Подключение прервётся на несколько секунд. После перезапуска подключитесь снова.",
             "The connection drops for a few seconds. Connect again after the restart.");
-        Add("Update_ConfirmIdle", "Приложение закроется и откроется уже в версии {0}.", "The app closes and opens again in version {0}.");
+        Add("Update_ConfirmIdle", "Приложение закроется и откроется уже в версии {0}.", "The app closes and opens again in version {0}.");
 
         // ── Строка настроек ──
         Add("Update_AutoCheck", "Проверять обновления автоматически", "Check for updates automatically");
