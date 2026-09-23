@@ -229,16 +229,7 @@ public sealed partial class L
         Add("Log_Copied", "Журнал скопирован", "Log copied");
         Add("Log_Lines", "{0} строк", "{0} lines");
 
-        // ── Проверить обновление ──
-        Add("Update_Title", "Проверить обновление", "Check for updates");
-        Add("Update_PreRelease", "Искать предварительный выпуск", "Look for pre-releases");
-        Add("Update_PreReleaseHint", "Ранние сборки с новыми функциями", "Early builds with new features");
-        Add("Update_Check", "Проверить обновление", "Check for updates");
-        Add("Update_Components", "Компоненты", "Components");
-        Add("Update_Now", "Обновить сейчас", "Update now");
-        Add("Update_App", "Приложение", "Application");
-        Add("Update_GeoFiles", "Geo-базы", "Geo databases");
-        Add("Update_Foot", "departament {0}", "departament {0}");
+        // ── Проверить обновление: ключи Update_* живут в L.Update.cs ──
 
         // ── Резервное копирование ──
         Add("Backup_SecData", "Данные", "Data");

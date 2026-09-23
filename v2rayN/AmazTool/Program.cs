@@ -1,87 +1,82 @@
 namespace AmazTool;
 
+/// <summary>
+/// Установщик обновлений departament. Команды:
+/// <code>
+///   AmazTool upgrade --package &lt;путь к zip&gt; [--pid &lt;PID приложения&gt;]
+///   AmazTool rebootas
+///   AmazTool &lt;путь к zip в URL-кодировке&gt;      (старая форма вызова апстрима)
+/// </code>
+/// Окна нет, консоли нет: всё пишется в guiLogs/upgrade.log. Код возврата 0 — сделано, 1 — нет.
+/// </summary>
 internal static class Program
 {
-    [STAThread]
-    private static void Main(string[] args)
+    private static int Main(string[] args)
     {
+        Log.Init();
         try
         {
-            // If no arguments are provided, display usage guidelines and exit
+            Log.Write($"AmazTool started: {string.Join(' ', args.Select(a => a.Contains(' ') ? $"\"{a}\"" : a))}");
             if (args.Length == 0)
             {
-                ShowHelp();
-                return;
+                Log.Write("no command, nothing to do");
+                return 1;
             }
 
-            // Log all arguments for debugging purposes
-            foreach (var arg in args)
-            {
-                Console.WriteLine(arg);
-            }
-
-            // Parse command based on first argument
             switch (args[0].ToLowerInvariant())
             {
-                case "rebootas":
-                    // Handle application restart
-                    HandleRebootAsync();
-                    break;
+                case "upgrade":
+                    return Upgrade(args[1..]);
 
-                case "help":
-                case "--help":
-                case "-h":
-                case "/?":
-                    // Display help information
-                    ShowHelp();
-                    break;
+                case "rebootas":
+                    return Reboot();
 
                 default:
-                    // Default behavior: handle as upgrade data
-                    // Maintain backward compatibility with existing usage pattern
-                    var argData = Uri.UnescapeDataString(string.Join(" ", args));
-                    HandleUpgrade(argData);
-                    break;
+                    // Форма апстрима: весь хвост — один путь в URL-кодировке, без PID.
+                    return UpgradeApp.Run(Uri.UnescapeDataString(string.Join(" ", args)), appPid: null) ? 0 : 1;
             }
         }
         catch (Exception ex)
         {
-            // Global exception handling
-            Console.WriteLine($"An error occurred: {ex.Message}");
-            Console.WriteLine("Press any key to exit...");
-            Console.ReadKey();
+            Log.Write($"fatal: {ex}");
+            return 1;
         }
     }
 
-    /// <summary>
-    /// Display help information and usage guidelines
-    /// </summary>
-    private static void ShowHelp()
+    private static int Upgrade(string[] options)
     {
-        Console.WriteLine(Resx.Resource.Guidelines);
-        Console.WriteLine("Available commands:");
-        Console.WriteLine("  rebootas             - Restart the application");
-        Console.WriteLine("  help                 - Display this help information");
-        Thread.Sleep(5000);
+        string? package = null;
+        int? pid = null;
+        for (var i = 0; i + 1 < options.Length; i += 2)
+        {
+            switch (options[i])
+            {
+                case "--package":
+                    package = options[i + 1];
+                    break;
+
+                case "--pid" when int.TryParse(options[i + 1], out var value):
+                    pid = value;
+                    break;
+            }
+        }
+        if (string.IsNullOrWhiteSpace(package))
+        {
+            Log.Write("upgrade: --package is missing");
+            return 1;
+        }
+        return UpgradeApp.Run(package, pid) ? 0 : 1;
     }
 
     /// <summary>
-    /// Handle application restart
+    /// Перезапуск после восстановления настроек из копии (на Linux и macOS приложение перезапускает себя
+    /// через установщик и сразу выходит). Раньше установщик ждал ровно секунду: если старый экземпляр к
+    /// тому времени ещё не вышел, новый упирался в замок единственного экземпляра и молча закрывался.
+    /// Теперь ждём выхода по-настоящему.
     /// </summary>
-    private static void HandleRebootAsync()
+    private static int Reboot()
     {
-        Console.WriteLine("Restarting application...");
-        Thread.Sleep(1000);
-        Utils.StartV2RayN();
-    }
-
-    /// <summary>
-    /// Handle application upgrade with the provided data
-    /// </summary>
-    /// <param name="upgradeData">Data for the upgrade process</param>
-    private static void HandleUpgrade(string upgradeData)
-    {
-        Console.WriteLine("Upgrading application...");
-        UpgradeApp.Upgrade(upgradeData);
+        Utils.WaitForAppExit(pid: null, TimeSpan.FromSeconds(30));
+        return Utils.StartApp() ? 0 : 1;
     }
 }

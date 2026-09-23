@@ -24,7 +24,22 @@ public class MainWindowViewModel : MyReactiveObject
     private ClashConnectionsViewModel? _clashConnectionsViewModel;
 
     public ClashConnectionsViewModel ClashConnectionsViewModel => _clashConnectionsViewModel ??= new();
-    public CheckUpdateViewModel CheckUpdateViewModel { get; } = new();
+    // Только для легаси-окна WPF. Раньше создавалась при КАЖДОМ запуске любой оболочки (инициализатор
+    // поля), хотя departament для ПК её не использует: у него свой экран, открываемый по тапу.
+    private CheckUpdateViewModel? _checkUpdateViewModel;
+
+    public CheckUpdateViewModel CheckUpdateViewModel
+    {
+        get
+        {
+            if (_checkUpdateViewModel is null)
+            {
+                _checkUpdateViewModel = new CheckUpdateViewModel();
+                _checkUpdateViewModel.Attach();
+            }
+            return _checkUpdateViewModel;
+        }
+    }
     public BackupAndRestoreViewModel BackupAndRestoreViewModel { get; } = new();
     public StatusBarViewModel StatusBarViewModel { get; } = StatusBarViewModel.Instance;
 
@@ -276,7 +291,6 @@ public class MainWindowViewModel : MyReactiveObject
         {
             ProfilesViewModel.ReloadRequested.AsObservable(),
             StatusBarViewModel.ReloadRequested.AsObservable(),
-            CheckUpdateViewModel.ReloadRequested.AsObservable(),
         };
 
         foreach (var reloadRequested in vmReloadRequestedList)
