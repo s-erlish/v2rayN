@@ -15,7 +15,7 @@ public class AppUpdateFeedTests
 
     private static string Asset(string name, long size = 1000, string state = "uploaded", string tag = "v1.1.0") => $$"""
         {
-          "url": "https://api.github.com/repos/s-erlish/v2rayN/releases/assets/9999999999",
+          "url": "https://api.github.com/repos/s-erlish/departament/releases/assets/9999999999",
           "id": 9999999999,
           "node_id": "RA_kwDOAAAAAAA",
           "name": "{{name}}",
@@ -26,7 +26,7 @@ public class AppUpdateFeedTests
           "download_count": 3,
           "created_at": "2026-09-20T10:00:00Z",
           "updated_at": "2026-09-20T10:01:00Z",
-          "browser_download_url": "https://github.com/s-erlish/v2rayN/releases/download/{{tag}}/{{name}}"
+          "browser_download_url": "https://github.com/s-erlish/departament/releases/download/{{tag}}/{{name}}"
         }
         """;
 
@@ -35,8 +35,8 @@ public class AppUpdateFeedTests
 
     private static string Release(string tag, bool prerelease = false, bool draft = false, string? assets = null, string body = "Исправления подключения") => $$"""
         {
-          "url": "https://api.github.com/repos/s-erlish/v2rayN/releases/8888888888",
-          "html_url": "https://github.com/s-erlish/v2rayN/releases/tag/{{tag}}",
+          "url": "https://api.github.com/repos/s-erlish/departament/releases/8888888888",
+          "html_url": "https://github.com/s-erlish/departament/releases/tag/{{tag}}",
           "id": 8888888888,
           "tag_name": "{{tag}}",
           "target_commitish": "claude/dp-desktop-incy",
@@ -46,8 +46,8 @@ public class AppUpdateFeedTests
           "created_at": "2026-09-20T09:59:00Z",
           "published_at": "2026-09-20T10:02:00Z",
           "assets": [{{assets ?? OurAssets(tag)}}],
-          "tarball_url": "https://api.github.com/repos/s-erlish/v2rayN/tarball/{{tag}}",
-          "zipball_url": "https://api.github.com/repos/s-erlish/v2rayN/zipball/{{tag}}",
+          "tarball_url": "https://api.github.com/repos/s-erlish/departament/tarball/{{tag}}",
+          "zipball_url": "https://api.github.com/repos/s-erlish/departament/zipball/{{tag}}",
           "body": "{{body}}"
         }
         """;

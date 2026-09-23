@@ -708,7 +708,7 @@ public class Global
         { ECoreType.shadowquic, "spongebob888/shadowquic" },
         { ECoreType.mieru, "enfein/mieru" },
         // Выпуски самого departament для ПК (не апстрим 2dust/v2rayN): см. AppUpdateChannel.
-        { ECoreType.v2rayN, "s-erlish/v2rayN" },
+        { ECoreType.v2rayN, "s-erlish/departament" },
     };
 
     public static readonly List<string> OtherGeoUrls =

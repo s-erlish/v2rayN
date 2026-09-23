@@ -7,9 +7,9 @@ namespace ServiceLib.Services.AppUpdate;
 /// бы поверх departament чужую программу — стоковый v2rayN. Теперь лента одна: выпуски
 /// <see cref="Repo"/>, и каждый шаг, где адрес может уйти в сторону, проверяется здесь:</para>
 /// <list type="bullet">
-///   <item>лента — только <c>api.github.com/repos/s-erlish/v2rayN/releases</c> и её <c>/latest</c>,
+///   <item>лента — только <c>api.github.com/repos/s-erlish/departament/releases</c> и её <c>/latest</c>,
 ///   адрес собирается из констант, а не приходит извне;</item>
-///   <item>загрузка — только <c>github.com/s-erlish/v2rayN/releases/download/&lt;тег&gt;/&lt;файл&gt;</c>
+///   <item>загрузка — только <c>github.com/s-erlish/departament/releases/download/&lt;тег&gt;/&lt;файл&gt;</c>
 ///   для двух имён по контракту выпуска: пакета и его контрольной суммы; любое другое имя отвергается,
 ///   даже если оно лежит в том же выпуске;</item>
 ///   <item>github.com отвечает на загрузку перенаправлением в своё хранилище файлов; идти по нему можно
@@ -19,8 +19,11 @@ namespace ServiceLib.Services.AppUpdate;
 /// </summary>
 public sealed class AppUpdateChannel
 {
-    /// <summary>Репозиторий выпусков departament для ПК, <c>владелец/имя</c>.</summary>
-    public const string Repo = "s-erlish/v2rayN";
+    /// <summary>
+    /// Репозиторий выпусков departament для ПК, <c>владелец/имя</c>: страница программы, где лежат её
+    /// выпуски. Исходный код — в s-erlish/v2rayN, выпуски оттуда больше не берутся.
+    /// </summary>
+    public const string Repo = "s-erlish/departament";
 
     /// <summary>Пакет выпуска по контракту CI: всё приложение под одним верхним каталогом.</summary>
     public const string AssetName = "departament-windows-x64.zip";
