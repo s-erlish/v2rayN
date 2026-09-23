@@ -17,7 +17,7 @@ namespace v2rayN.Desktop.Views;
 ///     Маршрутизация · Файлы ресурсов · Журнал · Проверить обновления · Резервное копирование ·
 ///     Схемы URL · О приложении;
 ///   • <b>тумблер</b> — булево: Обход локальной сети · IPv6 · Mux · Фрагментация ·
-///     Облегчённый режим · Запуск с системой.</para>
+///     Облегчённый режим · Запуск с системой · Проверять обновления автоматически.</para>
 ///
 /// <para><b>Нажатие.</b> У строки настроек только ХОВЕР — так в прототипе (класс <c>.srow</c> несёт
 /// один <c>:hover</c>, прогиб 0.985 живёт на <c>.row</c> Главной и Аккаунта). Строка настроек —
@@ -84,6 +84,7 @@ public partial class SettingsView : UserControl
         WireToggleRow(RowFragment, SwitchFragment);
         WireToggleRow(RowLiteMode, SwitchLiteMode);
         WireToggleRow(RowBoot, SwitchBoot);
+        WireToggleRow(RowAutoCheckUpdate, SwitchAutoCheckUpdate);
 
         // Зависимая строка «Число соединений Mux» существует только при включённом Mux.
         SwitchMux.IsCheckedChanged += (_, _) => SetMuxCountVisible(SwitchMux.IsChecked == true, animate: true);
@@ -197,7 +198,7 @@ public partial class SettingsView : UserControl
         [RowLiteMode],
         [RowAppearance, RowLanguage, RowUiScale, RowBoot],
         [RowSubAutoUpdate, RowRouting, RowAssets],
-        [RowLog, RowCheckUpdate, RowBackup, RowUrlScheme, RowAbout]);
+        [RowLog, RowCheckUpdate, RowAutoCheckUpdate, RowBackup, RowUrlScheme, RowAbout]);
 
     // ===================== Зависимая строка «Число соединений Mux» =====================
 

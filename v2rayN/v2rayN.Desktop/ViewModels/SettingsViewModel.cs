@@ -113,6 +113,9 @@ public class SettingsViewModel : MyReactiveObject
     [Reactive] public bool AutoStart { get; set; }
     [Reactive] public bool HideTrayIcon { get; set; }
 
+    /// <summary>«Проверять обновления автоматически» — <see cref="CheckUpdateItem.AutoCheck"/>.</summary>
+    [Reactive] public bool AutoCheckUpdates { get; set; }
+
     /// <summary>Owner-custom «Облегчённый режим». Backed by the SHARED persisted
     /// <see cref="UIItem.LiteMode"/> flag — survives restart and is the same field the desktop
     /// animation layer reads (App/MainWindow/ConnectHeroView/PressFeedback) to suppress motion.</summary>
@@ -205,6 +208,7 @@ public class SettingsViewModel : MyReactiveObject
         PerAppText = "Выкл";
         VersionText = Utils.GetVersionInfo();
         BypassLan = true;
+        AutoCheckUpdates = true;
     }
 
     /// <summary>Design-only instance referenced from <c>Design.DataContext</c> in the axaml.</summary>
@@ -225,6 +229,7 @@ public class SettingsViewModel : MyReactiveObject
             FragmentEnabled = _config.CoreBasicItem.EnableFragment;
             AutoStart = _config.GuiItem.AutoRun;
             HideTrayIcon = _config.UiItem.HideTrayIcon;
+            AutoCheckUpdates = _config.CheckUpdateItem.AutoCheck;
             LiteMode = _config.UiItem.LiteMode;
 
             PerAppText = ResolvePerAppText();
@@ -300,6 +305,7 @@ public class SettingsViewModel : MyReactiveObject
         this.WhenAnyValue(x => x.FragmentEnabled).Subscribe(async v => await OnFragmentChanged(v));
         this.WhenAnyValue(x => x.AutoStart).Subscribe(async v => await OnAutoStartChanged(v));
         this.WhenAnyValue(x => x.HideTrayIcon).Subscribe(async v => await OnHideTrayIconChanged(v));
+        this.WhenAnyValue(x => x.AutoCheckUpdates).Subscribe(async v => await OnAutoCheckUpdatesChanged(v));
         this.WhenAnyValue(x => x.LiteMode).Subscribe(async v => await OnLiteModeChanged(v));
 
         //  Строки-окошки: индекс — единственная точка записи. _loading гасит первичную эмиссию и
@@ -366,6 +372,22 @@ public class SettingsViewModel : MyReactiveObject
         _config.UiItem.HideTrayIcon = v;
         await ConfigHandler.SaveConfig(_config);
         v2rayN.Desktop.App.ApplyTrayIconVisibility(v);
+    }
+
+    //  Расписание само читает флаг на каждом шаге (AppUpdateManager.StartSchedule). Включённый заново
+    //  проверяет сразу, если в этом сеансе ответа ещё не было: иначе до следующего шага ждать до 6 часов.
+    private async Task OnAutoCheckUpdatesChanged(bool v)
+    {
+        if (_designMode || _config.CheckUpdateItem.AutoCheck == v)
+        {
+            return;
+        }
+        _config.CheckUpdateItem.AutoCheck = v;
+        await ConfigHandler.SaveConfig(_config);
+        if (v && AppUpdateManager.Instance.State.Stage == ServiceLib.Services.AppUpdate.AppUpdateStage.Idle)
+        {
+            _ = AppUpdateManager.Instance.CheckAsync(userInitiated: false);
+        }
     }
 
     private async Task OnAutoStartChanged(bool v)
