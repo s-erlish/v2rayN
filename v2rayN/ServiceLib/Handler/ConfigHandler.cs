@@ -2014,6 +2014,13 @@ public static class ConfigHandler
         }
         try
         {
+            //  Подписку могли удалить, пока шло скачивание (выход из аккаунта, «Удалить подписку»).
+            //  Удаление берёт тот же замок (DeleteSubItem), значит, после него записи уже нет, и
+            //  импортировать некуда: иначе серверы удалённой подписки возвращались сиротами.
+            if (gate is not null && await AppManager.Instance.GetSubItem(subid) is null)
+            {
+                return -1;
+            }
             return await AddBatchServersInternal(config, strData, subid, isSub);
         }
         finally
@@ -2148,19 +2155,28 @@ public static class ConfigHandler
             // The replacement generation is in place, so the previous generation's custom json files
             // are finally unreferenced and can go. Doing it only HERE is the whole point: until this
             // line the old files are the only thing that makes the restore above worth anything.
+            //  Сначала узнаём серверы прошлого поколения, пока их файлы ещё на диске: конфиг провайдера
+            //  узнаётся по содержимому, и файл неизменившегося сервера остаётся за ним — такой файл из
+            //  списка на удаление выходит.
+            var keptFiles = await KeepIndexIdsAcrossRefresh(subid, lstOriSub);
+            orphanCustomFiles.RemoveAll(keptFiles.Contains);
             DeleteCustomConfigFiles(orphanCustomFiles);
-
-            await KeepIndexIdsAcrossRefresh(subid, lstOriSub);
         }
 
         //Select active node
         if (activeProfile != null)
         {
             var lstSub = await AppManager.Instance.ProfileItems(subid);
-            var existItem = FindMatchedProfileItem(lstSub, activeProfile);
-            if (existItem != null)
+            //  Выбранный сервер узнан и сохранил свой id — выбор уже верен. Искать замену по имени здесь
+            //  нельзя: при двух одноимённых серверах поиск брал первый попавшийся, выбор перескакивал на
+            //  соседа, и ядро перезапускалось на другом сервере.
+            if (lstSub.All(t => t.IndexId != activeProfile.IndexId))
             {
-                await ConfigHandler.SetDefaultServerIndex(config, existItem.IndexId);
+                var existItem = FindMatchedProfileItem(lstSub, activeProfile);
+                if (existItem != null)
+                {
+                    await ConfigHandler.SetDefaultServerIndex(config, existItem.IndexId);
+                }
             }
         }
 
@@ -2193,68 +2209,172 @@ public static class ConfigHandler
     /// при возвращении окна, когда аккаунт заново скачивает подписки.
     ///
     /// Здесь каждой новой строке, в которой узнаётся строка прошлого поколения, возвращается прежний
-    /// id. Обычный сервер узнаётся по полному совпадению настроек (<see cref="CompareProfileItem"/>);
-    /// сервер-конфиг провайдера (Custom, XRAY_JSON Remnawave) хранит настройки в файле, имя которого
-    /// меняется на каждом импорте, поэтому узнаётся по имени и ядру. Каждый прежний id отдаётся не
-    /// больше одного раза и только если он свободен. Сначала вставляется копия под прежним id, потом
-    /// удаляется строка с новым: оборванная посередине операция оставит лишний дубль до следующего
-    /// обновления, но не потеряет сервер. Лучшее усилие: любая ошибка пишется в журнал и не мешает
-    /// обновлению — хуже прежнего поведения не станет.
+    /// id. Порядок узнавания — от надёжного к слабому:
+    ///   1. конфиг провайдера (Custom, XRAY_JSON Remnawave) — по СОДЕРЖИМОМУ файла. Файл
+    ///      неизменившегося сервера остаётся прежним (его имя уходит из списка на удаление, свежая копия
+    ///      удаляется), поэтому запись не меняется вовсе и CoreManager, перезапуская ядро по старому
+    ///      контексту, находит файл на месте;
+    ///   2. конфиг провайдера с изменившимся содержимым — по имени, но только если имя единственное и
+    ///      среди старых, и среди новых серверов. Без этого узла без remarks (все получают имя
+    ///      подписки) и повторяющиеся имена сдвигали id на соседей вместе с их пингами;
+    ///   3. обычный сервер — по полному совпадению настроек (<see cref="CompareProfileItem"/>).
+    /// Каждый прежний id отдаётся не больше одного раза и только свободный. Переименование — UPDATE на
+    /// месте одной транзакцией: порядок строк не меняется (сортировка по умолчанию идёт по порядку
+    /// записи), а оборванная операция откатывается целиком. Группы (PolicyGroup/ProxyChain из той же
+    /// подписки) ссылаются на детей по id, поэтому их ChildItems переписываются в той же транзакции.
+    /// Лучшее усилие: ошибка до фиксации пишется в журнал и оставляет свежие id — как было раньше.
     /// </summary>
-    private static async Task KeepIndexIdsAcrossRefresh(string subid, List<ProfileItem>? lstOriSub)
+    /// <returns>Имена файлов прошлого поколения, которые остались за узнанными серверами: их удалять нельзя.</returns>
+    private static async Task<HashSet<string>> KeepIndexIdsAcrossRefresh(string subid, List<ProfileItem>? lstOriSub)
     {
+        var keptFiles = new HashSet<string>(StringComparer.Ordinal);
         if (lstOriSub is not { Count: > 0 })
         {
-            return;
+            return keptFiles;
         }
 
+        List<(ProfileItem Fresh, ProfileItem Old, bool SameBody)> pairs = [];
+        List<ProfileItem> groupUpdates = [];
         try
         {
             var fresh = await AppManager.Instance.ProfileItems(subid);
             if (fresh is not { Count: > 0 })
             {
-                return;
+                return keptFiles;
             }
 
             var inUse = new HashSet<string>(fresh.Select(t => t.IndexId), StringComparer.Ordinal);
             var pool = lstOriSub.Where(o => o.IsSub && o.IndexId.IsNotEmpty() && !inUse.Contains(o.IndexId)).ToList();
-            foreach (var item in fresh.Where(t => t.IsSub))
-            {
-                if (pool.Count == 0)
-                {
-                    break;
-                }
+            var left = fresh.Where(t => t.IsSub).ToList();
 
-                var previous = pool.FirstOrDefault(o => IsSameServerAcrossRefresh(o, item));
-                if (previous is null)
+            var hashes = new Dictionary<ProfileItem, string?>(ReferenceEqualityComparer.Instance);
+            string? Hash(ProfileItem p)
+            {
+                if (!hashes.TryGetValue(p, out var h))
+                {
+                    h = CustomBodyHash(p);
+                    hashes[p] = h;
+                }
+                return h;
+            }
+
+            void Pair(ProfileItem n, ProfileItem o, bool sameBody)
+            {
+                pairs.Add((n, o, sameBody));
+                pool.Remove(o);
+                left.Remove(n);
+            }
+
+            foreach (var n in left.Where(t => t.ConfigType == EConfigType.Custom).ToList())
+            {
+                if (Hash(n) is not { } hash)
                 {
                     continue;
                 }
-                pool.Remove(previous);
-
-                var freshId = item.IndexId;
-                item.IndexId = previous.IndexId;
-                await SQLiteHelper.Instance.ReplaceAsync(item);
-                await SQLiteHelper.Instance.ExecuteAsync($"delete from ProfileItem where IndexId = '{freshId.Replace("'", "''")}'");
+                var o = pool.FirstOrDefault(x => x.ConfigType == EConfigType.Custom && x.CoreType == n.CoreType && Hash(x) == hash);
+                if (o is not null)
+                {
+                    Pair(n, o, true);
+                }
             }
+
+            foreach (var n in left.Where(t => t.ConfigType == EConfigType.Custom).ToList())
+            {
+                if (n.Remarks.IsNullOrEmpty()
+                    || left.Count(t => t.ConfigType == EConfigType.Custom && t.Remarks == n.Remarks) != 1)
+                {
+                    continue;
+                }
+                var olds = pool.Where(x => x.ConfigType == EConfigType.Custom && x.CoreType == n.CoreType && x.Remarks == n.Remarks).ToList();
+                if (olds.Count == 1)
+                {
+                    Pair(n, olds[0], false);
+                }
+            }
+
+            foreach (var n in left.Where(t => t.ConfigType != EConfigType.Custom).ToList())
+            {
+                var o = pool.FirstOrDefault(x => x.ConfigType != EConfigType.Custom && CompareProfileItem(x, n, true));
+                if (o is not null)
+                {
+                    Pair(n, o, false);
+                }
+            }
+
+            if (pairs.Count == 0)
+            {
+                return keptFiles;
+            }
+
+            var idMap = pairs.ToDictionary(p => p.Fresh.IndexId, p => p.Old.IndexId, StringComparer.Ordinal);
+            foreach (var g in fresh.Where(t => t.ConfigType.IsGroupType()))
+            {
+                var extra = g.GetProtocolExtra();
+                if (Utils.String2List(extra.ChildItems) is not { Count: > 0 } children)
+                {
+                    continue;
+                }
+                var remapped = children.Select(id => idMap.GetValueOrDefault(id, id)).ToList();
+                if (!remapped.SequenceEqual(children, StringComparer.Ordinal))
+                {
+                    g.SetProtocolExtra(extra with { ChildItems = Utils.List2String(remapped) });
+                    groupUpdates.Add(g);
+                }
+            }
+
+            await SQLiteHelper.Instance.RunInTransactionAsync(conn =>
+            {
+                //  Группы — по их СВЕЖЕМУ id, до переименования: сама группа тоже может быть в парах.
+                foreach (var g in groupUpdates)
+                {
+                    conn.Execute("update ProfileItem set ProtoExtra = ? where IndexId = ?", g.ProtoExtra, g.IndexId);
+                }
+                foreach (var (n, o, sameBody) in pairs)
+                {
+                    if (sameBody)
+                    {
+                        conn.Execute("update ProfileItem set IndexId = ?, Address = ? where IndexId = ?", o.IndexId, o.Address, n.IndexId);
+                    }
+                    else
+                    {
+                        conn.Execute("update ProfileItem set IndexId = ? where IndexId = ?", o.IndexId, n.IndexId);
+                    }
+                }
+            });
         }
         catch (Exception ex)
         {
+            //  До фиксации ничего не поменялось: свежие id и файлы остаются как есть.
             Logging.SaveLog(_tag, ex);
+            return keptFiles;
         }
+
+        //  Зафиксировано: у неизменившихся конфигов провайдера строка снова смотрит на прежний файл.
+        //  Прежний файл остаётся, свежая копия больше никому не нужна.
+        foreach (var (n, o, _) in pairs.Where(p => p.SameBody))
+        {
+            keptFiles.Add(o.Address);
+            DeleteCustomConfigFiles([n.Address]);
+        }
+        return keptFiles;
     }
 
-    /// <summary>Узнаётся ли в <paramref name="n"/> сервер прошлого поколения <paramref name="o"/>. См. <see cref="KeepIndexIdsAcrossRefresh"/>.</summary>
-    private static bool IsSameServerAcrossRefresh(ProfileItem o, ProfileItem n)
+    /// <summary>Отпечаток содержимого файла конфига провайдера; null, если файла нет или это не Custom.</summary>
+    private static string? CustomBodyHash(ProfileItem item)
     {
-        if (o.ConfigType == EConfigType.Custom || n.ConfigType == EConfigType.Custom)
+        if (item.ConfigType != EConfigType.Custom || item.Address.IsNullOrEmpty())
         {
-            return o.ConfigType == n.ConfigType
-                   && o.CoreType == n.CoreType
-                   && o.Remarks.IsNotEmpty()
-                   && o.Remarks == n.Remarks;
+            return null;
         }
-        return CompareProfileItem(o, n, true);
+        try
+        {
+            var path = File.Exists(item.Address) ? item.Address : Utils.GetConfigPath(item.Address);
+            return File.Exists(path) ? Utils.GetMd5(File.ReadAllText(path)) : null;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     /// <summary>
@@ -2501,21 +2621,35 @@ public static class ConfigHandler
     /// <returns>0 if successful</returns>
     public static async Task<int> DeleteSubItem(Config config, string id)
     {
-        var item = await AppManager.Instance.GetSubItem(id);
-        if (item is null)
+        //  Тот же замок, что у импорта этой подписки (AddBatchServers): удаление не вклинивается в
+        //  середину импорта, а импорт, дождавшись замка, видит, что подписки больше нет.
+        var gate = id.IsNotEmpty() ? GetSubImportLock(id) : null;
+        if (gate is not null)
         {
+            await gate.WaitAsync();
+        }
+        try
+        {
+            var item = await AppManager.Instance.GetSubItem(id);
+            if (item is null)
+            {
+                return 0;
+            }
+            await SQLiteHelper.Instance.DeleteAsync(item);
+            await RemoveServersViaSubid(config, id, false);
+
+            if (item.Id == config.SubIndexId)
+            {
+                var subs = await AppManager.Instance.SubItems();
+                config.SubIndexId = subs.LastOrDefault()?.Id;
+            }
+
             return 0;
         }
-        await SQLiteHelper.Instance.DeleteAsync(item);
-        await RemoveServersViaSubid(config, id, false);
-
-        if (item.Id == config.SubIndexId)
+        finally
         {
-            var subs = await AppManager.Instance.SubItems();
-            config.SubIndexId = subs.LastOrDefault()?.Id;
+            gate?.Release();
         }
-
-        return 0;
     }
 
     /// <summary>

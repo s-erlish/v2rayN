@@ -110,8 +110,11 @@ public class TaskManager
                     Logging.SaveLog($"Update subscription end. {msg}");
                 }
             });
-            item.UpdateTime = updateTime;
-            await ConfigHandler.AddSubItem(_config, item);
+            //  Отмечаем попытку ОДНИМ полем. Раньше сюда писалась вся запись, прочитанная ДО скачивания,
+            //  поверх свежей: она затирала новое имя провайдера и ссылку, записанные синхронизацией
+            //  аккаунта, а после выхода из аккаунта посреди скачивания возвращала удалённую подписку.
+            //  Если записи уже нет, UPDATE просто ничего не находит.
+            await SQLiteHelper.Instance.ExecuteAsync("update SubItem set UpdateTime = ? where Id = ?", updateTime, item.Id);
             await Task.Delay(1000);
         }
     }

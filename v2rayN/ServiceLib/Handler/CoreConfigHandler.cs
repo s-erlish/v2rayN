@@ -82,6 +82,18 @@ public static class CoreConfigHandler
             {
                 addressFileName = Utils.GetConfigPath(addressFileName);
             }
+            //  Файла нет — возможно, узел пришёл из СТАРОГО контекста. Перезапуск ядра после падения или
+            //  смены сети собирает конфиг по контексту последнего подключения, а обновление подписки
+            //  (импорт аккаунта, расписание) тем временем записало конфиг провайдера в новый файл и
+            //  удалило старый. Без перечитывания каждый такой перезапуск падал на «не удалось собрать
+            //  конфиг», и человек оставался без VPN. Берём свежую запись того же сервера по IndexId.
+            if (!File.Exists(addressFileName)
+                && node.IndexId.IsNotEmpty()
+                && await AppManager.Instance.GetProfileItem(node.IndexId) is { ConfigType: EConfigType.Custom } current
+                && current.Address.IsNotEmpty())
+            {
+                addressFileName = File.Exists(current.Address) ? current.Address : Utils.GetConfigPath(current.Address);
+            }
             if (!File.Exists(addressFileName))
             {
                 ret.Msg = ResUI.FailedGenDefaultConfiguration;

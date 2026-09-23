@@ -1327,8 +1327,9 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
                 ApplyShellVisibility();
             });
 
-        //  Страховка: если база по какой-то причине не ответила, окно не остаётся пустым навсегда,
-        //  а через три секунды решает по тому, что знает.
+        //  Страховка: если база по какой-то причине не ответила, окно не остаётся пустым навсегда.
+        //  Срок с запасом на медленный холодный старт (антивирус, спящий диск): решение по неполным
+        //  данным показало бы экран входа человеку, у которого серверы есть, — ровно то, что чиним.
         DispatcherTimer.RunOnce(() =>
         {
             if (!_profilesResolved)
@@ -1336,7 +1337,7 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
                 OnProfilesResolved();
                 ApplyShellVisibility();
             }
-        }, TimeSpan.FromSeconds(3));
+        }, TimeSpan.FromSeconds(8));
     }
 
     /// <summary>Состав серверов известен: гейт может выбирать экран, а соседние вкладки — садиться в дерево.</summary>
