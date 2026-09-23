@@ -1,128 +1,346 @@
-using System.Diagnostics;
 using System.IO.Compression;
-using System.Text;
 
 namespace AmazTool;
 
-internal class UpgradeApp
+/// <summary>
+/// Замена файлов приложения содержимым пакета обновления.
+///
+/// <para><b>Порядок.</b> Дождаться выхода приложения (и добить ядра, если их бросили) → разложить пакет
+/// во временный каталог <c>.update/staging</c> рядом с exe → по одному файлу отодвинуть старый в
+/// <c>.update/backup</c> и поставить на его место новый → запустить приложение. Раскладка идёт в тот же
+/// каталог установки, а не в %TEMP%: перенос файла внутри одного тома — переименование, оно атомарно и
+/// мгновенно, а копирование между томами — нет.</para>
+///
+/// <para><b>Что будет при сбое.</b> Пока пакет раскладывается, установка не тронута: битый архив, нехватка
+/// места или любая ошибка — и приложение запускается прежним. Если сбой случился посреди замены (файл
+/// занят и не освободился за все попытки), всё уже заменённое возвращается из <c>.update/backup</c> в
+/// обратном порядке. Если замену оборвало снаружи (выключили питание), при следующем запуске установщик
+/// видит метку <c>swap-in-progress</c> и сначала возвращает отодвинутые файлы.</para>
+///
+/// <para><b>Что не трогается никогда.</b> Данные пользователя: guiConfigs, guiLogs, binConfigs, guiTemps
+/// (и guiBackups, guiFonts). Запись пакета в такой каталог пропускается, даже если она там окажется.
+/// Всё остальное, bin/ целиком, перезаписывается: раньше установщик пропускал уже существующие файлы в
+/// bin/, и закреплённые версии ядер из нового выпуска не доезжали бы до пользователя никогда.</para>
+/// </summary>
+internal static class UpgradeApp
 {
-    public static void Upgrade(string fileName)
+    private const string WorkDirName = ".update";
+
+    private static readonly string[] UserDataDirs =
+        ["guiConfigs", "guiLogs", "binConfigs", "guiTemps", "guiBackups", "guiFonts", WorkDirName];
+
+    // Штатный выход приложения укладывается в пару секунд; 30 — запас на медленный диск и остановку ядра.
+    private static readonly TimeSpan AppExitTimeout = TimeSpan.FromSeconds(30);
+
+    private static string WorkDir => Path.Combine(Utils.AppDir, WorkDirName);
+    private static string StagingDir => Path.Combine(WorkDir, "staging");
+    private static string BackupDir => Path.Combine(WorkDir, "backup");
+    private static string SwapMarker => Path.Combine(WorkDir, "swap-in-progress");
+
+    /// <summary>
+    /// Куда отодвигается сам установщик, если пакет несёт его новую версию. Запущенный exe на Windows нельзя
+    /// ни удалить, ни перезаписать, но можно переименовать; следующий запуск установщика удалит этот файл.
+    /// </summary>
+    private static string SelfTmp => Utils.SelfPath + ".tmp";
+
+    /// <returns>true, если новая версия установлена. Приложение запускается в обоих случаях.</returns>
+    public static bool Run(string packagePath, int? appPid)
     {
-        Console.WriteLine($"{Resx.Resource.StartUnzipping}\n{fileName}");
+        Log.Write($"upgrade: package {packagePath}, app {Utils.AppExePath}");
 
-        Utils.Waiting(5);
+        Utils.WaitForAppExit(appPid, AppExitTimeout);
+        Utils.StopCoresFromBin();
 
-        if (!File.Exists(fileName))
-        {
-            Console.WriteLine(Resx.Resource.UpgradeFileNotFound);
-            return;
-        }
+        RecoverInterruptedSwap();
+        TryDelete(SelfTmp);
 
-        Console.WriteLine(Resx.Resource.TryTerminateProcess);
+        var installed = false;
         try
         {
-            var existing = Process.GetProcessesByName(Utils.V2rayN);
-            foreach (var pp in existing)
+            if (!File.Exists(packagePath))
             {
-                var path = pp.MainModule?.FileName ?? "";
-                if (path.StartsWith(Utils.GetPath(Utils.V2rayN)))
-                {
-                    pp?.Kill();
-                    pp?.WaitForExit(1000);
-                }
+                Log.Write("package not found, nothing to install");
+            }
+            else
+            {
+                TryDeleteDir(WorkDir);
+                Directory.CreateDirectory(StagingDir);
+                var files = Extract(packagePath);
+                installed = files is not null && Swap(files);
             }
         }
         catch (Exception ex)
         {
-            // Access may be denied without admin right. The user may not be an administrator.
-            Console.WriteLine(Resx.Resource.FailedTerminateProcess + ex.StackTrace);
+            // Сюда приходят сбои РАСКЛАДКИ (архив не читается, нет места): замена ещё не начиналась.
+            Log.Write($"upgrade failed before any file was replaced: {ex.Message}");
+        }
+        finally
+        {
+            TryDeleteDir(StagingDir);
         }
 
-        Console.WriteLine(Resx.Resource.StartUnzipping);
-        StringBuilder sb = new();
-        try
-        {
-            var thisAppOldFile = $"{Utils.GetExePath()}.tmp";
-            File.Delete(thisAppOldFile);
-            var splitKey = "/";
+        Log.Write(installed ? "upgrade installed" : "upgrade not installed, the previous version stays");
+        Utils.StartApp();
+        return installed;
+    }
 
-            using var archive = ZipFile.OpenRead(fileName);
-            foreach (var entry in archive.Entries)
+    /// <summary>
+    /// Раскладывает пакет в <see cref="StagingDir"/>. Пакет — один верхний каталог
+    /// (<c>departament-windows-x64/</c>) с приложением внутри; его имя здесь не проверяется, это делает
+    /// приложение до передачи пакета. Здесь проверяется то, без чего раскладка опасна: запись не выходит из
+    /// каталога (<c>..</c>, абсолютный путь, диск, поток NTFS), верхний каталог один, exe приложения есть.
+    /// </summary>
+    /// <returns>Относительные пути разложенных файлов или null, если пакет не годится.</returns>
+    private static List<string>? Extract(string packagePath)
+    {
+        var stagingRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(StagingDir)) + Path.DirectorySeparatorChar;
+        var files = new List<string>();
+        string? top = null;
+
+        using var archive = ZipFile.OpenRead(packagePath);
+        foreach (var entry in archive.Entries)
+        {
+            // Архиватор Windows PowerShell 5 пишет «\» вместо «/»: сводим к одному разделителю.
+            var name = entry.FullName.Replace('\\', '/');
+            var slash = name.IndexOf('/');
+            if (slash <= 0)
             {
+                Log.Write($"rejected package: entry outside the top folder: {name}");
+                return null;
+            }
+            var first = name[..slash];
+            top ??= first;
+            if (!string.Equals(first, top, StringComparison.Ordinal))
+            {
+                Log.Write($"rejected package: second top folder: {name}");
+                return null;
+            }
+
+            var rel = name[(slash + 1)..];
+            if (rel.Length == 0)
+            {
+                continue;
+            }
+            var isDir = rel.EndsWith('/');
+            var segments = rel.TrimEnd('/').Split('/');
+            if (segments.Any(s => s is "" or "." or ".." || s.Contains(':')))
+            {
+                Log.Write($"rejected package: unsafe entry: {name}");
+                return null;
+            }
+            if (UserDataDirs.Contains(segments[0], StringComparer.OrdinalIgnoreCase))
+            {
+                Log.Write($"skipped (user data is never overwritten): {name}");
+                continue;
+            }
+
+            var dest = Path.GetFullPath(Path.Combine(StagingDir, Path.Combine(segments)));
+            if (!dest.StartsWith(stagingRoot, Utils.PathComparison))
+            {
+                Log.Write($"rejected package: entry escapes the install folder: {name}");
+                return null;
+            }
+            if (isDir)
+            {
+                Directory.CreateDirectory(dest);
+                continue;
+            }
+            Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
+            entry.ExtractToFile(dest, overwrite: true);
+            files.Add(Path.Combine(segments));
+        }
+
+        var exe = Path.Combine(StagingDir, Utils.AppExeName);
+        if (top is null || !File.Exists(exe) || new FileInfo(exe).Length == 0)
+        {
+            Log.Write($"rejected package: no {Utils.AppExeName} in it");
+            return null;
+        }
+
+        MakeExecutable(files);
+        Log.Write($"staged {files.Count} files from {top}/");
+        return files;
+    }
+
+    /// <summary>
+    /// Ставит разложенные файлы на место. Каждый старый файл сначала отодвигается (переименованием), потом
+    /// на его место встаёт новый; журнал этих шагов — то, по чему делается откат. exe приложения ставится
+    /// ПОСЛЕДНИМ: пока замена не дошла до конца, на месте остаётся рабочая старая версия запускаемого файла.
+    /// </summary>
+    private static bool Swap(List<string> files)
+    {
+        files.Sort((a, b) => IsAppExe(a).CompareTo(IsAppExe(b)));
+        File.WriteAllText(SwapMarker, DateTime.Now.ToString("O"));
+
+        var journal = new List<(string Target, string? Saved)>();
+        foreach (var rel in files)
+        {
+            var source = Path.Combine(StagingDir, rel);
+            var target = Path.Combine(Utils.AppDir, rel);
+            try
+            {
+                if (Directory.Exists(target))
+                {
+                    throw new IOException($"a folder is in the way of {target}");
+                }
+                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+
+                string? saved = null;
+                if (File.Exists(target))
+                {
+                    saved = Utils.SamePath(target, Utils.SelfPath) ? SelfTmp : Path.Combine(BackupDir, rel);
+                    Directory.CreateDirectory(Path.GetDirectoryName(saved)!);
+                    Retry(() => File.Move(target, saved, overwrite: true), $"move aside {target}");
+                }
+                // В журнал — ДО установки нового файла: если она упадёт, откат вернёт отодвинутый.
+                journal.Add((target, saved));
+                Retry(() => File.Move(source, target), $"install {target}");
+            }
+            catch (Exception ex)
+            {
+                Log.Write($"replacing files failed: {ex.Message}");
+                Rollback(journal);
+                TryDelete(SwapMarker);
+                return false;
+            }
+        }
+
+        // Метка снимается первой: без неё следующий запуск не станет «восстанавливать» из backup, даже
+        // если удалить сам backup сейчас не получится.
+        TryDelete(SwapMarker);
+        TryDeleteDir(BackupDir);
+        Log.Write($"replaced {files.Count} files");
+        return true;
+    }
+
+    private static void Rollback(List<(string Target, string? Saved)> journal)
+    {
+        Log.Write($"rolling back {journal.Count} files");
+        for (var i = journal.Count - 1; i >= 0; i--)
+        {
+            var (target, saved) = journal[i];
+            try
+            {
+                // Старый файл всегда отодвигается до установки нового, поэтому на месте может быть только новый.
+                if (File.Exists(target))
+                {
+                    Retry(() => File.Delete(target), $"remove {target}");
+                }
+                if (saved is not null && File.Exists(saved))
+                {
+                    Retry(() => File.Move(saved, target), $"restore {target}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Write($"ROLLBACK INCOMPLETE for {target}: {ex.Message}");
+            }
+        }
+        TryDeleteDir(BackupDir);
+    }
+
+    /// <summary>
+    /// Прошлую замену оборвали снаружи: в каталоге смесь версий, а старые файлы лежат в backup. Возвращаем
+    /// их на место — это снова целая прошлая версия (новые файлы, которых в ней не было, ей не мешают).
+    /// Без метки backup — просто остаток удачной замены, который не удалось стереть; он удаляется.
+    /// </summary>
+    private static void RecoverInterruptedSwap()
+    {
+        if (File.Exists(SwapMarker) && Directory.Exists(BackupDir))
+        {
+            Log.Write("the previous upgrade was interrupted mid-way, restoring its backup first");
+            foreach (var saved in Directory.EnumerateFiles(BackupDir, "*", SearchOption.AllDirectories))
+            {
+                var target = Path.Combine(Utils.AppDir, Path.GetRelativePath(BackupDir, saved));
                 try
                 {
-                    if (entry.Length == 0)
-                    {
-                        continue;
-                    }
-
-                    Console.WriteLine(entry.FullName);
-
-                    var lst = entry.FullName.Split(splitKey);
-                    if (lst.Length == 1)
-                    {
-                        continue;
-                    }
-
-                    var fullName = string.Join(splitKey, lst[1..lst.Length]);
-
-                    if (string.Equals(Utils.GetExePath(), Utils.GetPath(fullName), StringComparison.OrdinalIgnoreCase))
-                    {
-                        File.Move(Utils.GetExePath(), thisAppOldFile);
-                    }
-
-                    var entryOutputPath = Utils.GetPath(fullName);
-                    Directory.CreateDirectory(Path.GetDirectoryName(entryOutputPath)!);
-                    //In the bin folder, if the file already exists, it will be skipped
-                    if (fullName.StartsWith("bin") && File.Exists(entryOutputPath))
-                    {
-                        continue;
-                    }
-
-                    TryExtractToFile(entry, entryOutputPath);
-
-                    Console.WriteLine(entryOutputPath);
+                    Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                    Retry(() => File.Move(saved, target, overwrite: true), $"restore {target}");
                 }
                 catch (Exception ex)
                 {
-                    sb.Append(ex.StackTrace);
+                    Log.Write($"could not restore {target}: {ex.Message}");
                 }
+            }
+        }
+        TryDeleteDir(WorkDir);
+    }
+
+    /// <summary>
+    /// На Linux и macOS права на запуск: архив из Windows их не несёт. exe приложения, установщик и
+    /// ядра в bin/ (у ядер нет расширения). На Windows ничего не делает.
+    /// </summary>
+    private static void MakeExecutable(List<string> files)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+        var bin = "bin" + Path.DirectorySeparatorChar;
+        foreach (var rel in files)
+        {
+            var name = Path.GetFileName(rel);
+            if (name is not (Utils.AppName or "AmazTool") && !(rel.StartsWith(bin, StringComparison.Ordinal) && !Path.HasExtension(name)))
+            {
+                continue;
+            }
+            var path = Path.Combine(StagingDir, rel);
+            File.SetUnixFileMode(path, File.GetUnixFileMode(path)
+                | UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute);
+        }
+    }
+
+    private static bool IsAppExe(string rel) => string.Equals(rel, Utils.AppExeName, Utils.PathComparison);
+
+    /// <summary>
+    /// Файл бывает занят несколько секунд после выхода процесса: антивирус проверяет новый exe, ядро ещё
+    /// отпускает библиотеку. Десять попыток с растущей паузой — около 14 с на файл в худшем случае.
+    /// </summary>
+    private static void Retry(Action action, string what)
+    {
+        const int attempts = 10;
+        for (var i = 1; ; i++)
+        {
+            try
+            {
+                action();
+                return;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException && i < attempts)
+            {
+                Log.Write($"{what}: {ex.Message} (attempt {i}/{attempts})");
+                Thread.Sleep(250 * i);
+            }
+        }
+    }
+
+    private static void TryDelete(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine(Resx.Resource.FailedUpgrade + ex.StackTrace);
-            //return;
+            Log.Write($"could not delete {path}: {ex.Message}");
         }
-        if (sb.Length > 0)
-        {
-            Console.WriteLine(Resx.Resource.FailedUpgrade + sb.ToString());
-            //return;
-        }
-
-        Console.WriteLine(Resx.Resource.Restartv2rayN);
-        Utils.Waiting(2);
-
-        Utils.StartV2RayN();
     }
 
-    private static bool TryExtractToFile(ZipArchiveEntry entry, string outputPath)
+    private static void TryDeleteDir(string path)
     {
-        var retryCount = 5;
-        var delayMs = 1000;
-
-        for (var i = 1; i <= retryCount; i++)
+        try
         {
-            try
+            if (Directory.Exists(path))
             {
-                entry.ExtractToFile(outputPath, true);
-                return true;
-            }
-            catch
-            {
-                Thread.Sleep(delayMs * i);
+                Directory.Delete(path, recursive: true);
             }
         }
-        return false;
+        catch (Exception ex)
+        {
+            Log.Write($"could not delete {path}: {ex.Message}");
+        }
     }
 }
