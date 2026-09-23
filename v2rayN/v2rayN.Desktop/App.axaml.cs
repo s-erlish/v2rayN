@@ -77,7 +77,7 @@ public partial class App : Application
 
             if (!Design.IsDesignMode)
             {
-                SetupTrayMenu();
+                SetupTray();
                 SetupConnectivityHooks(desktop);
                 SetupAppHandoff();
             }
@@ -348,8 +348,20 @@ public partial class App : Application
 
     #region Tray menu (departament: Перезапустить · Подключить/Отключить · Показать · Выход)
 
-    // Пункты трея. Порядок из App.axaml: Перезапустить · Подключить/Отключить · Показать · Выход.
-    // Переключатель держим синхронным с реальным состоянием ядра; подписи всех — из L.T (live).
+    // Значок в трее появляется ВМЕСТЕ С ОКНОМ, а не при загрузке приложения (см. App.axaml): иначе запуск
+    // выглядел как «программа висит в трее, а окно появляется потом». Разрешение даёт окно — своим
+    // первым кадром или уходом в трей, если на старте его не показывают (ShowTrayIcon). До этого
+    // переключатель в настройках и смена картинки только запоминаются.
+    //
+    // Скрытый значок здесь не существует, а не стоит с IsVisible=false. Avalonia на Windows при каждой
+    // смене картинки заново добавляет значок в трей, не глядя на IsVisible, поэтому спрятанный так
+    // значок возвращался при каждом подключении и отключении. Удалённый не возвращается.
+    private TrayIcon? _trayIcon;
+    private WindowIcon? _trayImage;
+    private bool _trayReleased;
+
+    // Пункты меню: Перезапустить · Подключить/Отключить · Показать · Выход. Переключатель держим
+    // синхронным с реальным состоянием ядра; подписи всех — из L.T (live).
     private NativeMenuItem? _trayRestartItem;
     private NativeMenuItem? _trayToggleItem;
     private NativeMenuItem? _trayShowItem;
@@ -358,68 +370,127 @@ public partial class App : Application
     private static bool IsCoreRunning() =>
         AppManager.Instance.IsRunningCore(ECoreType.Xray) || AppManager.Instance.IsRunningCore(ECoreType.sing_box);
 
-    /// <summary>Показать или спрятать значок в области уведомлений — по строке настроек, на месте.</summary>
-    public static void ApplyTrayIconVisibility(bool hidden)
+    /// <summary>Окно показано или ушло в трей: значку можно появиться. Повторный вызов ничего не делает.</summary>
+    public static void ShowTrayIcon()
     {
-        try
+        if (Current is App app)
         {
-            if (Current is null)
-            {
-                return;
-            }
-            var icons = TrayIcon.GetIcons(Current);
-            if (icons is { Count: > 0 })
-            {
-                icons[0].IsVisible = !hidden;
-            }
-        }
-        catch (Exception ex)
-        {
-            Logging.SaveLog("App", ex);
+            app._trayReleased = true;
+            app.CreateTrayIcon();
         }
     }
 
-    private void SetupTrayMenu()
+    /// <summary>Показать или убрать значок в области уведомлений — по строке настроек, на месте.</summary>
+    public static void ApplyTrayIconVisibility(bool hidden)
+    {
+        if (Current is not App app)
+        {
+            return;
+        }
+        if (hidden)
+        {
+            app.RemoveTrayIcon();
+        }
+        else
+        {
+            app.CreateTrayIcon();
+        }
+    }
+
+    /// <summary>Картинка значка по состоянию подключения. Если значка ещё нет, она встанет при его создании.</summary>
+    public static void SetTrayImage(WindowIcon icon)
+    {
+        if (Current is not App app)
+        {
+            return;
+        }
+        app._trayImage = icon;
+        if (app._trayIcon is { } tray)
+        {
+            tray.Icon = icon;
+        }
+    }
+
+    internal static WindowIcon? LoadTrayImage(string fileName)
     {
         try
         {
-            var icons = TrayIcon.GetIcons(this);
-            if (icons is { Count: > 0 })
+            using var stream = AssetLoader.Open(new Uri(Global.AvaAssets + fileName));
+            return new WindowIcon(stream);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private void CreateTrayIcon()
+    {
+        if (!_trayReleased || _trayIcon is not null || AppManager.Instance.Config.UiItem.HideTrayIcon)
+        {
+            return;
+        }
+        try
+        {
+            _trayRestartItem = new NativeMenuItem();
+            _trayRestartItem.Click += MenuRestart_Click;
+            _trayToggleItem = new NativeMenuItem();
+            _trayToggleItem.Click += MenuToggleConnect_Click;
+            _trayShowItem = new NativeMenuItem { Command = StatusBarViewModel.Instance.ShowWindowCmd };
+            _trayExitItem = new NativeMenuItem();
+            _trayExitItem.Click += MenuExit_Click;
+            LocalizeTray();
+
+            var menu = new NativeMenu();
+            menu.Items.Add(_trayRestartItem);
+            menu.Items.Add(_trayToggleItem);
+            menu.Items.Add(_trayShowItem);
+            menu.Items.Add(_trayExitItem);
+
+            //  Подсказка при наведении — всегда имя бренда, а не строка статуса подключения.
+            _trayIcon = new TrayIcon
             {
-                var trayIcon = icons[0];
-
-                //  «Скрыть значок в трее» (screens.md). Значок нужен не всем: у кого-то трей и так
-                //  забит, а приложение живёт в панели задач. Прячем сам значок, поведение окна не
-                //  трогаем — закрытие по-прежнему сворачивает или завершает по своей настройке.
-                //  Читаем ПРИ СБОРКЕ меню; переключение строки применяет видимость на месте.
-                trayIcon.IsVisible = !AppManager.Instance.Config.UiItem.HideTrayIcon;
-
-                // Bug2: подсказка иконки трея при наведении = ВСЕГДА «departament», а не строка статуса
-                // подключения. В App.axaml ToolTipText привязан к {Binding RunningServerToolTipText};
-                // перекрываем фиксированным именем бренда и УДЕРЖИВАЕМ его: если StatusBarViewModel
-                // перепишет строку (обновление серверов/подключение), тем же кадром возвращаем «departament».
-                trayIcon.ToolTipText = "departament";
-                trayIcon.GetObservable(TrayIcon.ToolTipTextProperty)
-                    .Where(t => t != "departament")
-                    .Subscribe(_ => Dispatcher.UIThread.Post(() => trayIcon.ToolTipText = "departament"));
-
-                if (trayIcon.Menu is { } menu)
-                {
-                    var items = menu.Items.OfType<NativeMenuItem>().ToList();
-                    _trayRestartItem = items.ElementAtOrDefault(0);
-                    _trayToggleItem = items.FirstOrDefault(i => Equals(i.CommandParameter, "toggleConnect")) ?? items.ElementAtOrDefault(1);
-                    _trayShowItem = items.ElementAtOrDefault(2);
-                    _trayExitItem = items.ElementAtOrDefault(3);
-                }
+                Icon = _trayImage ??= LoadTrayImage("NotifyShieldIdle.ico"),
+                ToolTipText = "departament",
+                Menu = menu,
+                Command = StatusBarViewModel.Instance.NotifyLeftClickCmd,
+            };
+            if (TrayIcon.GetIcons(this) is { } icons)
+            {
+                icons.Add(_trayIcon);
+            }
+            else
+            {
+                TrayIcon.SetIcons(this, new TrayIcons { _trayIcon });
             }
         }
         catch (Exception ex)
         {
-            Logging.SaveLog("SetupTrayMenu", ex);
+            Logging.SaveLog("CreateTrayIcon", ex);
         }
+    }
 
-        UpdateTrayToggleLabel();
+    private void RemoveTrayIcon()
+    {
+        if (_trayIcon is not { } tray)
+        {
+            return;
+        }
+        _trayIcon = null;
+        _trayRestartItem = _trayToggleItem = _trayShowItem = _trayExitItem = null;
+        try
+        {
+            //  Убранный из коллекции значок Avalonia сама освобождает, и он уходит из трея.
+            TrayIcon.GetIcons(this)?.Remove(tray);
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog("RemoveTrayIcon", ex);
+        }
+    }
 
+    private void SetupTray()
+    {
         // idle/perf B1: подпись «Подключить/Отключить» теперь обновляется ПО СОБЫТИЮ старта/останова
         // ядра (AppEvents.CoreRunningStateChanged из CoreManager), а не опросом каждые 2с. Событие
         // приходит с фонового потока (ядро стартует в Task.Run), поэтому обновление NativeMenuItem
@@ -430,13 +501,16 @@ public partial class App : Application
             .AsObservable()
             .Subscribe(_ => Dispatcher.UIThread.Post(UpdateTrayToggleLabel));
 
-        // Локализация трея: применяем подписи один раз на старте и заново при смене языка (live).
+        // Локализация трея: подписи ставятся при создании значка и заново при смене языка (live).
         // Родное OS-меню читает Header при открытии, так что достаточно переустановить строки.
-        LocalizeTray();
         L.Instance.LanguageChanged += (_, _) => Dispatcher.UIThread.Post(LocalizeTray);
+
+        //  Страховка: значок — единственный путь назад к спрятанному окну, поэтому он появится и тогда,
+        //  если первый кадр окна почему-то так и не случился. В обычном запуске окно давно успевает раньше.
+        DispatcherTimer.RunOnce(ShowTrayIcon, TimeSpan.FromSeconds(10));
     }
 
-    // Ре-локализация трея: подписи всех пунктов из L.T(...) — на старте и заново при смене языка.
+    // Ре-локализация трея: подписи всех пунктов из L.T(...) — при создании значка и при смене языка.
     // Родное OS-меню читает Header при открытии, поэтому достаточно переустановить строки.
     private void LocalizeTray()
     {

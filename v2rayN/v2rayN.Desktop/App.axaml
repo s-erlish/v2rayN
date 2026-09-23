@@ -25,37 +25,14 @@
     </Application.Styles>
 
     <!--  ==================== Значок в трее ====================
-          Логотип владельца, ПЕРЕНЕСЁННЫЙ, а не перерисованный: знак отделён от кремового фона
-          исходника по альфе (расстояние до фона → альфа), сетка глобуса сохранена как нарисована.
-          Windows и Linux (StatusNotifierItem/XEmbed) показывают ЦВЕТНОЙ значок с прозрачностью —
-          монохромный силуэт, как в статус-баре Android, тут не требуется.
+          Здесь его НЕТ, и это намеренно. Объявленный в разметке приложения значок Avalonia создаёт
+          при загрузке этого файла, то есть раньше, чем построено и показано окно: запуск выглядел так,
+          будто программа сперва «висит в трее», а окно появляется потом. Значок создаёт App.ShowTrayIcon
+          вместе с первым кадром окна (или в момент, когда окно уходит в трей, если окна на старте нет).
+          Меню, картинка и подсказка собираются там же, в коде.
 
-          Стартовое состояние — «не подключено» (NotifyShieldIdle.ico, тот же знак без цвета).
-          Дальше файл подменяет StatusBarView (LoadTrayIcon по ИМЕНИ файла) на NotifyShieldOn.ico
-          при живом ядре. Имена файлов исторические («Shield»), содержимое — логотип; переименование
-          требует правки StatusBarView.axaml.cs, которая лежит вне этой задачи.  -->
-    <TrayIcon.Icons>
-        <TrayIcons>
-            <TrayIcon
-                Command="{Binding NotifyLeftClickCmd}"
-                Icon="/Assets/NotifyShieldIdle.ico"
-                ToolTipText="{Binding RunningServerToolTipText}">
-                <!--  departament: ровно ЧЕТЫРЕ пункта, sentence-case по-русски. Native/OS-drawn меню
-                      (полный Incy-стиль тут невозможен) — важны корректные пункты + поведение.
-                      1) Перезапустить · 2) Подключить/Отключить (подпись = живое состояние ядра) ·
-                      3) Показать · 4) Выход.  -->
-                <TrayIcon.Menu>
-                    <NativeMenu>
-                        <NativeMenuItem Click="MenuRestart_Click" Header="Перезапустить" />
-                        <NativeMenuItem
-                            Click="MenuToggleConnect_Click"
-                            CommandParameter="toggleConnect"
-                            Header="Подключить" />
-                        <NativeMenuItem Command="{Binding ShowWindowCmd}" Header="Показать" />
-                        <NativeMenuItem Click="MenuExit_Click" Header="Выход" />
-                    </NativeMenu>
-                </TrayIcon.Menu>
-            </TrayIcon>
-        </TrayIcons>
-    </TrayIcon.Icons>
+          Картинка — логотип владельца, ПЕРЕНЕСЁННЫЙ, а не перерисованный: знак отделён от кремового
+          фона исходника по альфе, сетка глобуса сохранена как нарисована. Windows и Linux
+          (StatusNotifierItem/XEmbed) показывают ЦВЕТНОЙ значок с прозрачностью. Стартовая картинка —
+          «не подключено» (NotifyShieldIdle.ico), при живом ядре — NotifyShieldOn.ico (StatusBarView).  -->
 </Application>

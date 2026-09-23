@@ -2622,6 +2622,10 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         }
         else
         {
+            //  Окно уходит в трей — значок должен уже быть там. На старте «сразу в трей» первого кадра
+            //  нет, и значок появляется именно здесь.
+            App.ShowTrayIcon();
+
             if (WindowState == WindowState.Normal)
             {
                 _trayGeometry = (Position, Width, Height);
@@ -2646,6 +2650,22 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         }
 
         AppManager.Instance.ShowInTaskbar = bl;
+    }
+
+    //  Значок в трее — вместе с первым кадром окна, не раньше (App.ShowTrayIcon). Кадр ловим через
+    //  RequestAnimationFrame, а сам значок ставим сразу после него, на холостом ходу: регистрация значка
+    //  в системе не должна задерживать сам кадр.
+    private bool _trayIconRequested;
+
+    protected override void OnOpened(EventArgs e)
+    {
+        base.OnOpened(e);
+        if (_trayIconRequested)
+        {
+            return;
+        }
+        _trayIconRequested = true;
+        RequestAnimationFrame(_ => Dispatcher.UIThread.Post(App.ShowTrayIcon, DispatcherPriority.Background));
     }
 
     protected override void OnLoaded(object? sender, RoutedEventArgs e)

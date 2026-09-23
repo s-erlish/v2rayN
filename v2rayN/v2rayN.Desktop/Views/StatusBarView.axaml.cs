@@ -170,30 +170,14 @@ public partial class StatusBarView : ReactiveUserControl<StatusBarViewModel>
             desktop.MainWindow.Icon = icon;
         }
 
-        var iconslist = TrayIcon.GetIcons(Application.Current);
-        if (iconslist is { Count: > 0 })
-        {
-            iconslist[0].Icon = icon;
-            TrayIcon.SetIcons(Application.Current, iconslist);
-        }
+        //  Значок в трее живёт в App: его может ещё не быть (окно не показано) или не быть вовсе
+        //  (скрыт в настройках). App запоминает картинку и ставит её, когда значок есть.
+        App.SetTrayImage(icon);
     }
 
-    private static WindowIcon? IconIdle => _iconIdle ??= LoadTrayIcon("NotifyShieldIdle.ico");
+    private static WindowIcon? IconIdle => _iconIdle ??= App.LoadTrayImage("NotifyShieldIdle.ico");
 
-    private static WindowIcon? IconOn => _iconOn ??= LoadTrayIcon("NotifyShieldOn.ico");
-
-    private static WindowIcon? LoadTrayIcon(string fileName)
-    {
-        try
-        {
-            using var stream = AssetLoader.Open(new Uri(Global.AvaAssets + fileName));
-            return new WindowIcon(stream);
-        }
-        catch
-        {
-            return null;
-        }
-    }
+    private static WindowIcon? IconOn => _iconOn ??= App.LoadTrayImage("NotifyShieldOn.ico");
 
     #endregion Connect-state tray icon + transition toasts
 
