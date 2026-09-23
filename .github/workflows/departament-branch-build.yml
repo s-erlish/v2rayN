@@ -4,10 +4,12 @@ name: departament desktop (branch build)
 # desktop app and bundles the Xray core + geo assets, then uploads it as a
 # downloadable artifact. Trigger: push to the dev branch, or run manually.
 #
-# РЕЛИЗЫ. Тег vX.Y.Z (или vX.Y.Z-rc.N — предварительный выпуск) на коммите ветки разработки
-# собирает то же самое с версией из тега, упаковывает в departament-windows-x64.zip, собирает
-# установщик departament-setup.exe (installer/departament.iss) и создаёт черновик релиза GitHub
-# с ними и контрольной суммой архива (публикует его человек, см. работу release).
+# РЕЛИЗЫ. Выпуск — один коммит в ветку разработки: версия X.Y.Z (или X.Y.Z-rc.N — предварительный
+# выпуск) в v2rayN/Directory.Build.props и её описание release-notes/vX.Y.Z.md. Сборка такого коммита
+# упаковывает departament-windows-x64.zip, собирает установщик departament-setup.exe
+# (installer/departament.iss) и создаёт черновик релиза vX.Y.Z с ними и контрольной суммой архива
+# (публикует его человек, см. работу release; тег GitHub ставит при публикации). Тег vX.Y.Z,
+# отправленный вручную, выпускает так же.
 # По опубликованным релизам программа обновляет себя сама,
 # поэтому форма архива — договор с ней (AmazTool и проверка обновлений), а не вкус:
 #   • все файлы под одной папкой верхнего уровня departament-windows-x64/ — AmazTool срезает
@@ -48,6 +50,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       prerelease: ${{ steps.version.outputs.prerelease }}
+      release: ${{ steps.version.outputs.release }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -56,29 +59,42 @@ jobs:
           # Для тега нужна история: проверяем, что он стоит на коммите ветки разработки.
           fetch-depth: ${{ github.ref_type == 'tag' && '0' || '1' }}
 
-      # Версия выпуска — из тега, и только в строгой форме: по ней программа решает, новее ли
-      # релиз, чем она сама. Тег не на ветке разработки не выпускаем: релиз — это то, что
-      # прошло сборки ветки, а не любой коммит, на который можно поставить тег.
+      # Версия и решение «выпускать ли». Выпуск делается с ветки разработки, одним коммитом: версия в
+      # v2rayN/Directory.Build.props и её описание release-notes/v<версия>.md. Есть описание, а
+      # опубликованного релиза с этим тегом ещё нет — сборка уходит в черновик релиза (работа release).
+      # Тег v<версия> GitHub ставит сам на этот коммит в момент публикации черновика. Так выпуск не
+      # требует права отправлять теги. Тег, отправленный вручную, по-прежнему тоже выпускает.
+      # Версия — только в строгой форме: по ней программа решает, новее ли релиз, чем она сама.
       - name: Resolve version
         id: version
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $ErrorActionPreference = 'Stop'
-          if ($env:GITHUB_REF_TYPE -ne 'tag') {
-            "version=" >> $env:GITHUB_OUTPUT
-            "prerelease=false" >> $env:GITHUB_OUTPUT
-            Write-Host 'Branch build: version from Directory.Build.props'
-            exit 0
+          if ($env:GITHUB_REF_TYPE -eq 'tag') {
+            $tag = $env:GITHUB_REF_NAME
+            if ($tag -match '^v(\d+\.\d+\.\d+(-rc\.\d+)?)$') { $version = $Matches[1] }
+            else { throw "Tag '$tag' is not vX.Y.Z or vX.Y.Z-rc.N" }
+            git fetch --no-tags origin claude/dp-desktop-incy
+            git merge-base --is-ancestor $env:GITHUB_SHA FETCH_HEAD
+            if ($LASTEXITCODE -ne 0) { throw "Tag '$tag' ($env:GITHUB_SHA) is not on claude/dp-desktop-incy" }
+          } else {
+            $props = [xml](Get-Content 'v2rayN/Directory.Build.props')
+            $version = @($props.Project.PropertyGroup | ForEach-Object { $_.Version } | Where-Object { $_ })[0]
+            if ($version -notmatch '^\d+\.\d+\.\d+(-rc\.\d+)?$') { throw "Directory.Build.props Version '$version' is not X.Y.Z or X.Y.Z-rc.N" }
           }
-          $tag = $env:GITHUB_REF_NAME
-          if ($tag -match '^v(\d+\.\d+\.\d+(-rc\.\d+)?)$') { $version = $Matches[1] }
-          else { throw "Tag '$tag' is not vX.Y.Z or vX.Y.Z-rc.N" }
-          git fetch --no-tags origin claude/dp-desktop-incy
-          git merge-base --is-ancestor $env:GITHUB_SHA FETCH_HEAD
-          if ($LASTEXITCODE -ne 0) { throw "Tag '$tag' ($env:GITHUB_SHA) is not on claude/dp-desktop-incy" }
+          $release = Test-Path "release-notes/v$version.md"
+          if ($release) {
+            # Уже опубликованный релиз не трогаем: люди, возможно, уже качают его архив.
+            $state = gh release view "v$version" --repo $env:GITHUB_REPOSITORY --json isDraft -q '.isDraft' 2>$null
+            if ($LASTEXITCODE -eq 0 -and $state -eq 'false') { $release = $false; Write-Host "Release v$version is already published" }
+            $global:LASTEXITCODE = 0
+          }
           "version=$version" >> $env:GITHUB_OUTPUT
           "prerelease=$(($version -match '-').ToString().ToLower())" >> $env:GITHUB_OUTPUT
-          Write-Host "Release build $version"
+          "release=$($release.ToString().ToLower())" >> $env:GITHUB_OUTPUT
+          Write-Host "Version $version, release: $release"
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
@@ -269,10 +285,11 @@ jobs:
           compression-level: 0
 
       - name: Upload release assets
-        if: github.ref_type == 'tag'
+        if: steps.version.outputs.release == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: release-assets
+          retention-days: 3
           path: |
             departament-windows-x64.zip
             departament-windows-x64.zip.sha256
@@ -289,7 +306,7 @@ jobs:
   # и она остаётся за человеком. Уже опубликованный релиз этот шаг не трогает: подменить архив,
   # который люди, возможно, уже качают, значит разойтись с его контрольной суммой.
   release:
-    if: github.ref_type == 'tag'
+    if: needs.win-x64.outputs.release == 'true'
     needs: win-x64
     runs-on: ubuntu-latest
     permissions:
@@ -311,7 +328,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
-          TAG: ${{ github.ref_name }}
+          TAG: v${{ needs.win-x64.outputs.version }}
           VERSION: ${{ needs.win-x64.outputs.version }}
           PRERELEASE: ${{ needs.win-x64.outputs.prerelease }}
         run: |
@@ -323,13 +340,15 @@ jobs:
           [ "$PRERELEASE" = "true" ] && flags+=(--prerelease)
           if gh release view "$TAG" >/dev/null 2>&1; then
             if [ "$(gh release view "$TAG" --json isDraft -q .isDraft)" != "true" ]; then
-              echo "::error::Release $TAG is already published; its assets are not replaced. Cut a new tag."
-              exit 1
+              echo "::notice::Release $TAG is already published; its assets are not replaced. Bump the version for a new release."
+              exit 0
             fi
+            # Черновик ещё не опубликован: кладём в него сборку этого коммита.
             gh release upload "$TAG" departament-windows-x64.zip departament-windows-x64.zip.sha256 departament-setup.exe --clobber
-            gh release edit "$TAG" --notes-file "$notes"
+            gh release edit "$TAG" --notes-file "$notes" --target "$GITHUB_SHA"
           else
+            # --target: если тега ещё нет, GitHub поставит его на этот коммит при публикации черновика.
             gh release create "$TAG" departament-windows-x64.zip departament-windows-x64.zip.sha256 departament-setup.exe \
-              --verify-tag --title "departament для ПК ${VERSION}" --notes-file "$notes" "${flags[@]}"
+              --target "$GITHUB_SHA" --title "departament для ПК ${VERSION}" --notes-file "$notes" "${flags[@]}"
           fi
           echo "Draft release: $(gh release view "$TAG" --json url -q .url)" >> "$GITHUB_STEP_SUMMARY"
