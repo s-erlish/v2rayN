@@ -438,7 +438,15 @@ public class StatusBarViewModel : MyReactiveObject
 
     public async Task ChangeSystemProxyAsync(ESysProxyType type, bool blChange)
     {
-        await SysProxyHandler.UpdateSysProxy(_config, false);
+        //  Системный прокси включается только при живом ядре. Приложение стартует отключённым, а этот
+        //  метод зовёт Init на запуске: «Изменить системный прокси» тут же направлял программы Windows на
+        //  127.0.0.1:порт, где ещё никто не слушал, и до нажатия «Подключить» браузеры оставались без сети
+        //  (стенд Windows: прокси включён через 1,1 с после запуска, «Подключить» нажат на 1,9 с, ядро
+        //  слушает с 2,7 с). Без ядра прокси только снимается, как при отключении и выходе; заодно
+        //  убирается прокси, брошенный прошлым сеансом, если тот упал подключённым. Включает его
+        //  подключение (MainWindowViewModel.Reload), с уже работающим ядром.
+        var coreRunning = AppManager.Instance.IsRunningCore(ECoreType.Xray) || AppManager.Instance.IsRunningCore(ECoreType.sing_box);
+        await SysProxyHandler.UpdateSysProxy(_config, forceDisable: !coreRunning);
 
         BlSystemProxyClear = type == ESysProxyType.ForcedClear;
         BlSystemProxySet = type == ESysProxyType.ForcedChange;
