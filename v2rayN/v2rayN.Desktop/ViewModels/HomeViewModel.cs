@@ -48,6 +48,8 @@ public class HomeViewModel : MyReactiveObject, IDisposable
     // Coalesces the Clear()+AddRange() CollectionChanged burst the engine emits on every
     // refresh/select into ONE deferred reconcile (see OnProfileItemsChanged / ScheduleReconcile).
     private bool _reconcilePending;
+    // Движок уже хоть раз наполнил ProfileItems — см. IsResolved.
+    private bool _sourceLoaded;
     // Event-driven core state (B1/B3): no permanent 1s poll. The uptime tick below exists ONLY while
     // connected. Both are torn down in Dispose.
     private readonly IDisposable? _coreStateSub;
@@ -110,6 +112,13 @@ public class HomeViewModel : MyReactiveObject, IDisposable
 
     [Reactive] public bool IsEmpty { get; set; } = true;
 
+    /// <summary>
+    /// Список серверов хотя бы раз прочитан из базы. До этого <see cref="IsEmpty"/> = true значит
+    /// «ещё не читали», а не «серверов нет», и оболочка не выбирает по нему экран: иначе на холодном
+    /// старте на пару секунд вставал экран входа или пустая «Главная», пока база не отдала список.
+    /// </summary>
+    [Reactive] public bool IsResolved { get; set; }
+
     [Reactive] public string Subtitle { get; set; } = string.Empty;
 
     [Reactive] public string UpSpeed { get; set; } = "0 KB/s";
@@ -144,6 +153,8 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         // reconcile mutates ServerGroups IN PLACE (never Clear()+rebuild) so a mere active-flag flip
         // on selection does not tear the whole list down — see ReconcileGroups (Bug 6).
         Profiles.ProfileItems.CollectionChanged += OnProfileItemsChanged;
+        //  Модель могла собраться уже после первого чтения базы: тогда список в руках и ждать нечего.
+        _sourceLoaded = Profiles.ProfileItems.Count > 0;
         ReconcileGroups();
 
         // Live language switch: the fallback group name ("My servers") and the servers/providers
@@ -687,7 +698,13 @@ public class HomeViewModel : MyReactiveObject, IDisposable
     // the reconcile read the SETTLED list (post-AddRange): a pure selection then flips only IsActive,
     // while a GENUINE empty (logout / no subs) still latches onboarding because the settled count
     // really is zero. A single pending post absorbs any number of bursts before it fires.
-    private void OnProfileItemsChanged(object? sender, NotifyCollectionChangedEventArgs e) => ScheduleReconcile();
+    private void OnProfileItemsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        //  Движок пересобирает коллекцию целиком (Clear + AddRange), и Clear поднимает событие даже на
+        //  пустой базе. Значит, первое событие и есть «база прочитана», при любом числе серверов.
+        _sourceLoaded = true;
+        ScheduleReconcile();
+    }
 
     private void ScheduleReconcile()
     {
@@ -734,6 +751,12 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         ReconcileServerGroups(plan);
 
         Subtitle = FormatServersProvidersMeta(count, providers);
+
+        //  Поднимаем ПОСЛЕ IsEmpty и групп: оболочка, увидев «прочитано», сразу берёт готовый список.
+        if (_sourceLoaded && !IsResolved)
+        {
+            IsResolved = true;
+        }
 
         //  Список только что мог смениться — указатель «строка по IndexId» строится заново при
         //  первом же обращении. Это ЕДИНСТВЕННОЕ место, где меняются ServerGroups и их Servers.

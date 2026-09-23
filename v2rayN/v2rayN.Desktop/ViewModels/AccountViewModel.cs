@@ -1630,6 +1630,10 @@ public class AccountViewModel : MyReactiveObject
         {
             try
             {
+                //  Окно только что вернулось: первые кадры принадлежат ему. Сеть и пересборка данных
+                //  подождут полторы секунды, иначе они приходили ровно в момент показа и добавляли
+                //  рывков к возвращению из трея.
+                await Task.Delay(1500);
                 await AutoImportAndRefreshHome();
                 await LoadAll();
             }

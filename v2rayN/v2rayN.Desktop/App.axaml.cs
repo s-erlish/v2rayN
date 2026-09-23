@@ -47,6 +47,13 @@ public partial class App : Application
                 // (X-HWID) on every subscription GET, so a panel with HWID device-limit enabled serves
                 // the real server list instead of the «Приложение не поддерживается» placeholder.
                 ServiceLib.Global.SubscriptionHwidProvider = () => v2rayN.Desktop.Account.AuthTokenStore.DeviceId();
+
+                //  Подписки аккаунта при запуске скачивает импорт аккаунта (AccountViewModel.StartupLoad),
+                //  пока сессия жива. Разовая дозагрузка устаревших их не трогает: иначе одна и та же
+                //  подписка качалась дважды и список серверов пересобирался на глазах два раза подряд.
+                ServiceLib.Global.SubscriptionRefreshedElsewhere = id =>
+                    v2rayN.Desktop.Account.AccountSession.IsLoggedIn()
+                    && v2rayN.Desktop.Account.AuthTokenStore.GetManagedGuids().ContainsValue(id);
             }
 
             // Экранов Clash в departament для ПК нет ни в каком виде — ни вкладок, ни списка прокси.

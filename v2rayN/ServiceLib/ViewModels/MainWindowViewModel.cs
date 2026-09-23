@@ -333,10 +333,16 @@ public class MainWindowViewModel : MyReactiveObject
             return;
         }
 
+        //  СПИСОК СЕРВЕРОВ — ПЕРВЫМ. Ему нужны только сами записи и их задержки (ProfileExManager), а
+        //  окно, пока его нет, не знает, что показывать. Раньше чтение стояло в самом конце, за
+        //  встроенными DNS, шаблонами, ядром и статистикой: каждое их ожидание возвращалось на UI-поток,
+        //  занятый сборкой окна, и на слабой машине список приезжал через пару секунд после кадра.
+        await ProfileExManager.Instance.Init();
+        await RefreshServersDispatcherAsync();
+
         //await ConfigHandler.InitBuiltinRouting(_config);
         await ConfigHandler.InitBuiltinDNS(_config);
         await ConfigHandler.InitBuiltinFullConfigTemplate(_config);
-        await ProfileExManager.Instance.Init();
         await CoreManager.Instance.Init(_config, UpdateHandler);
         await CertPemManager.Instance.Init(_config);
         TaskManager.Instance.RegUpdateTask(_config, UpdateTaskHandler);
@@ -345,7 +351,6 @@ public class MainWindowViewModel : MyReactiveObject
         {
             await StatisticsManager.Instance.Init(_config, UpdateStatisticsHandler);
         }
-        await RefreshServersDispatcherAsync();
 
         //  Сведения подписки при запуске — сами, без «Обновить». Одноразово и в фоне: окно уже
         //  собрано и ждать сеть ему незачем.
@@ -388,6 +393,16 @@ public class MainWindowViewModel : MyReactiveObject
             // (SubIndexId is empty on the Home shell), silently connecting a disconnected user.
             var wasRunning = AppManager.Instance.IsRunningCore(ECoreType.Xray)
                 || AppManager.Instance.IsRunningCore(ECoreType.sing_box);
+            //  Туннель перезапускается, только если подключённый сервер правда поменялся. На «Главной»
+            //  SubIndexId всегда пуст, и ветка ниже перезапускала ядро на КАЖДОМ обновлении подписки:
+            //  «Обновить» на карточке рвал соединение, щит уходил в «Подключение…», таймер обнулялся,
+            //  хотя в подписке не поменялось ни байта. Настройки того же сервера — тот же отпечаток.
+            if (wasRunning
+                && _runningServerFingerprint is { } running
+                && await ServerFingerprint(await ConfigHandler.GetDefaultServer(_config)) == running)
+            {
+                wasRunning = false;
+            }
             if (wasRunning)
             {
                 // If indexId changed or subIndexId is empty, directly reload.
@@ -422,9 +437,65 @@ public class MainWindowViewModel : MyReactiveObject
         {
             return;
         }
+        var now = Environment.TickCount64;
+        var sinceLast = now - _lastStatsPublishTick;
+        _lastStatsPublishTick = now;
+        if (sinceLast > StatsCatchUpGapMs)
+        {
+            //  Замер после паузы — НЕ скорость. Пока окно скрыто, опрос Xray стоит, и первая разница
+            //  счётчиков после возвращения накрывает всё время в трее целиком: щит на секунду
+            //  показывал сотни мегабайт «в секунду». Итог за день уже учтён (StatisticsManager
+            //  прибавил разницу до этого места), а на экран уходит нулевая скорость — со следующей
+            //  секунды она снова настоящая.
+            update = new ServerSpeedItem
+            {
+                IndexId = update.IndexId,
+                TodayUp = update.TodayUp,
+                TodayDown = update.TodayDown,
+                TotalUp = update.TotalUp,
+                TotalDown = update.TotalDown,
+            };
+        }
         AppEvents.DispatcherStatisticsRequested.Publish(update);
         await Task.CompletedTask;
     }
+
+    //  Отпечаток сервера, с которым сейчас поднято ядро: по нему обновление подписки решает, нужен ли
+    //  перезапуск. Пишется при каждом запуске ядра (Reload, SwitchServer); null, пока ядро не запускали.
+    private string? _runningServerFingerprint;
+
+    /// <summary>
+    /// Отпечаток настроек сервера. Обычный сервер — вся его запись (IndexId после обновления подписки
+    /// сохраняется, см. ConfigHandler.KeepIndexIdsAcrossRefresh). Конфиг провайдера (Custom) живёт в
+    /// файле, имя которого меняется при каждом импорте, поэтому считается его содержимое, а не имя.
+    /// </summary>
+    private static async Task<string?> ServerFingerprint(ProfileItem? item)
+    {
+        if (item is null)
+        {
+            return null;
+        }
+        try
+        {
+            if (item.ConfigType == EConfigType.Custom)
+            {
+                var path = File.Exists(item.Address) ? item.Address : Utils.GetConfigPath(item.Address);
+                var body = File.Exists(path) ? await File.ReadAllTextAsync(path) : string.Empty;
+                return $"{item.IndexId}|{item.CoreType}|{item.PreSocksPort}|{item.DisplayLog}|{Utils.GetMd5(body)}";
+            }
+            return JsonUtils.Serialize(item);
+        }
+        catch
+        {
+            //  Не смогли прочитать — считаем, что изменился: лишний перезапуск лучше пропущенного.
+            return null;
+        }
+    }
+
+    //  Замеры идут раз в секунду, пока окно видно. Разрыв дольше трёх секунд значит, что опрос стоял
+    //  (трей, свёрнутое окно, простой без ядра), и следующий замер — догоняющий. См. UpdateStatisticsHandler.
+    private const long StatsCatchUpGapMs = 3000;
+    private long _lastStatsPublishTick;
 
     #endregion Actions
 
@@ -759,10 +830,12 @@ public class MainWindowViewModel : MyReactiveObject
             }
 
             var now = DateTimeOffset.Now.ToUnixTimeMilliseconds();
+            var refreshedElsewhere = Global.SubscriptionRefreshedElsewhere;
             var stale = subs
                 .Where(t => t.Enabled
                             && t.Url.IsNotEmpty()
-                            && now - t.UserInfoUpdated >= StartupSubscriptionMaxAgeMs)
+                            && now - t.UserInfoUpdated >= StartupSubscriptionMaxAgeMs
+                            && refreshedElsewhere?.Invoke(t.Id) != true)
                 .ToList();
             if (stale.Count == 0)
             {
@@ -919,6 +992,7 @@ public class MainWindowViewModel : MyReactiveObject
                 await SysProxyHandler.UpdateSysProxy(_config, false);
                 await Task.Delay(1000);
             });
+            _runningServerFingerprint = await ServerFingerprint(profileItem);
             RxSchedulers.MainThreadScheduler.Schedule(async () =>
             {
                 await StatusBarViewModel.TestServerAvailability();
@@ -1005,6 +1079,7 @@ public class MainWindowViewModel : MyReactiveObject
                 // keep it so direct/system-proxy mode stays correct. No Task.Delay here (unlike Reload).
                 await SysProxyHandler.UpdateSysProxy(_config, false);
             });
+            _runningServerFingerprint = await ServerFingerprint(profileItem);
             RxSchedulers.MainThreadScheduler.Schedule(async () =>
             {
                 await StatusBarViewModel.TestServerAvailability();

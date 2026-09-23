@@ -41,6 +41,15 @@ public class Global
     /// </summary>
     public static bool ClashUiAvailable = true;
 
+    /// <summary>
+    /// <b>Обновит ли эту подписку при запуске кто-то другой?</b> Принимает Id подписки. На ПК это
+    /// импорт аккаунта: у вошедшего пользователя он при каждом запуске заново скачивает подписки
+    /// аккаунта. Разовая дозагрузка устаревших подписок (MainWindowViewModel) раньше качала их ВТОРОЙ
+    /// раз: два скачивания подряд, две пересборки списка, и серверы на глазах менялись дважды.
+    /// Null — никто, дозагрузка обновляет всё, как раньше.
+    /// </summary>
+    public static Func<string, bool>? SubscriptionRefreshedElsewhere;
+
     public const string GithubUrl = "https://github.com";
     public const string GithubApiUrl = "https://api.github.com/repos";
     public const string GeoUrl = "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/{0}.dat";

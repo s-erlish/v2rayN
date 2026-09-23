@@ -1298,20 +1298,10 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
             .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ => ApplyShellVisibility());
 
-        // Пустой старт (нет подписок): показываем ТОЛЬКО онбординг на всю ширину под chrome — оба
-        // дерева скрыты. После добавления подписки (IsEmpty=false) — дерево по текущей раскладке.
-        _homeViewModel.WhenAnyValue(x => x.IsEmpty)
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
-            .Subscribe(empty =>
-            {
-                _isEmpty = empty;
-                //  Первый ответ = состав известен. Дальше гейт работает как раньше.
-                _profilesResolved = true;
-                ApplyShellVisibility();
-            });
-
         // A1: вошёл/вышел из аккаунта → пере-оцениваем гейт (logged-in + пусто ведёт на Главную, а не
-        // на онбординг-вход). Держится в паре с IsEmpty выше.
+        // на онбординг-вход). Подписка стоит РАНЬШЕ состава: планировщик на UI-потоке отдаёт текущее
+        // значение сразу при подписке, и раньше гейт впервые считался с _isLoggedIn = false даже у
+        // вошедшего владельца — вставал экран входа, а через мгновение уходил растворением.
         _accountVm.WhenAnyValue(x => x.IsLoggedIn)
             .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(loggedIn =>
@@ -1319,6 +1309,57 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
                 _isLoggedIn = loggedIn;
                 ApplyShellVisibility();
             });
+
+        // Пустой старт (нет подписок): показываем ТОЛЬКО онбординг на всю ширину под chrome — оба
+        // дерева скрыты. После добавления подписки (IsEmpty=false) — дерево по текущей раскладке.
+        //  Состав считается известным только по IsResolved (база прочитана), а не по первой эмиссии
+        //  IsEmpty: та приходит сразу при подписке со значением по умолчанию «пусто», и гейт по ней
+        //  показывал онбординг или пустую «Главную», пока база не отдавала список.
+        _homeViewModel.WhenAnyValue(x => x.IsEmpty, x => x.IsResolved)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .Subscribe(state =>
+            {
+                _isEmpty = state.Item1;
+                if (state.Item2)
+                {
+                    OnProfilesResolved();
+                }
+                ApplyShellVisibility();
+            });
+
+        //  Страховка: если база по какой-то причине не ответила, окно не остаётся пустым навсегда,
+        //  а через три секунды решает по тому, что знает.
+        DispatcherTimer.RunOnce(() =>
+        {
+            if (!_profilesResolved)
+            {
+                OnProfilesResolved();
+                ApplyShellVisibility();
+            }
+        }, TimeSpan.FromSeconds(3));
+    }
+
+    /// <summary>Состав серверов известен: гейт может выбирать экран, а соседние вкладки — садиться в дерево.</summary>
+    private void OnProfilesResolved()
+    {
+        _profilesResolved = true;
+        MaybeAttachRemainingTabs();
+    }
+
+    //  Соседние keep-alive вкладки садятся в дерево ПОСЛЕ того, как окно показано И список серверов
+    //  на месте. Раньше они садились сразу после первого кадра и их раскладка шла вперёд чтения базы:
+    //  на слабой машине «Главная» со списком появлялась на секунду позже, чем могла.
+    private bool _windowLoaded;
+    private bool _remainingTabsScheduled;
+
+    private void MaybeAttachRemainingTabs()
+    {
+        if (!_windowLoaded || !_profilesResolved || _remainingTabsScheduled)
+        {
+            return;
+        }
+        _remainingTabsScheduled = true;
+        Dispatcher.UIThread.Post(AttachRemainingTabs, DispatcherPriority.Background);
     }
 
     /// <summary>
@@ -2551,18 +2592,35 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         var bl = blShow ?? (!IsVisible || WindowState == WindowState.Minimized);
         if (bl)
         {
+            //  Геометрию возвращаем ДО показа, пока окно ещё скрыто. Раньше она ставилась после Show():
+            //  окно сперва проявлялось в том размере, какой дала система (иногда развёрнутым), раскладка
+            //  успевала перестроиться под него, а потом ещё раз под прежний размер. Две полные раскладки
+            //  подряд на глазах — это и было «открывается с лагами» при возвращении из трея.
+            //  Сначала размер, потом положение (иначе система переставит окно под новый размер).
+            var g = _trayGeometry;
+            if (g is { } before)
+            {
+                Width = before.W;
+                Height = before.H;
+                Position = before.Pos;
+            }
             Show();
             if (WindowState != WindowState.Normal)
             {
                 WindowState = WindowState.Normal;
             }
-            //  Возвращаем ровно то, с чем уходили: сначала размер, потом положение (иначе система
-            //  успевает переставить окно под новый размер и оно уезжает).
-            if (_trayGeometry is { } g)
+            //  Если система всё же вмешалась при показе — поправляем, но только то, что разошлось.
+            if (g is { } after)
             {
-                Width = g.W;
-                Height = g.H;
-                Position = g.Pos;
+                if (Width != after.W || Height != after.H)
+                {
+                    Width = after.W;
+                    Height = after.H;
+                }
+                if (Position != after.Pos)
+                {
+                    Position = after.Pos;
+                }
                 _trayGeometry = null;
             }
             Activate();
@@ -2628,7 +2686,9 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         // что пользователь увидит, и только потом досаживает соседние вкладки. Тем самым первый проход
         // раскладки меряет ОДНУ вкладку вместо четырёх, а keep-alive (смена вкладки без first-layout)
         // остаётся в силе — к первому же тапу по навигации все четыре уже разложены.
-        Dispatcher.UIThread.Post(AttachRemainingTabs, DispatcherPriority.Background);
+        //  Когда именно — решает MaybeAttachRemainingTabs: после показа окна И после чтения списка.
+        _windowLoaded = true;
+        MaybeAttachRemainingTabs();
 
         // DEV probe hooks (скриншот-обвязка, как INITIAL_TAB/PREVIEW_VIEW): DP_SETPOS=x,y ставит позицию
         // окна, как будто его перенёс пользователь; DP_EXIT_AFTER_MS=N штатно завершает приложение через
@@ -2649,6 +2709,20 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
                 await Task.Delay(exitMs);
                 await AppManager.Instance.AppExitAsync(false);
                 AppManager.Instance.Shutdown(true);
+            });
+        }
+        //  DP_TRAY_CYCLE=A:B — через A мс окно уходит в трей тем же путём, что и пункт меню, ещё через
+        //  B мс возвращается. Живая проверка возврата из трея там, где трея нет (Xvfb).
+        if (Environment.GetEnvironmentVariable("DP_TRAY_CYCLE") is { } trayCycle
+            && trayCycle.Split(':') is [var hideAt, var hiddenFor]
+            && int.TryParse(hideAt, out var hideAtMs) && int.TryParse(hiddenFor, out var hiddenForMs))
+        {
+            Dispatcher.UIThread.Post(async () =>
+            {
+                await Task.Delay(hideAtMs);
+                ShowHideWindow(false);
+                await Task.Delay(hiddenForMs);
+                ShowHideWindow(true);
             });
         }
 

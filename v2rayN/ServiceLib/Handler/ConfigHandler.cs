@@ -2149,6 +2149,8 @@ public static class ConfigHandler
             // are finally unreferenced and can go. Doing it only HERE is the whole point: until this
             // line the old files are the only thing that makes the restore above worth anything.
             DeleteCustomConfigFiles(orphanCustomFiles);
+
+            await KeepIndexIdsAcrossRefresh(subid, lstOriSub);
         }
 
         //Select active node
@@ -2177,6 +2179,82 @@ public static class ConfigHandler
         }
 
         return counter;
+    }
+
+    /// <summary>
+    /// ТОТ ЖЕ СЕРВЕР ОСТАЁТСЯ ТЕМ ЖЕ СЕРВЕРОМ ПОСЛЕ ОБНОВЛЕНИЯ ПОДПИСКИ.
+    ///
+    /// Обновление подписки — это «удалить группу и импортировать заново», и каждый импорт выдавал
+    /// КАЖДОМУ серверу новый IndexId, даже если в подписке не поменялось ни байта. А IndexId — это
+    /// всё, по чему приложение узнаёт сервер: по нему «Главная» сверяет строки списка, к нему
+    /// привязаны задержка и порядок (ProfileExItem), по нему помнится выбранный сервер. Новый id
+    /// значит «другой сервер»: список пересобирал все строки заново, пинги пропадали, выбор держался
+    /// только на поиске по имени. Владелец видел это как «программа перегружается» — при запуске и
+    /// при возвращении окна, когда аккаунт заново скачивает подписки.
+    ///
+    /// Здесь каждой новой строке, в которой узнаётся строка прошлого поколения, возвращается прежний
+    /// id. Обычный сервер узнаётся по полному совпадению настроек (<see cref="CompareProfileItem"/>);
+    /// сервер-конфиг провайдера (Custom, XRAY_JSON Remnawave) хранит настройки в файле, имя которого
+    /// меняется на каждом импорте, поэтому узнаётся по имени и ядру. Каждый прежний id отдаётся не
+    /// больше одного раза и только если он свободен. Сначала вставляется копия под прежним id, потом
+    /// удаляется строка с новым: оборванная посередине операция оставит лишний дубль до следующего
+    /// обновления, но не потеряет сервер. Лучшее усилие: любая ошибка пишется в журнал и не мешает
+    /// обновлению — хуже прежнего поведения не станет.
+    /// </summary>
+    private static async Task KeepIndexIdsAcrossRefresh(string subid, List<ProfileItem>? lstOriSub)
+    {
+        if (lstOriSub is not { Count: > 0 })
+        {
+            return;
+        }
+
+        try
+        {
+            var fresh = await AppManager.Instance.ProfileItems(subid);
+            if (fresh is not { Count: > 0 })
+            {
+                return;
+            }
+
+            var inUse = new HashSet<string>(fresh.Select(t => t.IndexId), StringComparer.Ordinal);
+            var pool = lstOriSub.Where(o => o.IsSub && o.IndexId.IsNotEmpty() && !inUse.Contains(o.IndexId)).ToList();
+            foreach (var item in fresh.Where(t => t.IsSub))
+            {
+                if (pool.Count == 0)
+                {
+                    break;
+                }
+
+                var previous = pool.FirstOrDefault(o => IsSameServerAcrossRefresh(o, item));
+                if (previous is null)
+                {
+                    continue;
+                }
+                pool.Remove(previous);
+
+                var freshId = item.IndexId;
+                item.IndexId = previous.IndexId;
+                await SQLiteHelper.Instance.ReplaceAsync(item);
+                await SQLiteHelper.Instance.ExecuteAsync($"delete from ProfileItem where IndexId = '{freshId.Replace("'", "''")}'");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog(_tag, ex);
+        }
+    }
+
+    /// <summary>Узнаётся ли в <paramref name="n"/> сервер прошлого поколения <paramref name="o"/>. См. <see cref="KeepIndexIdsAcrossRefresh"/>.</summary>
+    private static bool IsSameServerAcrossRefresh(ProfileItem o, ProfileItem n)
+    {
+        if (o.ConfigType == EConfigType.Custom || n.ConfigType == EConfigType.Custom)
+        {
+            return o.ConfigType == n.ConfigType
+                   && o.CoreType == n.CoreType
+                   && o.Remarks.IsNotEmpty()
+                   && o.Remarks == n.Remarks;
+        }
+        return CompareProfileItem(o, n, true);
     }
 
     /// <summary>
