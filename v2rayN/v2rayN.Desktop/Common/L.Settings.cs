@@ -95,7 +95,17 @@ public sealed partial class L
 
         // ── RoutingSubView ──
         Add("Routing_RuleSets", "Наборы правил", "Rule sets");
-        Add("Routing_RulesCount", "{0} правил", "{0} rules");
+        // Число правил склоняется: «1 правило», «4 правила», «8 правил». Раньше шаблон «{0} правил»
+        // писал «4 правил» под встроенным набором «Весь трафик через прокси».
+        AddPlural(
+            "Routing_RulesPlural",
+            new[] { "правило", "правила", "правил" },
+            new[] { "rule", "rules" });
+        // Встроенные наборы движка хранятся под китайскими именами апстрима («V4-绕过大陆(Whitelist)»
+        // и т. п.). Показываем их по-русски, теми же словами, что готовые наборы на Android.
+        Add("Routing_PresetBasic", "Базовый набор", "Basic set");
+        Add("Routing_PresetBlocked", "Прокси для заблокированных сайтов", "Proxy for blocked sites");
+        Add("Routing_PresetGlobal", "Весь трафик через прокси", "All traffic through the proxy");
         Add("Routing_Active", "Активен", "Active");
         Add("Routing_DomainStrategy", "Доменная стратегия", "Domain strategy");
         Add("Routing_DomainResolution", "Разрешение доменов", "Domain resolution");

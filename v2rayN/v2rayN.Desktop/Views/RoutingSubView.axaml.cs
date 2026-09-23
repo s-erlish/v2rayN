@@ -204,15 +204,41 @@ public partial class RoutingSubView : UserControl, ISubPage
     }
 }
 
-/// <summary>Форматирует число правил через язык-зависимый шаблон «{0} правил» / «{0} rules» (L.F).
-/// Нужен, потому что StringFormat в XAML статичен и не переключается при смене языка.</summary>
+/// <summary>Число правил с верным склонением («1 правило», «4 правила», «8 правил» / «1 rule») через
+/// L.Plural. Нужен, потому что StringFormat в XAML статичен и не переключается при смене языка.</summary>
 public sealed class RuleCountConverter : IValueConverter
 {
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         var n = value is int i ? i : 0;
-        return L.F("Routing_RulesCount", n);
+        return L.Plural("Routing_RulesPlural", n);
     }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>
+/// Имя набора правил для показа. Три встроенных набора движок заводит под китайскими именами
+/// апстрима (ConfigHandler.InitBuiltinRouting): «V4-绕过大陆(Whitelist)», «V4-黑名单(Blacklist)»,
+/// «V4-全局(Global)». Переводим ТОЛЬКО при показе и только эти три точных имени: в базе имя служит
+/// ещё и опознавательным знаком («Стандартные правила» находит встроенные наборы по префиксу «V4-»),
+/// а набор пользователя, как бы он ни назывался, показывается как есть.
+/// </summary>
+public sealed class RoutingNameConverter : IValueConverter
+{
+    private static readonly Dictionary<string, string> Builtins = new(StringComparer.Ordinal)
+    {
+        ["V4-绕过大陆(Whitelist)"] = "Routing_PresetBasic",
+        ["V4-黑名单(Blacklist)"] = "Routing_PresetBlocked",
+        ["V4-全局(Global)"] = "Routing_PresetGlobal",
+    };
+
+    public static string Display(string? remarks) =>
+        remarks is not null && Builtins.TryGetValue(remarks, out var key) ? L.T(key) : remarks ?? string.Empty;
+
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => Display(value as string);
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
         => throw new NotSupportedException();

@@ -13,8 +13,10 @@
     <!--  Фон НЕ задан: подэкран прозрачный, шелл под ним погашен (ApplySubPageShellGate).  -->
 
     <UserControl.Resources>
-        <!--  «{0} правил» — язык-зависимый формат (L.F) поверх целочисленного RuleNum.  -->
+        <!--  «8 правил» / «4 правила» — склонение по числу (L.Plural) поверх целочисленного RuleNum.  -->
         <v:RuleCountConverter x:Key="RuleCountConverter" />
+        <!--  Встроенные наборы движка — по-русски; наборы пользователя — как есть.  -->
+        <v:RoutingNameConverter x:Key="RoutingNameConverter" />
     </UserControl.Resources>
 
     <UserControl.Styles>
@@ -133,7 +135,7 @@
                                             Grid.Column="1"
                                             Margin="16,0,12,0"
                                             VerticalAlignment="Center">
-                                            <TextBlock Classes="SubName" Text="{Binding Item.Remarks}" />
+                                            <TextBlock Classes="SubName" Text="{Binding Item.Remarks, Converter={StaticResource RoutingNameConverter}}" />
                                             <TextBlock Classes="SubSub" Text="{Binding Item.RuleNum, Converter={StaticResource RuleCountConverter}}" />
                                         </StackPanel>
                                         <!--  «Активен» — не чип, а значение строки: тот же слот справа,
