@@ -2231,7 +2231,7 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         _themeSnapshot = snapshot;
         themeTransitionImage.Source = snapshot;
         // Подложка снимка = СТАРЫЙ фон окна (Brush.HomeGradient до свопа). Снимок chromeRoot прозрачен
-        // везде, где виден фон окна: сам фон рисует windowShell, а не chromeRoot. Без подложки сквозь
+        // везде, где виден фон окна: сам фон рисует windowBackdrop, а не chromeRoot. Без подложки сквозь
         // снимок до прихода круга просвечивала бы новая тема. Кисть берётся сейчас, до свопа, поэтому
         // остаётся старой, а границы у оверлея те же, что у chromeRoot и окна, — градиент совпадает.
         themeTransitionOverlay.Background = ResolveThemeBrush("Brush.HomeGradient");
