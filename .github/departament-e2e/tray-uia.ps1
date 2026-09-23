@@ -1,4 +1,4 @@
-# Значок departament в области уведомлений глазами UI Automation (Windows PowerShell 5.1).
+﻿# Значок departament в области уведомлений глазами UI Automation (Windows PowerShell 5.1).
 # Смотрит панель задач (Shell_TrayWnd) и оба вида окна переполнения: классическое
 # NotifyIconOverflowWindow (Windows 10 / Server 2019–2022) и XAML-остров Windows 11
 # (TopLevelWindowForOverflowXamlIsland). Новые значки Windows по умолчанию прячет в переполнение,

@@ -11,6 +11,8 @@ internal enum Status
     Fail,
     NotObservable,
     Skip,
+    //  Замечание: проверено и не так, как обещает интерфейс, но решение за владельцем — прогон не валит.
+    Warn,
 }
 
 internal sealed class CheckResult
@@ -23,6 +25,11 @@ internal sealed class CheckResult
 
     public string Details { get; set; } = "";
     public List<string> Evidence { get; } = [];
+
+    /// <summary>Диагностический прогон (например, с другим ядром): его отказ — довод, а не отказ сборки.</summary>
+    public bool Diagnostic { get; init; }
+
+    public bool FailsBuild => Status == Status.Fail && !Diagnostic;
 
     public CheckResult Set(Status status, string details)
     {
@@ -37,6 +44,7 @@ internal sealed class CheckResult
         Status.Pass => "PASS",
         Status.Fail => "FAIL",
         Status.NotObservable => "NOT OBSERVABLE",
+        Status.Warn => "WARN",
         _ => "SKIP",
     };
 }
@@ -49,9 +57,9 @@ internal sealed class Report
     public List<StartupRun> StartupRuns { get; } = [];
     public List<string> Notes { get; } = [];
 
-    public CheckResult Add(string id, string title)
+    public CheckResult Add(string id, string title, bool diagnostic = false)
     {
-        var c = new CheckResult { Id = id, Title = title };
+        var c = new CheckResult { Id = id, Title = title, Diagnostic = diagnostic };
         Checks.Add(c);
         return c;
     }
@@ -68,6 +76,9 @@ internal sealed class Report
 
         var md = Markdown();
         File.WriteAllText(Path.Combine(outDir, "summary.md"), md);
+        //  Сводка целиком и в журнал шага: её видно и там, где артефакт не скачать.
+        Console.WriteLine();
+        Console.WriteLine(md);
         var stepSummary = System.Environment.GetEnvironmentVariable("GITHUB_STEP_SUMMARY");
         if (!string.IsNullOrEmpty(stepSummary))
         {
@@ -77,11 +88,11 @@ internal sealed class Report
         //  Аннотация на каждую упавшую проверку: видна прямо на странице прогона, без чтения журнала.
         if (System.Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true")
         {
-            foreach (var c in Checks.Where(c => c.Status == Status.Fail))
+            foreach (var c in Checks.Where(c => c.FailsBuild))
             {
                 Console.WriteLine($"::error title={Escape(c.Title)}::{Escape(c.Details)}");
             }
-            foreach (var c in Checks.Where(c => c.Status == Status.NotObservable))
+            foreach (var c in Checks.Where(c => c.Status is Status.NotObservable or Status.Warn || c.Status == Status.Fail && c.Diagnostic))
             {
                 Console.WriteLine($"::warning title={Escape(c.Title)}::{Escape(c.Details)}");
             }
@@ -96,17 +107,18 @@ internal sealed class Report
         var sb = new StringBuilder();
         sb.AppendLine("## departament: проверка на Windows");
         sb.AppendLine();
-        var fails = Checks.Count(c => c.Status == Status.Fail);
-        var passes = Checks.Count(c => c.Status == Status.Pass);
+        var fails = Checks.Count(c => c.FailsBuild);
+        var passes = Checks.Count(c => c.Status == Status.Pass && !c.Diagnostic);
+        var warns = Checks.Count(c => c.Status == Status.Warn);
         sb.AppendLine(fails == 0
-            ? $"Все проверки без отказов: {passes} прошли, остальные не наблюдаемы или пропущены."
-            : $"**Отказов: {fails}.** Прошли: {passes}.");
+            ? $"Отказов нет: {passes} прошли{(warns > 0 ? $", замечаний: {warns}" : "")}, остальные не наблюдаемы, пропущены или диагностические."
+            : $"**Отказов: {fails}.** Прошли: {passes}{(warns > 0 ? $", замечаний: {warns}" : "")}.");
         sb.AppendLine();
         sb.AppendLine("| Проверка | Итог | Подробности |");
         sb.AppendLine("|---|---|---|");
         foreach (var c in Checks)
         {
-            sb.AppendLine($"| {Cell(c.Title)} | {Badge(c.Status)} | {Cell(c.Details)} |");
+            sb.AppendLine($"| {Cell(c.Title)} | {Badge(c.Status)}{(c.Diagnostic ? " (диагностика)" : "")} | {Cell(c.Details)} |");
         }
         sb.AppendLine();
 
@@ -170,6 +182,7 @@ internal sealed class Report
         Status.Pass => "**PASS**",
         Status.Fail => "**FAIL**",
         Status.NotObservable => "NOT OBSERVABLE",
+        Status.Warn => "**WARN**",
         _ => "SKIP",
     };
 

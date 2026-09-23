@@ -127,6 +127,10 @@ internal static class Net
     public static NetworkInterface? Adapter(string name) =>
         NetworkInterface.GetAllNetworkInterfaces().FirstOrDefault(n => string.Equals(n.Name, name, StringComparison.OrdinalIgnoreCase));
 
+    /// <summary>У адаптера есть IPv4-адрес, который ему назначили, а не автоконфигурация 169.254.0.0/16.</summary>
+    public static bool HasRealIPv4(NetworkInterface n) =>
+        n.GetIPProperties().UnicastAddresses.Any(a => a.Address.AddressFamily == AddressFamily.InterNetwork && !a.Address.ToString().StartsWith("169.254.", StringComparison.Ordinal));
+
     public static string DescribeAdapter(NetworkInterface n)
     {
         var ips = n.GetIPProperties().UnicastAddresses.Select(a => a.Address.ToString());
@@ -147,8 +151,8 @@ internal static class Net
     }
 
     /// <summary>
-    /// Запрос A-записи к конкретному серверу по UDP. Нужен до тестов: прямой DNS приложения по умолчанию —
-    /// 119.29.29.29, и если он не отвечает с этой машины, TUN упадёт не по вине приложения.
+    /// Запрос A-записи к конкретному серверу по UDP: отвечает ли прямой DNS приложения с этой машины. Если нет,
+    /// TUN упадёт не по вине приложения.
     /// </summary>
     public static (List<string> Ips, string? Error) QueryA(string server, string name, int timeoutMs = 3000)
     {

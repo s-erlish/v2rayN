@@ -24,6 +24,7 @@ internal sealed class Options
     public string Target1 { get; set; } = "https://www.gstatic.com/generate_204";
     public string Target2 { get; set; } = "https://www.example.com/";
     public bool NoBind { get; set; }
+    public string? XrayCandidate { get; set; }
 
     public static Options Parse(string[] args)
     {
@@ -47,6 +48,7 @@ internal sealed class Options
                 case "--target1": o.Target1 = Next(); break;
                 case "--target2": o.Target2 = Next(); break;
                 case "--no-bind": o.NoBind = true; break;
+                case "--xray-candidate": o.XrayCandidate = Next(); break;
                 default: throw new ArgumentException($"неизвестный аргумент {args[i]}");
             }
         }
@@ -93,7 +95,7 @@ internal static class Program
             e2e.Cleanup();
             report.Write(o.Out);
         }
-        var fails = report.Checks.Count(c => c.Status == Status.Fail);
+        var fails = report.Checks.Count(c => c.FailsBuild);
         Log.Info(fails == 0 ? "Отказов нет." : $"Отказов: {fails}.");
         return fails == 0 ? 0 : 1;
     }
@@ -112,6 +114,8 @@ internal sealed class E2E(Options o, Report report)
     private bool _hostIsDomain;
     private bool _serverOk;
     private bool _serverBound = true;
+    private readonly List<string> _directDns = [];
+    private int _defaultSysProxyType;
     private ProfileRow? _vless;
     private ProfileRow? _custom;
 
@@ -151,6 +155,10 @@ internal sealed class E2E(Options o, Report report)
         if (o.Phases.Contains("custom"))
         {
             Phase("TUN, узел Custom", () => PhaseTun(customNode: true));
+        }
+        if (o.XrayCandidate is not null && o.Phases.Contains("tun"))
+        {
+            Phase("TUN, обычный узел с другим Xray", PhaseXrayCandidate);
         }
     }
 
@@ -249,8 +257,7 @@ internal sealed class E2E(Options o, Report report)
         foreach (var c in candidates)
         {
             var sys = Net.ResolveSystem(c);
-            var (direct, err) = IPAddress.TryParse(c, out _) ? ([c], null) : Net.QueryA("119.29.29.29", c);
-            var line = $"{c}: система → [{string.Join(", ", sys)}], 119.29.29.29 → [{string.Join(", ", direct)}]{(err is null ? "" : " (" + err + ")")}";
+            var line = $"{c}: система → [{string.Join(", ", sys)}]";
             Log.Info("Адрес сервера-кандидат " + line);
             check.Evidence.Add(line);
             if (sys.Contains("127.0.0.1"))
@@ -460,6 +467,9 @@ internal sealed class E2E(Options o, Report report)
             return;
         }
 
+        CheckDirectDns();
+        _defaultSysProxyType = _app.ReadConfig()["SystemProxyItem"]?["SysProxyType"] is JsonValue v && v.TryGetValue<int>(out var t) ? t : 0;
+
         _app.AddSubscription("e2e-sub-vless", "E2E VLESS", $"http://127.0.0.1:{o.WebPort}/sub", 1);
         _app.AddSubscription("e2e-sub-json", "E2E XRAY_JSON", $"http://127.0.0.1:{o.WebPort}/subjson", 2);
         _app.PatchConfig(root =>
@@ -468,7 +478,6 @@ internal sealed class E2E(Options o, Report report)
             core["LogEnabled"] = true;
             core["Loglevel"] = "debug";
             AppDriver.Obj(root, "TunModeItem")["EnableTun"] = false;
-            AppDriver.Obj(root, "SystemProxyItem")["SysProxyType"] = 0;
             if (o.LocalPort != 10808 && root["Inbound"] is JsonArray { Count: > 0 } inbound && inbound[0] is JsonObject first)
             {
                 first["LocalPort"] = o.LocalPort;
@@ -506,6 +515,41 @@ internal sealed class E2E(Options o, Report report)
         var runC = LaunchObserved("C-warm", 12000, uia: false);
         runs.Add(runC);
         report.StartupRuns.Add(runC);
+    }
+
+    /// <summary>
+    /// Прямой DNS приложения (SimpleDNSItem.DirectDNS, умолчание первого запуска) с этой машины: им в режиме
+    /// TUN разрешается домен VPN-сервера. Не отвечает он — проверки «мимо туннеля» упадут не по вине кода.
+    /// </summary>
+    private void CheckDirectDns()
+    {
+        try
+        {
+            var dns = _app.ReadConfig()["SimpleDNSItem"] as JsonObject;
+            foreach (var key in new[] { "DirectDNS", "BootstrapDNS" })
+            {
+                var value = dns?[key]?.GetValue<string>() ?? "";
+                foreach (var entry in value.Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    if (!IPAddress.TryParse(entry, out _))
+                    {
+                        _directDns.Add($"{key} {entry}: не IP, напрямую не опрашивается");
+                        continue;
+                    }
+                    var (ips, err) = _hostIsDomain ? Net.QueryA(entry, _host) : ([], "узел без домена");
+                    _directDns.Add($"{key} {entry}: {_host} → [{string.Join(", ", ips)}]{(err is null ? "" : " (" + err + ")")}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _directDns.Add("прямой DNS из guiNConfig.json не прочитан: " + ex.Message);
+        }
+        foreach (var line in _directDns)
+        {
+            report.Environment.Add("Прямой DNS приложения: " + line);
+            Log.Info("Прямой DNS приложения: " + line);
+        }
     }
 
     private void JudgeStartups(CheckResult window, CheckResult tray, List<StartupRun> runs)
@@ -638,23 +682,54 @@ internal sealed class E2E(Options o, Report report)
 
     private void PhaseProxy()
     {
-        var set = report.Add("proxy.set", "Системный прокси: включается при подключении");
+        var byDefault = report.Add("proxy.default", "«Только прокси» с настройками по умолчанию: системный прокси включается при подключении");
+        var set = report.Add("proxy.set", "Системный прокси (режим «Изменить системный прокси»): включается при подключении");
+        var early = report.Add("proxy.early", "Системный прокси не включается раньше, чем ядро слушает порт");
         var traffic = report.Add("proxy.traffic", "Системный прокси: трафик программ идёт через VPN-сервер");
         var cleared = report.Add("proxy.cleared", "Системный прокси: снимается при выходе");
         if (_vless is null || !_serverOk)
         {
-            foreach (var c in new[] { set, traffic, cleared })
+            foreach (var c in new[] { byDefault, set, early, traffic, cleared })
             {
                 c.Set(Status.Skip, _vless is null ? "нет импортированного узла VLESS" : "тестовый сервер не прошёл самопроверку");
             }
             return;
         }
+        var expected = $"127.0.0.1:{o.LocalPort}";
+
+        //  1. Как у человека: режим «Только прокси», тип системного прокси — тот, что приложение само
+        //  записало в новый конфиг (в интерфейсе ПК его не выставить: переключатель — в скрытом StatusBarView).
         _app.PatchConfig(root =>
         {
             root["IndexId"] = _vless.IndexId;
             AppDriver.Obj(root, "TunModeItem")["EnableTun"] = false;
-            AppDriver.Obj(root, "SystemProxyItem")["SysProxyType"] = 1; // ForcedChange
+            AppDriver.Obj(root, "SystemProxyItem")["SysProxyType"] = _defaultSysProxyType;
         });
+        if (IsWin)
+        {
+            var envDefault = BaseEnv(14000);
+            envDefault["DP_CONNECT_AFTER_MS"] = "500";
+            var pDefault = _app.Launch(envDefault);
+            var listening = Net.WaitUntil(() => Net.IsListening(o.LocalPort), TimeSpan.FromSeconds(20));
+            var enabled = listening.HasValue ? Net.WaitUntil(() => IsWin && Win.ReadSystemProxy().Enabled, TimeSpan.FromSeconds(4), 50) : null;
+            var state = Win.ReadSystemProxy();
+            if (!AppDriver.WaitExit(pDefault, TimeSpan.FromSeconds(45)))
+            {
+                _app.KillEverything();
+            }
+            byDefault.Set(listening is null ? Status.Fail : enabled.HasValue ? Status.Pass : Status.Warn,
+                listening is null ? "ядро так и не стало слушать порт — подключения не было"
+                : enabled.HasValue ? $"SysProxyType по умолчанию = {_defaultSysProxyType}: после подключения {state}"
+                : $"SysProxyType по умолчанию = {_defaultSysProxyType} (ForcedClear): подключение в режиме «Только прокси» системный прокси Windows НЕ включает ({state}) — браузеры и другие программы идут мимо VPN, а главная пишет «Через системный прокси». Выставить режим в интерфейсе нельзя: переключатель в скрытом StatusBarView");
+        }
+        else
+        {
+            byDefault.Set(Status.NotObservable, "системный прокси Windows проверяется только на Windows");
+        }
+
+        //  2. Режим «Изменить системный прокси» (SysProxyType=1): Windows направляет программы на вход
+        //  приложения, их трафик идёт через VPN-сервер, выход прокси снимает.
+        _app.PatchConfig(root => AppDriver.Obj(root, "SystemProxyItem")["SysProxyType"] = 1);
         var mark = _access!.Mark();
         var env = BaseEnv(30000);
         env["DP_CONNECT_AFTER_MS"] = "500";
@@ -662,16 +737,22 @@ internal sealed class E2E(Options o, Report report)
         File.Delete(timeline);
         env["DP_TIMELINE"] = timeline;
         var p = _app.Launch(env);
+        DateTime? processStart = null;
+        try { processStart = p.StartTime; } catch { }
+        double? enabledAtMs = null;
         try
         {
-            var expected = $"127.0.0.1:{o.LocalPort}";
-            double? tSet = null;
             if (IsWin)
             {
-                tSet = Net.WaitUntil(() => IsWin && Win.ReadSystemProxy() is { Enabled: true } s && s.Server!.Contains(expected), TimeSpan.FromSeconds(25));
+                //  Частый опрос: момент включения сверяется с вехой core.up изнутри.
+                var tSet = Net.WaitUntil(() => IsWin && Win.ReadSystemProxy() is { Enabled: true } s && s.Server!.Contains(expected), TimeSpan.FromSeconds(25), 25);
+                if (tSet.HasValue && processStart is { } ps)
+                {
+                    enabledAtMs = (DateTime.Now - ps).TotalMilliseconds;
+                }
                 var state = Win.ReadSystemProxy();
                 set.Set(tSet.HasValue ? Status.Pass : Status.Fail, tSet.HasValue
-                    ? $"через {tSet:F0} мс после запуска: {state}"
+                    ? $"на {enabledAtMs:F0} мс от старта процесса: {state}"
                     : $"за 25 с системный прокси не стал {expected}: {state}");
             }
             else
@@ -688,6 +769,11 @@ internal sealed class E2E(Options o, Report report)
                 fetch.Ok && hits.Count > 0
                     ? $"{HostPort(o.Target1)}: HTTP {fetch.Code} за {fetch.ElapsedMs} мс, сервер записал: {Shorten(hits[0])}"
                     : $"запрос: HTTP {fetch.Code}{(fetch.Error.Length > 0 ? " (" + fetch.Error.Trim() + ")" : "")}; строк про {HostPort(o.Target1)} в журнале сервера: {hits.Count}");
+            if (IsWin)
+            {
+                //  Что в это время показывает само приложение: щит, режим, скорость.
+                Win.SaveScreenshot(Path.Combine(_shots, "proxy-connected.png"));
+            }
         }
         finally
         {
@@ -699,6 +785,23 @@ internal sealed class E2E(Options o, Report report)
             var tl = new StartupRun();
             tl.ReadTimeline(timeline);
             traffic.Evidence.Add("вехи: " + string.Join(", ", tl.Timeline.Select(kv => $"{kv.Key} {kv.Value:F0}")));
+            if (!IsWin)
+            {
+                early.Set(Status.NotObservable, "системный прокси Windows проверяется только на Windows");
+            }
+            else if (enabledAtMs is null || !tl.Timeline.TryGetValue("core.up", out var coreUp))
+            {
+                early.Set(Status.NotObservable, $"нечего сравнить: прокси включён на {(enabledAtMs is { } e ? $"{e:F0}" : "—")} мс, core.up {(tl.Timeline.ContainsKey("core.up") ? "есть" : "нет")}");
+            }
+            else
+            {
+                //  Допуск 100 мс: опрос реестра идёт с шагом 25 мс, веха пишется из потока ядра.
+                var lead = coreUp - enabledAtMs.Value;
+                var tap = tl.Timeline.TryGetValue("connect.tap", out var t) ? t : (double?)null;
+                early.Set(lead > 100 ? Status.Fail : Status.Pass, lead > 100
+                    ? $"прокси включён на {enabledAtMs:F0} мс, а ядро слушает с {coreUp:F0} мс (нажатие «Подключить» — на {(tap is { } x ? $"{x:F0}" : "—")} мс): {lead:F0} мс программы Windows смотрели в порт, где никого нет"
+                    : $"прокси включён на {enabledAtMs:F0} мс, ядро слушает с {coreUp:F0} мс, «Подключить» — на {(tap is { } x2 ? $"{x2:F0}" : "—")} мс");
+            }
             if (IsWin)
             {
                 var after = Win.ReadSystemProxy();
@@ -716,17 +819,20 @@ internal sealed class E2E(Options o, Report report)
 
     #region Подключение: TUN
 
-    private void PhaseTun(bool customNode)
+    /// <param name="candidate">Версия подменённого ядра Xray для диагностического прогона (null — ядро из поставки).</param>
+    private void PhaseTun(bool customNode, string? candidate = null)
     {
         var kind = customNode ? "узел Custom (XRAY_JSON)" : "обычный узел";
-        var prefix = customNode ? "tun.custom" : "tun.xray";
+        var prefix = customNode ? "tun.custom" : candidate is null ? "tun.xray" : "tun.xray-candidate";
+        var lead = candidate is null ? "TUN" : $"Диагностика, TUN с {candidate}";
+        var diagnostic = candidate is not null;
         var adapterName = customNode ? "singbox_tun" : "xray_tun";
         var up = report.Add($"{prefix}.up", customNode
             ? "TUN, узел Custom: sing-box поднимает singbox_tun и отдаёт трафик в Xray 127.0.0.1:" + o.LocalPort
-            : "TUN, обычный узел: Xray поднимает xray_tun (wintun.dll рядом с xray.exe)");
-        var traffic = report.Add($"{prefix}.traffic", $"TUN, {kind}: трафик без настроек прокси идёт через VPN-сервер");
-        var dns = report.Add($"{prefix}.dns", $"TUN, {kind}: домен VPN-сервера разрешается мимо туннеля");
-        var down = report.Add($"{prefix}.down", $"TUN, {kind}: после выхода адаптера нет и сеть прямая");
+            : $"{lead}, обычный узел: Xray поднимает xray_tun с адресом и маршрутом (wintun.dll рядом с xray.exe)", diagnostic);
+        var traffic = report.Add($"{prefix}.traffic", $"{lead}, {kind}: трафик без настроек прокси идёт через VPN-сервер", diagnostic);
+        var dns = report.Add($"{prefix}.dns", $"{lead}, {kind}: домен VPN-сервера разрешается мимо туннеля", diagnostic);
+        var down = report.Add($"{prefix}.down", $"{lead}, {kind}: после выхода адаптера нет и сеть прямая", diagnostic);
         var all = new[] { up, traffic, dns, down };
         var node = customNode ? _custom : _vless;
         if (!IsWin)
@@ -785,14 +891,20 @@ internal sealed class E2E(Options o, Report report)
                 dns.Set(Status.Skip, "туннеля нет");
                 return;
             }
-            var adapter = Net.Adapter(adapterName)!;
-            var coresOk = !customNode || (cores.Any(c => c.StartsWith("sing-box", StringComparison.Ordinal)) && cores.Any(c => c.StartsWith("xray", StringComparison.Ordinal)) && Net.IsListening(o.LocalPort));
-            up.Set(coresOk ? Status.Pass : Status.Fail, $"через {tUp:F0} мс: {Net.DescribeAdapter(adapter)}; ядра: {string.Join(", ", cores)}" +
-                (customNode ? $"; Xray слушает 127.0.0.1:{o.LocalPort}: {(Net.IsListening(o.LocalPort) ? "да" : "НЕТ")}" : ""));
-
-            //  Маршруты встают следом за адаптером.
+            //  Поднятый адаптер — ещё не туннель: ядро должно дать ему адрес и маршрут. Адрес 169.254.x.x
+            //  (APIPA) Windows ставит сама, когда этого никто не сделал.
+            var tAddr = Net.WaitUntil(() => Net.Adapter(adapterName) is { } a && Net.HasRealIPv4(a), TimeSpan.FromSeconds(10), 200);
+            //  Маршруты встают следом за адресом.
             Thread.Sleep(2000);
+            var adapter = Net.Adapter(adapterName);
             var best = Win.BestInterfaceFor(IPAddress.Parse("8.8.8.8"));
+            var coresOk = !customNode || (cores.Any(c => c.StartsWith("sing-box", StringComparison.Ordinal)) && cores.Any(c => c.StartsWith("xray", StringComparison.Ordinal)) && Net.IsListening(o.LocalPort));
+            var routed = best != null && adapter != null && best.Id == adapter.Id;
+            var upOk = coresOk && tAddr.HasValue && routed;
+            up.Set(upOk ? Status.Pass : Status.Fail,
+                (upOk ? $"через {tUp:F0} мс: " : tAddr is null ? "адаптер поднят, но без IPv4-адреса (только APIPA) и без маршрута: ядро не настроило интерфейс; " : !routed ? $"адрес есть, но маршрут до 8.8.8.8 идёт через {best?.Name ?? "?"}, а не через туннель; " : "") +
+                $"{(adapter is null ? adapterName + " пропал" : Net.DescribeAdapter(adapter))}; маршрут до 8.8.8.8 через {best?.Name ?? "?"}; ядра: {string.Join(", ", cores)}" +
+                (customNode ? $"; Xray слушает 127.0.0.1:{o.LocalPort}: {(Net.IsListening(o.LocalPort) ? "да" : "НЕТ")}" : ""));
             var proxy = Win.ReadSystemProxy();
             traffic.Evidence.Add($"маршрут до 8.8.8.8 через: {best?.Name ?? "?"}; системный прокси: {proxy}");
             var (_, routes, _, _) = Net.Run("route", ["print", "-4"], TimeSpan.FromSeconds(10));
@@ -807,6 +919,9 @@ internal sealed class E2E(Options o, Report report)
             traffic.Set(viaTunnel ? Status.Pass : Status.Fail, viaTunnel
                 ? $"{HostPort(o.Target1)}: HTTP {f1.Code} за {f1.ElapsedMs} мс без прокси (системный прокси выключен), сервер записал: {Shorten(hits1[0])}; маршрут по умолчанию через {best?.Name}"
                 : $"curl без прокси: {f1}; строк в журнале сервера: {hits1.Count}; системный прокси: {(proxy.Enabled ? "ВКЛЮЧЁН" : "выключен")}; маршрут через {best?.Name}");
+            Win.SaveScreenshot(Path.Combine(_shots, $"{prefix}-connected.png"));
+            //  Конфиги ядер этой фазы: следующая фаза их перезапишет.
+            CopyDir(_app.BinConfigsDir, Path.Combine(o.Out, "app", $"binConfigs-{prefix}"));
 
             //  Домен сервера: кеш DNS системы сбрасывается, и следующее соединение ядра с сервером
             //  вынуждено разрешить его заново. Уйди это разрешение в туннель — оно ждало бы само себя.
@@ -819,6 +934,7 @@ internal sealed class E2E(Options o, Report report)
             dns.Evidence.AddRange(hits2.Take(3));
             var (staticOk, staticDetail) = customNode ? SingboxProtect() : XrayProtect();
             dns.Evidence.Add("конфиг: " + staticDetail);
+            dns.Evidence.AddRange(_directDns.Select(l => "прямой DNS до туннеля: " + l));
             var (logLines, contradiction) = DnsLogEvidence(logMarks, customNode);
             dns.Evidence.AddRange(logLines.Take(20));
             if (!_hostIsDomain)
@@ -860,6 +976,42 @@ internal sealed class E2E(Options o, Report report)
                     Net.Run("powershell.exe", ["-NoProfile", "-Command", $"Disable-NetAdapter -Name '{adapterName}' -Confirm:$false"], TimeSpan.FromSeconds(30));
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// Диагностика: тот же TUN обычного узла, но с другим ядром Xray вместо закреплённого в сборке. Идёт,
+    /// только если с ядром из поставки туннель не заработал, — чтобы было видно, чинит ли дело смена ядра.
+    /// Отказы здесь сборку не валят; ядро из поставки возвращается на место в любом случае.
+    /// </summary>
+    private void PhaseXrayCandidate()
+    {
+        var shippedFailed = report.Checks.Any(c => c.Id is "tun.xray.up" or "tun.xray.traffic" && c.Status == Status.Fail);
+        if (!shippedFailed)
+        {
+            report.Notes.Add("TUN обычного узла с ядром из поставки прошёл — прогон с другим Xray не нужен.");
+            return;
+        }
+        if (!IsWin || _app.CoreExe("xray") is not { } shipped || !File.Exists(o.XrayCandidate))
+        {
+            report.Notes.Add("Прогон с другим Xray не состоялся: нет ядра из поставки или подменного ядра.");
+            return;
+        }
+        _app.KillEverything();
+        var backup = shipped + ".shipped";
+        File.Copy(shipped, backup, overwrite: true);
+        try
+        {
+            File.Copy(o.XrayCandidate!, shipped, overwrite: true);
+            var (_, version, _, _) = Net.Run(shipped, ["version"], TimeSpan.FromSeconds(15));
+            var name = string.Join(' ', version.Split('\n')[0].Trim().Split(' ').Take(2));
+            PhaseTun(customNode: false, candidate: name.Length > 0 ? name : "другим Xray");
+        }
+        finally
+        {
+            _app.KillEverything();
+            File.Copy(backup, shipped, overwrite: true);
+            File.Delete(backup);
         }
     }
 

@@ -36,6 +36,12 @@ env:
   # адреса. Закреплён версией и суммой, как ядра в сборке приложения. Клиент — ядра из самой сборки.
   SERVER_XRAY_TAG: v25.9.11
   SERVER_XRAY_SHA256: d8db96eb39d7bc8cae484b2e59b651ff3c04f21e26d66e310f6a44e256ed1cc4
+  # Диагностика: если TUN обычного узла с Xray из сборки не заработал, стенд повторяет его с этим ядром
+  # (подменой bin/Xray/xray.exe на время одного прогона). Xray 26.3.27 из сборки не ставит адаптеру
+  # xray_tun ни адреса, ни маршрута: поля gateway/autoSystemRoutingTable появились только в v26.4.13.
+  # Отказы диагностики сборку не валят — это довод для обновления ядра, а не проверка поставки.
+  XRAY_CANDIDATE_TAG: v26.9.9
+  XRAY_CANDIDATE_SHA256: 244deaba2098c2964e49bba90df3707777e5f5f428a82d2f29604015f24beec2
   DEV_BRANCH: claude/dp-desktop-incy
 
 jobs:
@@ -68,6 +74,17 @@ jobs:
           if ($hash -ne $env:SERVER_XRAY_SHA256) { throw "Xray-windows-64.zip ($env:SERVER_XRAY_TAG): SHA256 $hash, ожидалось $env:SERVER_XRAY_SHA256" }
           Expand-Archive $zip -DestinationPath "$env:RUNNER_TEMP\server-xray" -Force
           & "$env:RUNNER_TEMP\server-xray\xray.exe" version | Select-Object -First 1
+
+      - name: Ядро Xray для диагностики TUN
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $zip = "$env:RUNNER_TEMP\xray-candidate.zip"
+          Invoke-WebRequest -Uri "https://github.com/XTLS/Xray-core/releases/download/$env:XRAY_CANDIDATE_TAG/Xray-windows-64.zip" -OutFile $zip
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash
+          if ($hash -ne $env:XRAY_CANDIDATE_SHA256) { throw "Xray-windows-64.zip ($env:XRAY_CANDIDATE_TAG): SHA256 $hash, ожидалось $env:XRAY_CANDIDATE_SHA256" }
+          Expand-Archive $zip -DestinationPath "$env:RUNNER_TEMP\xray-candidate" -Force
+          & "$env:RUNNER_TEMP\xray-candidate\xray.exe" version | Select-Object -First 1
 
       # Сборка этого коммита идёт параллельно (тот же пуш); ждём её конца, а не собираем второй раз.
       - name: Ждём сборку ветки для этого коммита
@@ -115,7 +132,7 @@ jobs:
       - name: Проверки на Windows
         shell: pwsh
         run: |
-          & "$env:RUNNER_TEMP\e2e-bin\DpE2E.exe" --app C:\dp-e2e\app --server-xray "$env:RUNNER_TEMP\server-xray\xray.exe" --out "$env:RUNNER_TEMP\e2e-out" --work C:\dp-e2e\work
+          & "$env:RUNNER_TEMP\e2e-bin\DpE2E.exe" --app C:\dp-e2e\app --server-xray "$env:RUNNER_TEMP\server-xray\xray.exe" --xray-candidate "$env:RUNNER_TEMP\xray-candidate\xray.exe" --out "$env:RUNNER_TEMP\e2e-out" --work C:\dp-e2e\work
           exit $LASTEXITCODE
 
       - name: Снимки экрана и журналы
