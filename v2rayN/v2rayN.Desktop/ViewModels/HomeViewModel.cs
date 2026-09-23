@@ -127,9 +127,11 @@ public class HomeViewModel : MyReactiveObject, IDisposable
 
     [Reactive] public string Subtitle { get; set; } = string.Empty;
 
-    [Reactive] public string UpSpeed { get; set; } = "0 KB/s";
+    //  Скорость печатает ByteSize на языке интерфейса («3,0 КБ/с»), а не движковый HumanFy
+    //  с английскими «KB/s» и двумя разными нулями («0 KB/s» до подключения, «0.0 B/s» после).
+    [Reactive] public string UpSpeed { get; set; } = ByteSize.Speed(0);
 
-    [Reactive] public string DownSpeed { get; set; } = "0 KB/s";
+    [Reactive] public string DownSpeed { get; set; } = ByteSize.Speed(0);
 
     [Reactive] public string Uptime { get; set; } = "00:00:00";
 
@@ -416,8 +418,8 @@ public class HomeViewModel : MyReactiveObject, IDisposable
                 //  догоняющего замера и только потом настоящую: «300 → 0 → 300» на ровной загрузке.
                 //  Теперь без свежего замера на щите ноль, пока не придёт настоящий.
                 var fresh = Environment.TickCount64 - _lastSpeedTick <= SpeedSampleMaxAgeMs;
-                UpSpeed = $"{Utils.HumanFy(fresh ? s.ProxyUp : 0)}/s";
-                DownSpeed = $"{Utils.HumanFy(fresh ? s.ProxyDown : 0)}/s";
+                UpSpeed = ByteSize.Speed(fresh ? s.ProxyUp : 0);
+                DownSpeed = ByteSize.Speed(fresh ? s.ProxyDown : 0);
             }
         }
         else
@@ -428,8 +430,8 @@ public class HomeViewModel : MyReactiveObject, IDisposable
             _connectedSince = null;
             IsConnected = false;
             Uptime = "00:00:00";
-            UpSpeed = "0 KB/s";
-            DownSpeed = "0 KB/s";
+            UpSpeed = ByteSize.Speed(0);
+            DownSpeed = ByteSize.Speed(0);
 
             if (IsConnecting && _connectingUntil is { } until && DateTime.Now > until)
             {

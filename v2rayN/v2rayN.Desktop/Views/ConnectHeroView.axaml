@@ -661,30 +661,39 @@
 
                     <!--  Стата-строка ПОД пилюлей: ↑ отдача · аптайм · ↓ приём. Скрывается целиком в
                           «Облегчённом режиме» (владелец: «над кнопкой эти показатели должны пропадать»).  -->
+                    <!--  Ячейки скоростей держат ширину САМОЙ длинной строки («99,9 МБ/с», её меряет
+                          ReserveSpeedWidth), а значение прижато к таймеру: ↑ справа в своей ячейке,
+                          ↓ слева. Без резерва строка центрировалась заново на каждом тике — таймер
+                          ездил влево-вправо, как только менялась длина скорости, и вся колонка героя
+                          перекладывалась раз в секунду.  -->
                     <StackPanel
                         x:Name="StatsRow"
                         Margin="0,16,0,0"
                         HorizontalAlignment="Center"
                         Orientation="Horizontal"
                         Spacing="20">
-                        <StackPanel
-                            VerticalAlignment="Center"
-                            Orientation="Horizontal"
-                            Spacing="4">
-                            <TextBlock
+                        <Panel x:Name="UpCell" VerticalAlignment="Center">
+                            <StackPanel
+                                x:Name="UpGroup"
+                                HorizontalAlignment="Right"
                                 VerticalAlignment="Center"
-                                Classes="Caption"
-                                FontSize="11"
-                                Foreground="{DynamicResource Brush.Accent}"
-                                Text="↑" />
-                            <TextBlock
-                                x:Name="UpSpeed"
-                                VerticalAlignment="Center"
-                                Classes="Numeric"
-                                FontSize="12.5"
-                                FontWeight="Bold"
-                                Text="0 KB/s" />
-                        </StackPanel>
+                                Orientation="Horizontal"
+                                Spacing="4">
+                                <TextBlock
+                                    x:Name="UpArrow"
+                                    VerticalAlignment="Center"
+                                    Classes="Caption"
+                                    FontSize="11"
+                                    Foreground="{DynamicResource Brush.Accent}"
+                                    Text="↑" />
+                                <TextBlock
+                                    x:Name="UpSpeed"
+                                    VerticalAlignment="Center"
+                                    Classes="Numeric"
+                                    FontSize="12.5"
+                                    FontWeight="Bold" />
+                            </StackPanel>
+                        </Panel>
                         <TextBlock
                             x:Name="Uptime"
                             VerticalAlignment="Center"
@@ -693,24 +702,26 @@
                             FontWeight="Bold"
                             Foreground="{DynamicResource Brush.OnSurfaceVariant}"
                             Text="00:00:00" />
-                        <StackPanel
-                            VerticalAlignment="Center"
-                            Orientation="Horizontal"
-                            Spacing="4">
-                            <TextBlock
+                        <Panel x:Name="DownCell" VerticalAlignment="Center">
+                            <StackPanel
+                                HorizontalAlignment="Left"
                                 VerticalAlignment="Center"
-                                Classes="Caption"
-                                FontSize="11"
-                                Foreground="{DynamicResource Brush.Accent}"
-                                Text="↓" />
-                            <TextBlock
-                                x:Name="DownSpeed"
-                                VerticalAlignment="Center"
-                                Classes="Numeric"
-                                FontSize="12.5"
-                                FontWeight="Bold"
-                                Text="0 KB/s" />
-                        </StackPanel>
+                                Orientation="Horizontal"
+                                Spacing="4">
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    Classes="Caption"
+                                    FontSize="11"
+                                    Foreground="{DynamicResource Brush.Accent}"
+                                    Text="↓" />
+                                <TextBlock
+                                    x:Name="DownSpeed"
+                                    VerticalAlignment="Center"
+                                    Classes="Numeric"
+                                    FontSize="12.5"
+                                    FontWeight="Bold" />
+                            </StackPanel>
+                        </Panel>
                     </StackPanel>
 
                     <!--  Идентичность сервера: флаг + имя АКЦЕНТОМ (screens.md: «флаг и имя сервера

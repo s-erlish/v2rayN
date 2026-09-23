@@ -617,8 +617,7 @@ public partial class ConnectHeroView : UserControl
                     PlayErrorContract();
                 }
 
-                UpSpeed.Text = "0 KB/s";
-                DownSpeed.Text = "0 KB/s";
+                UpSpeed.Text = DownSpeed.Text = ByteSize.Speed(0);
                 Uptime.Text = "00:00:00";
                 break;
 
@@ -633,8 +632,7 @@ public partial class ConnectHeroView : UserControl
                 SetArc(false);
                 SetGlow(connecting: false, connected: false);
                 HideSonar();
-                UpSpeed.Text = "0 KB/s";
-                DownSpeed.Text = "0 KB/s";
+                UpSpeed.Text = DownSpeed.Text = ByteSize.Speed(0);
                 Uptime.Text = "00:00:00";
                 break;
         }
@@ -722,11 +720,40 @@ public partial class ConnectHeroView : UserControl
     private void ApplyMetaDim(ConnectVisualState state) =>
         HeroMeta.Opacity = state == ConnectVisualState.Connected ? 1 : 0.45;
 
-    /// <summary>Обновляет ↑/↓ (строки Utils.HumanFy, напр. «1.2 MB/s»).</summary>
+    /// <summary>Обновляет ↑/↓ (строки <see cref="ByteSize.Speed"/>, напр. «1,2 МБ/с»).</summary>
     public void SetSpeeds(string up, string down)
     {
         UpSpeed.Text = up;
         DownSpeed.Text = down;
+    }
+
+    /// <summary>
+    /// Резерв ширины под скорости: ячейки ↑ и ↓ держат ширину самой длинной возможной строки на
+    /// текущем языке (стрелка + зазор + «99,9 МБ/с»), поэтому смена значения раз в секунду не
+    /// двигает таймер и не перекладывает колонку героя. Мерим отдельным пробником с тем же шрифтом,
+    /// кеглем, начертанием и tnum, что у живой строки: живую трогать нельзя, а цифры без tnum
+    /// дали бы другую ширину. Зовётся при входе в дерево и на смену языка.
+    /// </summary>
+    private void ReserveSpeedWidth()
+    {
+        var arrow = MeasureLike(UpArrow, UpArrow.Text ?? string.Empty);
+        var widest = ByteSize.SpeedSamples().Max(sample => MeasureLike(UpSpeed, sample));
+        UpCell.MinWidth = DownCell.MinWidth = Math.Ceiling(arrow + UpGroup.Spacing + widest);
+    }
+
+    private static double MeasureLike(TextBlock like, string text)
+    {
+        var probe = new TextBlock
+        {
+            Text = text,
+            FontFamily = like.FontFamily,
+            FontSize = like.FontSize,
+            FontWeight = like.FontWeight,
+            FontStyle = like.FontStyle,
+            FontFeatures = like.FontFeatures,
+        };
+        probe.Measure(Size.Infinity);
+        return probe.DesiredSize.Width;
     }
 
     /// <summary>Обновляет центральный таймер аптайма (hh:mm:ss).</summary>
@@ -765,6 +792,7 @@ public partial class ConnectHeroView : UserControl
         //  {loc:T} binding can't refresh it. Re-apply the current visual state (animate:false = jump
         //  to its end-look, no re-played sonar) whenever the language changes so the caption follows.
         L.Instance.LanguageChanged += OnLanguageChanged;
+        ReserveSpeedWidth();
 
         //  Reactive theme (Bug 1): the idle status foreground / shield / glyph tints are SNAPSHOT
         //  IBrush-и, разрешаемые из тема-токенов (Brush.OnSurface / OnSurfaceVariant / Accent / Red)
@@ -884,8 +912,12 @@ public partial class ConnectHeroView : UserControl
 
     private void OnMotionStateChanged(object? sender, bool lite) => ApplyLiteMode(lite, reapply: true);
 
-    private void OnLanguageChanged(object? sender, EventArgs e) =>
+    private void OnLanguageChanged(object? sender, EventArgs e)
+    {
+        //  Единицы скорости сменили язык («КБ/с» ↔ «KB/s») — и ширина резерва вместе с ними.
+        ReserveSpeedWidth();
         SetConnectState(_visualState, hasServer: _hasServer, animate: false);
+    }
 
     //  Тема сменилась (Dark ↔ Light ↔ mono) → пере-применяем текущее состояние, чтобы snapshot-кисти
     //  подписи/щита/глифа (OnSurfaceBrush / ShieldIdleBrush / AccentBrush / ErrorBrush) разрешились

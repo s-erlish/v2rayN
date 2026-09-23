@@ -51,9 +51,12 @@ public sealed partial class L
         Add("Common_SomethingWrong", "Что-то пошло не так", "Something went wrong");
 
         // ── Units / formats (positional templates → use with L.F; arrays → split on ',') ──
-        // Byte-unit ladder: split on ',' at the call site. WP2 uses all 6; WP5 uses the first 5.
+        // Лестница единиц объёма, делится на ','. Берут её ByteSize (объём и скорость по всему
+        // приложению) и подпись файлов в «Файлах ресурсов».
         Add("Common_ByteUnits", "Б,КБ,МБ,ГБ,ТБ,ПБ", "B,KB,MB,GB,TB,PB");
-        Add("Common_ZeroBytes", "0 Б", "0 B");
+        // Скорость = объём в секунду: «1,2 МБ/с». Шаблон целиком, а не суффикс «/с», чтобы язык сам
+        // решал форму. Собирает ByteSize.Speed.
+        Add("Common_PerSecond", "{0}/с", "{0}/s");
         Add("Common_HoursShort", "{0} ч.", "{0} h");
         Add("Common_MinutesShort", "{0} мин.", "{0} min");
         Add("Common_DaysShort", "{0} дн.", "{0} days");

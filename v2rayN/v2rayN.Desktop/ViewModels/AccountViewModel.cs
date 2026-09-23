@@ -3197,33 +3197,10 @@ public class AccountViewModel : MyReactiveObject
     }
 
     /// <summary>
-    /// Localized byte formatter — ported 1:1 from Home's <c>SubscriptionMetaView.FormatBytes</c> so the
-    /// account traffic pill reads identically to Home's («18,4 ГБ» in RU, «18.4 GB» in EN). Base 1024.
+    /// Трафик на «Аккаунте» читается так же, как на карточке подписки «Главной» («18,4 ГБ» /
+    /// «18.4 GB»): оба берут общий <see cref="ByteSize.Bytes"/>, а не каждый свою копию.
     /// </summary>
-    private static string FormatBytes(long bytes)
-    {
-        if (bytes <= 0)
-        {
-            return L.T("Common_ZeroBytes");
-        }
-        var units = L.T("Common_ByteUnits").Split(',');
-        double value = bytes;
-        var unit = 0;
-        while (value >= 1024 && unit < units.Length - 1)
-        {
-            value /= 1024;
-            unit++;
-        }
-        var culture = CultureInfo.GetCultureInfo(L.Instance.CurrentLang == "en" ? "en-US" : "ru-RU");
-        var digits = unit == 0 ? 0 : 1;
-        var text = value.ToString("N" + digits, culture);
-        var trailingZero = culture.NumberFormat.NumberDecimalSeparator + "0";
-        if (digits == 1 && text.EndsWith(trailingZero, StringComparison.Ordinal))
-        {
-            text = text[..^trailingZero.Length];
-        }
-        return $"{text} {units[unit]}";
-    }
+    private static string FormatBytes(long bytes) => ByteSize.Bytes(bytes);
 
     private static string Monogram(string primary)
     {
