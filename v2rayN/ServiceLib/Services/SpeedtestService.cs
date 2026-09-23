@@ -17,13 +17,27 @@ public class SpeedtestService(Config config, Func<SpeedTestResult, Task> updateF
     private readonly int _speedTestPageSize = config.SpeedTestItem.SpeedTestPageSize ?? Global.SpeedTestPageSize;
     private readonly TimeSpan _delayInterval = TimeSpan.FromSeconds(config.SpeedTestItem.SpeedTestDelayInterval ?? 1);
 
-    public void RunLoop(ESpeedActionType actionType, List<ProfileItem> selecteds)
+    /// <summary>
+    /// Прогон в фоне. Возвращённая задача завершается, когда прогон ДЕЙСТВИТЕЛЬНО закончен (или
+    /// остановлен), и никогда не падает: ошибка пишется в журнал. Раньше метод ничего не возвращал,
+    /// команда «пинг всех» завершалась в ту же миллисекунду, и карточка подписки гасила свой
+    /// индикатор и писала «Задержка обновлена», пока все строки ещё крутили замер — на тридцати
+    /// серверах за секунды до первого результата.
+    /// </summary>
+    public Task RunLoop(ESpeedActionType actionType, List<ProfileItem> selecteds)
     {
-        Task.Run(async () =>
+        return Task.Run(async () =>
         {
-            await RunAsync(actionType, selecteds);
-            await ProfileExManager.Instance.SaveTo();
-            await UpdateFunc("", ResUI.SpeedtestingCompleted);
+            try
+            {
+                await RunAsync(actionType, selecteds);
+                await ProfileExManager.Instance.SaveTo();
+                await UpdateFunc("", ResUI.SpeedtestingCompleted);
+            }
+            catch (Exception ex)
+            {
+                Logging.SaveLog(_tag, ex);
+            }
         });
     }
 

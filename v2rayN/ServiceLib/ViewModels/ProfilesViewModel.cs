@@ -810,7 +810,9 @@ public class ProfilesViewModel : MyReactiveObject
             });
             await Task.CompletedTask;
         });
-        _speedtestService?.RunLoop(actionType, lstSelected);
+        //  Ждём сам прогон: вызывающий (команда «пинг всех» на карточке подписки) узнаёт о конце
+        //  замера, когда он правда закончен, а не в момент запуска.
+        await _speedtestService.RunLoop(actionType, lstSelected);
     }
 
     public void ServerSpeedtestStop()
