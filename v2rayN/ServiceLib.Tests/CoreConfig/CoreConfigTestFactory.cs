@@ -211,6 +211,32 @@ internal static class CoreConfigTestFactory
         };
     }
 
+    /// <summary>Встроенный набор маршрутов апстрима (custom_routing_white / black / global) таким, каким
+    /// его кладёт в базу InitBuiltinRouting.</summary>
+    public static RoutingItem CreateBuiltinRouting(string name)
+    {
+        var rules = JsonUtils.Deserialize<List<RulesItem>>(EmbedUtils.GetEmbedText(Global.CustomRoutingFileName + name))!;
+        return new RoutingItem
+        {
+            Id = $"r-{name}",
+            Remarks = name,
+            RuleSet = JsonUtils.Serialize(rules, false),
+            DomainStrategy = Global.AsIs,
+            DomainStrategy4Singbox = string.Empty,
+        };
+    }
+
+    /// <summary>Серверы DNS из конфига Xray: строка-адрес приводится к объекту без доменов.</summary>
+    public static List<DnsServer4Ray> XrayDnsServers(V2rayConfig cfg)
+    {
+        var dns = JsonUtils.ParseJson(JsonUtils.Serialize(cfg.dns))!;
+        return dns["servers"]!.AsArray()
+            .Select(s => s is JsonValue v && v.TryGetValue<string>(out var address)
+                ? new DnsServer4Ray { address = address }
+                : JsonUtils.Deserialize<DnsServer4Ray>(s!.ToJsonString())!)
+            .ToList();
+    }
+
     public static Config CreateConfigWithDirectExpectedIPs(ECoreType coreType,
         string directExpectedIPs = "192.168.0.0/16,geoip:cn")
     {
