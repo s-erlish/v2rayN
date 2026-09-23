@@ -311,9 +311,9 @@
                                                                     CenterY="7.5" />
                                                             </Ellipse.RenderTransform>
                                                         </Ellipse>
-                                                        <!--  Значение: 12.5/500, табличные цифры, цвет по задержке —
-                                                              зелёный до 150, жёлтый до 350, дальше красный, серый «n/a»
-                                                              у недоступного (screens.md «Список серверов»).  -->
+                                                        <!--  Значение: 12.5/500, табличные цифры. Ответил — число
+                                                              зелёным, не ответил — дефис красным, как на Android
+                                                              (DelayDisplayConverter / DelayInkConverter).  -->
                                                         <TextBlock
                                                             VerticalAlignment="Center"
                                                             Classes="Numeric"
