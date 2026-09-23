@@ -50,72 +50,14 @@ public sealed class CoreInfoManager
         return fileName;
     }
 
-    public List<ECoreType> GetCheckUpdateCoreTypes()
-    {
-        var lst = new List<ECoreType>();
-
-        if (RuntimeInformation.ProcessArchitecture != Architecture.X86)
-        {
-            if (IsCheckUpdateSupported(ECoreType.v2rayN))
-            {
-                lst.Add(ECoreType.v2rayN);
-            }
-
-            if (!(Utils.IsWindows() && Environment.OSVersion.Version.Major < 10))
-            {
-                lst.Add(ECoreType.Xray);
-                lst.Add(ECoreType.mihomo);
-                lst.Add(ECoreType.sing_box);
-            }
-        }
-
-        return lst;
-    }
-
-    public bool IsCheckUpdateSupported(ECoreType type)
-    {
-        return type switch
-        {
-            ECoreType.v2rayN => !Utils.IsPackagedInstall(),
-            ECoreType.Xray => true,
-            ECoreType.mihomo => true,
-            ECoreType.sing_box => true,
-            _ => false,
-        };
-    }
-
-    public bool GetCheckPreRelease(ECoreType type, bool preRelease)
-    {
-        return type switch
-        {
-            ECoreType.v2rayN => preRelease,
-            ECoreType.Xray => preRelease,
-            _ => false,
-        };
-    }
-
     private void InitCoreInfo()
     {
-        var urlN = GetCoreUrl(ECoreType.v2rayN);
-        var urlXray = GetCoreUrl(ECoreType.Xray);
-        var urlMihomo = GetCoreUrl(ECoreType.mihomo);
-        var urlSingbox = GetCoreUrl(ECoreType.sing_box);
-
         _coreInfo =
         [
             new CoreInfo
                 {
                     CoreType = ECoreType.v2rayN,
                     Url = GetCoreUrl(ECoreType.v2rayN),
-                    ReleaseApiUrl = urlN.Replace(Global.GithubUrl, Global.GithubApiUrl),
-                    DownloadUrlWin64 = urlN + "/download/{0}/v2rayN-windows-64.zip",
-                    DownloadUrlWinArm64 = urlN + "/download/{0}/v2rayN-windows-arm64.zip",
-                    DownloadUrlLinux64 = urlN + "/download/{0}/v2rayN-linux-64.zip",
-                    DownloadUrlLinuxArm64 = urlN + "/download/{0}/v2rayN-linux-arm64.zip",
-                    DownloadUrlLinuxRiscV64 = urlN + "/download/{0}/v2rayN-linux-riscv64.zip",
-                    DownloadUrlLinuxLoong64 = urlN + "/download/{0}/v2rayN-linux-loong64.zip",
-                    DownloadUrlOSX64 = urlN + "/download/{0}/v2rayN-macos-64.zip",
-                    DownloadUrlOSXArm64 = urlN + "/download/{0}/v2rayN-macos-arm64.zip",
                 },
 
                 new CoreInfo
@@ -124,8 +66,6 @@ public sealed class CoreInfoManager
                     CoreExes = ["v2ray"],
                     Arguments = "{0}",
                     Url = GetCoreUrl(ECoreType.v2fly),
-                    Match = "V2Ray",
-                    VersionArg = "-version",
                     Environment = new Dictionary<string, string?>()
                     {
                         { Global.V2RayLocalAsset, Utils.GetBinPath("") },
@@ -138,8 +78,6 @@ public sealed class CoreInfoManager
                     CoreExes = ["v2ray"],
                     Arguments = "run -c {0} -format jsonv5",
                     Url = GetCoreUrl(ECoreType.v2fly_v5),
-                    Match = "V2Ray",
-                    VersionArg = "version",
                     Environment = new Dictionary<string, string?>()
                     {
                         { Global.V2RayLocalAsset, Utils.GetBinPath("") },
@@ -152,17 +90,6 @@ public sealed class CoreInfoManager
                     CoreExes = ["xray"],
                     Arguments = "run -c {0}",
                     Url = GetCoreUrl(ECoreType.Xray),
-                    ReleaseApiUrl = urlXray.Replace(Global.GithubUrl, Global.GithubApiUrl),
-                    DownloadUrlWin64 = urlXray + "/download/{0}/Xray-windows-64.zip",
-                    DownloadUrlWinArm64 = urlXray + "/download/{0}/Xray-windows-arm64-v8a.zip",
-                    DownloadUrlLinux64 = urlXray + "/download/{0}/Xray-linux-64.zip",
-                    DownloadUrlLinuxArm64 = urlXray + "/download/{0}/Xray-linux-arm64-v8a.zip",
-                    DownloadUrlLinuxRiscV64 = urlXray + "/download/{0}/Xray-linux-riscv64.zip",
-                    DownloadUrlLinuxLoong64 = urlXray + "/download/{0}/Xray-linux-loong64.zip",
-                    DownloadUrlOSX64 = urlXray + "/download/{0}/Xray-macos-64.zip",
-                    DownloadUrlOSXArm64 = urlXray + "/download/{0}/Xray-macos-arm64-v8a.zip",
-                    Match = "Xray",
-                    VersionArg = "-version",
                     Environment = new Dictionary<string, string?>()
                     {
                         { Global.XrayLocalAsset, Utils.GetBinPath("") },
@@ -176,17 +103,6 @@ public sealed class CoreInfoManager
                     CoreExes = GetMihomoCoreExes(),
                     Arguments = "-f {0}" + PortableMode(),
                     Url = GetCoreUrl(ECoreType.mihomo),
-                    ReleaseApiUrl = urlMihomo.Replace(Global.GithubUrl, Global.GithubApiUrl),
-                    DownloadUrlWin64 = urlMihomo + "/download/{0}/mihomo-windows-amd64-v1-{0}.zip",
-                    DownloadUrlWinArm64 = urlMihomo + "/download/{0}/mihomo-windows-arm64-{0}.zip",
-                    DownloadUrlLinux64 = urlMihomo + "/download/{0}/mihomo-linux-amd64-v1-{0}.gz",
-                    DownloadUrlLinuxArm64 = urlMihomo + "/download/{0}/mihomo-linux-arm64-{0}.gz",
-                    DownloadUrlLinuxRiscV64 = urlMihomo + "/download/{0}/mihomo-linux-riscv64-{0}.gz",
-                    DownloadUrlLinuxLoong64 = urlMihomo + "/download/{0}/mihomo-linux-loong64-abi2-{0}.gz",
-                    DownloadUrlOSX64 = urlMihomo + "/download/{0}/mihomo-darwin-amd64-v1-{0}.gz",
-                    DownloadUrlOSXArm64 = urlMihomo + "/download/{0}/mihomo-darwin-arm64-{0}.gz",
-                    Match = "Mihomo",
-                    VersionArg = "-v",
                 },
 
                 new CoreInfo
@@ -219,18 +135,6 @@ public sealed class CoreInfoManager
                     CoreExes = ["sing-box-client", "sing-box"],
                     Arguments = "run -c {0} --disable-color",
                     Url = GetCoreUrl(ECoreType.sing_box),
-
-                    ReleaseApiUrl = urlSingbox.Replace(Global.GithubUrl, Global.GithubApiUrl),
-                    DownloadUrlWin64 = urlSingbox + "/download/{0}/sing-box-{1}-windows-amd64.zip",
-                    DownloadUrlWinArm64 = urlSingbox + "/download/{0}/sing-box-{1}-windows-arm64.zip",
-                    DownloadUrlLinux64 = urlSingbox + "/download/{0}/sing-box-{1}-linux-amd64.tar.gz",
-                    DownloadUrlLinuxArm64 = urlSingbox + "/download/{0}/sing-box-{1}-linux-arm64.tar.gz",
-                    DownloadUrlLinuxRiscV64 = urlSingbox + "/download/{0}/sing-box-{1}-linux-riscv64.tar.gz",
-                    DownloadUrlLinuxLoong64 = urlSingbox + "/download/{0}/sing-box-{1}-linux-loong64.tar.gz",
-                    DownloadUrlOSX64 = urlSingbox + "/download/{0}/sing-box-{1}-darwin-amd64.tar.gz",
-                    DownloadUrlOSXArm64 = urlSingbox + "/download/{0}/sing-box-{1}-darwin-arm64.tar.gz",
-                    Match = "sing-box",
-                    VersionArg = "version",
                 },
 
                 new CoreInfo

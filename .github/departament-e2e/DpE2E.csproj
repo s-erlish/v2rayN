@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<!-- Стенд Windows для departament-windows-e2e.yml: запускает собранное приложение на настоящей
+	     Windows, смотрит на окно и трей снаружи, подключает через системный прокси и TUN к своему
+	     серверу Xray и пишет итог по каждой проверке. Отдельный проект вне решения v2rayN: в сборку
+	     приложения не попадает и общие настройки апстрима (v2rayN/Directory.*.props) не наследует.
+	     Код общий для Windows и Linux: на Linux то, что про Windows, помечается «не наблюдаемо», и
+	     остальное можно прогнать локально до отправки в CI. -->
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFramework>net10.0</TargetFramework>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+		<InvariantGlobalization>true</InvariantGlobalization>
+		<RootNamespace>DpE2E</RootNamespace>
+		<AssemblyName>DpE2E</AssemblyName>
+		<SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Include="tray-uia.ps1" CopyToOutputDirectory="PreserveNewest" />
+	</ItemGroup>
+
+</Project>

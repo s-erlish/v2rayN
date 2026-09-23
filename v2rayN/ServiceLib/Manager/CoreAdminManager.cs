@@ -34,6 +34,19 @@ public class CoreAdminManager
         StringBuilder sb = new();
         sb.AppendLine("#!/bin/bash");
         var cmdLine = $"{fileName.AppendQuotes()} {string.Format(coreInfo.Arguments, Utils.GetBinConfigPath(configPath).AppendQuotes())}";
+        //  sudo сбрасывает окружение (env_reset), и переменные ядра, которые обычный запуск кладёт в
+        //  процесс, сюда не доходили. Xray без XRAY_LOCATION_ASSET ищет geoip.dat рядом со своим
+        //  файлом, а базы лежат в bin, — и в режиме «весь трафик» падал на первом правиле geoip.
+        //  Передаём их через env: это обычная команда, её sudo не фильтрует, в отличие от
+        //  VAR=значение в собственной командной строке. {0} — полный путь конфига, как в аргументах.
+        var envVars = coreInfo.Environment
+            .Where(kv => kv.Value != null)
+            .Select(kv => $"{kv.Key}={string.Format(kv.Value!, Utils.GetBinConfigPath(configPath))}".AppendQuotes())
+            .ToList();
+        if (envVars.Count > 0)
+        {
+            cmdLine = $"env {string.Join(" ", envVars)} {cmdLine}";
+        }
         sb.AppendLine($"exec sudo -S -- {cmdLine}");
         var shFilePath = await FileUtils.CreateLinuxShellFile("run_as_sudo.sh", sb.ToString(), true);
 

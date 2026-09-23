@@ -4,6 +4,11 @@ public class V2rayConfig
 {
     public Log4Ray log { get; set; }
     public object dns { get; set; }
+
+    // Seamless switch (Tier 2): the Xray HandlerService `api` block, e.g.
+    // { "tag": "api", "services": ["HandlerService"] }. Null (and omitted by the null-ignoring
+    // serializer) unless GenApi() emits it, so it never changes existing configs.
+    public Api4Ray? api { get; set; }
     public List<Inbounds4Ray> inbounds { get; set; }
     public List<Outbounds4Ray> outbounds { get; set; }
     public Routing4Ray routing { get; set; }
@@ -13,6 +18,12 @@ public class V2rayConfig
     public Observatory4Ray? observatory { get; set; }
     public BurstObservatory4Ray? burstObservatory { get; set; }
     public string? remarks { get; set; }
+}
+
+public class Api4Ray
+{
+    public string tag { get; set; }
+    public List<string> services { get; set; }
 }
 
 public class Stats4Ray

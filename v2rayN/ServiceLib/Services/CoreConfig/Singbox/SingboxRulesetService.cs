@@ -60,8 +60,10 @@ public partial class CoreConfigSingboxService
         //load custom ruleset file
         List<Ruleset4Sbox> customRulesets = [];
 
+        //  Маршрута может не быть (свежая база до первой инициализации) — GenDns рядом это проверяет,
+        //  а здесь обращение без проверки роняло сборку конфига целиком.
         var routing = context.RoutingItem;
-        if (routing.CustomRulesetPath4Singbox.IsNotEmpty())
+        if (routing != null && routing.CustomRulesetPath4Singbox.IsNotEmpty())
         {
             var result = EmbedUtils.LoadResource(routing.CustomRulesetPath4Singbox);
             if (result.IsNotEmpty())
@@ -103,13 +105,18 @@ public partial class CoreConfigSingboxService
                         ? Global.SingboxRulesetUrl
                         : _config.ConstItem.SrsSourceUrl;
 
+                    //  Качать — через proxy, как и раньше, но формой 1.14: download_detour с 1.14
+                    //  объявлен устаревшим и в 1.16 роняет ядро, а неявный «клиент по умолчанию»
+                    //  (поле просто опустить) устарел так же. http_client ядра до 1.14 не знают, но
+                    //  приложение их и не встречает: в сборке 1.14.1, а обновление ядра из
+                    //  приложения идёт только вперёд, к стабильным выпускам.
                     customRuleset = new()
                     {
                         type = "remote",
                         format = "binary",
                         tag = item,
                         url = string.Format(srsUrl, item.StartsWith(geosite) ? geosite : geoip, item),
-                        download_detour = Global.ProxyTag
+                        http_client = new() { detour = Global.ProxyTag },
                     };
                 }
             }

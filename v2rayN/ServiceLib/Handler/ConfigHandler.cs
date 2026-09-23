@@ -19,17 +19,95 @@ public static class ConfigHandler
     public static Config? LoadConfig()
     {
         Config? config = null;
-        var result = EmbedUtils.LoadResource(Utils.GetConfigPath(_configRes));
+        var configPath = Utils.GetConfigPath(_configRes);
+        var result = EmbedUtils.LoadResource(configPath);
         if (result.IsNotEmpty())
         {
             config = JsonUtils.Deserialize<Config>(result);
+
+            // The file had content but would not parse. JsonUtils.Deserialize swallows the exception
+            // and returns null (JsonUtils.cs:77-80), so this used to fall silently into the
+            // `config ??= new Config()` below — a factory reset that drops IndexId, SubIndexId,
+            // language, TUN mode and every other setting, which the next SaveConfig then writes back
+            // over the damaged file, making the loss permanent and untraceable.
+            //
+            // Keep starting with defaults (refusing to launch is worse), but preserve the original
+            // bytes next to the config first, so a damaged file is diagnosable and the user's settings
+            // are recoverable instead of gone. Best-effort: a failure to copy must not block startup.
+            if (config is null)
+            {
+                Logging.SaveLog($"{_tag}: config file exists but could not be parsed, falling back to defaults");
+                try
+                {
+                    File.Copy(configPath, $"{configPath}.bad", true);
+                }
+                catch (Exception ex)
+                {
+                    Logging.SaveLog(_tag, ex);
+                }
+            }
         }
         else
         {
-            if (File.Exists(Utils.GetConfigPath(_configRes)))
+            if (File.Exists(configPath))
             {
-                Logging.SaveLog("LoadConfig Exception");
-                return null;
+                // The file is there but yielded nothing. Two very different situations hide behind
+                // that, and treating them the same cost the user a working app:
+                //
+                //  • EMPTY (0 bytes). A crash or a kill between creating and writing the file leaves
+                //    exactly this. There is nothing in it to protect, yet the old code returned null,
+                //    which makes InitApp return false and Program.Main call Environment.Exit(0) — the
+                //    app just never opens, with no window and no message, on EVERY subsequent launch,
+                //    until someone finds and deletes the file by hand. Servers live in guiNDB.db, not
+                //    here, so starting from defaults costs at most the UI preferences and gets the
+                //    user back into a working app.
+                //
+                //  • NON-EMPTY but unreadable (locked by another writer, AV scan, permissions). Here
+                //    the bytes ARE the user's settings, so falling back to defaults would overwrite
+                //    them on the next save. Retry the read a couple of times for the transient case,
+                //    and only if it still fails refuse to start — same as before.
+                var length = -1L;
+                try
+                {
+                    length = new FileInfo(configPath).Length;
+                }
+                catch (Exception ex)
+                {
+                    Logging.SaveLog(_tag, ex);
+                }
+
+                if (length == 0)
+                {
+                    Logging.SaveLog($"{_tag}: config file is empty, starting from defaults");
+                }
+                else
+                {
+                    for (var attempt = 0; attempt < 2 && result.IsNullOrEmpty(); attempt++)
+                    {
+                        Thread.Sleep(100);
+                        result = EmbedUtils.LoadResource(configPath);
+                    }
+
+                    if (result.IsNullOrEmpty())
+                    {
+                        Logging.SaveLog("LoadConfig Exception");
+                        return null;
+                    }
+
+                    config = JsonUtils.Deserialize<Config>(result);
+                    if (config is null)
+                    {
+                        Logging.SaveLog($"{_tag}: config file exists but could not be parsed, falling back to defaults");
+                        try
+                        {
+                            File.Copy(configPath, $"{configPath}.bad", true);
+                        }
+                        catch (Exception ex)
+                        {
+                            Logging.SaveLog(_tag, ex);
+                        }
+                    }
+                }
             }
         }
 
@@ -89,7 +167,8 @@ public static class ConfigHandler
         };
         config.TunModeItem ??= new TunModeItem
         {
-            EnableTun = false,
+            // departament: a fresh config is TUN by default (whole-device routing) — ModeText shows «TUN».
+            EnableTun = true,
             Mtu = 9000,
             IcmpRouting = Global.TunIcmpRoutingPolicies.First(),
             EnableLegacyProtect = false,
@@ -107,9 +186,9 @@ public static class ConfigHandler
 
         if (config.UiItem.CurrentLanguage.IsNullOrEmpty())
         {
-            config.UiItem.CurrentLanguage = Thread.CurrentThread.CurrentCulture.TwoLetterISOLanguageName.Equals("zh", StringComparison.CurrentCultureIgnoreCase)
-                ? Global.Languages.First()
-                : Global.Languages[2];
+            // departament: default a fresh config to Russian UI. English (and every other language)
+            // stays fully available and switchable via the «Язык» row; this only sets the initial value.
+            config.UiItem.CurrentLanguage = Global.Languages[5]; // "ru"
         }
 
         config.ConstItem ??= new ConstItem();
@@ -119,6 +198,7 @@ public static class ConfigHandler
         config.SimpleDNSItem.BootstrapDNS ??= Global.DomainPureIPDNSAddress.FirstOrDefault();
         config.SimpleDNSItem.ServeStale ??= false;
         config.SimpleDNSItem.ParallelQuery ??= false;
+        MigrateSimpleDnsDefaults(config.SimpleDNSItem);
 
         config.SpeedTestItem ??= new();
         if (config.SpeedTestItem.SpeedTestTimeout < 10)
@@ -141,6 +221,11 @@ public static class ConfigHandler
         {
             config.SpeedTestItem.UdpTestTarget = Global.UdpTestTargets.First();
         }
+        if (config.SpeedTestItem.PingMethod.IsNullOrEmpty())
+        {
+            // departament: default latency probe = real delay through the core (Android parity).
+            config.SpeedTestItem.PingMethod = nameof(ESpeedActionType.Realping);
+        }
 
         config.Mux4RayItem ??= new()
         {
@@ -151,7 +236,9 @@ public static class ConfigHandler
 
         config.Mux4SboxItem ??= new()
         {
-            Protocol = Global.SingboxMuxs.First(),
+            // departament: Mux OFF by default — empty Protocol gates mux off in SingboxOutboundService
+            // (see `Protocol.IsNotEmpty()` guard). The Settings Mux toggle writes a real protocol when on.
+            Protocol = string.Empty,
             MaxConnections = 8
         };
 
@@ -183,6 +270,26 @@ public static class ConfigHandler
     }
 
     /// <summary>
+    /// Serialises every config save. The write-temp-then-move below is only atomic against a CRASH;
+    /// it used NOT to be atomic against a SECOND concurrent save, because both shared the one
+    /// "&lt;res&gt;_temp" path. Saves genuinely do overlap: several call sites are fire-and-forget
+    /// (ThemeSettingViewModel :44/:57/:69, SettingsViewModel :541, MainWindow.axaml.cs :1582),
+    /// TaskManager saves from its own timer thread every 20 minutes (TaskManager.cs:45), and a
+    /// subscription import saves from a thread-pool task (AddBatchServersCommon, :1648).
+    ///
+    /// Interleaved, that destroyed the live config:
+    ///   A: WriteAllTextAsync(temp, contentA)  -> temp holds a COMPLETE config
+    ///   B: WriteAllTextAsync(temp, contentB)  -> FileMode.Create TRUNCATES temp to 0, starts writing
+    ///   A: File.Move(temp, config, true)      -> moves B's HALF-WRITTEN file over the live config
+    /// The next launch then read a truncated guiNConfig.json, and LoadConfig turns that into silent
+    /// data loss: a zero-length file returns null (:29-33) so the app exits without a word, and a
+    /// partial-but-non-empty file fails Deserialize and falls through to `config ??= new Config()`
+    /// (:36) — a factory reset that discards IndexId, SubIndexId, language, TUN mode and every
+    /// setting, which is then written back over the file on the next save.
+    /// </summary>
+    private static readonly SemaphoreSlim _saveConfigLock = new(1, 1);
+
+    /// <summary>
     /// Save the configuration to a file
     /// First writes to a temporary file, then replaces the original file
     /// </summary>
@@ -190,11 +297,21 @@ public static class ConfigHandler
     /// <returns>0 if successful, -1 if failed</returns>
     public static async Task<int> SaveConfig(Config config)
     {
+        await _saveConfigLock.WaitAsync();
+        var tempPath = string.Empty;
         try
         {
             //save temp file
             var resPath = Utils.GetConfigPath(_configRes);
-            var tempPath = $"{resPath}_temp";
+            // The semaphore above only serialises writers INSIDE this process. The scratch file must
+            // therefore be unique per WRITER, not a single shared "<res>_temp": two app processes on
+            // the same config directory (the single-instance gate can be lost — see Program.OnStartup —
+            // and a portable install can simply be launched twice) would otherwise replay the exact
+            // interleaving described above ACROSS processes, and the semaphore cannot see them. A
+            // process-and-call unique name makes the write private and keeps File.Move (rename(2)) the
+            // one atomic publish step, so a reader only ever sees the old or the new file, never a
+            // half-written one.
+            tempPath = $"{resPath}.{Environment.ProcessId}.{Guid.NewGuid():N}.tmp";
 
             var content = JsonUtils.Serialize(config, true, true);
             if (content.IsNullOrEmpty())
@@ -205,11 +322,29 @@ public static class ConfigHandler
 
             //rename
             File.Move(tempPath, resPath, true);
+            tempPath = string.Empty;
         }
         catch (Exception ex)
         {
             Logging.SaveLog(_tag, ex);
             return -1;
+        }
+        finally
+        {
+            // A failed save must not leave its scratch file behind: the names are unique now, so
+            // without this they would accumulate in guiConfigs forever.
+            if (tempPath.IsNotEmpty())
+            {
+                try
+                {
+                    File.Delete(tempPath);
+                }
+                catch (Exception ex)
+                {
+                    Logging.SaveLog(_tag, ex);
+                }
+            }
+            _saveConfigLock.Release();
         }
 
         return 0;
@@ -1661,6 +1796,12 @@ public static class ConfigHandler
         var subRemarks = subItem?.Remarks;
         var preSocksPort = subItem?.PreSocksPort;
 
+        // A departament / Remnawave "XRAY_JSON" body is an array of FULL Xray configs (each carrying
+        // its own routing rules + dns + outbounds). We store every element AS-IS as a CUSTOM node so
+        // the provider's routing/ad-block/geo rules are preserved and applied at connect time — the
+        // faithful Android way. SingboxFmt/V2rayFmt.ResolveFullArray write the raw element to a file
+        // and AddCustomServer imports it (ConfigType=Custom, CoreType=Xray). The real protocol /
+        // transport / ping are recovered later by introspecting the wrapped proxy outbound.
         List<ProfileItem>? lstProfiles = null;
         //Is sing-box array configuration
         if (lstProfiles is null || lstProfiles.Count <= 0)
@@ -1854,80 +1995,297 @@ public static class ConfigHandler
         {
             return -1;
         }
+
+        // A subscription refresh is a DESTRUCTIVE replace (delete the group, then import). Two of them
+        // running at once on the same subid interleave into data loss, and they really do overlap:
+        // the account import at launch (SubscriptionSyncManager -> SubscriptionHandler.UpdateProcess),
+        // TaskManager's per-minute auto-update timer, and the user's own «обновить» all call this for
+        // the SAME subscription with nothing serialising them. The losing interleaving is:
+        //     A: snapshot(20 servers), DELETE  -> group empty
+        //     B: snapshot(0 servers)           -> B's "previous state" is EMPTY
+        //     A: parse fails -> restore(20)    -> group back to 20
+        //     B: DELETE                        -> group empty again
+        //     B: parse fails -> restore(0)     -> nothing to restore. All 20 servers gone for good.
+        // The benign-looking variant is just as wrong: when both succeed, both generations are
+        // inserted and the list silently DOUBLES. One writer per subscription at a time fixes both.
+        var gate = isSub && subid.IsNotEmpty() ? GetSubImportLock(subid) : null;
+        if (gate is not null)
+        {
+            await gate.WaitAsync();
+        }
+        try
+        {
+            //  Подписку могли удалить, пока шло скачивание (выход из аккаунта, «Удалить подписку»).
+            //  Удаление берёт тот же замок (DeleteSubItem), значит, после него записи уже нет, и
+            //  импортировать некуда: иначе серверы удалённой подписки возвращались сиротами.
+            if (gate is not null && await AppManager.Instance.GetSubItem(subid) is null)
+            {
+                return -1;
+            }
+            if (gate is null)
+            {
+                return await AddBatchServersInternal(config, strData, subid, isSub);
+            }
+            await BeginGroupReplace();
+            try
+            {
+                return await AddBatchServersInternal(config, strData, subid, isSub);
+            }
+            finally
+            {
+                EndGroupReplace();
+            }
+        }
+        finally
+        {
+            gate?.Release();
+        }
+    }
+
+    /// <summary>
+    /// Прочитать список серверов так, чтобы ни одна подписка не была посреди замены своих серверов.
+    /// Для экрана список читается ТОЛЬКО так (ProfilesViewModel.RefreshServers).
+    ///
+    /// Обновление подписки — это НЕСКОЛЬКО записей в базу подряд: удалить группу, вставить новое
+    /// поколение, вернуть узнанным серверам прежние id (<see cref="KeepIndexIdsAcrossRefresh"/>).
+    /// Чтение, попавшее между ними, видело группу пустой или с новыми id: читатель, который
+    /// перечитывал группу, пока подписка десять раз обновлялась, заставал её пустой примерно в каждом
+    /// пятом чтении и с чужими id — почти в каждом втором (SubscriptionReadGateTests без ворот). В жизни
+    /// это запуск вошедшего пользователя, когда импорт аккаунта обновляет подписку ровно в момент
+    /// первого чтения списка, и две подписки, из которых одна закончила обновляться и перечитывает весь
+    /// список, пока вторая на середине. Пустое чтение ставило «Главную» пустой (у вошедшего —
+    /// приветственная карточка вместо серверов), чтение с новыми id пересобирало все строки, и через
+    /// долю секунды всё повторялось обратно.
+    ///
+    /// Поэтому это ворота «читатели — писатели»: чтений может быть сколько угодно сразу, но ни одно
+    /// не идёт, пока какая-то подписка заменяет свои серверы, а замена начинается, только когда
+    /// начатые чтения закончились. Замена длится десятки миллисекунд, на медленном диске — сотни;
+    /// подождать её дешевле, чем показать полсписка.
+    /// </summary>
+    public static async Task<T> ReadServersSettledAsync<T>(Func<Task<T>> read)
+    {
+        while (true)
+        {
+            Task replaces;
+            lock (_serversGateLock)
+            {
+                if (_groupReplaces == 0)
+                {
+                    _serverReads++;
+                    break;
+                }
+                replaces = _groupReplacesDone.Task;
+            }
+            await replaces;
+        }
+        try
+        {
+            return await read();
+        }
+        finally
+        {
+            TaskCompletionSource? drained = null;
+            lock (_serversGateLock)
+            {
+                if (--_serverReads == 0)
+                {
+                    drained = _serverReadsDone;
+                    _serverReadsDone = null;
+                }
+            }
+            drained?.TrySetResult();
+        }
+    }
+
+    private static readonly object _serversGateLock = new();
+    private static int _serverReads;
+    private static int _groupReplaces;
+    private static TaskCompletionSource _groupReplacesDone = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private static TaskCompletionSource? _serverReadsDone;
+
+    /// <summary>Замена группы начинается: новые чтения ждут, начатые дочитываются. См. <see cref="ReadServersSettledAsync{T}"/>.</summary>
+    private static async Task BeginGroupReplace()
+    {
+        Task? reads = null;
+        lock (_serversGateLock)
+        {
+            if (_groupReplaces++ == 0)
+            {
+                _groupReplacesDone = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            }
+            if (_serverReads > 0)
+            {
+                _serverReadsDone ??= new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                reads = _serverReadsDone.Task;
+            }
+        }
+        if (reads is not null)
+        {
+            await reads;
+        }
+    }
+
+    private static void EndGroupReplace()
+    {
+        TaskCompletionSource? done = null;
+        lock (_serversGateLock)
+        {
+            if (--_groupReplaces == 0)
+            {
+                done = _groupReplacesDone;
+            }
+        }
+        done?.TrySetResult();
+    }
+
+    /// <summary>
+    /// One import lock per subscription id. Bounded by the number of subscriptions the user has (a
+    /// handful), so the dictionary never grows meaningfully; entries are intentionally kept for the
+    /// life of the process so a refresh that starts while another finishes still meets the same gate.
+    /// </summary>
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> _subImportLocks = new();
+
+    private static SemaphoreSlim GetSubImportLock(string subid)
+        => _subImportLocks.GetOrAdd(subid, static _ => new SemaphoreSlim(1, 1));
+
+    private static async Task<int> AddBatchServersInternal(Config config, string strData, string subid, bool isSub)
+    {
         List<ProfileItem>? lstOriSub = null;
         ProfileItem? activeProfile = null;
-        if (isSub && subid.IsNotEmpty())
-        {
-            lstOriSub = await AppManager.Instance.ProfileItems(subid);
-            activeProfile = lstOriSub?.FirstOrDefault(t => t.IndexId == config.IndexId);
-            await RemoveServersViaSubid(config, subid, true);
-        }
+        // The json files behind the group's CUSTOM profiles (the departament / Remnawave XRAY_JSON
+        // shape is exactly this). They are NOT deleted with the rows: a failed import puts the rows
+        // back, and rows whose backing config file was already deleted are dead weight — they show in
+        // the list and fail to connect, which is the same complaint wearing a different hat. The files
+        // are dropped further down, only once a replacement really landed.
+        var orphanCustomFiles = new List<string>();
 
         var counter = 0;
-        if (Utils.IsBase64String(strData))
+        try
         {
-            counter = await AddBatchServersCommon(config, Utils.Base64Decode(strData), subid, isSub);
-        }
-        if (counter < 1)
-        {
-            counter = await AddBatchServersCommon(config, strData, subid, isSub);
-        }
-        if (counter < 1)
-        {
-            counter = await AddBatchServersCommon(config, Utils.Base64Decode(strData), subid, isSub);
-        }
-
-        if (counter < 1)
-        {
-            counter = await AddBatchServers4SsSIP008(config, strData, subid, isSub);
-        }
-
-        //maybe wireguard config
-        if (counter < 1)
-        {
-            counter = await AddBatchServers4Wireguard(config, strData, subid, isSub);
-        }
-
-        //May be standard uri mixed with internal uri
-        var innerUriCount = 0;
-        if (Utils.IsBase64String(strData))
-        {
-            innerUriCount = await AddBatchServers4InnerUri(config, Utils.Base64Decode(strData), subid, isSub);
-        }
-        if (innerUriCount < 1)
-        {
-            innerUriCount = await AddBatchServers4InnerUri(config, strData, subid, isSub);
-        }
-        if (innerUriCount < 1)
-        {
-            innerUriCount = await AddBatchServers4InnerUri(config, Utils.Base64Decode(strData), subid, isSub);
-        }
-        if (innerUriCount > 0)
-        {
-            if (counter > 0)
+            if (isSub && subid.IsNotEmpty())
             {
-                counter += innerUriCount;
+                lstOriSub = await AppManager.Instance.ProfileItems(subid);
+                activeProfile = lstOriSub?.FirstOrDefault(t => t.IndexId == config.IndexId);
+                // INSIDE the try: this deletes rows, and anything it throws (it used to delete files
+                // too, unguarded) must still reach the restore below instead of unwinding with the
+                // group already emptied.
+                await RemoveServersViaSubid(config, subid, true, orphanCustomFiles);
             }
-            else
+
+            if (Utils.IsBase64String(strData))
             {
-                counter = innerUriCount;
+                counter = await AddBatchServersCommon(config, Utils.Base64Decode(strData), subid, isSub);
+            }
+            if (counter < 1)
+            {
+                counter = await AddBatchServersCommon(config, strData, subid, isSub);
+            }
+            if (counter < 1)
+            {
+                counter = await AddBatchServersCommon(config, Utils.Base64Decode(strData), subid, isSub);
+            }
+
+            if (counter < 1)
+            {
+                counter = await AddBatchServers4SsSIP008(config, strData, subid, isSub);
+            }
+
+            //maybe wireguard config
+            if (counter < 1)
+            {
+                counter = await AddBatchServers4Wireguard(config, strData, subid, isSub);
+            }
+
+            //May be standard uri mixed with internal uri
+            var innerUriCount = 0;
+            if (Utils.IsBase64String(strData))
+            {
+                innerUriCount = await AddBatchServers4InnerUri(config, Utils.Base64Decode(strData), subid, isSub);
+            }
+            if (innerUriCount < 1)
+            {
+                innerUriCount = await AddBatchServers4InnerUri(config, strData, subid, isSub);
+            }
+            if (innerUriCount < 1)
+            {
+                innerUriCount = await AddBatchServers4InnerUri(config, Utils.Base64Decode(strData), subid, isSub);
+            }
+            if (innerUriCount > 0)
+            {
+                if (counter > 0)
+                {
+                    counter += innerUriCount;
+                }
+                else
+                {
+                    counter = innerUriCount;
+                }
+            }
+
+            //maybe other sub
+            if (counter < 1)
+            {
+                counter = await AddBatchServers4Custom(config, strData, subid, isSub);
             }
         }
+        catch
+        {
+            // A parser THREW after the delete above — the same "old gone, new never written" hole as a
+            // zero-count parse, just reached by an exception. The live case is an invalid
+            // SubItem.Filter: AddBatchServersCommon calls Regex.IsMatch with it (:1613) and an
+            // unparseable pattern throws ArgumentException, which unwinds all the way out to
+            // SubscriptionHandler.UpdateProcess's catch (:49) — past the zero-count restore below.
+            // Put the servers back, then let the exception continue to its existing handler so the
+            // failure is still reported exactly as before. The custom json files were deliberately
+            // NOT deleted, so the restored rows are whole, not hollow.
+            await RestoreOriginalSubServers(subid, lstOriSub);
+            throw;
+        }
 
-        //maybe other sub
+        // Nothing parsed, but the old servers for this subscription were already deleted above ->
+        // restore them instead of leaving the user with an empty list.
+        //
+        // CAUSE: this method deletes BEFORE it has the replacement (RemoveServersViaSubid above), and
+        // no parser here is guaranteed to produce anything. SubscriptionHandler.ProcessDownloadResult
+        // only guards the EMPTY body case (:242) — a body that downloads fine but yields zero servers
+        // sails straight through into this delete-then-fail window. That happens for real:
+        //   • a captive-portal / hotspot login page or a proxy error page (HTML, 200 OK);
+        //   • the panel answering with a JSON error object instead of the node list;
+        //   • a truncated / corrupted base64 body from a dropped connection;
+        //   • an invalid SubItem.Filter regex (handled by the catch above, which restores and rethrows).
+        // In every one of these the subscription's whole server list vanished for good, which is the
+        // other half of the reported "бывает, что просто сервера исчезают и все".
         if (counter < 1)
         {
-            counter = await AddBatchServers4Custom(config, strData, subid, isSub);
+            await RestoreOriginalSubServers(subid, lstOriSub);
+        }
+        else
+        {
+            // The replacement generation is in place, so the previous generation's custom json files
+            // are finally unreferenced and can go. Doing it only HERE is the whole point: until this
+            // line the old files are the only thing that makes the restore above worth anything.
+            //  Сначала узнаём серверы прошлого поколения, пока их файлы ещё на диске: конфиг провайдера
+            //  узнаётся по содержимому, и файл неизменившегося сервера остаётся за ним — такой файл из
+            //  списка на удаление выходит.
+            var keptFiles = await KeepIndexIdsAcrossRefresh(subid, lstOriSub);
+            orphanCustomFiles.RemoveAll(keptFiles.Contains);
+            DeleteCustomConfigFiles(orphanCustomFiles);
         }
 
         //Select active node
         if (activeProfile != null)
         {
             var lstSub = await AppManager.Instance.ProfileItems(subid);
-            var existItem = FindMatchedProfileItem(lstSub, activeProfile);
-            if (existItem != null)
+            //  Выбранный сервер узнан и сохранил свой id — выбор уже верен. Искать замену по имени здесь
+            //  нельзя: при двух одноимённых серверах поиск брал первый попавшийся, выбор перескакивал на
+            //  соседа, и ядро перезапускалось на другом сервере.
+            if (lstSub.All(t => t.IndexId != activeProfile.IndexId))
             {
-                await ConfigHandler.SetDefaultServerIndex(config, existItem.IndexId);
+                var existItem = FindMatchedProfileItem(lstSub, activeProfile);
+                if (existItem != null)
+                {
+                    await ConfigHandler.SetDefaultServerIndex(config, existItem.IndexId);
+                }
             }
         }
 
@@ -1946,6 +2304,222 @@ public static class ConfigHandler
         }
 
         return counter;
+    }
+
+    /// <summary>
+    /// ТОТ ЖЕ СЕРВЕР ОСТАЁТСЯ ТЕМ ЖЕ СЕРВЕРОМ ПОСЛЕ ОБНОВЛЕНИЯ ПОДПИСКИ.
+    ///
+    /// Обновление подписки — это «удалить группу и импортировать заново», и каждый импорт выдавал
+    /// КАЖДОМУ серверу новый IndexId, даже если в подписке не поменялось ни байта. А IndexId — это
+    /// всё, по чему приложение узнаёт сервер: по нему «Главная» сверяет строки списка, к нему
+    /// привязаны задержка и порядок (ProfileExItem), по нему помнится выбранный сервер. Новый id
+    /// значит «другой сервер»: список пересобирал все строки заново, пинги пропадали, выбор держался
+    /// только на поиске по имени. Владелец видел это как «программа перегружается» — при запуске и
+    /// при возвращении окна, когда аккаунт заново скачивает подписки.
+    ///
+    /// Здесь каждой новой строке, в которой узнаётся строка прошлого поколения, возвращается прежний
+    /// id. Порядок узнавания — от надёжного к слабому:
+    ///   1. конфиг провайдера (Custom, XRAY_JSON Remnawave) — по СОДЕРЖИМОМУ файла. Файл
+    ///      неизменившегося сервера остаётся прежним (его имя уходит из списка на удаление, свежая копия
+    ///      удаляется), поэтому запись не меняется вовсе и CoreManager, перезапуская ядро по старому
+    ///      контексту, находит файл на месте;
+    ///   2. конфиг провайдера с изменившимся содержимым — по имени, но только если имя единственное и
+    ///      среди старых, и среди новых серверов. Без этого узла без remarks (все получают имя
+    ///      подписки) и повторяющиеся имена сдвигали id на соседей вместе с их пингами;
+    ///   3. обычный сервер — по полному совпадению настроек (<see cref="CompareProfileItem"/>).
+    /// Каждый прежний id отдаётся не больше одного раза и только свободный. Переименование — UPDATE на
+    /// месте одной транзакцией: порядок строк не меняется (сортировка по умолчанию идёт по порядку
+    /// записи), а оборванная операция откатывается целиком. Группы (PolicyGroup/ProxyChain из той же
+    /// подписки) ссылаются на детей по id, поэтому их ChildItems переписываются в той же транзакции.
+    /// Лучшее усилие: ошибка до фиксации пишется в журнал и оставляет свежие id — как было раньше.
+    /// </summary>
+    /// <returns>Имена файлов прошлого поколения, которые остались за узнанными серверами: их удалять нельзя.</returns>
+    private static async Task<HashSet<string>> KeepIndexIdsAcrossRefresh(string subid, List<ProfileItem>? lstOriSub)
+    {
+        var keptFiles = new HashSet<string>(StringComparer.Ordinal);
+        if (lstOriSub is not { Count: > 0 })
+        {
+            return keptFiles;
+        }
+
+        List<(ProfileItem Fresh, ProfileItem Old, bool SameBody)> pairs = [];
+        List<ProfileItem> groupUpdates = [];
+        try
+        {
+            var fresh = await AppManager.Instance.ProfileItems(subid);
+            if (fresh is not { Count: > 0 })
+            {
+                return keptFiles;
+            }
+
+            var inUse = new HashSet<string>(fresh.Select(t => t.IndexId), StringComparer.Ordinal);
+            var pool = lstOriSub.Where(o => o.IsSub && o.IndexId.IsNotEmpty() && !inUse.Contains(o.IndexId)).ToList();
+            var left = fresh.Where(t => t.IsSub).ToList();
+
+            var hashes = new Dictionary<ProfileItem, string?>(ReferenceEqualityComparer.Instance);
+            string? Hash(ProfileItem p)
+            {
+                if (!hashes.TryGetValue(p, out var h))
+                {
+                    h = CustomBodyHash(p);
+                    hashes[p] = h;
+                }
+                return h;
+            }
+
+            void Pair(ProfileItem n, ProfileItem o, bool sameBody)
+            {
+                pairs.Add((n, o, sameBody));
+                pool.Remove(o);
+                left.Remove(n);
+            }
+
+            foreach (var n in left.Where(t => t.ConfigType == EConfigType.Custom).ToList())
+            {
+                if (Hash(n) is not { } hash)
+                {
+                    continue;
+                }
+                var o = pool.FirstOrDefault(x => x.ConfigType == EConfigType.Custom && x.CoreType == n.CoreType && Hash(x) == hash);
+                if (o is not null)
+                {
+                    Pair(n, o, true);
+                }
+            }
+
+            foreach (var n in left.Where(t => t.ConfigType == EConfigType.Custom).ToList())
+            {
+                if (n.Remarks.IsNullOrEmpty()
+                    || left.Count(t => t.ConfigType == EConfigType.Custom && t.Remarks == n.Remarks) != 1)
+                {
+                    continue;
+                }
+                var olds = pool.Where(x => x.ConfigType == EConfigType.Custom && x.CoreType == n.CoreType && x.Remarks == n.Remarks).ToList();
+                if (olds.Count == 1)
+                {
+                    Pair(n, olds[0], false);
+                }
+            }
+
+            foreach (var n in left.Where(t => t.ConfigType != EConfigType.Custom).ToList())
+            {
+                var o = pool.FirstOrDefault(x => x.ConfigType != EConfigType.Custom && CompareProfileItem(x, n, true));
+                if (o is not null)
+                {
+                    Pair(n, o, false);
+                }
+            }
+
+            if (pairs.Count == 0)
+            {
+                return keptFiles;
+            }
+
+            var idMap = pairs.ToDictionary(p => p.Fresh.IndexId, p => p.Old.IndexId, StringComparer.Ordinal);
+            foreach (var g in fresh.Where(t => t.ConfigType.IsGroupType()))
+            {
+                var extra = g.GetProtocolExtra();
+                if (Utils.String2List(extra.ChildItems) is not { Count: > 0 } children)
+                {
+                    continue;
+                }
+                var remapped = children.Select(id => idMap.GetValueOrDefault(id, id)).ToList();
+                if (!remapped.SequenceEqual(children, StringComparer.Ordinal))
+                {
+                    g.SetProtocolExtra(extra with { ChildItems = Utils.List2String(remapped) });
+                    groupUpdates.Add(g);
+                }
+            }
+
+            await SQLiteHelper.Instance.RunInTransactionAsync(conn =>
+            {
+                //  Группы — по их СВЕЖЕМУ id, до переименования: сама группа тоже может быть в парах.
+                foreach (var g in groupUpdates)
+                {
+                    conn.Execute("update ProfileItem set ProtoExtra = ? where IndexId = ?", g.ProtoExtra, g.IndexId);
+                }
+                foreach (var (n, o, sameBody) in pairs)
+                {
+                    if (sameBody)
+                    {
+                        conn.Execute("update ProfileItem set IndexId = ?, Address = ? where IndexId = ?", o.IndexId, o.Address, n.IndexId);
+                    }
+                    else
+                    {
+                        conn.Execute("update ProfileItem set IndexId = ? where IndexId = ?", o.IndexId, n.IndexId);
+                    }
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            //  До фиксации ничего не поменялось: свежие id и файлы остаются как есть.
+            Logging.SaveLog(_tag, ex);
+            return keptFiles;
+        }
+
+        //  Зафиксировано: у неизменившихся конфигов провайдера строка снова смотрит на прежний файл.
+        //  Прежний файл остаётся, свежая копия больше никому не нужна.
+        foreach (var (n, o, _) in pairs.Where(p => p.SameBody))
+        {
+            keptFiles.Add(o.Address);
+            DeleteCustomConfigFiles([n.Address]);
+        }
+        return keptFiles;
+    }
+
+    /// <summary>Отпечаток содержимого файла конфига провайдера; null, если файла нет или это не Custom.</summary>
+    private static string? CustomBodyHash(ProfileItem item)
+    {
+        if (item.ConfigType != EConfigType.Custom || item.Address.IsNullOrEmpty())
+        {
+            return null;
+        }
+        try
+        {
+            var path = File.Exists(item.Address) ? item.Address : Utils.GetConfigPath(item.Address);
+            return File.Exists(path) ? Utils.GetMd5(File.ReadAllText(path)) : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Puts a subscription's previous servers back after a refresh deleted them and then imported
+    /// nothing. <see cref="AddBatchServers"/> deletes BEFORE it has the replacement
+    /// (RemoveServersViaSubid), so every path that ends with zero imported servers used to leave the
+    /// user with an empty list and no way back.
+    ///
+    /// The restore is EXACT, not approximate: IndexId is the ProfileItem primary key
+    /// (Models/Entities/ProfileItem.cs:156), so the rows return under their ORIGINAL ids and
+    /// config.IndexId, ProfileExItem and ServerStatItem all keep resolving. Rows still present are
+    /// filtered out first — RemoveServersViaSubid with isSub=1 only deletes `isSub = 1` rows, while the
+    /// snapshot covers every row of the group — so re-inserting can never hit a primary-key conflict.
+    /// Best-effort and idempotent: a failure here is logged, never thrown, and never blocks the caller.
+    /// </summary>
+    private static async Task RestoreOriginalSubServers(string subid, List<ProfileItem>? lstOriSub)
+    {
+        if (lstOriSub is not { Count: > 0 })
+        {
+            return;
+        }
+
+        try
+        {
+            var remaining = (await AppManager.Instance.ProfileItemIndexes(subid)) ?? [];
+            var lstRestore = lstOriSub.Where(t => !remaining.Contains(t.IndexId)).ToList();
+            if (lstRestore.Count > 0)
+            {
+                await SQLiteHelper.Instance.InsertAllAsync(lstRestore);
+                Logging.SaveLog($"{_tag}: subscription update imported 0 servers, restored {lstRestore.Count} existing server(s) for subid {subid}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog(_tag, ex);
+        }
     }
 
     #endregion Batch add servers
@@ -1970,7 +2544,13 @@ public static class ConfigHandler
         SubItem subItem = new()
         {
             Id = string.Empty,
-            Url = url
+            Url = url,
+            // Stamp the recognised v2rayNG-family UA on manually-added subs (paste / clipboard / QR)
+            // exactly as the Telegram/account path does. Without it the row carries a blank UA and any
+            // fetch that reads item.UserAgent directly (i.e. does not route through
+            // SubscriptionHandler.ResolveSubUserAgent) would send a blank/branding UA and get the
+            // «Приложение не поддерживается» placeholder instead of the real server list.
+            UserAgent = Global.SubscriptionUserAgent
         };
 
         var uri = Utils.TryUri(url);
@@ -2057,11 +2637,44 @@ public static class ConfigHandler
     /// <returns>0 if successful, -1 if failed</returns>
     public static async Task<int> RemoveServersViaSubid(Config config, string subid, bool isSub)
     {
+        return await RemoveServersViaSubid(config, subid, isSub, null);
+    }
+
+    /// <summary>
+    /// Remove servers associated with a subscription ID.
+    ///
+    /// Two hard-won rules live here, both of which cost real user data before:
+    ///
+    /// 1. Only the CUSTOM files of rows this call actually deletes may be touched. The old code
+    ///    collected every Custom row of the group and deleted its backing json REGARDLESS of
+    ///    <paramref name="isSub"/>, while the DELETE with isSub=1 spares `isSub = 0` rows. So a
+    ///    manually added custom profile that happens to sit in a subscription's group silently lost
+    ///    the file behind it on the next subscription refresh: the row stayed in the list, the
+    ///    config it points at was gone, and connecting to it failed forever after.
+    ///
+    /// 2. Deleting the files is CLEANUP, not part of the data operation, so it must never throw.
+    ///    <see cref="AddBatchServers"/> calls this to make room for a fresh import; an exception
+    ///    escaping here (a locked file on Windows, an empty Address whose GetConfigPath resolves to
+    ///    the guiConfigs DIRECTORY) unwound past its restore path with the rows already deleted, and
+    ///    the whole subscription was gone. Each delete is therefore best-effort and logged.
+    ///
+    /// <paramref name="deferredFiles"/> lets a caller that may need to PUT THE ROWS BACK take the
+    /// file list instead of the deletion: the files stay on disk until the caller knows the
+    /// replacement really landed (see <see cref="AddBatchServers"/>).
+    /// </summary>
+    private static async Task<int> RemoveServersViaSubid(Config config, string subid, bool isSub, List<string>? deferredFiles)
+    {
         if (subid.IsNullOrEmpty())
         {
             return -1;
         }
-        var customProfile = await SQLiteHelper.Instance.TableAsync<ProfileItem>().Where(t => t.Subid == subid && t.ConfigType == EConfigType.Custom).ToListAsync();
+        var customProfile = isSub
+            ? await SQLiteHelper.Instance.TableAsync<ProfileItem>()
+                .Where(t => t.Subid == subid && t.ConfigType == EConfigType.Custom && t.IsSub == true)
+                .ToListAsync()
+            : await SQLiteHelper.Instance.TableAsync<ProfileItem>()
+                .Where(t => t.Subid == subid && t.ConfigType == EConfigType.Custom)
+                .ToListAsync();
         if (isSub)
         {
             await SQLiteHelper.Instance.ExecuteAsync($"delete from ProfileItem where isSub = 1 and subid = '{subid}'");
@@ -2070,12 +2683,43 @@ public static class ConfigHandler
         {
             await SQLiteHelper.Instance.ExecuteAsync($"delete from ProfileItem where subid = '{subid}'");
         }
-        foreach (var item in customProfile)
+
+        var files = customProfile.Select(t => t.Address).Where(t => t.IsNotEmpty()).ToList();
+        if (deferredFiles is not null)
         {
-            File.Delete(Utils.GetConfigPath(item.Address));
+            deferredFiles.AddRange(files);
+        }
+        else
+        {
+            DeleteCustomConfigFiles(files);
         }
 
         return 0;
+    }
+
+    /// <summary>
+    /// Best-effort removal of the json files behind CUSTOM profiles. Cleanup only: a failure is
+    /// logged and swallowed so it can never abort — or unwind out of — the caller's data operation.
+    /// An empty name is skipped (GetConfigPath("") is the guiConfigs DIRECTORY, and File.Delete on a
+    /// directory throws).
+    /// </summary>
+    private static void DeleteCustomConfigFiles(IEnumerable<string> fileNames)
+    {
+        foreach (var name in fileNames)
+        {
+            if (name.IsNullOrEmpty())
+            {
+                continue;
+            }
+            try
+            {
+                File.Delete(Utils.GetConfigPath(name));
+            }
+            catch (Exception ex)
+            {
+                Logging.SaveLog(_tag, ex);
+            }
+        }
     }
 
     /// <summary>
@@ -2086,21 +2730,45 @@ public static class ConfigHandler
     /// <returns>0 if successful</returns>
     public static async Task<int> DeleteSubItem(Config config, string id)
     {
-        var item = await AppManager.Instance.GetSubItem(id);
-        if (item is null)
+        //  Тот же замок, что у импорта этой подписки (AddBatchServers): удаление не вклинивается в
+        //  середину импорта, а импорт, дождавшись замка, видит, что подписки больше нет.
+        var gate = id.IsNotEmpty() ? GetSubImportLock(id) : null;
+        if (gate is not null)
         {
+            await gate.WaitAsync();
+        }
+        try
+        {
+            var item = await AppManager.Instance.GetSubItem(id);
+            if (item is null)
+            {
+                return 0;
+            }
+            //  Две записи подряд: между ними серверы уже без подписки и на экране на миг стали бы
+            //  группой «Мои серверы». Экран читает список только до или после них (ReadServersSettledAsync).
+            await BeginGroupReplace();
+            try
+            {
+                await SQLiteHelper.Instance.DeleteAsync(item);
+                await RemoveServersViaSubid(config, id, false);
+            }
+            finally
+            {
+                EndGroupReplace();
+            }
+
+            if (item.Id == config.SubIndexId)
+            {
+                var subs = await AppManager.Instance.SubItems();
+                config.SubIndexId = subs.LastOrDefault()?.Id;
+            }
+
             return 0;
         }
-        await SQLiteHelper.Instance.DeleteAsync(item);
-        await RemoveServersViaSubid(config, id, false);
-
-        if (item.Id == config.SubIndexId)
+        finally
         {
-            var subs = await AppManager.Instance.SubItems();
-            config.SubIndexId = subs.LastOrDefault()?.Id;
+            gate?.Release();
         }
-
-        return 0;
     }
 
     /// <summary>
@@ -2622,7 +3290,55 @@ public static class ConfigHandler
             DirectDNS = Global.DomainDirectDNSAddress.FirstOrDefault(),
             RemoteDNS = Global.DomainRemoteDNSAddress.FirstOrDefault(),
             BootstrapDNS = Global.DomainPureIPDNSAddress.FirstOrDefault(),
+            DefaultsVersion = SimpleDnsDefaultsVersion,
         };
+    }
+
+    /// <summary>Версия встроенных умолчаний DNS. 1 — прямой и bootstrap-DNS на Яндексе.</summary>
+    private const int SimpleDnsDefaultsVersion = 1;
+
+    //  Умолчания апстрима, которые InitBuiltinSimpleDNS писал в конфиг сам, без человека: v2rayN 7.21+
+    //  (с него начат departament) — DNSPod 119.29.29.29; 7.14–7.20 — DoH AliDNS для прямого DNS и
+    //  223.5.5.5 для bootstrap (поле появилось в 7.17). Старые версии — на случай конфига, принесённого
+    //  из папки апстрима. Сравнение точное: значение, набранное руками, хоть на пробел иное, — выбор.
+    private static readonly string[] UpstreamDirectDnsDefaults = ["119.29.29.29", "https://dns.alidns.com/dns-query"];
+
+    private static readonly string[] UpstreamBootstrapDnsDefaults = ["119.29.29.29", "223.5.5.5"];
+
+    /// <summary>
+    /// Один раз переводит китайские умолчания апстрима на умолчания departament (Яндекс).
+    ///
+    /// Прямой DNS и bootstrap в departament для ПК не показаны ни на одном экране, поэтому у всех,
+    /// кто ставил приложение до этой версии, в конфиге так и лежит то, что записал апстрим. Меняется
+    /// только поле, которое ТОЧНО равно одному из тех умолчаний; своё значение не трогаем.
+    ///
+    /// Прямой DNS не трогаем и тогда, когда заданы ожидаемые IP (у апстрима они пусты, значит, их
+    /// ставил человек). Они проверяют ответы именно прямого DNS: ответ вне списка Xray молча
+    /// отбрасывает и спрашивает удалённый DNS. Такую пару подбирали под свой резолвер, и подменить
+    /// резолвер под ней значило бы поменять смысл чужой настройки.
+    ///
+    /// Один раз — по <see cref="SimpleDNSItem.DefaultsVersion"/>: если потом кто-то вернёт себе
+    /// 119.29.29.29 руками, это его выбор, и следующий запуск его не отменит.
+    /// </summary>
+    /// <returns>true, если блок доведён до текущей версии сейчас; false, если уже был доведён.</returns>
+    public static bool MigrateSimpleDnsDefaults(SimpleDNSItem item)
+    {
+        if (item.DefaultsVersion >= SimpleDnsDefaultsVersion)
+        {
+            return false;
+        }
+
+        if (UpstreamDirectDnsDefaults.Contains(item.DirectDNS) && item.DirectExpectedIPs.IsNullOrEmpty())
+        {
+            item.DirectDNS = Global.DomainDirectDNSAddress.First();
+        }
+        if (UpstreamBootstrapDnsDefaults.Contains(item.BootstrapDNS))
+        {
+            item.BootstrapDNS = Global.DomainPureIPDNSAddress.First();
+        }
+
+        item.DefaultsVersion = SimpleDnsDefaultsVersion;
+        return true;
     }
 
     public static async Task<SimpleDNSItem> GetExternalSimpleDNSItem(string url)

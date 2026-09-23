@@ -27,9 +27,10 @@ public class V2rayFmt : BaseFmt
     public static ProfileItem? ResolveFull(string strData, string? subRemarks)
     {
         var config = JsonUtils.ParseJson(strData);
-        if (config?["inbounds"] == null
-            || config["outbounds"] == null
-            || config["routing"] == null)
+        // A Remnawave / departament XRAY_JSON template may omit "inbounds"/"routing" and carry
+        // only "outbounds"; require just "outbounds" so such templates still parse as a fallback
+        // custom config when typed extraction did not apply.
+        if (config?["outbounds"] == null)
         {
             return null;
         }

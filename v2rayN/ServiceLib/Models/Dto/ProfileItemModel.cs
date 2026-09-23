@@ -3,9 +3,17 @@ namespace ServiceLib.Models.Dto;
 [Serializable]
 public class ProfileItemModel : ReactiveObject
 {
+    [Reactive]
     public bool IsActive { get; set; }
+
     public string IndexId { get; set; }
     public EConfigType ConfigType { get; set; }
+
+    // Protocol label shown on the row chip. For a CUSTOM (raw xray-json) node this is the wrapped
+    // proxy outbound's real protocol (VLESS / VMESS / …) resolved by introspection, so the chip
+    // reads the real protocol instead of "CUSTOM". Empty for ordinary nodes (chip uses ConfigType).
+    public string? ProtocolDisplay { get; set; }
+
     public string Remarks { get; set; }
     public string Address { get; set; }
     public int Port { get; set; }
@@ -43,12 +51,7 @@ public class ProfileItemModel : ReactiveObject
 
     public string GetSummary()
     {
-        var summary = $"[{ConfigType}] {Remarks}";
-        if (!ConfigType.IsComplexType())
-        {
-            summary += $"({Address}:{Port})";
-        }
-
-        return summary;
+        // Show only the human server remark — never leak engine tokens like [Custom][Xray].
+        return Remarks;
     }
 }

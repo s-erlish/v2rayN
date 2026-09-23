@@ -5,6 +5,51 @@ public class Global
     #region const
 
     public const string AppName = "v2rayN";
+
+    /// <summary>
+    /// The ONE User-Agent every subscription fetch sends. The departament / Remnawave panel serves its
+    /// server list to a recognised v2rayNG-family client. Single source of truth shared by BOTH the
+    /// manual subscription-add path (SubscriptionHandler.ResolveSubUserAgent) and the Telegram/account
+    /// path (SubscriptionSyncManager) so the two can never drift.
+    /// </summary>
+    public const string SubscriptionUserAgent = "v2rayNG/1.10.6";
+
+    /// <summary>
+    /// Remnawave HWID device-limit headers. When the panel has HWID device-limit enabled it REQUIRES an
+    /// <c>x-hwid</c> header on the subscription request; without it the panel answers with the
+    /// «Приложение не поддерживается» ("app not supported") placeholder node (verified on the wire).
+    /// With a valid HWID the real server list is served (subject to the device-slot limit). The Desktop
+    /// layer wires this to AuthTokenStore.DeviceId() — the SAME stable per-machine id the account API
+    /// already uses (X-HWID) — so the app is one consistent device for both the API and the sub fetch.
+    /// Null provider (or empty result) → no HWID header sent (unchanged legacy behaviour).
+    /// </summary>
+    public static Func<string?>? SubscriptionHwidProvider;
+
+    /// <summary>
+    /// <b>Есть ли в этой оболочке экраны Clash?</b> В WPF-приложении есть (вкладки «Proxies» и
+    /// «Connections»), в departament для ПК — нет: его «Главная» показывает свой список серверов, а
+    /// панели Clash не существует ни в одном виде.
+    ///
+    /// Пока флаг был неявным, <see cref="ViewModels.MainWindowViewModel"/> создавал ОБА вида Clash
+    /// в поле-инициализаторе, то есть при каждом запуске любой оболочки, а каждый из них в своём
+    /// конструкторе запускал бесконечный цикл (<c>while (true)</c> с задержкой 5 и 60 секунд).
+    /// На ПК эти циклы просыпались 780 раз в час ради проверки, которая всегда отвечала «смотреть
+    /// некому».
+    ///
+    /// Оболочка ПК ставит здесь false ДО создания MainWindowViewModel; по умолчанию true, поэтому
+    /// WPF-приложение и любой будущий хост ведут себя ровно как раньше.
+    /// </summary>
+    public static bool ClashUiAvailable = true;
+
+    /// <summary>
+    /// <b>Обновит ли эту подписку при запуске кто-то другой?</b> Принимает Id подписки. На ПК это
+    /// импорт аккаунта: у вошедшего пользователя он при каждом запуске заново скачивает подписки
+    /// аккаунта. Разовая дозагрузка устаревших подписок (MainWindowViewModel) раньше качала их ВТОРОЙ
+    /// раз: два скачивания подряд, две пересборки списка, и серверы на глазах менялись дважды.
+    /// Null — никто, дозагрузка обновляет всё, как раньше.
+    /// </summary>
+    public static Func<string, bool>? SubscriptionRefreshedElsewhere;
+
     public const string GithubUrl = "https://github.com";
     public const string GithubApiUrl = "https://api.github.com/repos";
     public const string GeoUrl = "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/{0}.dat";
@@ -56,6 +101,7 @@ public class Global
     public const string DefaultXhttpMode = "auto";
     public const string ProxyTag = "proxy";
     public const string DirectTag = "direct";
+    public const string ApiTag = "api";
     public const string BlockTag = "block";
     public const string DnsOutboundTag = "dns";
     public const string DnsTag = "dns-module";
@@ -88,7 +134,7 @@ public class Global
     public const int MinFontSize = 8;
     public const int MinFontSizeCount = 13;
     public const string RebootAs = "rebootas";
-    public const string AvaAssets = "avares://v2rayN/Assets/";
+    public const string AvaAssets = "avares://departament/Assets/";
     public const string LocalAppData = "V2RAYN_LOCAL_APPLICATION_DATA_V2";
     public const string V2RayLocalAsset = "V2RAY_LOCATION_ASSET";
     public const string XrayLocalAsset = "XRAY_LOCATION_ASSET";
@@ -454,14 +500,20 @@ public class Global
         ""
     ];
 
+    /// <summary>
+    /// Прямой DNS: им разрешаются домены, которые маршрут ведёт мимо VPN, и хост самого VPN-сервера.
+    /// Первый элемент — умолчание. У апстрима здесь стояли DNSPod и AliDNS, резолверы в Китае: из
+    /// России каждый запрос идёт через полмира, а CDN, которые выбирают адрес по резолверу, отдают
+    /// ближний к Китаю, а не к человеку. У departament — Яндекс, как в пресете «Россия» самого
+    /// апстрима (runetfreedom, simple_dns.json: DirectDNS 77.88.8.8). Конфиги со старыми
+    /// умолчаниями переводит ConfigHandler.MigrateSimpleDnsDefaults.
+    /// </summary>
     public static readonly List<string> DomainDirectDNSAddress =
     [
-        "119.29.29.29",
-        "223.5.5.5",
-        "119.29.29.29,223.5.5.5,https://doh.pub/dns-query",
-        "https://doh.pub/dns-query",
-        "https://dns.alidns.com/dns-query",
-        "https://doh.pub/dns-query,https://dns.alidns.com/dns-query",
+        "77.88.8.8",
+        "77.88.8.1",
+        "77.88.8.8,77.88.8.1",
+        "https://common.dot.dns.yandex.net/dns-query",
         "localhost"
     ];
 
@@ -481,10 +533,15 @@ public class Global
         "77.88.8.8"
     ];
 
+    /// <summary>
+    /// Резолвер без имени, только IP: bootstrap для имён DoH-серверов и защита хоста VPN-сервера,
+    /// когда включён свой DNS. Первый элемент — умолчание; Яндекс по той же причине, что у
+    /// <see cref="DomainDirectDNSAddress"/>.
+    /// </summary>
     public static readonly List<string> DomainPureIPDNSAddress =
     [
-        "119.29.29.29",
-        "223.5.5.5",
+        "77.88.8.8",
+        "77.88.8.1",
         "localhost"
     ];
 
@@ -650,7 +707,8 @@ public class Global
         { ECoreType.overtls, "ShadowsocksR-Live/overtls" },
         { ECoreType.shadowquic, "spongebob888/shadowquic" },
         { ECoreType.mieru, "enfein/mieru" },
-        { ECoreType.v2rayN, "2dust/v2rayN" },
+        // Выпуски самого departament для ПК (не апстрим 2dust/v2rayN): см. AppUpdateChannel.
+        { ECoreType.v2rayN, "s-erlish/departament" },
     };
 
     public static readonly List<string> OtherGeoUrls =
@@ -714,6 +772,10 @@ public class Global
         { "doh.pub", ["1.12.12.12", "120.53.53.53"] },
         { "dns.quad9.net", ["9.9.9.9", "149.112.112.112", "2620:fe::fe", "2620:fe::9"] },
         { "dns.yandex.net", ["77.88.8.8", "77.88.8.1", "2a02:6b8::feed:0ff", "2a02:6b8:0:1::feed:0ff"] },
+        //  Имя DoH и DoT Яндекса (https://common.dot.dns.yandex.net/dns-query). У dns.yandex.net
+        //  записей A и AAAA нет вовсе, так что без этой строки DoH Яндекса разрешал бы своё имя
+        //  через bootstrap. Адреса — ответ самого имени (A 77.88.8.8/77.88.8.1, AAAA ::feed:ff).
+        { "common.dot.dns.yandex.net", ["77.88.8.8", "77.88.8.1", "2a02:6b8::feed:0ff", "2a02:6b8:0:1::feed:0ff"] },
         { "dns.sb", ["45.11.45.11", "185.222.222.222", "2a09::", "2a11::"] },
         { "dns.umbrella.com", ["208.67.220.220", "208.67.222.222", "2620:119:35::35", "2620:119:53::53"] },
         { "dns.sse.cisco.com", ["208.67.220.220", "208.67.222.222", "2620:119:35::35", "2620:119:53::53"] },

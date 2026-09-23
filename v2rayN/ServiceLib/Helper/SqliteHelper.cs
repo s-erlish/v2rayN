@@ -63,6 +63,18 @@ public sealed class SQLiteHelper
         return await _dbAsync.ExecuteAsync(sql);
     }
 
+    /// <summary>Запрос с параметрами (<c>?</c> в тексте) — значения не склеиваются в строку SQL.</summary>
+    public async Task<int> ExecuteAsync(string sql, params object[] args)
+    {
+        return await _dbAsync.ExecuteAsync(sql, args);
+    }
+
+    /// <summary>Несколько операций одной транзакцией: либо все, либо ни одной.</summary>
+    public async Task RunInTransactionAsync(Action<SQLiteConnection> action)
+    {
+        await _dbAsync.RunInTransactionAsync(action);
+    }
+
     public async Task<List<T>> QueryAsync<T>(string sql) where T : new()
     {
         return await _dbAsync.QueryAsync<T>(sql);

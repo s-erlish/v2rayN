@@ -12,6 +12,21 @@ public class CertPemManager
     private static readonly Lazy<CertPemManager> _instance = new(() => new());
     private Config _config;
 
+    /// <summary>
+    /// The live config, from <see cref="Init"/> when it has run, else straight from
+    /// <see cref="AppManager"/> (set in Program.Main before any UI exists).
+    ///
+    /// Init is only called from MainWindowViewModel's own async init, but the FIRST subscription
+    /// download does not wait for it: the account restore at launch (AccountViewModel → Task.Run →
+    /// SubscriptionHandler.UpdateProcess → DownloadService) regularly reaches
+    /// <see cref="BuildCertificateChainPolicy"/> while <c>_config</c> is still null, and the
+    /// NullReferenceException it threw was caught by the download wrapper and logged as an ordinary
+    /// download failure — so the very first account import of a session could fetch ZERO servers on a
+    /// perfectly healthy network and report nothing but «не удалось». Observed live in guiLogs
+    /// (CertPemManager.IsSystemRootCertProvider NRE under DownloadService) on a cold start.
+    /// </summary>
+    private Config? LiveConfig => _config ??= AppManager.Instance.Config;
+
     public async Task Init(Config config)
     {
         if (_config != null)
@@ -299,7 +314,7 @@ public class CertPemManager
 
     private X509Certificate2Collection BuildTrustedCertificateCollection()
     {
-        if (_config.GuiItem.RootCertProvider == Global.ChromeRootProvider)
+        if (LiveConfig?.GuiItem.RootCertProvider == Global.ChromeRootProvider)
         {
             return _chromeRootCerts.Value;
         }
@@ -308,7 +323,10 @@ public class CertPemManager
 
     private bool IsSystemRootCertProvider()
     {
-        return _config.GuiItem.RootCertProvider != Global.ChromeRootProvider && _config.GuiItem.RootCertProvider != Global.MozillaRootProvider;
+        // No config at all (nothing loaded yet) reads as the system provider — the default the config
+        // ships with — so an early call degrades to the stock TLS validation instead of throwing.
+        var provider = LiveConfig?.GuiItem.RootCertProvider;
+        return provider != Global.ChromeRootProvider && provider != Global.MozillaRootProvider;
     }
 
     public X509ChainPolicy? BuildCertificateChainPolicy()

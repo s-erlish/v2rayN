@@ -839,11 +839,27 @@ public class Utils
         return Global.AppName;
     }
 
+    /// <summary>
+    /// Версия приложения как в теге выпуска: <c>1.2.0</c> или <c>1.2.0-rc.3</c>.
+    ///
+    /// CI собирает выпуск с <c>-p:Version=</c> из тега. Из этого SDK делает две версии: числовую
+    /// AssemblyVersion (<c>1.2.0.0</c>), где хвоста <c>-rc.3</c> уже нет, и информационную
+    /// (<c>1.2.0-rc.3+хеш коммита</c>). Раньше здесь читалась числовая, и предварительная сборка
+    /// называла себя выпуском: 1.2.0-rc.3 считала бы себя 1.2.0 и никогда не увидела бы настоящий 1.2.0.
+    /// Поэтому читаем информационную и отрезаем метаданные после «+».
+    /// </summary>
     public static string GetVersionInfo()
     {
         try
         {
-            return Assembly.GetExecutingAssembly()?.GetName()?.Version?.ToString(3) ?? "0.0";
+            var assembly = Assembly.GetExecutingAssembly();
+            var informational = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+            if (informational.IsNotEmpty())
+            {
+                var plus = informational.IndexOf('+');
+                return plus >= 0 ? informational[..plus] : informational;
+            }
+            return assembly.GetName()?.Version?.ToString(3) ?? "0.0";
         }
         catch (Exception ex)
         {

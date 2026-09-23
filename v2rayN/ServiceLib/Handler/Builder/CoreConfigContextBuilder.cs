@@ -190,6 +190,28 @@ public class CoreConfigContextBuilder
         var coreType = AppManager.Instance.GetCoreType(node, node.ConfigType);
 
         var preSocksItem = ConfigHandler.GetPreSocksItem(config, node, coreType);
+
+        // FULL TUN for a CUSTOM (Remnawave XRAY_JSON) node: the main core is Xray, which cannot
+        // create the OS tun device. Without a pre-socks item the app would (a) inject a bogus `tun`
+        // inbound into the Xray config and (b) start NO tun owner at all — the process runs, the UI
+        // says «Подключено», but nothing captures OS traffic. So when TUN is on and no explicit
+        // pre-socks port was configured, synthesise a sing-box SOCKS pre-service that owns the tun
+        // adapter and forwards everything into the Xray SOCKS inbound at the app's standard local
+        // socks port (the exact port MergeAppInbounds gives the Xray custom config).
+        if (preSocksItem == null
+            && node.ConfigType == EConfigType.Custom
+            && coreType == ECoreType.Xray
+            && config.TunModeItem.EnableTun)
+        {
+            preSocksItem = new ProfileItem
+            {
+                CoreType = ECoreType.sing_box,
+                ConfigType = EConfigType.SOCKS,
+                Address = Global.Loopback,
+                Port = AppManager.Instance.GetLocalPort(EInboundProtocol.socks),
+            };
+        }
+
         if (preSocksItem != null)
         {
             var preSocksResult = await Build(nodeContext.AppConfig, preSocksItem);
@@ -348,6 +370,17 @@ public class CoreConfigContextBuilder
         if (Utils.IsDomain(address))
         {
             context.ProtectDomainList.Add(address);
+        }
+
+        //  У CUSTOM в Address — имя файла конфига, настоящие серверы внутри него. Без этого хост
+        //  VPN-сервера не попадал в защиту, и в режиме «весь трафик» его разрешение шло через
+        //  туннель, то есть через сам этот сервер (подробно — у GetServerHosts).
+        if (node.ConfigType == EConfigType.Custom)
+        {
+            foreach (var host in XrayJsonTemplateFmt.GetServerHosts(node))
+            {
+                context.ProtectDomainList.Add(host);
+            }
         }
 
         // ech query server name protect

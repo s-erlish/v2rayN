@@ -8,7 +8,7 @@
     xmlns:vms="clr-namespace:ServiceLib.ViewModels;assembly=ServiceLib"
     Name="v2rayN"
     x:DataType="vms:StatusBarViewModel"
-    RequestedThemeVariant="Default">
+    RequestedThemeVariant="Dark">
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
@@ -24,54 +24,15 @@
         <dialogHost:DialogHostStyles />
     </Application.Styles>
 
-    <TrayIcon.Icons>
-        <TrayIcons>
-            <TrayIcon
-                Command="{Binding NotifyLeftClickCmd}"
-                Icon="/Assets/NotifyIcon1.ico"
-                ToolTipText="{Binding RunningServerToolTipText}">
-                <TrayIcon.Menu>
-                    <NativeMenu>
-                        <NativeMenuItem
-                            Command="{Binding ShowWindowCmd}"
-                            Header="{x:Static resx:ResUI.TbDisplayGUI}"
-                            IsVisible="{Binding BlIsNonWindows}" />
-                        <NativeMenuItem
-                            Command="{Binding NotifyLeftClickCmd}"
-                            Header="{x:Static resx:ResUI.menuShowOrHideMainWindow}"
-                            IsVisible="{Binding BlIsNonWindows}" />
-                        <NativeMenuItem Command="{Binding CopyProxyCmdToClipboardCmd}" Header="{x:Static resx:ResUI.menuCopyProxyCmdToClipboard}" />
-                        <NativeMenuItemSeparator />
-                        <NativeMenuItem
-                            Command="{Binding SystemProxyClearCmd}"
-                            Header="{x:Static resx:ResUI.menuSystemProxyClear}"
-                            IsChecked="{Binding BlSystemProxyClear}"
-                            ToggleType="Radio" />
-                        <NativeMenuItem
-                            Command="{Binding SystemProxySetCmd}"
-                            Header="{x:Static resx:ResUI.menuSystemProxySet}"
-                            IsChecked="{Binding BlSystemProxySet}"
-                            ToggleType="Radio" />
-                        <NativeMenuItem
-                            Command="{Binding SystemProxyNothingCmd}"
-                            Header="{x:Static resx:ResUI.menuSystemProxyNothing}"
-                            IsChecked="{Binding BlSystemProxyNothing}"
-                            ToggleType="Radio" />
-                        <NativeMenuItem
-                            Command="{Binding SystemProxyPacCmd}"
-                            Header="{x:Static resx:ResUI.menuSystemProxyPac}"
-                            IsChecked="{Binding BlSystemProxyPac}"
-                            IsVisible="{Binding BlSystemProxyPacVisible}"
-                            ToggleType="Radio" />
-                        <NativeMenuItemSeparator />
-                        <NativeMenuItem Click="MenuAddServerViaClipboardClick" Header="{x:Static resx:ResUI.menuAddServerViaClipboard}" />
-                        <NativeMenuItem Command="{Binding SubUpdateCmd}" Header="{x:Static resx:ResUI.menuSubUpdate}" />
-                        <NativeMenuItem Command="{Binding SubUpdateViaProxyCmd}" Header="{x:Static resx:ResUI.menuSubUpdateViaProxy}" />
-                        <NativeMenuItemSeparator />
-                        <NativeMenuItem Click="MenuExit_Click" Header="{x:Static resx:ResUI.menuExit}" />
-                    </NativeMenu>
-                </TrayIcon.Menu>
-            </TrayIcon>
-        </TrayIcons>
-    </TrayIcon.Icons>
+    <!--  ==================== Значок в трее ====================
+          Здесь его НЕТ, и это намеренно. Объявленный в разметке приложения значок Avalonia создаёт
+          при загрузке этого файла, то есть раньше, чем построено и показано окно: запуск выглядел так,
+          будто программа сперва «висит в трее», а окно появляется потом. Значок создаёт App.ShowTrayIcon
+          вместе с первым кадром окна (или в момент, когда окно уходит в трей, если окна на старте нет).
+          Меню, картинка и подсказка собираются там же, в коде.
+
+          Картинка — логотип владельца, ПЕРЕНЕСЁННЫЙ, а не перерисованный: знак отделён от кремового
+          фона исходника по альфе, сетка глобуса сохранена как нарисована. Windows и Linux
+          (StatusNotifierItem/XEmbed) показывают ЦВЕТНОЙ значок с прозрачностью. Стартовая картинка —
+          «не подключено» (NotifyShieldIdle.ico), при живом ядре — NotifyShieldOn.ico (StatusBarView).  -->
 </Application>

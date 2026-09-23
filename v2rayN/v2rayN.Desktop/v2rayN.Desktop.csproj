@@ -2,12 +2,23 @@
 
 	<PropertyGroup>
 		<OutputType>WinExe</OutputType>
-		<ApplicationIcon>Assets\v2rayN.ico</ApplicationIcon>
+		<!-- Иконка EXE (Explorer/панель задач Windows) — логотип владельца целиком, как есть.
+		     Раньше здесь стоял NotifyShieldOn.ico, то есть иконкой приложения был ГЛИФ ТРЕЯ
+		     в состоянии «подключено». Разные роли — разные файлы: AppIcon.ico это приложение,
+		     NotifyShield*.ico это состояния трея. -->
+		<ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
 		<BuiltInComInteropSupport>true</BuiltInComInteropSupport>
 		<AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
-		<AssemblyName>v2rayN</AssemblyName>
+		<AssemblyName>departament</AssemblyName>
+		<!-- Task Manager reads these version-resource fields (Name/Description columns).
+		     Set them explicitly so the built host identifies as "departament", not "v2rayN". -->
+		<Product>departament</Product>
+		<AssemblyTitle>departament</AssemblyTitle>
+		<Company>departament</Company>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<CETCompat>false</CETCompat>
+		<!-- Elevate on Windows so TUN mode can create the wintun adapter (full-tunnel VPN). -->
+		<ApplicationManifest>app.manifest</ApplicationManifest>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -44,15 +55,6 @@
 		<EmbeddedResource Include="Assets\v2rayN.ico">
 			<CopyToOutputDirectory>Never</CopyToOutputDirectory>
 		</EmbeddedResource>
-		<Compile Update="Views\FullConfigTemplateWindow.axaml.cs">
-		  <DependentUpon>FullConfigTemplateWindow.axaml</DependentUpon>
-		</Compile>
-		<None Update="v2rayN.png">
-			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
-		</None>
-		<None Update="v2rayN.icns">
-			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
-		</None>
 	</ItemGroup>
 
 </Project>

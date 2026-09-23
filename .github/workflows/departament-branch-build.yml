@@ -1,0 +1,21 @@
+name: departament desktop (branch build)
+
+# Сборка каждого пуша в ветку разработки: те же шаги, что у выпуска (departament-build.yml), — ради
+# артефактов для проверки (departament-vpn-win-x64, departament-setup) и стенда Windows
+# (departament-windows-e2e.yml). Выпуски здесь не публикуются: их публикует репозиторий страницы
+# программы s-erlish/departament, откуда программа и берёт обновления.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/dp-desktop-incy
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    uses: ./.github/workflows/departament-build.yml
+    with:
+      source_ref: ${{ github.sha }}

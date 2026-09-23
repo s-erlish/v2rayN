@@ -1,0 +1,232 @@
+name: departament desktop (Windows e2e)
+
+# Проверка на настоящей Windows того, что в контейнере Linux проверить нельзя. Берёт сборку этого же
+# коммита из «departament desktop (branch build)» (артефакт departament-vpn-win-x64, без повторной
+# сборки) и гоняет её стендом .github/departament-e2e (DpE2E):
+#   1. запуск: когда окно стало видно, когда появился первый кадр с содержимым и когда значок встал
+#      в трей (Shell_NotifyIconGetRect, панели ToolbarWindow32, UI Automation); значок — не раньше окна;
+#   2. подключение через системный прокси к своему серверу VLESS+REALITY на этой же машине; трафик
+#      обычной программы Windows доходит до сервера (его журнал) и дальше в интернет;
+#   3. режим «весь трафик» (TUN): обычный узел (TUN самого Xray + wintun.dll) и узел Custom
+#      (XRAY_JSON, TUN держит sing-box и отдаёт в Xray 127.0.0.1:10808); трафик без настроек прокси
+#      идёт через сервер, домен сервера разрешается мимо туннеля (после сброса кеша DNS);
+#   4. уход в трей и возврат (DP_TRAY_CYCLE): окно возвращается тем же размером и на то же место;
+#   5. самообновление: пакет departament-windows-x64.zip и его .sha256 по договору, AmazTool (NativeAOT,
+#      без консоли), версия и отсутствие отладочных хуков в выпуске; AmazTool ставит «новую» версию поверх
+#      старой и откатывается, если файл занят (обновление из приложения в выпускной сборке не
+#      запустить — подставная лента есть только в Debug, — поэтому стенд делает то же, что приложение:
+#      кладёт пакет в guiTemps/update и запускает AmazTool с PID);
+#   6. установщик departament-setup.exe: тихая установка в Program Files, установка поверх запущенной
+#      подключённой программы, «departament.exe --quit», самообновление установленной программы, удаление.
+# Для фаз 5–6 стенд включает Defender в реальном времени (на образе раннера он выключен), как у людей.
+# Итог по каждой проверке — таблица в сводке прогона и аннотация на каждый отказ; снимки экрана,
+# журналы приложения, ядер и сервера — в артефакте departament-windows-e2e.
+#
+# Запуск — пушем в ветку разработки. Выпуски публикует s-erlish/departament той же сборкой
+# (departament-build.yml); здесь пакет самообновления собирается из артефакта так же, как там.
+# workflow_dispatch работает, только когда этот файл есть в ветке по умолчанию; тогда берётся сборка
+# того же коммита или последняя удачная сборка ветки.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/dp-desktop-incy
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: departament-windows-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Тестовый сервер — Xray 25.9.11, как у стенда Linux: ветка 26 глушит во freedom частные и петлевые
+  # адреса. Закреплён версией и суммой, как ядра в сборке приложения. Клиент — ядра из самой сборки.
+  SERVER_XRAY_TAG: v25.9.11
+  SERVER_XRAY_SHA256: d8db96eb39d7bc8cae484b2e59b651ff3c04f21e26d66e310f6a44e256ed1cc4
+  # Диагностика: если TUN обычного узла с Xray из сборки не заработал, стенд повторяет его с этим ядром
+  # (подменой bin/Xray/xray.exe на время одного прогона). Xray 26.3.27 из сборки не ставит адаптеру
+  # xray_tun ни адреса, ни маршрута: поля gateway/autoSystemRoutingTable появились только в v26.4.13.
+  # Отказы диагностики сборку не валят — это довод для обновления ядра, а не проверка поставки.
+  XRAY_CANDIDATE_TAG: v26.9.9
+  XRAY_CANDIDATE_SHA256: 244deaba2098c2964e49bba90df3707777e5f5f428a82d2f29604015f24beec2
+  DEV_BRANCH: claude/dp-desktop-incy
+
+jobs:
+  e2e:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      # Нужны стенд, номер версии и сценарий установщика: исходники приложения собирает branch build.
+      - name: Checkout (стенд)
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            /.github/
+            /installer/
+            /v2rayN/Directory.Build.props
+            /v2rayN/v2rayN.Desktop/Assets/AppIcon.ico
+          sparse-checkout-cone-mode: false
+
+      # Какую версию должна назвать сборка: из Directory.Build.props (так же выбирает сборка ветки).
+      # С ней сверяются exe, запись в «Приложениях» и то, что программа прочтёт о себе.
+      - name: Ожидаемая версия
+        id: version
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:GITHUB_REF_TYPE -eq 'tag') { $v = $env:GITHUB_REF_NAME -replace '^v', '' }
+          else {
+            [xml]$props = Get-Content v2rayN/Directory.Build.props
+            $v = @($props.Project.PropertyGroup | ForEach-Object { $_.Version } | Where-Object { $_ })[0]
+          }
+          if (-not $v) { throw 'версию не определить' }
+          Write-Host "Ожидаемая версия: $v"
+          "version=$v" >> $env:GITHUB_OUTPUT
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Сборка стенда
+        shell: pwsh
+        run: dotnet build .github/departament-e2e/DpE2E.csproj -c Release -o "$env:RUNNER_TEMP\e2e-bin"
+
+      - name: Ядро тестового сервера (Xray 25.9.11)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $zip = "$env:RUNNER_TEMP\server-xray.zip"
+          Invoke-WebRequest -Uri "https://github.com/XTLS/Xray-core/releases/download/$env:SERVER_XRAY_TAG/Xray-windows-64.zip" -OutFile $zip
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash
+          if ($hash -ne $env:SERVER_XRAY_SHA256) { throw "Xray-windows-64.zip ($env:SERVER_XRAY_TAG): SHA256 $hash, ожидалось $env:SERVER_XRAY_SHA256" }
+          Expand-Archive $zip -DestinationPath "$env:RUNNER_TEMP\server-xray" -Force
+          & "$env:RUNNER_TEMP\server-xray\xray.exe" version | Select-Object -First 1
+
+      - name: Ядро Xray для диагностики TUN
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $zip = "$env:RUNNER_TEMP\xray-candidate.zip"
+          Invoke-WebRequest -Uri "https://github.com/XTLS/Xray-core/releases/download/$env:XRAY_CANDIDATE_TAG/Xray-windows-64.zip" -OutFile $zip
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash
+          if ($hash -ne $env:XRAY_CANDIDATE_SHA256) { throw "Xray-windows-64.zip ($env:XRAY_CANDIDATE_TAG): SHA256 $hash, ожидалось $env:XRAY_CANDIDATE_SHA256" }
+          Expand-Archive $zip -DestinationPath "$env:RUNNER_TEMP\xray-candidate" -Force
+          & "$env:RUNNER_TEMP\xray-candidate\xray.exe" version | Select-Object -First 1
+
+      # Сборка этого коммита идёт параллельно (тот же пуш); ждём её конца, а не собираем второй раз.
+      - name: Ждём сборку ветки для этого коммита
+        id: build
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $repo = '${{ github.repository }}'
+          $sha = '${{ github.sha }}'
+          $start = Get-Date
+          $run = $null
+          while ($true) {
+            $runs = (gh api "repos/$repo/actions/workflows/departament-branch-build.yml/runs?head_sha=$sha&per_page=20" | ConvertFrom-Json).workflow_runs |
+              Where-Object { $_.head_branch -eq $env:GITHUB_REF_NAME } | Sort-Object created_at -Descending
+            $run = $runs | Select-Object -First 1
+            if ($run -and $run.status -eq 'completed') { break }
+            if (-not $run -and '${{ github.event_name }}' -eq 'workflow_dispatch' -and (Get-Date) -gt $start.AddMinutes(1)) {
+              # Ручной запуск на коммите без своей сборки — последняя удачная сборка ветки.
+              $run = (gh api "repos/$repo/actions/workflows/departament-branch-build.yml/runs?branch=$env:DEV_BRANCH&status=success&per_page=1" | ConvertFrom-Json).workflow_runs | Select-Object -First 1
+              if (-not $run) { throw 'удачных сборок ветки нет' }
+              break
+            }
+            if ((Get-Date) -gt $start.AddMinutes(40)) { throw "сборка ветки для $sha не закончилась за 40 минут" }
+            Write-Host "сборка: $(if ($run) { "$($run.status) $($run.html_url)" } else { 'ещё не появилась' })"
+            Start-Sleep -Seconds 20
+          }
+          if ($run.conclusion -ne 'success') {
+            Write-Host "::error title=Сборка ветки не удалась::$($run.html_url) — $($run.conclusion); проверять нечего"
+            exit 1
+          }
+          Write-Host "Сборка: $($run.html_url) ($($run.head_sha))"
+          "run_id=$($run.id)" >> $env:GITHUB_OUTPUT
+          "Проверяется сборка [$($run.head_sha.Substring(0, 8))]($($run.html_url))." >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Скачать сборку
+        uses: actions/download-artifact@v4
+        with:
+          name: departament-vpn-win-x64
+          run-id: ${{ steps.build.outputs.run_id }}
+          github-token: ${{ github.token }}
+          path: C:\dp-e2e\dist
+
+      # Установщик появился в сборке не сразу: у старых сборок артефакта нет, тогда его проверки — SKIP.
+      - name: Скачать установщик
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: departament-setup
+          run-id: ${{ steps.build.outputs.run_id }}
+          github-token: ${{ github.token }}
+          path: C:\dp-e2e\setup
+
+      # Запуск программы в конце установки (галочка последней страницы, [Run] postinstall) тихая
+      # установка пропускает — skipifsilent, а владелец именно там видел ошибку с кодом (740). Две копии
+      # departament.iss без skipifsilent: с «runascurrentuser shellexec», как в ветке, и без них — контроль,
+      # что проверка ловит 740. Те же /D, что у branch build; сжатие в копиях выключено: проверяется [Run],
+      # а не упаковка, а lzma2/max собирался бы минутами.
+      - name: Установщики для проверки запуска в конце установки
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) { choco install innosetup --no-progress -y | Out-Host }
+          if (-not (Test-Path $iscc)) { throw "ISCC.exe не найден: $iscc" }
+          $v = '${{ steps.version.outputs.version }}'
+          $num = "$(($v -split '-')[0]).0"
+          $utf8 = [System.Text.UTF8Encoding]::new($false)
+          $src = [System.IO.File]::ReadAllText("$pwd\installer\departament.iss", $utf8)
+          $run = [regex]::Match($src, '(?m)^Filename: "\{app\}\\departament\.exe";[^\r\n]*').Value
+          if (-not $run) { throw '[Run] с departament.exe не найден' }
+          $fixed = $run -replace '\s+skipifsilent\b', ''
+          $baseline = $fixed -replace '\s+(runascurrentuser|shellexec)\b', ''
+          $out = 'C:\dp-e2e\setup-test'
+          New-Item -ItemType Directory -Force $out | Out-Null
+          foreach ($variant in @(@{ Name = 'postinstall'; Run = $fixed }, @{ Name = 'postinstall-baseline'; Run = $baseline })) {
+            $iss = $src.Replace($run, $variant.Run)
+            $iss = $iss -replace '(?m)^Compression=.*$', 'Compression=none' -replace '(?m)^SolidCompression=.*$', 'SolidCompression=no'
+            $iss = $iss -replace '(?m)^OutputBaseFilename=.*$', "OutputBaseFilename=departament-setup-$($variant.Name)"
+            $path = "$pwd\installer\departament-$($variant.Name).iss"
+            [System.IO.File]::WriteAllText($path, $iss, $utf8)
+            Write-Host "[$($variant.Name)] $($variant.Run)"
+            & $iscc "/DAppVersion=$v" "/DNumericVersion=$num" "/DSourceDir=C:\dp-e2e\dist" "/DIconFile=$pwd\v2rayN\v2rayN.Desktop\Assets\AppIcon.ico" "/O$out" $path | Select-Object -Last 2
+            if ($LASTEXITCODE -ne 0) { throw "ISCC ($($variant.Name)): код $LASTEXITCODE" }
+          }
+          Get-ChildItem $out | ForEach-Object { Write-Host "$($_.Name) $([math]::Round($_.Length / 1MB, 1)) МБ" }
+
+      - name: Проверки на Windows
+        shell: pwsh
+        run: |
+          # dist остаётся чистым (из него пакет самообновления и сверка установленного), запуски — из копии.
+          Copy-Item C:\dp-e2e\dist C:\dp-e2e\app -Recurse
+          $a = @(
+            '--app', 'C:\dp-e2e\app', '--dist', 'C:\dp-e2e\dist',
+            '--server-xray', "$env:RUNNER_TEMP\server-xray\xray.exe",
+            '--xray-candidate', "$env:RUNNER_TEMP\xray-candidate\xray.exe",
+            '--expected-version', '${{ steps.version.outputs.version }}',
+            '--setup', 'C:\dp-e2e\setup\departament-setup.exe',
+            '--setup-postinstall', 'C:\dp-e2e\setup-test\departament-setup-postinstall.exe',
+            '--setup-baseline', 'C:\dp-e2e\setup-test\departament-setup-postinstall-baseline.exe',
+            '--defender-realtime',
+            '--out', "$env:RUNNER_TEMP\e2e-out", '--work', 'C:\dp-e2e\work')
+          & "$env:RUNNER_TEMP\e2e-bin\DpE2E.exe" @a
+          exit $LASTEXITCODE
+
+      - name: Снимки экрана и журналы
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: departament-windows-e2e
+          path: ${{ runner.temp }}/e2e-out
+          if-no-files-found: warn

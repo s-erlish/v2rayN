@@ -402,3 +402,6 @@ FodyWeavers.xsd
 # JetBrains Rider
 .idea/
 *.sln.iml
+
+# Session scratchpad (internal reports/plans — never committed)
+scratchpad/

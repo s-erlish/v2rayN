@@ -15,8 +15,8 @@ public partial class MessageBoxDialog : Window
 
         if (Design.IsDesignMode)
         {
-            caption = "Design Caption";
-            message = "Design Message";
+            caption = "departament";
+            message = "Удалить подписку?";
         }
 
         Title = caption;

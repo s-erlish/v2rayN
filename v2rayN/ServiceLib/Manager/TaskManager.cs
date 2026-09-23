@@ -70,18 +70,9 @@ public class TaskManager
                 }
             }
 
-            //Execute once 24 hour
-            if (numOfExecuted % 1440 == 1)
-            {
-                try
-                {
-                    await UpdateTaskRunCheckUpdate();
-                }
-                catch (Exception ex)
-                {
-                    Logging.SaveLog("ScheduledTasks - UpdateTaskRunCheckUpdate", ex);
-                }
-            }
+            // Проверки новых ядер здесь нет и не будет: ядра едут вместе с приложением и закреплены в
+            // выпуске. Проверка новой версии самого приложения — AppUpdateManager.StartSchedule: её
+            // запускает оболочка после первого кадра окна, а не этот цикл.
             numOfExecuted++;
         }
     }
@@ -89,9 +80,17 @@ public class TaskManager
     private async Task UpdateTaskRunSubscription()
     {
         var updateTime = ((DateTimeOffset)DateTime.Now).ToUnixTimeSeconds();
+        //  Своя частота у подписки — если задана; иначе общая из «Настройки → Автообновление подписки»
+        //  (GuiItem.AutoUpdateInterval, минуты). Раньше общая строка настроек сюда не доходила вовсе:
+        //  своей частоты у подписок нет, и подписка сама не обновлялась никогда, что бы там ни стояло.
+        //  Обновление безопасно для подключения: ядро перезапускается, только если подключённый сервер
+        //  правда изменился (MainWindowViewModel.UpdateTaskHandler).
+        var globalInterval = _config.GuiItem.AutoUpdateInterval;
         var lstSubs = (await AppManager.Instance.SubItems())?
-            .Where(t => t.AutoUpdateInterval > 0)
-            .Where(t => updateTime - t.UpdateTime >= t.AutoUpdateInterval * 60)
+            .Where(t => t.Enabled && t.Url.IsNotEmpty())
+            .Select(t => (Item: t, Interval: t.AutoUpdateInterval > 0 ? t.AutoUpdateInterval : globalInterval))
+            .Where(t => t.Interval > 0 && updateTime - t.Item.UpdateTime >= t.Interval * 60)
+            .Select(t => t.Item)
             .ToList();
 
         if (lstSubs is not { Count: > 0 })
@@ -111,8 +110,11 @@ public class TaskManager
                     Logging.SaveLog($"Update subscription end. {msg}");
                 }
             });
-            item.UpdateTime = updateTime;
-            await ConfigHandler.AddSubItem(_config, item);
+            //  Отмечаем попытку ОДНИМ полем. Раньше сюда писалась вся запись, прочитанная ДО скачивания,
+            //  поверх свежей: она затирала новое имя провайдера и ссылку, записанные синхронизацией
+            //  аккаунта, а после выхода из аккаунта посреди скачивания возвращала удалённую подписку.
+            //  Если записи уже нет, UPDATE просто ничего не находит.
+            await SQLiteHelper.Instance.ExecuteAsync("update SubItem set UpdateTime = ? where Id = ?", updateTime, item.Id);
             await Task.Delay(1000);
         }
     }
@@ -127,25 +129,6 @@ public class TaskManager
             {
                 await _updateFunc?.Invoke(false, msg);
             }).UpdateGeoFileAll();
-        }
-    }
-
-    private async Task UpdateTaskRunCheckUpdate()
-    {
-        Logging.SaveLog("Execute check update");
-
-        var updateService = new UpdateService(_config, async (success, msg) => await Task.CompletedTask);
-
-        var msgs = await updateService.CheckHasUpdateOnlyAll(_config.CheckUpdateItem.CheckPreReleaseUpdate);
-        foreach (var msg in msgs)
-        {
-            await _updateFunc?.Invoke(false, msg);
-        }
-        NoticeManager.Instance.Enqueue(string.Join("\n", msgs));
-
-        if (msgs.Count > 0)
-        {
-            AppEvents.HasUpdateNotified.Publish(true);
         }
     }
 }
