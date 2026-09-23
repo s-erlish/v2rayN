@@ -39,7 +39,8 @@ internal static class UpgradeApp
 
     /// <summary>
     /// Куда отодвигается сам установщик, если пакет несёт его новую версию. Запущенный exe на Windows нельзя
-    /// ни удалить, ни перезаписать, но можно переименовать; следующий запуск установщика удалит этот файл.
+    /// ни удалить, ни перезаписать, но можно переименовать. Этот файл удаляет новая версия приложения при
+    /// первом запуске (AppUpdateManager.EnsureReconciled), а если не смогла — следующий запуск установщика.
     /// </summary>
     private static string SelfTmp => Utils.SelfPath + ".tmp";
 
@@ -51,7 +52,12 @@ internal static class UpgradeApp
         Utils.WaitForAppExit(appPid, AppExitTimeout);
         Utils.StopCoresFromBin();
 
-        RecoverInterruptedSwap();
+        if (!RecoverInterruptedSwap())
+        {
+            Log.Write("upgrade not installed: the previous interrupted upgrade is not undone yet");
+            Utils.StartApp();
+            return false;
+        }
         TryDelete(SelfTmp);
 
         var installed = false;
@@ -77,6 +83,12 @@ internal static class UpgradeApp
         finally
         {
             TryDeleteDir(StagingDir);
+            // Рабочий каталог остаётся, только если откат не вернул всё: метка и backup нужны следующему
+            // запуску установщика. В остальных случаях от .update в каталоге приложения не остаётся ничего.
+            if (!File.Exists(SwapMarker))
+            {
+                TryDeleteDir(WorkDir);
+            }
         }
 
         Log.Write(installed ? "upgrade installed" : "upgrade not installed, the previous version stays");
@@ -157,7 +169,7 @@ internal static class UpgradeApp
             return null;
         }
 
-        MakeExecutable(files);
+        SetUnixModes(files);
         Log.Write($"staged {files.Count} files from {top}/");
         return files;
     }
@@ -199,8 +211,10 @@ internal static class UpgradeApp
             catch (Exception ex)
             {
                 Log.Write($"replacing files failed: {ex.Message}");
-                Rollback(journal);
-                TryDelete(SwapMarker);
+                if (Rollback(journal))
+                {
+                    TryDelete(SwapMarker);
+                }
                 return false;
             }
         }
@@ -213,9 +227,15 @@ internal static class UpgradeApp
         return true;
     }
 
-    private static void Rollback(List<(string Target, string? Saved)> journal)
+    /// <returns>
+    /// true, если на место вернулось всё. false — какой-то старый файл вернуть не удалось: тогда backup и
+    /// метка остаются, и следующий запуск установщика первым делом вернёт их (<see cref="RecoverInterruptedSwap"/>).
+    /// Раньше backup удалялся и в этом случае, то есть вместе с единственной копией невозвращённого файла.
+    /// </returns>
+    private static bool Rollback(List<(string Target, string? Saved)> journal)
     {
         Log.Write($"rolling back {journal.Count} files");
+        var complete = true;
         for (var i = journal.Count - 1; i >= 0; i--)
         {
             var (target, saved) = journal[i];
@@ -233,10 +253,18 @@ internal static class UpgradeApp
             }
             catch (Exception ex)
             {
+                complete = false;
                 Log.Write($"ROLLBACK INCOMPLETE for {target}: {ex.Message}");
             }
         }
+        if (!complete)
+        {
+            Log.Write($"backup kept in {BackupDir}, the next installer run restores it first");
+            return false;
+        }
         TryDeleteDir(BackupDir);
+        Log.Write("rollback complete, the previous version is back in place");
+        return true;
     }
 
     /// <summary>
@@ -244,12 +272,17 @@ internal static class UpgradeApp
     /// их на место — это снова целая прошлая версия (новые файлы, которых в ней не было, ей не мешают).
     /// Без метки backup — просто остаток удачной замены, который не удалось стереть; он удаляется.
     /// </summary>
-    private static void RecoverInterruptedSwap()
+    /// <returns>
+    /// false, если вернуть удалось не всё. Тогда метка и backup остаются (в них единственная копия
+    /// невозвращённых файлов), а новая установка не начинается: она стёрла бы рабочий каталог вместе с ними.
+    /// </returns>
+    private static bool RecoverInterruptedSwap()
     {
         if (File.Exists(SwapMarker) && Directory.Exists(BackupDir))
         {
             Log.Write("the previous upgrade was interrupted mid-way, restoring its backup first");
-            foreach (var saved in Directory.EnumerateFiles(BackupDir, "*", SearchOption.AllDirectories))
+            var complete = true;
+            foreach (var saved in Directory.EnumerateFiles(BackupDir, "*", SearchOption.AllDirectories).ToList())
             {
                 var target = Path.Combine(Utils.AppDir, Path.GetRelativePath(BackupDir, saved));
                 try
@@ -259,34 +292,42 @@ internal static class UpgradeApp
                 }
                 catch (Exception ex)
                 {
+                    complete = false;
                     Log.Write($"could not restore {target}: {ex.Message}");
                 }
             }
+            if (!complete)
+            {
+                Log.Write($"backup kept in {BackupDir} for the next installer run");
+                return false;
+            }
+            Log.Write("the interrupted upgrade is undone");
         }
         TryDeleteDir(WorkDir);
+        return true;
     }
 
     /// <summary>
-    /// На Linux и macOS права на запуск: архив из Windows их не несёт. exe приложения, установщик и
-    /// ядра в bin/ (у ядер нет расширения). На Windows ничего не делает.
+    /// На Linux и macOS — одни и те же права при любом архиве: 0755 у exe приложения, установщика и ядер в
+    /// bin/ (у ядер нет расширения), 0644 у остального. Архив из Windows прав не несёт, и без этого ядро не
+    /// запустилось бы; архив, собранный иначе, несёт какие угодно: e2e на Linux поймал 0600 у библиотек
+    /// из архива Python (их не прочёл бы другой пользователь той же машины). На Windows ничего не делает.
     /// </summary>
-    private static void MakeExecutable(List<string> files)
+    private static void SetUnixModes(List<string> files)
     {
         if (OperatingSystem.IsWindows())
         {
             return;
         }
+        const UnixFileMode Plain = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead | UnixFileMode.OtherRead;
+        const UnixFileMode Executable = Plain | UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute;
         var bin = "bin" + Path.DirectorySeparatorChar;
         foreach (var rel in files)
         {
             var name = Path.GetFileName(rel);
-            if (name is not (Utils.AppName or "AmazTool") && !(rel.StartsWith(bin, StringComparison.Ordinal) && !Path.HasExtension(name)))
-            {
-                continue;
-            }
-            var path = Path.Combine(StagingDir, rel);
-            File.SetUnixFileMode(path, File.GetUnixFileMode(path)
-                | UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute);
+            var executable = name is Utils.AppName or "AmazTool"
+                || (rel.StartsWith(bin, StringComparison.Ordinal) && !Path.HasExtension(name));
+            File.SetUnixFileMode(Path.Combine(StagingDir, rel), executable ? Executable : Plain);
         }
     }
 
