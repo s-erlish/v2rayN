@@ -1445,7 +1445,7 @@ public class CoreManager
         await _updateFunc?.Invoke(notify, msg);
     }
 
-    private static async Task WaitForProxyPort(CoreConfigContext? preContext, int timeoutMs = 5000)
+    private async Task WaitForProxyPort(CoreConfigContext? preContext, int timeoutMs = 5000)
     {
         if (preContext is null)
         {
@@ -1466,6 +1466,15 @@ public class CoreManager
 
         while (!rootToken.IsCancellationRequested)
         {
+            //  Главное ядро умерло или не запустилось вовсе — его порт уже не откроется. Раньше
+            //  ожидание всё равно высиживало все 5 с, и сорвавшийся запуск с повтором внутри
+            //  LoadCore стоил больше десяти секунд крутилки до честной ошибки.
+            if (_processService is null or { HasExited: true })
+            {
+                Logging.SaveLog($"WaitForProxyPort: main core is not running, stop waiting for proxy port {port}.");
+                return;
+            }
+
             using var tcp = new TcpClient();
             using var attemptCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
             using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(rootToken, attemptCts.Token);
