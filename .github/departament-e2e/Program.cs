@@ -14,7 +14,7 @@ internal sealed class Options
     public string ServerXray { get; set; } = "";
     public string Out { get; set; } = "e2e-out";
     public string Work { get; set; } = "";
-    public HashSet<string> Phases { get; set; } = ["startup", "tray", "proxy", "tun", "custom"];
+    public HashSet<string> Phases { get; set; } = ["startup", "tray", "proxy", "tun", "custom", "update", "installer"];
     public int WebPort { get; set; } = 18080;
     public int ServerPort { get; set; } = 24443;
     public int DestPort { get; set; } = 24444;
@@ -25,6 +25,20 @@ internal sealed class Options
     public string Target2 { get; set; } = "https://www.example.com/";
     public bool NoBind { get; set; }
     public string? XrayCandidate { get; set; }
+
+    //  Чистая копия сборки (как её выложил branch build): из неё собирается пакет самообновления и с ней
+    //  сверяется установленное. Запуски идут из --app, куда программа пишет свои настройки и журналы.
+    public string? Dist { get; set; }
+    public string? ExpectedVersion { get; set; }
+    public string? ReleaseZip { get; set; }
+    public string? ReleaseSha256 { get; set; }
+    public string? Setup { get; set; }
+
+    //  Копии установщика без skipifsilent (шаг workflow): с «runascurrentuser shellexec», как в ветке,
+    //  и без них — контроль, что проверка запуска в конце установки ловит ошибку 740.
+    public string? SetupPostinstall { get; set; }
+    public string? SetupBaseline { get; set; }
+    public bool DefenderRealtime { get; set; }
 
     public static Options Parse(string[] args)
     {
@@ -49,6 +63,14 @@ internal sealed class Options
                 case "--target2": o.Target2 = Next(); break;
                 case "--no-bind": o.NoBind = true; break;
                 case "--xray-candidate": o.XrayCandidate = Next(); break;
+                case "--dist": o.Dist = Path.GetFullPath(Next()); break;
+                case "--expected-version": o.ExpectedVersion = Next() is { Length: > 0 } v ? v : null; break;
+                case "--release-zip": o.ReleaseZip = Next() is { Length: > 0 } z ? Path.GetFullPath(z) : null; break;
+                case "--release-sha256": o.ReleaseSha256 = Next() is { Length: > 0 } h ? Path.GetFullPath(h) : null; break;
+                case "--setup": o.Setup = Next() is { Length: > 0 } x ? Path.GetFullPath(x) : null; break;
+                case "--setup-postinstall": o.SetupPostinstall = Next() is { Length: > 0 } sp ? Path.GetFullPath(sp) : null; break;
+                case "--setup-baseline": o.SetupBaseline = Next() is { Length: > 0 } sb ? Path.GetFullPath(sb) : null; break;
+                case "--defender-realtime": o.DefenderRealtime = true; break;
                 default: throw new ArgumentException($"неизвестный аргумент {args[i]}");
             }
         }
@@ -101,7 +123,7 @@ internal static class Program
     }
 }
 
-internal sealed class E2E(Options o, Report report)
+internal sealed partial class E2E(Options o, Report report)
 {
     private readonly AppDriver _app = new(o.App);
     private readonly string _shots = Path.Combine(o.Out, "screens");
@@ -138,8 +160,12 @@ internal sealed class E2E(Options o, Report report)
             Win.Prepare();
         }
         DescribeMachine();
-        Phase("стенд", StartFixtures);
-        Phase("запуск", PhaseStartup);
+        //  Стенд и первый запуск нужны всем фазам, кроме самообновления (оно работает с копиями сборки).
+        if (o.Phases.Overlaps(["startup", "tray", "proxy", "tun", "custom", "installer"]))
+        {
+            Phase("стенд", StartFixtures);
+            Phase("запуск", PhaseStartup);
+        }
         if (o.Phases.Contains("tray"))
         {
             Phase("трей", PhaseTrayCycle);
@@ -159,6 +185,16 @@ internal sealed class E2E(Options o, Report report)
         if (o.XrayCandidate is not null && o.Phases.Contains("tun"))
         {
             Phase("TUN, обычный узел с другим Xray", PhaseXrayCandidate);
+        }
+        //  Последними: обе фазы запускают программу из других папок и трогают Defender, запись в
+        //  «Приложениях», автозапуск — ничто из этого не должно попасть в замеры первого запуска.
+        if (o.Phases.Contains("update"))
+        {
+            Phase("самообновление", PhaseUpdate);
+        }
+        if (o.Phases.Contains("installer"))
+        {
+            Phase("установщик", PhaseInstaller);
         }
     }
 
@@ -195,6 +231,8 @@ internal sealed class E2E(Options o, Report report)
             {
             }
             env.Add($"Права администратора у стенда: {(Win.IsAdmin() ? "да" : "НЕТ")}");
+            var (lua, consent) = UacState();
+            env.Add($"UAC: EnableLUA={lua?.ToString() ?? "—"}, ConsentPromptBehaviorAdmin={consent?.ToString() ?? "—"} (0 — повышение без запроса)");
             var explorers = Process.GetProcessesByName("explorer");
             env.Add($"Explorer: {(explorers.Length > 0 ? $"запущен (pid {string.Join(", ", explorers.Select(p => p.Id))})" : "НЕ запущен")}; панель задач: {Win.TaskbarRect()?.ToString() ?? "нет Shell_TrayWnd"}");
             env.Add($"Экран (виртуальный): {Win.VirtualScreen()}");
@@ -1159,6 +1197,7 @@ internal sealed class E2E(Options o, Report report)
 
     public void Cleanup()
     {
+        DefenderDetections();
         try
         {
             var killed = _app.KillEverything();
