@@ -5,8 +5,9 @@ name: departament desktop (branch build)
 # downloadable artifact. Trigger: push to the dev branch, or run manually.
 #
 # РЕЛИЗЫ. Тег vX.Y.Z (или vX.Y.Z-rc.N — предварительный выпуск) на коммите ветки разработки
-# собирает то же самое с версией из тега, упаковывает в departament-windows-x64.zip и публикует
-# релиз GitHub вместе с контрольной суммой. По этим релизам программа обновляет себя сама,
+# собирает то же самое с версией из тега, упаковывает в departament-windows-x64.zip и создаёт
+# черновик релиза GitHub вместе с контрольной суммой (публикует его человек, см. работу release).
+# По опубликованным релизам программа обновляет себя сама,
 # поэтому форма архива — договор с ней (AmazTool и проверка обновлений), а не вкус:
 #   • все файлы под одной папкой верхнего уровня departament-windows-x64/ — AmazTool срезает
 #     первый сегмент пути и файлы из корня архива пропускает;
@@ -14,7 +15,7 @@ name: departament desktop (branch build)
 #   • рядом departament-windows-x64.zip.sha256 в формате sha256sum — программа сверяет архив
 #     с ним до распаковки.
 # Архив собирается и проверяется на КАЖДОЙ сборке ветки, а не только на теге: сломанная упаковка
-# видна сразу, а не в момент выпуска. Публикует его только тег.
+# видна сразу, а не в момент выпуска. В релиз он уходит только по тегу.
 #
 # Ядра ЗАКРЕПЛЕНЫ версией и контрольной суммой. Раньше сборка брала «latest» в момент
 # запуска, и выход нового ядра наверху мог за ночь сломать подключение без единой правки
@@ -250,6 +251,12 @@ jobs:
   # Публикация — отдельной работой и только она с правом записи: сборка ничего в репозитории
   # менять не может. Релиз, созданный GITHUB_TOKEN, по правилам GitHub не запускает других
   # workflow — в том числе оставшийся в master от исходного проекта «WinGet submission on release».
+  #
+  # Релиз создаётся ЧЕРНОВИКОМ, как на Android (s-erlish/dp, publish-release.yml): опубликованный
+  # релиз — это обновление, которое программа сама предложит людям. Черновик программа не видит.
+  # Поставить тег — решение выпустить; нажать «Publish release» — вторая половина того же решения,
+  # и она остаётся за человеком. Уже опубликованный релиз этот шаг не трогает: подменить архив,
+  # который люди, возможно, уже качают, значит разойтись с его контрольной суммой.
   release:
     if: github.ref_type == 'tag'
     needs: win-x64
@@ -281,12 +288,17 @@ jobs:
           notes="release-notes/${TAG}.md"
           [ -f "$notes" ] || { echo "::error::$notes is missing: write the release notes first"; exit 1; }
           sha256sum -c departament-windows-x64.zip.sha256
-          flags=()
+          flags=(--draft)
           [ "$PRERELEASE" = "true" ] && flags+=(--prerelease)
           if gh release view "$TAG" >/dev/null 2>&1; then
+            if [ "$(gh release view "$TAG" --json isDraft -q .isDraft)" != "true" ]; then
+              echo "::error::Release $TAG is already published; its assets are not replaced. Cut a new tag."
+              exit 1
+            fi
             gh release upload "$TAG" departament-windows-x64.zip departament-windows-x64.zip.sha256 --clobber
             gh release edit "$TAG" --notes-file "$notes"
           else
             gh release create "$TAG" departament-windows-x64.zip departament-windows-x64.zip.sha256 \
               --verify-tag --title "departament для ПК ${VERSION}" --notes-file "$notes" "${flags[@]}"
           fi
+          echo "Draft release: $(gh release view "$TAG" --json url -q .url)" >> "$GITHUB_STEP_SUMMARY"
