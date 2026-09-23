@@ -4,6 +4,18 @@ name: departament desktop (branch build)
 # desktop app and bundles the Xray core + geo assets, then uploads it as a
 # downloadable artifact. Trigger: push to the dev branch, or run manually.
 #
+# РЕЛИЗЫ. Тег vX.Y.Z (или vX.Y.Z-rc.N — предварительный выпуск) на коммите ветки разработки
+# собирает то же самое с версией из тега, упаковывает в departament-windows-x64.zip и публикует
+# релиз GitHub вместе с контрольной суммой. По этим релизам программа обновляет себя сама,
+# поэтому форма архива — договор с ней (AmazTool и проверка обновлений), а не вкус:
+#   • все файлы под одной папкой верхнего уровня departament-windows-x64/ — AmazTool срезает
+#     первый сегмент пути и файлы из корня архива пропускает;
+#   • разделитель путей в архиве — «/»; AmazTool режет по нему;
+#   • рядом departament-windows-x64.zip.sha256 в формате sha256sum — программа сверяет архив
+#     с ним до распаковки.
+# Архив собирается и проверяется на КАЖДОЙ сборке ветки, а не только на теге: сломанная упаковка
+# видна сразу, а не в момент выпуска. Публикует его только тег.
+#
 # Ядра ЗАКРЕПЛЕНЫ версией и контрольной суммой. Раньше сборка брала «latest» в момент
 # запуска, и выход нового ядра наверху мог за ночь сломать подключение без единой правки
 # здесь. Обновление ядра — это правка версии и суммы ниже и проверка сгенерированных
@@ -16,6 +28,8 @@ on:
   push:
     branches:
       - claude/dp-desktop-incy
+    tags:
+      - 'v*'
 
 permissions:
   contents: read
@@ -29,11 +43,40 @@ env:
 jobs:
   win-x64:
     runs-on: windows-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           submodules: recursive
+          # Для тега нужна история: проверяем, что он стоит на коммите ветки разработки.
+          fetch-depth: ${{ github.ref_type == 'tag' && '0' || '1' }}
+
+      # Версия выпуска — из тега, и только в строгой форме: по ней программа решает, новее ли
+      # релиз, чем она сама. Тег не на ветке разработки не выпускаем: релиз — это то, что
+      # прошло сборки ветки, а не любой коммит, на который можно поставить тег.
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:GITHUB_REF_TYPE -ne 'tag') {
+            "version=" >> $env:GITHUB_OUTPUT
+            "prerelease=false" >> $env:GITHUB_OUTPUT
+            Write-Host 'Branch build: version from Directory.Build.props'
+            exit 0
+          }
+          $tag = $env:GITHUB_REF_NAME
+          if ($tag -match '^v(\d+\.\d+\.\d+(-rc\.\d+)?)$') { $version = $Matches[1] }
+          else { throw "Tag '$tag' is not vX.Y.Z or vX.Y.Z-rc.N" }
+          git fetch --no-tags origin claude/dp-desktop-incy
+          git merge-base --is-ancestor $env:GITHUB_SHA FETCH_HEAD
+          if ($LASTEXITCODE -ne 0) { throw "Tag '$tag' ($env:GITHUB_SHA) is not on claude/dp-desktop-incy" }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "prerelease=$(($version -match '-').ToString().ToLower())" >> $env:GITHUB_OUTPUT
+          Write-Host "Release build $version"
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
@@ -44,9 +87,17 @@ jobs:
       # компилирует JIT. Владелец ждал окно с серверами после каждого старта; живой замер — 1,4–1,5 с
       # до списка вместо 2,1–2,6 с. Цена — размер: exe 105 → 170 МБ, архив сборки примерно +25 МБ.
       # Только здесь, а не в Directory.Build.props: общие настройки апстрима не трогаем.
+      # AmazTool — помощник обновления: программа отдаёт ему скачанный архив и выходит, он заменяет
+      # файлы и запускает её снова. Без него рядом с departament.exe обновиться нечем. Публикуется
+      # ПЕРВЫМ и в ту же папку: среда выполнения у них общая, а собранные ReadyToRun файлы
+      # приложения публикация приложения затем кладёт поверх.
+      - name: Publish AmazTool (upgrade helper)
+        working-directory: ./v2rayN
+        run: dotnet publish ./AmazTool/AmazTool.csproj -c Release -r win-x64 -p:SelfContained=true -p:EnableWindowsTargeting=true ${{ steps.version.outputs.version && format('-p:Version={0}', steps.version.outputs.version) || '' }} -o "${{ github.workspace }}/dist"
+
       - name: Publish (self-contained win-x64)
         working-directory: ./v2rayN
-        run: dotnet publish ./v2rayN.Desktop/v2rayN.Desktop.csproj -c Release -r win-x64 -p:SelfContained=true -p:EnableWindowsTargeting=true -p:PublishReadyToRun=true -o "${{ github.workspace }}/dist"
+        run: dotnet publish ./v2rayN.Desktop/v2rayN.Desktop.csproj -c Release -r win-x64 -p:SelfContained=true -p:EnableWindowsTargeting=true -p:PublishReadyToRun=true ${{ steps.version.outputs.version && format('-p:Version={0}', steps.version.outputs.version) || '' }} -o "${{ github.workspace }}/dist"
 
       - name: Strip debug symbols
         shell: pwsh
@@ -70,6 +121,16 @@ jobs:
             } else {
               throw 'departament.exe not found in publish output'
             }
+          }
+          if (-not (Test-Path (Join-Path "${{ github.workspace }}/dist" 'AmazTool.exe'))) { throw 'AmazTool.exe not found in publish output' }
+          # На выпуске версия в самом файле обязана совпасть с тегом: по ней программа сравнивает
+          # себя с релизом. Разойдись они — обновление предлагалось бы по кругу или не предлагалось вовсе.
+          $v = '${{ steps.version.outputs.version }}'
+          if ($v) {
+            $pv = (Get-Item $exe).VersionInfo.ProductVersion
+            # ProductVersion = версия выпуска, после «+» — хеш коммита (его дописывает SDK).
+            if ($pv -ne $v -and -not $pv.StartsWith("$v+")) { throw "departament.exe ProductVersion '$pv' does not match release $v" }
+            Write-Host "departament.exe ProductVersion $pv"
           }
 
       - name: Bundle Xray core + geo assets
@@ -142,9 +203,90 @@ jobs:
           }
           Write-Host 'Bundled rule-sets:' ((Get-ChildItem $dir -Filter *.srs).Name -join ', ')
 
+      - name: Package release zip
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $name = 'departament-windows-x64'
+          $pkg = Join-Path $env:RUNNER_TEMP 'pkg'
+          $root = Join-Path $pkg $name
+          New-Item -ItemType Directory -Force -Path $root | Out-Null
+          Copy-Item -Path "${{ github.workspace }}/dist/*" -Destination $root -Recurse -Force
+          $zip = Join-Path "${{ github.workspace }}" "$name.zip"
+          if (Test-Path $zip) { Remove-Item $zip -Force }
+          # includeBaseDirectory: все записи под departament-windows-x64/, разделитель — «/».
+          [System.IO.Compression.ZipFile]::CreateFromDirectory($root, $zip, [System.IO.Compression.CompressionLevel]::Optimal, $true)
+          $archive = [System.IO.Compression.ZipFile]::OpenRead($zip)
+          try {
+            $names = $archive.Entries | ForEach-Object { $_.FullName }
+          } finally { $archive.Dispose() }
+          $bad = $names | Where-Object { -not $_.StartsWith("$name/") -or $_.Contains('\') }
+          if ($bad) { throw "Zip entries outside '$name/' or with backslashes: $($bad | Select-Object -First 5)" }
+          foreach ($must in @('departament.exe', 'AmazTool.exe', 'bin/Xray/xray.exe', 'bin/Xray/wintun.dll', 'bin/sing_box/sing-box.exe', 'bin/geoip.dat', 'bin/geosite.dat')) {
+            if ($names -notcontains "$name/$must") { throw "Zip is missing $name/$must" }
+          }
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          [System.IO.File]::WriteAllText("$zip.sha256", "$hash  $name.zip`n")
+          Write-Host "$name.zip: $($names.Count) entries, $([math]::Round((Get-Item $zip).Length / 1MB, 1)) MB, sha256 $hash"
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: departament-vpn-win-x64
           path: dist
           if-no-files-found: error
+
+      - name: Upload release assets
+        if: github.ref_type == 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-assets
+          path: |
+            departament-windows-x64.zip
+            departament-windows-x64.zip.sha256
+          if-no-files-found: error
+
+  # Публикация — отдельной работой и только она с правом записи: сборка ничего в репозитории
+  # менять не может. Релиз, созданный GITHUB_TOKEN, по правилам GitHub не запускает других
+  # workflow — в том числе оставшийся в master от исходного проекта «WinGet submission on release».
+  release:
+    if: github.ref_type == 'tag'
+    needs: win-x64
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout release notes
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: release-notes
+
+      - name: Download release assets
+        uses: actions/download-artifact@v4
+        with:
+          name: release-assets
+
+      # Описание выпуска пишется руками, по-русски, для людей: release-notes/<тег>.md. Без него
+      # релиз не публикуется — пустой или машинный список коммитов владельцу не нужен.
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.win-x64.outputs.version }}
+          PRERELEASE: ${{ needs.win-x64.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+          notes="release-notes/${TAG}.md"
+          [ -f "$notes" ] || { echo "::error::$notes is missing: write the release notes first"; exit 1; }
+          sha256sum -c departament-windows-x64.zip.sha256
+          flags=()
+          [ "$PRERELEASE" = "true" ] && flags+=(--prerelease)
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" departament-windows-x64.zip departament-windows-x64.zip.sha256 --clobber
+            gh release edit "$TAG" --notes-file "$notes"
+          else
+            gh release create "$TAG" departament-windows-x64.zip departament-windows-x64.zip.sha256 \
+              --verify-tag --title "departament для ПК ${VERSION}" --notes-file "$notes" "${flags[@]}"
+          fi
