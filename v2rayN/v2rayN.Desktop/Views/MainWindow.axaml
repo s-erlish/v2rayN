@@ -387,6 +387,13 @@
                         Foreground="{DynamicResource Brush.OnSurfaceVariant}"
                         Text="departament" />
 
+                    <!--  Уведомление об обновлении — чип слева от кнопок окна (130 = 6 + 3×40 + 2×2, плюс зазор 8).
+                          В покое его нет вовсе; зачем он здесь, а не тостом внизу, — в UpdateNotice.axaml.  -->
+                    <views:UpdateNotice
+                        Margin="0,0,138,0"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Center" />
+
                     <!--  Системные кнопки справа. Глифы 16×16, обводка 1.3, круглые концы — прототип.  -->
                     <StackPanel
                         Margin="0,0,6,0"

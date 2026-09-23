@@ -80,6 +80,7 @@ public sealed partial class L : INotifyPropertyChanged
         RegisterBuy();
         RegisterShell();
         RegisterStart();
+        RegisterUpdate();
     }
 
     // ── Per-area registration hooks (implemented in the L.<Area>.cs partials) ──
@@ -94,6 +95,9 @@ public sealed partial class L : INotifyPropertyChanged
     // Начальный экран + экран прогрузки (L.Start.cs). Заведён своим хуком, а не дописан в
     // Home/Common, чтобы блок 7 не правил файлы соседних пакетов работ — см. шапку L.Start.cs.
     partial void RegisterStart();
+
+    // Самообновление: экран, уведомление в строке окна, строка настроек (L.Update.cs).
+    partial void RegisterUpdate();
 
     /// <summary>Register one key with its Russian and English value. Called from the partials.</summary>
     private void Add(string key, string ru, string en) => _table[key] = (ru, en);

@@ -1,26 +1,47 @@
-using Avalonia.Controls.Shapes;
-using Avalonia.Data.Converters;
-using ServiceLib.Models.Dto;
+using ServiceLib.Services.AppUpdate;
 using v2rayN.Desktop.Common;
 
 namespace v2rayN.Desktop.Views;
 
 /// <summary>
-/// «Проверить обновление» — подэкран настроек по единому лекалу (screens.md «Подэкраны»):
-/// тумблер предварительных выпусков → действия → компоненты → сноска с версией.
+/// «Проверить обновление» — подэкран настроек по единому лекалу: карточка «что сейчас и что дальше» →
+/// «Искать предварительный выпуск» → сноска с версией и временем проверки.
 ///
-/// Раньше это было легаси-представление v2rayN: англоязычный ResUI, <c>ListBox</c> с тумблером,
-/// типом ядра и текстом в трёх колонках и две кнопки в ряд. Разметка переписана, ЛОГИКА НЕ
-/// ДУБЛИРУЕТСЯ — под экраном тот же движковый <see cref="CheckUpdateViewModel"/>: он хранит выбор
-/// компонентов в конфиге, качает релизы и пишет ответ в <c>Remarks</c> каждой строки.
+/// <para>Под экраном — <see cref="CheckUpdateViewModel"/>, то есть общее состояние самообновления
+/// (<see cref="AppUpdateManager"/>): загрузка, начатая из уведомления в строке окна, видна здесь с тем же
+/// прогрессом. Экран каждый раз рисует состояние целиком (<see cref="Render"/>): одна точка, где
+/// состояние становится словами, — и ни одна строка не может остаться от прошлого состояния.</para>
 ///
-/// Класс остался <see cref="ReactiveUserControl{T}"/> — на нём висит регистрация в
-/// <c>SimpleViewLocator</c>; добавлен <see cref="ISubPage"/>, поэтому экран кладётся на общий стек
-/// «назад» оболочки, как остальные подэкраны, и из него есть выход.
+/// <para>Раньше здесь были список «компонентов» (приложение, Xray, mihomo, sing-box, Geo-базы) и две
+/// вечные строки «Проверить» и «Обновить сейчас»; «Обновить» поставил бы поверх departament стоковый
+/// v2rayN и незакреплённые ядра. Ядра теперь едут в выпуске, Geo-базы обновляются из «Файлов ресурсов».</para>
 /// </summary>
 public partial class CheckUpdateView : ReactiveUserControl<CheckUpdateViewModel>, ISubPage
 {
-    private bool _busy;
+    private enum Tone
+    {
+        Neutral,
+        Accent,
+        Error,
+    }
+
+    /// <summary>Что показать для состояния: плитка, слова, основное действие и нужна ли страница загрузки.</summary>
+    private sealed record Look(
+        string Glyph,
+        Tone Tone,
+        bool Spinner,
+        string Title,
+        string? Line,
+        string? Action,
+        string ActionGlyph,
+        bool ActionAccent,
+        bool ActionEnabled,
+        Action? Run,
+        bool ReleasesPage);
+
+    private Action? _run;
+    private bool _runEnabled;
+    private double _fraction = -1;
 
     public event EventHandler? BackRequested;
 
@@ -28,165 +49,240 @@ public partial class CheckUpdateView : ReactiveUserControl<CheckUpdateViewModel>
     {
         InitializeComponent();
 
-        // Раньше модель приходила только через DataContext локатора. Подэкран создаётся оболочкой
-        // напрямую (new CheckUpdateView()), поэтому модель заводим сами — иначе экран пустой.
+        // Подэкран создаётся оболочкой напрямую (new CheckUpdateView()), поэтому модель заводим сами.
         ViewModel ??= new CheckUpdateViewModel();
-
-        // Строки строятся ОДИН раз: у обёртки собственное реактивное IsOn, а Remarks движка уже
-        // [Reactive] — значит и тумблер, и живой ответ проверки доезжают до экрана сами.
-        // Пересборка списка на каждый тап (как было) моргала всей карточкой.
-        // Безымянный компонент СТРОКОЙ НЕ СТАНОВИТСЯ. Раньше такая строка получала подпись «—»:
-        // тумблер без названия, который непонятно что включает. Имя берётся из CoreTypeForStorage,
-        // и оно же — ключ, под которым выбор сохраняется в конфиг; без имени строка не может ни
-        // назваться, ни запомниться.
-        listComponents.ItemsSource = ViewModel.CheckUpdateModels
-            .Where(m => m.CoreTypeForStorage.IsNotEmpty())
-            .Select((m, i) => new ComponentRow(m, i > 0))
-            .ToList();
-        txtFoot.Text = L.F("Update_Foot", Utils.GetVersionInfo());
 
         btnBack.Click += (_, _) => BackRequested?.Invoke(this, EventArgs.Empty);
 
-        // Тап по строке-тумблеру переключает тумблер — но не когда источником тапа был он сам.
-        RowPreRelease.Tapped += (_, e) =>
+        WireRow(RowAction, () =>
         {
-            if (!SubPageUtil.OriginatedIn<ToggleSwitch>(e.Source))
+            if (_runEnabled)
             {
-                togEnableCheckPreReleaseUpdate.IsChecked = togEnableCheckPreReleaseUpdate.IsChecked != true;
+                _run?.Invoke();
             }
-        };
+        });
+        WireRow(RowSecondary, OpenReleasesPage);
+        // Тап по строке-тумблеру переключает тумблер — но не когда источником тапа был он сам.
+        WireRow(RowPreRelease, () => togEnableCheckPreReleaseUpdate.IsChecked = togEnableCheckPreReleaseUpdate.IsChecked != true,
+            skipToggle: true);
 
-        RowCheckOnly.Tapped += (_, _) => Run(check: true);
-        RowInstall.Tapped += (_, _) => Run(check: false);
+        Meter.SizeChanged += (_, _) => ApplyFraction();
 
         this.WhenActivated(disposables =>
         {
             this.Bind(ViewModel, vm => vm.EnableCheckPreReleaseUpdate, v => v.togEnableCheckPreReleaseUpdate.IsChecked).DisposeWith(disposables);
+            ViewModel.WhenAnyValue(vm => vm.State).Subscribe(_ => Render()).DisposeWith(disposables);
         });
-    }
 
-    /// <summary>Тап по строке компонента переключает его тумблер (кроме тапа по самому тумблеру).</summary>
-    private void OnComponentRowTapped(object? sender, TappedEventArgs e)
-    {
-        if (SubPageUtil.OriginatedIn<ToggleSwitch>(e.Source))
+        // Подписка на общее состояние — только пока экран на виду (см. CheckUpdateViewModel.Attach).
+        AttachedToVisualTree += (_, _) =>
         {
-            return;
-        }
-        if (sender is Border { DataContext: ComponentRow row })
+            ViewModel?.Attach();
+            L.Instance.LanguageChanged += OnLanguageChanged;
+            Render();
+            ViewModel?.CheckIfStale();
+        };
+        DetachedFromVisualTree += (_, _) =>
         {
-            row.IsOn = !row.IsOn;
-        }
-    }
-
-    /// <summary>
-    /// Запускает движковую команду. Пока она идёт, действия теряют акцент и не откликаются: акцентный
-    /// текст читается как «нажми», а нажимать в этот момент нечего (то же правило, что в «Файлах
-    /// ресурсов»). В плитке ЗАПУЩЕННОЙ строки глиф подменяется вращающимся кругом — motion.md
-    /// («Пинг и обновление подписки»): «на месте иконки вращается круг».
-    /// </summary>
-    private void Run(bool check)
-    {
-        if (_busy || ViewModel is null)
-        {
-            return;
-        }
-        _busy = true;
-        SetBusy(true, check);
-
-        var cmd = check ? ViewModel.CheckOnlyCmd : ViewModel.CheckUpdateCmd;
-        cmd.Execute().Subscribe(
-            _ => { },
-            _ => Done(),
-            Done);
-
-        void Done() => Dispatcher.UIThread.Post(() =>
-        {
-            _busy = false;
-            SetBusy(false, check);
-        });
-    }
-
-    /// <param name="busy">идёт ли команда.</param>
-    /// <param name="check">какая именно строка её запустила — только у неё крутится круг.</param>
-    private void SetBusy(bool busy, bool check)
-    {
-        foreach (var (text, row) in new[] { (txtCheckOnly, RowCheckOnly), (txtInstall, RowInstall) })
-        {
-            text.Classes.Set("accent", !busy);
-            row.Classes.Set("tap", !busy);
-        }
-
-        Spin(icoCheckOnly, spinCheckOnly, busy && check);
-        Spin(icoInstall, spinInstall, busy && !check);
-    }
-
-    /// <summary>Подмена глифа кругом в том же слоте: ничего вокруг не сдвигается.</summary>
-    private static void Spin(PathIcon glyph, Ellipse ring, bool on)
-    {
-        glyph.IsVisible = !on;
-        ring.IsVisible = on;
-        ring.Classes.Set("spinning", on);
-    }
-
-    /// <summary>
-    /// Обёртка строки списка: несёт разделитель (он рисуется перед каждой строкой кроме первой),
-    /// человеческое имя компонента и реактивный переключатель. Имена ядра и Geo-баз показываем так,
-    /// как их зовут в этом приложении: «v2rayN» — это оно само, и апстримное имя в интерфейсе
-    /// departament ни о чём не говорит пользователю.
-    ///
-    /// <c>IsOn</c> нужен потому, что <see cref="CheckUpdateModel.IsSelected"/> — обычное свойство без
-    /// уведомления: биндиться прямо к нему нельзя, тумблер не узнал бы о смене.
-    /// </summary>
-    public sealed class ComponentRow : ReactiveObject
-    {
-        private bool _isOn;
-
-        public ComponentRow(CheckUpdateModel model, bool showDivider)
-        {
-            Model = model;
-            ShowDivider = showDivider;
-            _isOn = model.IsSelected == true;
-        }
-
-        public CheckUpdateModel Model { get; }
-
-        public bool ShowDivider { get; }
-
-        public bool IsOn
-        {
-            get => _isOn;
-            set
-            {
-                this.RaiseAndSetIfChanged(ref _isOn, value);
-                Model.IsSelected = value;
-            }
-        }
-
-        public string Title => Model.CoreTypeForStorage switch
-        {
-            "GeoFiles" => L.T("Update_GeoFiles"),
-            "v2rayN" => L.T("Update_App"),
-            "sing_box" => "sing-box",
-            // Пустого варианта здесь больше нет: безымянные строки отсеиваются при сборке списка.
-            var other => other,
+            ViewModel?.Detach();
+            L.Instance.LanguageChanged -= OnLanguageChanged;
         };
     }
-}
 
-/// <summary>
-/// Есть ли у компонента ЖИВОЙ ответ проверки. До первой проверки движок кладёт в <c>Remarks</c> свою
-/// менюшную надпись «Обновить» (<c>ResUI.menuCheckUpdate</c>) — как подзаголовок строки она обещает
-/// действие, которого в строке нет, поэтому такая подпись не показывается вовсе. Всё остальное —
-/// настоящий ответ («… уже последней версии», «не поддерживается», ход проверки) — показывается.
-/// Локален для этого экрана, в GlobalResources не выносится.
-/// </summary>
-public sealed class UpdateAnswerVisibleConverter : IValueConverter
-{
-    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    private void OnLanguageChanged(object? sender, EventArgs e) => Dispatcher.UIThread.Post(Render);
+
+    /// <summary>Строка-действие: тап и Enter/Space с фокуса — один и тот же жест (клавиатура обязательна, 00-rules 14.8).</summary>
+    private static void WireRow(Border row, Action activate, bool skipToggle = false)
     {
-        var s = value?.ToString();
-        return !string.IsNullOrWhiteSpace(s) && !string.Equals(s, ResUI.menuCheckUpdate, StringComparison.Ordinal);
+        row.Focusable = true;
+        row.IsTabStop = true;
+        row.Tapped += (_, e) =>
+        {
+            if (!skipToggle || !SubPageUtil.OriginatedIn<ToggleSwitch>(e.Source))
+            {
+                activate();
+            }
+        };
+        row.KeyDown += (_, e) =>
+        {
+            if (e.Key is Key.Enter or Key.Space)
+            {
+                activate();
+                e.Handled = true;
+            }
+        };
     }
 
-    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => null;
+    // ==================== Состояние → экран ====================
+
+    private void Render()
+    {
+        if (ViewModel is null)
+        {
+            return;
+        }
+        var s = ViewModel.State;
+        var look = LookOf(s);
+
+        // Плитка: глиф или круг на его месте (motion.md «на месте иконки вращается круг»).
+        icoStatus.Data = FindGlyph(look.Glyph);
+        icoStatus.IsVisible = !look.Spinner;
+        spinStatus.IsVisible = look.Spinner;
+        spinStatus.Classes.Set("spinning", look.Spinner);
+        tileStatus.Classes.Set("accent", look.Tone == Tone.Accent);
+        tileStatus.Classes.Set("error", look.Tone == Tone.Error);
+
+        txtStatusTitle.Text = look.Title;
+        txtStatusLine.Text = look.Line;
+        txtStatusLine.IsVisible = !string.IsNullOrEmpty(look.Line);
+
+        RenderProgress(s);
+
+        // Основное действие. Нет действия — нет и строки с разделителем: пустая строка обещала бы шаг,
+        // которого нет.
+        var hasAction = look.Action is not null;
+        RowAction.IsVisible = DividerAction.IsVisible = hasAction;
+        _run = look.Run;
+        _runEnabled = look.ActionEnabled && look.Run is not null;
+        txtAction.Text = look.Action;
+        icoAction.Data = FindGlyph(look.ActionGlyph);
+        txtAction.Classes.Set("accent", look.ActionAccent && _runEnabled);
+        RowAction.Classes.Set("tap", _runEnabled);
+        RowAction.Classes.Set("idle", !_runEnabled);
+        RowAction.IsTabStop = RowAction.Focusable = _runEnabled;
+
+        RowSecondary.IsVisible = DividerSecondary.IsVisible = look.ReleasesPage;
+
+        // Пока приложение уже выходит в установку, переключать канал поздно.
+        RowPreRelease.IsEnabled = s.Stage != AppUpdateStage.Installing;
+
+        txtFoot.Text = Foot(s);
+    }
+
+    private Look LookOf(AppUpdateState s)
+    {
+        var vm = ViewModel!;
+        var running = AppUpdateManager.Instance.Running.ToString();
+        var offer = s.Offer?.Version.ToString() ?? string.Empty;
+        Action check = () => Execute(vm.CheckCmd);
+        Action download = () => Execute(vm.DownloadCmd);
+        Action cancel = () => Execute(vm.CancelCmd);
+        Action restart = () => UpdateRestartFlyout.ShowAt(RowAction);
+
+        Look Retry(string title, string line, bool withDownload = false, bool page = false) =>
+            new("Geo.Update.Alert", Tone.Error, false, title, line,
+                L.T("Common_Retry"), "Geo.Sub.Refresh", true, true, withDownload && s.Offer is not null ? download : check, page);
+
+        Look Page(string glyph, Tone tone, string title, string line) =>
+            new(glyph, tone, false, title, line, L.T("Update_OpenReleases"), "Geo.Update.Open", true, true, OpenReleasesPage, false);
+
+        return s.Stage switch
+        {
+            AppUpdateStage.Idle => new("Geo.Update.Schedule", Tone.Neutral, false, L.F("Update_IdleTitle", running), L.T("Update_IdleLine"),
+                L.T("Update_Check"), "Geo.Sub.Refresh", true, true, check, false),
+
+            AppUpdateStage.Checking => new("Geo.Sub.Refresh", Tone.Neutral, true, L.T("Update_CheckingTitle"), L.F("Update_CheckingLine", running),
+                L.T("Update_Check"), "Geo.Sub.Refresh", true, false, null, false),
+
+            AppUpdateStage.UpToDate => new("Geo.Sub.Check", Tone.Neutral, false, L.T("Update_NoneTitle"),
+                s.NoReleaseYet ? L.T("Update_NoReleaseLine") : L.F("Update_NoneLine", running),
+                L.T("Update_Check"), "Geo.Sub.Refresh", true, true, check, false),
+
+            AppUpdateStage.Available => new("Geo.Update.Newer", Tone.Accent, false,
+                s.Offer!.IsPreRelease ? L.F("Update_FoundPreTitle", offer) : L.F("Update_FoundTitle", offer), L.T("Update_FoundLine"),
+                L.T("Update_Download"), "Geo.Update.Install", true, true, download, false),
+
+            // Отмена — тихая строка без акцента: главное на экране сейчас полоса, а не выход из неё.
+            AppUpdateStage.Downloading => new("Geo.Update.Install", Tone.Neutral, false, L.F("Update_DownloadingTitle", offer), null,
+                L.T("Update_Cancel"), "Geo.Update.Cancel", false, true, cancel, false),
+
+            AppUpdateStage.Verifying => new("Geo.Update.Install", Tone.Neutral, true, L.T("Update_VerifyingTitle"), L.T("Update_VerifyingLine"),
+                L.T("Update_Cancel"), "Geo.Update.Cancel", false, true, cancel, false),
+
+            AppUpdateStage.Ready => new("Geo.Update.Done", Tone.Accent, false, L.F("Update_ReadyTitle", offer), L.T("Update_ReadyLine"),
+                L.T("Update_Restart"), "Geo.Update.Restart", true, true, restart, false),
+
+            AppUpdateStage.Installing => new("Geo.Update.Done", Tone.Neutral, true, L.T("Update_InstallingTitle"), L.T("Update_InstallingLine"),
+                null, "Geo.Update.Restart", false, false, null, false),
+
+            _ => s.Failure switch
+            {
+                // Нет сети — не поломка приложения: тон спокойный, глиф говорит сам.
+                AppUpdateFailure.Offline => new("Geo.Update.Offline", Tone.Neutral, false, L.T("Update_ErrOfflineTitle"), L.T("Update_ErrOfflineLine"),
+                    L.T("Common_Retry"), "Geo.Sub.Refresh", true, true, s.Offer is not null ? download : check, false),
+                AppUpdateFailure.Unreachable => Retry(L.T("Update_ErrCheckTitle"), L.T("Update_ErrUnreachableLine")),
+                AppUpdateFailure.RateLimited => Retry(L.T("Update_ErrCheckTitle"), L.T("Update_ErrRateLine")),
+                AppUpdateFailure.UnsupportedPlatform => Page("Geo.Update.Info", Tone.Neutral, L.T("Update_ErrUnavailableTitle"), L.T("Update_ErrPlatformLine")),
+                // Нового пакета нет — повтор ответа не изменит, пока не выйдет следующая сборка; «Проверить
+                // обновление» остаётся, как у «обновлений нет».
+                AppUpdateFailure.NoPackage => new("Geo.Update.Info", Tone.Neutral, false, L.T("Update_ErrUnavailableTitle"), L.T("Update_ErrNoPackageLine"),
+                    L.T("Update_Check"), "Geo.Sub.Refresh", true, true, check, false),
+                AppUpdateFailure.DownloadFailed => Retry(L.T("Update_ErrDownloadTitle"), L.T("Update_ErrDownloadLine"), withDownload: true),
+                AppUpdateFailure.ChecksumMismatch => Retry(L.T("Update_ErrChecksumTitle"), L.T("Update_ErrChecksumLine"), withDownload: true),
+                AppUpdateFailure.ForeignRedirect => Page("Geo.Update.Alert", Tone.Error, L.T("Update_ErrRedirectTitle"), L.T("Update_ErrRedirectLine")),
+                AppUpdateFailure.BadPackage => Page("Geo.Update.Alert", Tone.Error, L.T("Update_ErrForeignTitle"), L.T("Update_ErrForeignLine")),
+                AppUpdateFailure.InstallerMissing => Page("Geo.Update.Alert", Tone.Error, L.T("Update_ErrInstallerTitle"), L.T("Update_ErrInstallerLine")),
+                AppUpdateFailure.InstallFailed => Retry(L.T("Update_ErrInstallTitle"), L.F("Update_ErrInstallLine", running), withDownload: true, page: true),
+                _ => Retry(L.T("Update_ErrCheckTitle"), L.T("Update_ErrServerLine")),
+            },
+        };
+    }
+
+    /// <summary>
+    /// Полоса и цифры загрузки. Длину сервер назвал — доля и «12,4 МБ из 38,1 МБ»; не назвал — полоса
+    /// без заливки и «Скачано 12,4 МБ»: процент без знаменателя был бы украшением, а не прогрессом.
+    /// </summary>
+    private void RenderProgress(AppUpdateState s)
+    {
+        var downloading = s.Stage == AppUpdateStage.Downloading;
+        ProgressBlock.IsVisible = downloading;
+        if (!downloading)
+        {
+            _fraction = -1;
+            return;
+        }
+        if (s.Total > 0)
+        {
+            _fraction = Math.Clamp((double)s.Received / s.Total, 0, 1);
+            txtProgress.Text = L.F("Update_DownloadingSize", Megabytes(s.Received), Megabytes(s.Total));
+        }
+        else
+        {
+            _fraction = 0;
+            txtProgress.Text = L.F("Update_DownloadingDone", Megabytes(s.Received));
+        }
+        ApplyFraction();
+    }
+
+    private void ApplyFraction()
+    {
+        MeterFill.Width = _fraction < 0 ? 0 : Math.Round(Meter.Bounds.Width * _fraction);
+    }
+
+    private static string Megabytes(long bytes) =>
+        (bytes / 1024d / 1024d).ToString("0.0", CultureInfo.CurrentUICulture);
+
+    /// <summary>«departament 1.2.0 · проверено в 14:32»: версия всегда, время — когда лента ответила.</summary>
+    private static string Foot(AppUpdateState s)
+    {
+        var running = AppUpdateManager.Instance.Running.ToString();
+        if (s.CheckedAt is not { } at)
+        {
+            return L.F("Update_Foot", running);
+        }
+        return at.Date == DateTime.Today
+            ? L.F("Update_FootToday", running, at.ToString("HH:mm", CultureInfo.CurrentUICulture))
+            : L.F("Update_FootDate", running, at.ToString("dd.MM.yyyy", CultureInfo.CurrentUICulture));
+    }
+
+    private Geometry? FindGlyph(string key) =>
+        this.TryFindResource(key, out var value) ? value as Geometry : null;
+
+    private static void Execute<TOut>(ReactiveCommand<Unit, TOut> command) =>
+        command.Execute().Subscribe(_ => { }, ex => Logging.SaveLog("CheckUpdateView", ex));
+
+    private static void OpenReleasesPage()
+    {
+        ProcUtils.TryProcessStart(AppUpdateManager.Instance.Channel.ReleasesPageUrl);
+    }
 }

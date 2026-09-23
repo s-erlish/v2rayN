@@ -1610,6 +1610,17 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         PushSubPage(view);
     }
 
+    /// <summary>«Проверить обновление» из уведомления в строке окна. Экран, уже лежащий сверху стека,
+    /// второй раз не кладётся: иначе «назад» пришлось бы нажимать дважды ради одного и того же экрана.</summary>
+    public void OpenUpdatePage()
+    {
+        if (_subStack.Count > 0 && _subStack[^1] is CheckUpdateView)
+        {
+            return;
+        }
+        OpenSubPage(new CheckUpdateView());
+    }
+
     #endregion Sub-page host
 
     private void TitleBar_PointerPressed(object? sender, PointerPressedEventArgs e)
@@ -2665,7 +2676,15 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
             return;
         }
         _trayIconRequested = true;
-        RequestAnimationFrame(_ => Dispatcher.UIThread.Post(App.ShowTrayIcon, DispatcherPriority.Background));
+        RequestAnimationFrame(_ => Dispatcher.UIThread.Post(() =>
+        {
+            App.ShowTrayIcon();
+            // Автопроверка обновлений — тоже после первого кадра, и ещё через 20–30 с (UpdateNotice).
+            UpdateNotice.StartAutoCheck();
+        }, DispatcherPriority.Background));
+        // Страховка, как у значка в трее (App.SetupTray): окно, спрятанное в трей до первого кадра,
+        // кадра не рисует. Повторный вызов ничего не делает.
+        DispatcherTimer.RunOnce(UpdateNotice.StartAutoCheck, TimeSpan.FromSeconds(10));
     }
 
     protected override void OnLoaded(object? sender, RoutedEventArgs e)

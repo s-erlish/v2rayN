@@ -500,6 +500,21 @@ public sealed class AppUpdateManager
 
     #region State
 
+#if DEBUG
+    /// <summary>
+    /// Только отладочная сборка: показать экран и уведомление в заданном состоянии без сети — для снимков
+    /// всех состояний при проверке оформления. В выпускной сборке метода нет.
+    /// </summary>
+    public void DevShowState(AppUpdateState state)
+    {
+        lock (_gate)
+        {
+            _generation++;
+        }
+        Transition(null, state);
+    }
+#endif
+
     /// <summary>Ставит состояние, если с начала работы <paramref name="generation"/> пользователь ничего не
     /// сделал (null — без проверки), и оповещает подписчиков.</summary>
     private void Transition(long? generation, AppUpdateState next)
