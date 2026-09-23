@@ -210,7 +210,7 @@ public class SingboxDnsServiceTests
         var cfg = Generate(rawDns: new DNSItem { Enabled = true, CoreType = ECoreType.sing_box });
 
         Flatten(cfg.dns!.rules).Should().NotContain(r => r.strategy != null);
-        cfg.dns.rules.Should().Contain(r => r.rule_set != null && r.rule_set.Contains("geosite-cn"));
+        cfg.dns.rules.Should().Contain(r => r.server == "local" && r.domain_suffix != null && r.domain_suffix.Contains("ru"));
         cfg.dns.strategy.Should().Be("prefer_ipv4");
     }
 

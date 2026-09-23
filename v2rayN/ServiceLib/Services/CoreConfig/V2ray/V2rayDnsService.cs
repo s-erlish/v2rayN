@@ -82,7 +82,15 @@ public partial class CoreConfigV2rayService
                 .ToList();
             if (directDnsTags.Count > 0)
             {
-                _coreConfig.routing.rules.Add(new()
+                //  ПЕРВЫМ, до правил маршрута. Свои запросы прямой DNS Xray пропускает через те же
+                //  правила, что и трафик, а это правило стояло в самом конце, и любое правило по IP
+                //  резолвера срабатывало раньше. Встроенный «Blacklist» шлёт 77.88.8.8 и 77.88.8.1 в
+                //  proxy («публичные DNS за рубежом» — так их видит апстрим из Китая): прямой DNS на
+                //  Яндексе уходил в туннель, включая запрос за адресом самого VPN-сервера, которому
+                //  туннель и нужен, а в режиме TUN это петля. Китайский 119.29.29.29 ни одно правило
+                //  «Blacklist» в proxy не вело, поэтому раньше это не всплывало. У sing-box такого
+                //  нет: DNS-сервер без detour у него всегда ходит напрямую.
+                _coreConfig.routing.rules.Insert(0, new()
                 {
                     type = "field",
                     inboundTag = directDnsTags,
@@ -241,7 +249,10 @@ public partial class CoreConfigV2rayService
         AddDnsServers(directDNSAddress, expectedDomainList, true, expectedIPs);
         if (dnsServerDomains.Count > 0)
         {
-            AddDnsServers(bootstrapDNSAddress, dnsServerDomains);
+            //  Bootstrap — тоже прямой резолвер: имена DoH-серверов нельзя разрешать через туннель,
+            //  который сам может ждать этих имён. Без метки direct-dns его вёл по правилам только
+            //  «Whitelist» апстрима (китайские DNS — напрямую), а Яндекс ни в одном таком правиле нет.
+            AddDnsServers(bootstrapDNSAddress, dnsServerDomains, true);
         }
 
         var useDirectDns = false;
@@ -463,12 +474,25 @@ public partial class CoreConfigV2rayService
         }
 
         var dnsItem = context.RawDnsItem;
+        //  Хосты VPN-серверов разрешаются мимо туннеля: метка и правило «напрямую» первым — по той же
+        //  причине, что у прямого DNS в GenDns. Раньше их вело туда только правило «Whitelist» для
+        //  китайских DNS, а резолвер вне этого списка (Яндекс, например) уходил в proxy, которому
+        //  этот адрес и нужен. И сам сервер — первым в списке: из совпавших по домену Xray спрашивает
+        //  первый, а в своём DNS бывает сервер на целую зону (domain:ru), куда попадает и хост VPN.
+        var protectTag = $"{Global.DirectDnsTag}-protect";
         var dnsServer = new DnsServer4Ray()
         {
             address = string.IsNullOrEmpty(dnsItem?.DomainDNSAddress) ? Global.DomainPureIPDNSAddress.FirstOrDefault() : dnsItem?.DomainDNSAddress,
             skipFallback = true,
             domains = domainList.ToList(),
+            tag = protectTag,
         };
-        servers.AsArray().Add(JsonUtils.SerializeToNode(dnsServer));
+        servers.AsArray().Insert(0, JsonUtils.SerializeToNode(dnsServer));
+        _coreConfig.routing.rules.Insert(0, new()
+        {
+            type = "field",
+            inboundTag = [protectTag],
+            outboundTag = Global.DirectTag,
+        });
     }
 }
