@@ -54,6 +54,7 @@ public class HomeViewModel : MyReactiveObject, IDisposable
     // connected. Both are torn down in Dispose.
     private readonly IDisposable? _coreStateSub;
     private readonly IDisposable? _switchSettledSub;
+    private readonly IDisposable? _recoveryFailedSub;
     private readonly IDisposable? _statsSub;
     // Per-item live-sync: latency/speed results are reported by MUTATING the ProfileItems instances in
     // place (ProfilesViewModel.SetSpeedTestResult sets Delay/DelayVal/SpeedVal/IpInfo) — a per-ITEM
@@ -185,6 +186,13 @@ public class HomeViewModel : MyReactiveObject, IDisposable
             .AsObservable()
             .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ => OnCoreSwitchSettled());
+
+        //  Подключение упало само и не восстановилось — это отказ, а не отключение: щит уходит в
+        //  Error с причиной. Тот же фоновый поток у события, тот же переход в поток интерфейса.
+        _recoveryFailedSub = AppEvents.CoreRecoveryFailed
+            .AsObservable()
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .Subscribe(_ => OnCoreRecoveryFailed());
 
         // Reflect whatever the core is doing right now (it may already be running when this VM builds).
         SyncState();
@@ -516,11 +524,15 @@ public class HomeViewModel : MyReactiveObject, IDisposable
             return L.T("Home_FailNoRights");
         }
 
-        //  Сервер отказал/недоступен — сеть, а не настройки.
+        //  Сервер отказал/недоступен — сеть, а не настройки. Сюда же — sing-box, не скачавший
+        //  набор правил («initial rule-set»): качает он его через туннель, то есть через этот же
+        //  сервер, и срыв значит, что трафик сервер не пропускает (обрыв, «context deadline
+        //  exceeded», EOF — формулировки разные, суть одна).
         if (text.Contains("connection refused")
             || text.Contains("no such host")
             || text.Contains("i/o timeout")
-            || text.Contains("network is unreachable"))
+            || text.Contains("network is unreachable")
+            || text.Contains("initial rule-set"))
         {
             return L.T("Home_FailServerRefused");
         }
@@ -612,6 +624,23 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         SyncState();
         UpdateStateTick();
         ApplyPendingServer();
+    }
+
+    /// <summary>
+    /// Автовосстановление сдалось (см. <see cref="AppEvents.CoreRecoveryFailed"/>). Причина уже лежит
+    /// в <see cref="CoreManager.LastStartFailure"/>, поэтому щит показывает отказ с подсказкой, а не
+    /// тихое «Не подключено». Если пользователь тем временем сам начал подключение или ядро снова
+    /// работает — это уже другая попытка, её не трогаем.
+    /// </summary>
+    private void OnCoreRecoveryFailed()
+    {
+        if (!IsConnecting && !IsCoreRunning())
+        {
+            MarkConnectFailed();
+            ClearSwitchQueue();
+        }
+        SyncState();
+        UpdateStateTick();
     }
 
     /// <summary>
@@ -1042,6 +1071,7 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         StopUptimeTick();
         _coreStateSub?.Dispose();
         _switchSettledSub?.Dispose();
+        _recoveryFailedSub?.Dispose();
         _statsSub?.Dispose();
     }
 

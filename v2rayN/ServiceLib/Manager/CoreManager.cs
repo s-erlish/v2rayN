@@ -94,8 +94,12 @@ public class CoreManager
     // time. Held OUTSIDE _coreOpGate (order: _restartGate → _coreOpGate; never the reverse).
     private readonly SemaphoreSlim _restartGate = new(1, 1);
     private readonly object _restartStatsLock = new();
+    //  Перезапуски ПОДРЯД, ни один из которых не продержался _restartWindow. Раньше счётчик жил в
+    //  окне 60 с от первой попытки: ядро, падающее раз в 15–16 с (sing-box, не дождавшийся набора
+    //  правил), укладывалось в окно по четыре раза, окно обнулялось, и круг «подключено → упало →
+    //  снова» шёл бесконечно — до отказа с причиной дело не доходило никогда. Теперь счётчик
+    //  сбрасывают только устойчивая работа (сторож) и новое подключение пользователя.
     private int _restartAttempts;
-    private DateTime _restartWindowStart;
     private DateTime? _coreUpSince;
 
     // Sticky user-stop intent — set by CoreStop(byUser:true), cleared by a USER connect. While set, no
@@ -793,8 +797,8 @@ public class CoreManager
     /// Re-run the SAME full-restart primitive with the cached current contexts, serialized through
     /// <see cref="_restartGate"/> (single recovery driver) and, for the actual reload,
     /// <see cref="_coreOpGate"/> (single core-op gate — no race with a user reload/disconnect). Backoff
-    /// 1s,2s,4s,8s… capped at ~30s; at most <see cref="_maxRestartAttempts"/> attempts per rolling
-    /// <see cref="_restartWindow"/>, then it gives up (no crash-loop hammering). It bails PERMANENTLY the
+    /// 1s,2s,4s,8s… capped at ~30s; at most <see cref="_maxRestartAttempts"/> restarts in a row that did
+    /// not hold <see cref="_restartWindow"/>, then it gives up (no crash-loop hammering). It bails PERMANENTLY the
     /// moment an external/user stop is observed — the captured stop generation changed,
     /// <see cref="_userStopRequested"/> is set, or the loop token was cancelled — so a user Disconnect
     /// during the backoff window can never be silently undone (C1). The token also makes the backoff wait
@@ -829,12 +833,6 @@ public class CoreManager
                 int attempt;
                 lock (_restartStatsLock)
                 {
-                    var nowTs = DateTime.Now;
-                    if (nowTs - _restartWindowStart > _restartWindow)
-                    {
-                        _restartWindowStart = nowTs;
-                        _restartAttempts = 0;
-                    }
                     if (_restartAttempts >= _maxRestartAttempts)
                     {
                         attempt = -1;
@@ -848,10 +846,9 @@ public class CoreManager
 
                 if (attempt < 0)
                 {
-                    // Crash loop — stop retrying rather than hammer. The shield stays disconnected/Error;
-                    // the budget resets after the rolling window so a later resume/network health check
-                    // can try again.
-                    await UpdateFunc(true, ResUI.FailedToRunCore);
+                    //  Круг падений — не долбим дальше. Щит уходит в отказ с причиной, уцелевшее ядро
+                    //  останавливается; снова подключит пользователь, его попытки счётчиком не ограничены.
+                    await GiveUpRecoveryAsync(startGen, token);
                     return;
                 }
 
@@ -906,8 +903,45 @@ public class CoreManager
     /// definitive close on C1's hand-off race: a user Disconnect bumps the generation before it waits on
     /// the gate, so whichever side wins the gate, the loop never re-establishes a tunnel the user tore
     /// down (and the two never touch <c>_processService</c> concurrently ⇒ no orphan).
+    /// Возвращает true, только если перезапуск действительно прошёл, а не был отменён: проверке
+    /// здоровья нужно отличать «перезапустили и не поднялось» от «перезапуск отменили».
     /// </summary>
-    private async Task RestartLoadCoreAsync(int startGen, CancellationToken token)
+    private async Task<bool> RestartLoadCoreAsync(int startGen, CancellationToken token)
+    {
+        try
+        {
+            await _coreOpGate.WaitAsync(token);
+        }
+        catch (OperationCanceledException)
+        {
+            return false;
+        }
+        try
+        {
+            if (ShouldAbortRecovery(startGen, token))
+            {
+                return false;
+            }
+            await LoadCoreInternal(_lastMainContext, _lastPreContext);
+            return true;
+        }
+        finally
+        {
+            _coreOpGate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Восстановление сдалось. Раньше здесь только уходило общее «не удалось запустить ядро»:
+    /// под щитом — голое «Не подключено» без причины, а уцелевшее ядро оставалось жить. Если
+    /// упал sing-box, живой Xray держал порт впустую; если упал Xray, живой sing-box держал
+    /// туннель со strict_route и заворачивал весь трафик системы в мёртвый порт — без интернета
+    /// вовсе. Теперь: причину — словами умершего ядра, всё уцелевшее — остановить, интерфейсу —
+    /// событие, чтобы щит показал отказ, а не тихое «отключено». Под тем же шлюзом и с той же
+    /// проверкой отмены, что и перезапуск: отключение пользователя или новое подключение,
+    /// успевшее раньше, этот разбор не трогает.
+    /// </summary>
+    private async Task GiveUpRecoveryAsync(int startGen, CancellationToken token)
     {
         try
         {
@@ -923,12 +957,26 @@ public class CoreManager
             {
                 return;
             }
-            await LoadCoreInternal(_lastMainContext, _lastPreContext);
+
+            //  Хвост снимаем ДО остановки: CoreStopInternal обнуляет процессы вместе с выводом.
+            await CaptureCoreErrorTail();
+            if (LastStartFailure == ECoreStartFailure.None)
+            {
+                //  Ядро умерло молча (убито извне, не хватило памяти) — отказ всё равно назван:
+                //  сырой текст уходит в журнал, интерфейс покажет общую подсказку.
+                ReportStartFailure(ECoreStartFailure.CoreOutput,
+                    $"core exited unexpectedly; auto-restart gave up after {_maxRestartAttempts} restarts in a row that did not hold {_restartWindow.TotalSeconds:0} s");
+            }
+            await CoreStopInternal();
         }
         finally
         {
             _coreOpGate.Release();
         }
+
+        Logging.SaveLog($"{_tag} auto-restart gave up: {LastStartError}");
+        AppEvents.CoreRecoveryFailed.Publish();
+        await UpdateFunc(true, ResUI.FailedToRunCore);
     }
 
     private CancellationToken CurrentRestartToken()
@@ -955,11 +1003,14 @@ public class CoreManager
     }
 
     /// <summary>Arm a FRESH restart-loop cancellation source for a new connect session (a user connect
-    /// supersedes any prior loop). Cancels+disposes the old one so any loop still holding it bails.</summary>
+    /// supersedes any prior loop). Cancels+disposes the old one so any loop still holding it bails.
+    /// Заодно — свежий запас перезапусков: подключение пользователя начинает счёт заново, иначе после
+    /// одного отказа первое же падение нового подключения сдавалось бы без единой попытки.</summary>
     private void ResetRestartLoopCts()
     {
         lock (_restartStatsLock)
         {
+            _restartAttempts = 0;
             var old = _restartLoopCts;
             _restartLoopCts = new CancellationTokenSource();
             try
@@ -1023,9 +1074,14 @@ public class CoreManager
                 dead = !await ProbeSocksReadySustainedAsync(pre.Node.Port);
             }
 
-            if (dead && !ShouldAbortRecovery(startGen, token) && _lastMainContext != null)
+            if (dead && !ShouldAbortRecovery(startGen, token) && _lastMainContext != null
+                && await RestartLoadCoreAsync(startGen, token)
+                && !ShouldAbortRecovery(startGen, token))
             {
-                await RestartLoadCoreAsync(startGen, token);
+                //  Перезапуск прошёл, ядро не поднялось, и никто извне его не отменял (иначе сработала
+                //  бы проверка выше). LoadCore уже назвал причину и всё остановил, но щит без события
+                //  так и стоял бы на тихом «Не подключено».
+                AppEvents.CoreRecoveryFailed.Publish();
             }
         }
         catch (Exception ex)
@@ -1121,7 +1177,6 @@ public class CoreManager
                     lock (_restartStatsLock)
                     {
                         _restartAttempts = 0;
-                        _restartWindowStart = DateTime.Now;
                     }
                 }
             }
@@ -1395,7 +1450,11 @@ public class CoreManager
             await Task.Delay(350);
         }
 
-        var preServiceRequiredButFailed = preContext != null && _processPreService is null;
+        //  Второе ядро тоже проверяем на «умерло в окне», а не только на «не запустилось». sing-box
+        //  падает на старте позже Xray (например, не скачав набор правил), и его смерть в этом окне
+        //  сторож не видит: флаг «подключено» ещё не поднят. Раньше такой запуск засчитывался, щит
+        //  синел над мёртвым туннелем, а через 15 с сторож начинал круг перезапусков.
+        var preServiceRequiredButFailed = preContext != null && _processPreService is null or { HasExited: true };
         return _processService is { HasExited: false } && !preServiceRequiredButFailed;
     }
 
@@ -1424,7 +1483,13 @@ public class CoreManager
             var preCoreType = preContext?.Node?.CoreType ?? ECoreType.sing_box;
             var fileName = Utils.GetBinConfigPath(Global.CorePreConfigFileName);
             var result = await CoreConfigHandler.GenerateClientConfig(preContext, fileName);
-            if (result.Success)
+            if (!result.Success)
+            {
+                //  Без второго ядра туннеля нет, и попытка сорвётся — причину называем сразу, иначе
+                //  под щитом осталось бы безымянное «не запустилось».
+                ReportStartFailure(ECoreStartFailure.ConfigFailed, result.Msg);
+            }
+            else
             {
                 var coreInfo = CoreInfoManager.Instance.GetCoreInfo(preCoreType);
                 var proc = await RunProcess(coreInfo, Global.CorePreConfigFileName, true, true);
@@ -1445,7 +1510,7 @@ public class CoreManager
         await _updateFunc?.Invoke(notify, msg);
     }
 
-    private static async Task WaitForProxyPort(CoreConfigContext? preContext, int timeoutMs = 5000)
+    private async Task WaitForProxyPort(CoreConfigContext? preContext, int timeoutMs = 5000)
     {
         if (preContext is null)
         {
@@ -1466,6 +1531,15 @@ public class CoreManager
 
         while (!rootToken.IsCancellationRequested)
         {
+            //  Главное ядро умерло или не запустилось вовсе — его порт уже не откроется. Раньше
+            //  ожидание всё равно высиживало все 5 с, и сорвавшийся запуск с повтором внутри
+            //  LoadCore стоил больше десяти секунд крутилки до честной ошибки.
+            if (_processService is null or { HasExited: true })
+            {
+                Logging.SaveLog($"WaitForProxyPort: main core is not running, stop waiting for proxy port {port}.");
+                return;
+            }
+
             using var tcp = new TcpClient();
             using var attemptCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
             using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(rootToken, attemptCts.Token);
@@ -1525,25 +1599,24 @@ public class CoreManager
     /// </summary>
     private async Task CaptureCoreErrorTail()
     {
-        //  Событие выхода опережает дочитывание вывода — сливаем потоки у умерших процессов,
-        //  иначе фатальная строка ещё не в буфере и причина снова окажется безымянной.
-        if (_processService is { HasExited: true } main)
+        //  Причину называет тот, кто УМЕР. Раньше первым читался хвост главного ядра, даже живого:
+        //  когда падал sing-box, Xray рядом был жив, и его обычная строка старта («Xray ... started»)
+        //  затирала фатальную строку sing-box — под щитом оставалось безымянное «не запустилось».
+        //  Событие выхода опережает дочитывание вывода, поэтому поток умершего сперва сливаем,
+        //  иначе фатальной строки ещё нет в буфере.
+        foreach (var proc in new[] { _processService, _processPreService })
         {
-            await main.FlushOutputAsync();
-        }
-        if (_processPreService is { HasExited: true } pre)
-        {
-            await pre.FlushOutputAsync();
-        }
-
-        var tail = _processService?.GetOutputTail();
-        if (tail.IsNullOrEmpty())
-        {
-            tail = _processPreService?.GetOutputTail();
-        }
-        if (tail.IsNotEmpty())
-        {
-            ReportStartFailure(ECoreStartFailure.CoreOutput, tail);
+            if (proc is not { HasExited: true })
+            {
+                continue;
+            }
+            await proc.FlushOutputAsync();
+            var tail = proc.GetOutputTail();
+            if (tail.IsNotEmpty())
+            {
+                ReportStartFailure(ECoreStartFailure.CoreOutput, tail);
+                return;
+            }
         }
     }
 

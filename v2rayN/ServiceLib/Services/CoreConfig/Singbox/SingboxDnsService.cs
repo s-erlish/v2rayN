@@ -10,6 +10,7 @@ public partial class CoreConfigSingboxService
             if (item is { Enabled: true })
             {
                 GenDnsCustom();
+                MigrateDnsRuleStrategies();
                 return;
             }
 
@@ -51,10 +52,75 @@ public partial class CoreConfigSingboxService
                     rewrite_ttl = 1,
                 });
             }
+            MigrateDnsRuleStrategies();
         }
         catch (Exception ex)
         {
             Logging.SaveLog(_tag, ex);
+        }
+    }
+
+    /// <summary>
+    /// Семейство адресов у правил DNS — без <c>strategy</c> в действии правила.
+    ///
+    /// sing-box 1.14 выключает устаревший режим DNS, как только в списке есть query_type, — а у нас
+    /// он есть по умолчанию (блокировка HTTPS/SVCB), — и тогда strategy у действия правила фатален:
+    ///   create service: initialize dns router: Legacy `strategy` DNS rule action option is deprecated…
+    /// Без query_type — предупреждение и удаление в 1.16. Сюда вели непустые Strategy4Freedom /
+    /// Strategy4Proxy (они ставят strategy на правила защиты, clash_mode и правила маршрута) и
+    /// DNS-шаблоны с prefer_ipv4 у правил.
+    ///
+    /// Перенос — тот, что предлагает сам sing-box («strategy → rule items»), в форме, понятной и
+    /// старым ядрам. ipv4_only / ipv6_only становятся правилом-близнецом перед исходным, которое на
+    /// AAAA / A отвечает пустым NOERROR, — ровно то, что делало действие. prefer_* просто снимается:
+    /// на запросы программ оно не влияет, а порядок семейств при собственных разрешениях ядра задаёт
+    /// route.default_domain_resolver, где strategy законен. У логического правила близнеца не
+    /// строим: вложенные правила ConvertGeo2Ruleset не переводит с geosite, — только снимаем strategy.
+    /// </summary>
+    private void MigrateDnsRuleStrategies()
+    {
+        var rules = _coreConfig.dns?.rules;
+        if (rules == null)
+        {
+            return;
+        }
+
+        for (var i = 0; i < rules.Count; i++)
+        {
+            var rule = rules[i];
+            var strategy = rule.strategy;
+            if (strategy.IsNullOrEmpty())
+            {
+                continue;
+            }
+            rule.strategy = null;
+
+            int? refusedType = strategy switch
+            {
+                "ipv4_only" => 28, // AAAA
+                "ipv6_only" => 1, // A
+                _ => null,
+            };
+            if (refusedType is not { } refused || rule.type == "logical")
+            {
+                continue;
+            }
+            //  Правило уже ограничено типами запросов, и отказного среди них нет — близнецу нечего ловить.
+            if (rule.query_type is { Count: > 0 } types && !types.Contains(refused))
+            {
+                continue;
+            }
+
+            var twin = JsonUtils.DeepCopy(rule)!;
+            twin.server = null;
+            twin.rewrite_ttl = null;
+            twin.disable_cache = null;
+            twin.client_subnet = null;
+            twin.action = "predefined";
+            twin.rcode = "NOERROR";
+            twin.query_type = [refused];
+            rules.Insert(i, twin);
+            i++;
         }
     }
 

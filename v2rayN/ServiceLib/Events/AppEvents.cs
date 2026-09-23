@@ -35,6 +35,17 @@ public static class AppEvents
     /// </summary>
     public static readonly EventChannel<bool> CoreSwitchSettled = new();
 
+    /// <summary>
+    /// Ядро упало само, а восстановление не справилось: автоперезапуск исчерпал попытки или
+    /// перезапуск после пробуждения/смены сети не поднял ядро. К этому моменту
+    /// <see cref="ServiceLib.Manager.CoreManager"/> уже записал причину
+    /// (<c>LastStartFailure</c>/<c>LastStartError</c>) и остановил всё уцелевшее. Нужно экрану:
+    /// после падения подключения попытки пользователя нет, и без события щит молча оставался на
+    /// «Не подключено» — ни ошибки, ни причины. Поднимается на фоновом потоке — подписчики
+    /// интерфейса сами уходят в свой поток.
+    /// </summary>
+    public static readonly EventChannel<Unit> CoreRecoveryFailed = new();
+
     public static readonly EventChannel<ESysProxyType> SysProxyChangeRequested = new();
 
     /// <summary>
