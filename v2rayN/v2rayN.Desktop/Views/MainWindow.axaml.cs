@@ -1597,15 +1597,6 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         _accountVm.LoginTelegramCmd.Execute().Subscribe();
     }
 
-    // Онбординг «Войти через сайт»: открываем LoginView (чтобы возврату из браузера было куда сесть и
-    // чтобы показать шаг «завершаем вход через сайт…») И СРАЗУ запускаем браузер-хэндофф (§A1): сайт
-    // /app-login чеканит одноразовый код у залогиненной веб-сессии и возвращается по departamentvpn://auth.
-    public void OpenLoginSite()
-    {
-        OpenLogin();
-        _accountVm.LoginBrowserCmd.Execute().Subscribe();
-    }
-
     // Общий вход для суб-страниц НАСТРОЕК (DNS, Маршрутизация, Прокси по приложениям, Провайдеры,
     // Файлы ресурсов, Пинг, О приложении, Резервное копирование, Схемы URL). Раньше это были
     // отдельные OS-окна — теперь любая реализующая <see cref="ISubPage"/> вью кладётся на ТОТ ЖЕ стек

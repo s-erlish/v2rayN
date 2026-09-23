@@ -117,10 +117,12 @@ public class StatisticsSingboxService
                     {
                         ParseOutput(result, out var up, out var down);
 
+                        //  В КиБ, как у Xray (linkBase = 1024): экран делит на 1024 и подписывает
+                        //  «КБ/с». Делитель 1000 показывал скорость sing-box на 2,4% выше настоящей.
                         await _updateFunc?.Invoke(new ServerSpeedItem()
                         {
-                            ProxyUp = (long)(up / 1000),
-                            ProxyDown = (long)(down / 1000)
+                            ProxyUp = (long)(up / 1024),
+                            ProxyDown = (long)(down / 1024)
                         });
                     }
                     // Stop draining the moment the app exits or goes hidden/minimized; the outer loop
