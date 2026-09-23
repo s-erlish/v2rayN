@@ -42,6 +42,7 @@ public partial class CheckUpdateView : ReactiveUserControl<CheckUpdateViewModel>
     private Action? _run;
     private bool _runEnabled;
     private double _fraction = -1;
+    private IDisposable? _coreStateSub;
 
     public event EventHandler? BackRequested;
 
@@ -79,6 +80,10 @@ public partial class CheckUpdateView : ReactiveUserControl<CheckUpdateViewModel>
         {
             ViewModel?.Attach();
             L.Instance.LanguageChanged += OnLanguageChanged;
+            // Строка «готово» говорит о подключении: подключились или отключились, пока экран открыт, —
+            // перерисовать. Событие приходит с фонового потока.
+            _coreStateSub ??= AppEvents.CoreRunningStateChanged.AsObservable()
+                .Subscribe(_ => Dispatcher.UIThread.Post(Render));
             Render();
             ViewModel?.CheckIfStale();
         };
@@ -86,6 +91,8 @@ public partial class CheckUpdateView : ReactiveUserControl<CheckUpdateViewModel>
         {
             ViewModel?.Detach();
             L.Instance.LanguageChanged -= OnLanguageChanged;
+            _coreStateSub?.Dispose();
+            _coreStateSub = null;
         };
     }
 
@@ -199,7 +206,7 @@ public partial class CheckUpdateView : ReactiveUserControl<CheckUpdateViewModel>
             AppUpdateStage.Verifying => new("Geo.Update.Install", Tone.Neutral, true, L.T("Update_VerifyingTitle"), L.T("Update_VerifyingLine"),
                 L.T("Update_Cancel"), "Geo.Update.Cancel", false, true, cancel, false),
 
-            AppUpdateStage.Ready => new("Geo.Update.Done", Tone.Accent, false, L.F("Update_ReadyTitle", offer), L.T("Update_ReadyLine"),
+            AppUpdateStage.Ready => new("Geo.Update.Done", Tone.Accent, false, L.F("Update_ReadyTitle", offer), ReadyLine(),
                 L.T("Update_Restart"), "Geo.Update.Restart", true, true, restart, false),
 
             AppUpdateStage.Installing => new("Geo.Update.Done", Tone.Neutral, true, L.T("Update_InstallingTitle"), L.T("Update_InstallingLine"),
@@ -227,6 +234,16 @@ public partial class CheckUpdateView : ReactiveUserControl<CheckUpdateViewModel>
             },
         };
     }
+
+    /// <summary>
+    /// Строка под «Обновление готово» — по настоящему подключению, как и подтверждение: без подключения
+    /// о нём ни слова, с подключением — что оно прервётся и вернётся само (UpdateReconnect). Экран
+    /// перерисовывается на каждом подключении и отключении.
+    /// </summary>
+    private static string ReadyLine() =>
+        AppManager.Instance.IsRunningCore(ECoreType.Xray) || AppManager.Instance.IsRunningCore(ECoreType.sing_box)
+            ? L.T("Update_ReadyLineConnected")
+            : L.T("Update_ReadyLine");
 
     /// <summary>
     /// Полоса и цифры загрузки. Длину сервер назвал — доля и «12,4 МБ из 38,1 МБ»; не назвал — полоса

@@ -40,8 +40,11 @@ public sealed partial class L
         Add("Update_VerifyingTitle", "Проверяем файл…", "Verifying the file…");
         Add("Update_VerifyingLine", "Сверяем его с контрольной суммой выпуска.", "Checking it against the release checksum.");
         Add("Update_ReadyTitle", "Обновление {0} готово", "Update {0} is ready");
-        Add("Update_ReadyLine", "Перезапустите приложение, чтобы закончить установку. Подключение прервётся на несколько секунд.",
-            "Restart the app to finish installing. The connection drops for a few seconds.");
+        // Строка под «готово» зависит от подключения, как и подтверждение: без подключения рвать нечего,
+        // а с ним новый запуск подключается снова сам (UpdateReconnect).
+        Add("Update_ReadyLine", "Перезапустите приложение, чтобы закончить установку.", "Restart the app to finish installing.");
+        Add("Update_ReadyLineConnected", "Перезапустите приложение, чтобы закончить установку. Подключение прервётся на несколько секунд и восстановится само.",
+            "Restart the app to finish installing. The connection drops for a few seconds and comes back on its own.");
         Add("Update_InstallingTitle", "Устанавливаем обновление…", "Installing the update…");
         Add("Update_InstallingLine", "Приложение закроется и откроется снова.", "The app closes and opens again.");
 
