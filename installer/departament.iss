@@ -67,8 +67,8 @@ Name: "en"; MessagesFile: "compiler:Default.isl"
 [CustomMessages]
 ru.DesktopIcon=Значок на рабочем столе
 en.DesktopIcon=Desktop shortcut
-ru.LaunchApp=Запустить departament
-en.LaunchApp=Launch departament
+ru.LaunchApp=Запустить departament от имени администратора
+en.LaunchApp=Launch departament as administrator
 ru.RemoveUserData=Удалить также настройки, серверы и вход в аккаунт?%n%nЕсли оставить, при повторной установке всё будет на месте.
 en.RemoveUserData=Also remove settings, servers and account sign-in?%n%nIf you keep them, everything will be in place after reinstalling.
 
@@ -83,7 +83,11 @@ Name: "{autoprograms}\departament VPN"; Filename: "{app}\departament.exe"
 Name: "{autodesktop}\departament VPN"; Filename: "{app}\departament.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\departament.exe"; Description: "{cm:LaunchApp}"; Flags: nowait postinstall skipifsilent
+; Галочка на последней странице включена сразу. runascurrentuser — запуск с правами самого установщика,
+; то есть от имени администратора. Без флага Inno запускает postinstall-программу от исходного, не
+; повышенного пользователя, а программе с requireAdministrator Windows такой запуск отказывает
+; (ошибка 740): после установки она просто не открылась бы.
+Filename: "{app}\departament.exe"; Description: "{cm:LaunchApp}"; Flags: nowait postinstall skipifsilent runascurrentuser
 
 [UninstallDelete]
 ; Служебное самообновления и файлы, которые могли прийти с обновлениями после установки (ядра,
