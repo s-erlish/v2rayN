@@ -183,11 +183,13 @@ jobs:
           # удалённые наборы, и ядро при старте качает их через туннель; не скачалось —
           # FATAL «initial rule-set», и подключение уходит в круг перезапусков. Локальный файл
           # приложение берёт первым (SingboxRulesetService), и старт от сети не зависит.
-          # Список — все теги встроенных маршрутов (белый, чёрный, глобальный), DNS-шаблонов и
-          # умолчаний «Обновить базы» (UpdateService); тот же набор кладут пакеты апстрима.
+          # Список — все теги встроенных маршрутов («Белый список России», белый, чёрный, глобальный),
+          # DNS-шаблонов и умолчаний «Обновить базы» (UpdateService). ru и category-ru — для набора по
+          # умолчанию «Белый список России»: без файлов sing-box качал бы их на каждом старте через
+          # туннель и без сети падал бы с «initial rule-set: geosite-category-ru».
           $sets = @{
-            'geoip'   = @('private', 'cn', 'facebook', 'fastly', 'google', 'netflix', 'telegram', 'twitter')
-            'geosite' = @('private', 'cn', 'google', 'gfw', 'greatfire', 'geolocation-cn', 'category-ads-all')
+            'geoip'   = @('private', 'ru', 'cn', 'facebook', 'fastly', 'google', 'netflix', 'telegram', 'twitter')
+            'geosite' = @('private', 'category-ru', 'cn', 'google', 'gfw', 'greatfire', 'geolocation-cn', 'category-ads-all')
           }
           $dir = "${{ github.workspace }}/dist/bin/srss"
           New-Item -ItemType Directory -Force -Path $dir, srs-check | Out-Null
