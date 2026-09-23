@@ -45,7 +45,12 @@ public sealed class AppUpdateManager
     private CancellationTokenSource? _work;
     private string? _expectedSha256;
     private int _scheduled;
-    private int _reconciled;
+
+    // Итог прошлой установки читается один раз за сеанс, и все, кто о нём спрашивает, ждут, пока он
+    // прочитан: оболочке нужен не факт «кто-то уже начал читать», а сама метка.
+    private readonly object _reconcileGate = new();
+    private bool _reconciled;
+    private AppUpdatePendingInstall? _reconnect;
 
     private AppUpdateManager()
     {
@@ -80,8 +85,6 @@ public sealed class AppUpdateManager
 
     public bool IsSupported => Channel.IsSupportedPlatform;
 
-    public bool AutoCheck => AppManager.Instance.Config.CheckUpdateItem?.AutoCheck ?? true;
-
     public bool IncludePreRelease => AppManager.Instance.Config.CheckUpdateItem?.CheckPreReleaseUpdate ?? false;
 
     private static string UpdateDir => Utils.GetTempPath("update");
@@ -93,8 +96,9 @@ public sealed class AppUpdateManager
 
     /// <summary>
     /// Запускает автопроверку: первая через <paramref name="firstDelay"/>, дальше каждые <paramref name="period"/>.
-    /// Повторный вызов ничего не делает. Выключенная настройка «Проверять обновления автоматически»
-    /// проверяется на каждом шаге, так что её смена действует без перезапуска.
+    /// Повторный вызов ничего не делает. Выключателя у автопроверки нет: владелец решил, что кнопки
+    /// «Проверить обновления» достаточно, а о новой версии приложение сообщает само. Поле AutoCheck из
+    /// конфигов прежних сборок при чтении пропускается и при следующей записи пропадает.
     /// </summary>
     public void StartSchedule(TimeSpan firstDelay, TimeSpan period)
     {
@@ -110,7 +114,7 @@ public sealed class AppUpdateManager
             {
                 await Task.Delay(delay);
                 delay = period;
-                if (!AutoCheck || !IsSupported)
+                if (!IsSupported)
                 {
                     continue;
                 }
@@ -130,37 +134,47 @@ public sealed class AppUpdateManager
     /// Итог прошлой установки и уборка скачанного. Один раз за сеанс, до первой проверки. Установщик
     /// перезапускает приложение и в случае успеха, и после отката, поэтому о результате судим по версии:
     /// запущена та, что передавали установщику, — обновились; прежняя — замена откатилась, и это
-    /// показывается как сбой с «Повторить», а не молчанием.
+    /// показывается как сбой с «Повторить», а не молчанием. Если в момент «Перезапустить» было
+    /// подключение, метка откладывается для <see cref="TakeReconnect"/>: вернуть его решает оболочка.
     /// </summary>
     public void EnsureReconciled()
     {
-        if (Interlocked.Exchange(ref _reconciled, 1) == 1)
+        lock (_reconcileGate)
         {
-            return;
-        }
-        try
-        {
-            if (File.Exists(PendingPath)
-                && JsonSerializer.Deserialize<PendingInstall>(File.ReadAllText(PendingPath)) is { } pending
-                && AppVersion.TryParseTag(pending.Tag, out var expected))
+            if (_reconciled)
             {
-                if (Running >= expected)
+                return;
+            }
+            _reconciled = true;
+            try
+            {
+                var pending = File.Exists(PendingPath) ? AppUpdatePendingInstall.TryParse(File.ReadAllText(PendingPath)) : null;
+                if (pending is not null && AppVersion.TryParseTag(pending.Tag, out var expected))
                 {
-                    Logging.SaveLog($"{_tag}: updated to {Running}");
-                }
-                else
-                {
-                    Logging.SaveLog($"{_tag}: installing {expected} did not take, still {Running} (see guiLogs/upgrade.log)");
-                    var offer = new AppUpdateOffer(expected, pending.Tag!, pending.PreRelease, 0, null);
-                    Transition(null, new AppUpdateState { Stage = AppUpdateStage.Failed, Failure = AppUpdateFailure.InstallFailed, Offer = offer });
+                    if (Running >= expected)
+                    {
+                        Logging.SaveLog($"{_tag}: updated to {Running}");
+                    }
+                    else
+                    {
+                        Logging.SaveLog($"{_tag}: installing {expected} did not take, still {Running} (see guiLogs/upgrade.log)");
+                        var offer = new AppUpdateOffer(expected, pending.Tag!, pending.PreRelease, 0, null);
+                        Transition(null, new AppUpdateState { Stage = AppUpdateStage.Failed, Failure = AppUpdateFailure.InstallFailed, Offer = offer });
+                    }
+                    if (pending.Reconnect is { } marker)
+                    {
+                        Logging.SaveLog($"{_tag}: the restart for {pending.Tag} closed a connection (server {marker.ServerId}, tun {marker.Tun})");
+                        _reconnect = pending;
+                    }
                 }
             }
+            catch (Exception ex)
+            {
+                Logging.SaveLog(_tag, ex);
+            }
+            // Метка удаляется при первом же чтении: второй запуск её уже не увидит, что бы ни случилось с этим.
+            DeleteUpdateFiles();
         }
-        catch (Exception ex)
-        {
-            Logging.SaveLog(_tag, ex);
-        }
-        DeleteUpdateFiles();
 
         // Прежний установщик: заменяя сам себя, он отодвигается в AmazTool.exe.tmp (запущенный exe на Windows
         // нельзя удалить, но можно переименовать), а убрал бы эту копию только при следующем обновлении. К этой
@@ -174,6 +188,25 @@ public sealed class AppUpdateManager
             Logging.SaveLog($"{_tag}: the previous installer copy is still busy: {ex.Message}");
         }
     }
+
+    /// <summary>
+    /// Метка прошлого перезапуска, если он закрыл подключение, — один раз за сеанс: второй вызов вернёт
+    /// null. Решение, возвращать ли подключение, принимает <see cref="AppUpdateReconnect"/> в оболочке.
+    /// Читает файл, поэтому звать не из потока интерфейса.
+    /// </summary>
+    public AppUpdatePendingInstall? TakeReconnect()
+    {
+        EnsureReconciled();
+        lock (_reconcileGate)
+        {
+            var pending = _reconnect;
+            _reconnect = null;
+            return pending;
+        }
+    }
+
+    private static bool IsConnected =>
+        AppManager.Instance.IsRunningCore(ECoreType.Xray) || AppManager.Instance.IsRunningCore(ECoreType.sing_box);
 
     #endregion Schedule
 
@@ -465,7 +498,19 @@ public sealed class AppUpdateManager
                 throw new AppUpdateException(AppUpdateFailure.InstallerMissing, $"{installer} not found");
             }
 
-            await File.WriteAllTextAsync(PendingPath, JsonSerializer.Serialize(new PendingInstall { Tag = offer.Tag, PreRelease = offer.IsPreRelease }));
+            // Метка для следующего запуска: что ставили и что было подключено. Сервер — тот, что по
+            // умолчанию: к нему подключают и щит, и смена сервера. Режим — действующий: если TUN в этом
+            // запуске недоступен, конфиг уже понижен до прокси (StatusBarViewModel), и подключение было им.
+            var config = AppManager.Instance.Config;
+            var pending = new AppUpdatePendingInstall
+            {
+                Tag = offer.Tag,
+                PreRelease = offer.IsPreRelease,
+                From = Running.ToString(),
+                HandedOffUtc = DateTime.UtcNow,
+                Reconnect = IsConnected ? new AppUpdateReconnectMarker { ServerId = config.IndexId, Tun = config.TunModeItem.EnableTun } : null,
+            };
+            await File.WriteAllTextAsync(PendingPath, pending.ToJson());
 
             // Без оболочки: установщик наследует права приложения (оно запущено от администратора), а
             // аргументы уходят списком, без склейки в строку, и путь с пробелами не разваливается.
@@ -481,7 +526,8 @@ public sealed class AppUpdateManager
             start.ArgumentList.Add(Environment.ProcessId.ToString(CultureInfo.InvariantCulture));
             using var process = Process.Start(start)
                 ?? throw new AppUpdateException(AppUpdateFailure.InstallerMissing, $"{installer} did not start");
-            Logging.SaveLog($"{_tag}: {offer.Tag} handed to the installer (pid {process.Id}), exiting");
+            Logging.SaveLog($"{_tag}: {offer.Tag} handed to the installer (pid {process.Id}), exiting"
+                            + (pending.Reconnect is { } marker ? $", reconnect to {marker.ServerId} (tun {marker.Tun}) after the restart" : string.Empty));
         }
         catch (Exception ex)
         {
@@ -575,13 +621,6 @@ public sealed class AppUpdateManager
         {
             Logging.SaveLog(_tag, ex);
         }
-    }
-
-    /// <summary>Что было передано установщику: по этому следующий запуск понимает, обновился ли он.</summary>
-    private sealed class PendingInstall
-    {
-        public string? Tag { get; set; }
-        public bool PreRelease { get; set; }
     }
 
     #endregion State

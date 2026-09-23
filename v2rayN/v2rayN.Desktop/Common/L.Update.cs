@@ -1,8 +1,8 @@
 namespace v2rayN.Desktop.Common;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Самообновление: экран «Проверить обновление», уведомление в строке окна, подтверждение перезапуска
-// и строка «Проверять обновления автоматически» в настройках. Ключи Update_*.
+// Самообновление: экран «Проверить обновление», уведомление в строке окна и подтверждение
+// перезапуска. Ключи Update_*.
 //
 // Отдельный файл со своим хуком (как L.Start.cs), чтобы работа над обновлением не правила файлы
 // соседних пакетов. Тексты состояний повторяют departament для Android (strings_editors.xml, A-36):
@@ -40,8 +40,11 @@ public sealed partial class L
         Add("Update_VerifyingTitle", "Проверяем файл…", "Verifying the file…");
         Add("Update_VerifyingLine", "Сверяем его с контрольной суммой выпуска.", "Checking it against the release checksum.");
         Add("Update_ReadyTitle", "Обновление {0} готово", "Update {0} is ready");
-        Add("Update_ReadyLine", "Перезапустите приложение, чтобы закончить установку. Подключение прервётся на несколько секунд.",
-            "Restart the app to finish installing. The connection drops for a few seconds.");
+        // Строка под «готово» зависит от подключения, как и подтверждение: без подключения рвать нечего,
+        // а с ним новый запуск подключается снова сам (UpdateReconnect).
+        Add("Update_ReadyLine", "Перезапустите приложение, чтобы закончить установку.", "Restart the app to finish installing.");
+        Add("Update_ReadyLineConnected", "Перезапустите приложение, чтобы закончить установку. Подключение прервётся на несколько секунд и восстановится само.",
+            "Restart the app to finish installing. The connection drops for a few seconds and comes back on its own.");
         Add("Update_InstallingTitle", "Устанавливаем обновление…", "Installing the update…");
         Add("Update_InstallingLine", "Приложение закроется и откроется снова.", "The app closes and opens again.");
 
@@ -97,12 +100,8 @@ public sealed partial class L
 
         // ── Подтверждение перезапуска ──
         Add("Update_ConfirmTitle", "Перезапустить сейчас?", "Restart now?");
-        Add("Update_ConfirmConnected", "Подключение прервётся на несколько секунд. После перезапуска подключитесь снова.",
-            "The connection drops for a few seconds. Connect again after the restart.");
+        Add("Update_ConfirmConnected", "Подключение прервётся на несколько секунд и восстановится само.",
+            "The connection drops for a few seconds and comes back on its own.");
         Add("Update_ConfirmIdle", "Приложение закроется и откроется уже в версии {0}.", "The app closes and opens again in version {0}.");
-
-        // ── Строка настроек ──
-        Add("Update_AutoCheck", "Проверять обновления автоматически", "Check for updates automatically");
-        Add("Update_AutoCheckHint", "Раз в 6 часов, пока приложение открыто", "Every 6 hours while the app is open");
     }
 }

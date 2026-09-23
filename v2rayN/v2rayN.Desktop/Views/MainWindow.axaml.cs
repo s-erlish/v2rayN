@@ -364,6 +364,9 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
                 // незамеченную задачу → «ничего не происходит». Теперь обработчик жив всегда.
                 RegisterWindowInteractions(vm!);
                 SetupHome(vm!);
+                //  Перезапуск ради обновления закрыл подключение — вернуть его, как только движок и список
+                //  готовы (метка одноразовая; обычный запуск ничего не делает).
+                UpdateReconnect.Start(vm!, () => _homeViewModel);
             });
 
         this.WhenActivated(disposables =>
@@ -2474,6 +2477,7 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
             {
                 if (e.Key == Key.F5)
                 {
+                    UpdateReconnect.NoteUserAction();
                     ViewModel?.Reload();
                 }
             }
