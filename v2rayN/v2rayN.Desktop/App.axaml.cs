@@ -346,6 +346,38 @@ public partial class App : Application
 
     #endregion App Event
 
+    #region DEV: вехи запуска (DP_TIMELINE)
+
+    //  DP_TIMELINE=путь — вехи запуска и подключения построчно в файл: «мс от старта процесса, событие».
+    //  Стенд Windows (departament-windows-e2e.yml) снаружи меряет, когда окно стало видно и когда значок
+    //  встал в трей; вехи изнутри показывают, между какими шагами ушло время, и остаются доказательством
+    //  там, где область уведомлений снаружи не видна. Без переменной — ни одного обращения к диску.
+    private static readonly string? s_timelinePath = Environment.GetEnvironmentVariable("DP_TIMELINE");
+
+    private static readonly object s_timelineGate = new();
+
+    internal static void DevMark(string what)
+    {
+        if (s_timelinePath is null)
+        {
+            return;
+        }
+        try
+        {
+            var ms = (DateTime.Now - System.Diagnostics.Process.GetCurrentProcess().StartTime).TotalMilliseconds;
+            lock (s_timelineGate)
+            {
+                File.AppendAllText(s_timelinePath, $"{ms.ToString("F0", CultureInfo.InvariantCulture)} {what}{Environment.NewLine}");
+            }
+        }
+        catch
+        {
+            //  Вехи нужны только стенду: сбой записи не должен задевать приложение.
+        }
+    }
+
+    #endregion DEV: вехи запуска (DP_TIMELINE)
+
     #region Tray menu (departament: Перезапустить · Подключить/Отключить · Показать · Выход)
 
     // Значок в трее появляется ВМЕСТЕ С ОКНОМ, а не при загрузке приложения (см. App.axaml): иначе запуск
@@ -455,6 +487,9 @@ public partial class App : Application
                 Menu = menu,
                 Command = StatusBarViewModel.Instance.NotifyLeftClickCmd,
             };
+            //  Avalonia регистрирует значок в системе уже в этом инициализаторе (Shell_NotifyIcon при
+            //  установке картинки), поэтому веха ставится здесь, а не после добавления в коллекцию.
+            DevMark("tray.created");
             if (TrayIcon.GetIcons(this) is { } icons)
             {
                 icons.Add(_trayIcon);

@@ -2660,12 +2660,17 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
     protected override void OnOpened(EventArgs e)
     {
         base.OnOpened(e);
+        App.DevMark("window.opened");
         if (_trayIconRequested)
         {
             return;
         }
         _trayIconRequested = true;
-        RequestAnimationFrame(_ => Dispatcher.UIThread.Post(App.ShowTrayIcon, DispatcherPriority.Background));
+        RequestAnimationFrame(_ =>
+        {
+            App.DevMark("window.frame");
+            Dispatcher.UIThread.Post(App.ShowTrayIcon, DispatcherPriority.Background);
+        });
     }
 
     protected override void OnLoaded(object? sender, RoutedEventArgs e)
@@ -2737,6 +2742,29 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
                 ShowHideWindow(false);
                 await Task.Delay(hiddenForMs);
                 ShowHideWindow(true);
+            });
+        }
+        //  DP_CONNECT_AFTER_MS=N — через N мс щит «Подключить» нажимается тем же путём, что и тапом
+        //  (HomeViewModel.ConnectToggle): стенд Windows проверяет системный прокси и TUN без рук. Ждёт,
+        //  пока прочитан список серверов, иначе подключать нечего. Вехи connect.tap и core.up/core.down
+        //  уходят в DP_TIMELINE.
+        if (int.TryParse(Environment.GetEnvironmentVariable("DP_CONNECT_AFTER_MS"), out var connectAfterMs) && connectAfterMs >= 0)
+        {
+            AppEvents.CoreRunningStateChanged
+                .AsObservable()
+                .Subscribe(up => App.DevMark(up ? "core.up" : "core.down"));
+            Dispatcher.UIThread.Post(async () =>
+            {
+                await Task.Delay(connectAfterMs);
+                for (var i = 0; i < 120 && _homeViewModel is not { HasServers: true }; i++)
+                {
+                    await Task.Delay(250);
+                }
+                if (_homeViewModel is { IsConnected: false, IsConnecting: false } home)
+                {
+                    App.DevMark("connect.tap");
+                    home.ConnectToggle();
+                }
             });
         }
 
