@@ -128,6 +128,32 @@ public class Global
     public const string SystemProxyExceptionsWindows = "localhost;127.*;10.*;172.16.*;172.17.*;172.18.*;172.19.*;172.20.*;172.21.*;172.22.*;172.23.*;172.24.*;172.25.*;172.26.*;172.27.*;172.28.*;172.29.*;172.30.*;172.31.*;192.168.*";
     public const string SystemProxyExceptionsLinux = "localhost,127.0.0.0/8,::1";
     public const string RoutingRuleComma = "<COMMA>";
+
+    //  Встроенные наборы маршрутов. Имя в базе — ещё и опознавательный знак: по префиксу «V4-»
+    //  ConfigHandler.InitBuiltinRouting решает, созданы ли встроенные наборы, а «Стандартные правила»
+    //  на экране маршрутизации убирают их перед пересозданием. Показываются они по-русски
+    //  (RoutingNameConverter), а в базе лежат как есть: три имени апстрима менять нельзя, по ним
+    //  узнаются наборы, созданные прежними сборками.
+    public const string BuiltinRoutingPrefix = "V4-";
+
+    /// <summary>
+    /// «Белый список России» — набор по умолчанию, правило в правило как одноимённый готовый набор
+    /// на Android (assets/custom_routing_white_russia, Sample/custom_routing_white_russia).
+    /// </summary>
+    public const string BuiltinRoutingRussia = BuiltinRoutingPrefix + "Белый список России";
+
+    public const string BuiltinRoutingWhitelist = BuiltinRoutingPrefix + "绕过大陆(Whitelist)";
+    public const string BuiltinRoutingBlacklist = BuiltinRoutingPrefix + "黑名单(Blacklist)";
+    public const string BuiltinRoutingGlobal = BuiltinRoutingPrefix + "全局(Global)";
+
+    /// <summary>
+    /// Начало пометки правил, которые «Прокси по приложениям» сам вписывает в активный набор
+    /// (PerAppProxyPage: __departament_perapp_bypass / _include / _catchall). Это не правка набора
+    /// человеком, а производное от настроек UiItem.PerAppProxy*, и при переводе набора по умолчанию
+    /// такие правила переезжают вместе с ним.
+    /// </summary>
+    public const string PerAppRuleRemarksPrefix = "__departament_perapp_";
+
     public const string GrpcGunMode = "gun";
     public const string GrpcMultiMode = "multi";
     public const int MaxPort = 65536;

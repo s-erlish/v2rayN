@@ -221,14 +221,16 @@ public sealed class RuleCountConverter : IValueConverter
 /// <summary>
 /// Имя набора правил для показа. Три встроенных набора движок заводит под китайскими именами
 /// апстрима (ConfigHandler.InitBuiltinRouting): «V4-绕过大陆(Whitelist)», «V4-黑名单(Blacklist)»,
-/// «V4-全局(Global)». Переводим ТОЛЬКО при показе и только эти три точных имени: в базе имя служит
-/// ещё и опознавательным знаком («Стандартные правила» находит встроенные наборы по префиксу «V4-»),
-/// а набор пользователя, как бы он ни назывался, показывается как есть.
+/// «V4-全局(Global)», четвёртый, набор по умолчанию, — под «V4-Белый список России». Переводим ТОЛЬКО
+/// при показе и только эти точные имена: в базе имя служит ещё и опознавательным знаком
+/// («Стандартные правила» находит встроенные наборы по префиксу «V4-»), а набор пользователя, как бы
+/// он ни назывался, показывается как есть.
 /// </summary>
 public sealed class RoutingNameConverter : IValueConverter
 {
     private static readonly Dictionary<string, string> Builtins = new(StringComparer.Ordinal)
     {
+        [Global.BuiltinRoutingRussia] = "Routing_PresetRussia",
         ["V4-绕过大陆(Whitelist)"] = "Routing_PresetBasic",
         ["V4-黑名单(Blacklist)"] = "Routing_PresetBlocked",
         ["V4-全局(Global)"] = "Routing_PresetGlobal",

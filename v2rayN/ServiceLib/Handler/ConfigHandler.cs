@@ -3069,16 +3069,38 @@ public static class ConfigHandler
         return 0;
     }
 
+    /// <summary>Версия встроенных наборов маршрутов. 1 — «Белый список России» первым в списке и по умолчанию.</summary>
+    private const int RoutingDefaultsVersion = 1;
+
+    //  Встроенные наборы заводят две стороны: StatusBarViewModel.Init на старте и
+    //  RoutingSettingViewModel.Init при входе на экран маршрутизации. Совпавшие вызовы на свежей базе
+    //  оба видят пустую таблицу и заводят наборы дважды (восемь вместо четырёх), а переход ниже добавил
+    //  бы два «Белых списка России». Очередь делает второй вызов пустым.
+    private static readonly SemaphoreSlim _builtinRoutingLock = new(1, 1);
+
     /// <summary>
     /// Initialize built-in routing rules
-    /// Creates default routing configurations (whitelist, blacklist, global)
+    /// Creates default routing configurations (Russia, whitelist, blacklist, global)
     /// </summary>
     /// <param name="config">Current configuration</param>
     /// <param name="blImportAdvancedRules">Whether to import advanced rules</param>
     /// <returns>0 if successful</returns>
     public static async Task<int> InitBuiltinRouting(Config config, bool blImportAdvancedRules = false)
     {
-        var ver = "V4-";
+        await _builtinRoutingLock.WaitAsync();
+        try
+        {
+            return await InitBuiltinRoutingLocked(config, blImportAdvancedRules);
+        }
+        finally
+        {
+            _builtinRoutingLock.Release();
+        }
+    }
+
+    private static async Task<int> InitBuiltinRoutingLocked(Config config, bool blImportAdvancedRules)
+    {
+        var ver = Global.BuiltinRoutingPrefix;
         var items = await AppManager.Instance.RoutingItems();
 
         //TODO Temporary code to be removed later
@@ -3103,42 +3125,210 @@ public static class ConfigHandler
                 config.RoutingBasicItem.RoutingIndexId = string.Empty;
             }
 
+            await MigrateBuiltinRoutingDefaults(config);
             return 0;
         }
 
         var maxSort = items.Count;
+        //  «Белый список России» — первым и по умолчанию. Люди в России: банки, Госуслуги и прочие
+        //  сервисы, которые не пускают зарубежные адреса, должны идти мимо VPN с первого подключения,
+        //  как на Android. Правила встроены в приложение (Sample/custom_routing_white_russia), а не
+        //  качаются при первом запуске: первое подключение не должно зависеть от GitHub.
+        var itemRussia = new RoutingItem()
+        {
+            Remarks = Global.BuiltinRoutingRussia,
+            Url = string.Empty,
+            Sort = maxSort + 1,
+        };
+        await AddBatchRoutingRules(itemRussia, EmbedUtils.GetEmbedText(Global.CustomRoutingFileName + "white_russia"));
+
         //Bypass the mainland
         var item2 = new RoutingItem()
         {
-            Remarks = $"{ver}绕过大陆(Whitelist)",
+            Remarks = Global.BuiltinRoutingWhitelist,
             Url = string.Empty,
-            Sort = maxSort + 1,
+            Sort = maxSort + 2,
         };
         await AddBatchRoutingRules(item2, EmbedUtils.GetEmbedText(Global.CustomRoutingFileName + "white"));
 
         //Blacklist
         var item3 = new RoutingItem()
         {
-            Remarks = $"{ver}黑名单(Blacklist)",
+            Remarks = Global.BuiltinRoutingBlacklist,
             Url = string.Empty,
-            Sort = maxSort + 2,
+            Sort = maxSort + 3,
         };
         await AddBatchRoutingRules(item3, EmbedUtils.GetEmbedText(Global.CustomRoutingFileName + "black"));
 
         //Global
         var item1 = new RoutingItem()
         {
-            Remarks = $"{ver}全局(Global)",
+            Remarks = Global.BuiltinRoutingGlobal,
             Url = string.Empty,
-            Sort = maxSort + 3,
+            Sort = maxSort + 4,
         };
         await AddBatchRoutingRules(item1, EmbedUtils.GetEmbedText(Global.CustomRoutingFileName + "global"));
 
         if (!blImportAdvancedRules)
         {
-            await SetDefaultRouting(config, item2);
+            await SetDefaultRouting(config, itemRussia);
+            //  Наборы только что заведены по нынешним умолчаниям: переводить им нечего.
+            config.RoutingBasicItem.DefaultsVersion = RoutingDefaultsVersion;
         }
         return 0;
+    }
+
+    /// <summary>
+    /// Один раз делает «Белый список России» набором по умолчанию у установок, заведённых до него.
+    ///
+    /// Прежние сборки заводили три набора апстрима и по умолчанию ставили «Whitelist» (на экране
+    /// «Базовый набор»): напрямую — китайские домены и IP, а всё российское — через VPN. У всех, кто
+    /// набор не выбирал, банки и Госуслуги ходили через зарубежный выход, и часть из них такие адреса
+    /// не пускает, а китайские сайты шли напрямую без всякой пользы.
+    ///
+    /// «Белый список России» добавляется первым в список у всех. Набором по умолчанию он становится
+    /// только там, где по умолчанию стоит нетронутый «Whitelist» апстрима
+    /// (<see cref="IsUntouchedUpstreamWhitelist"/>). Выбранный человеком другой набор, свой набор и
+    /// правленый «Whitelist» остаются по умолчанию. Правила «Прокси по приложениям» — не правка набора,
+    /// а производное от настроек, — переезжают в новый набор по умолчанию.
+    ///
+    /// Один раз — по <see cref="RoutingBasicItem.DefaultsVersion"/>: кто после перехода вернёт себе
+    /// «Базовый набор», того следующий запуск не тронет. И повтор без отметки ничего не меняет: набор
+    /// уже есть, а по умолчанию уже стоит не нетронутый «Whitelist».
+    /// </summary>
+    /// <returns>true, если установка доведена до текущей версии сейчас; false, если уже была доведена.</returns>
+    public static async Task<bool> MigrateBuiltinRoutingDefaults(Config config)
+    {
+        config.RoutingBasicItem ??= new();
+        if (config.RoutingBasicItem.DefaultsVersion >= RoutingDefaultsVersion)
+        {
+            return false;
+        }
+
+        var items = await AppManager.Instance.RoutingItems() ?? [];
+        if (items.Count > 0)
+        {
+            //  Тот набор, с которым ядро поднимется сейчас: отмеченный активным, а без отметки — первый
+            //  (так выбирает GetDefaultRouting при подключении). Спрашиваем до того, как добавим новый.
+            var active = await GetDefaultRouting(config);
+
+            var russia = items.FirstOrDefault(t => t.Remarks == Global.BuiltinRoutingRussia);
+            if (russia is null)
+            {
+                russia = new RoutingItem()
+                {
+                    Remarks = Global.BuiltinRoutingRussia,
+                    Url = string.Empty,
+                    //  Первым в списке: рекомендуемый набор виден сразу, в том числе тому, кто выбрал
+                    //  другой. Порядок остальных наборов не меняется.
+                    Sort = items.Min(t => t.Sort) - 1,
+                };
+                await AddBatchRoutingRules(russia, EmbedUtils.GetEmbedText(Global.CustomRoutingFileName + "white_russia"));
+            }
+
+            if (active is not null && active.Id != russia.Id && IsUntouchedUpstreamWhitelist(active))
+            {
+                await MovePerAppRules(config, active, russia);
+                await SetDefaultRouting(config, russia);
+            }
+        }
+
+        config.RoutingBasicItem.DefaultsVersion = RoutingDefaultsVersion;
+        //  Сразу на диск. Отметка живёт в guiNConfig.json, а база уже изменена; конфиг иначе пишется при
+        //  выходе и раз в 20 минут. После аварийного завершения без отметки тот, кто успел вернуть себе
+        //  «Базовый набор», на следующем запуске снова получил бы Россию.
+        await SaveConfig(config);
+        return true;
+    }
+
+    /// <summary>
+    /// «Нетронутый Whitelist апстрима» — набор, который прежняя сборка завела сама и который с тех пор
+    /// никто не правил. Все условия сразу:
+    /// <list type="bullet">
+    /// <item>имя в базе ровно «V4-绕过大陆(Whitelist)»: переименованный набор уже чей-то;</item>
+    /// <item>у набора нет своих настроек (доменных стратегий Xray и sing-box, своих наборов правил
+    /// sing-box, значка, адреса), и он включён;</item>
+    /// <item>правила — ровно встроенный Sample/custom_routing_white: столько же, в том же порядке, поле
+    /// в поле (пометка, исходящий, порт, сеть, тип, входящие, IP, домены, протоколы, процессы,
+    /// включённость). Id не сравнивается: он случайный у каждой установки. Пустой список и пустая
+    /// строка равны отсутствующим: оба генератора понимают их одинаково;</item>
+    /// <item>правила «Прокси по приложениям» не в счёт: их вписывает приложение, а не человек.</item>
+    /// </list>
+    /// Любое другое отличие — выбор человека.
+    /// </summary>
+    public static bool IsUntouchedUpstreamWhitelist(RoutingItem item)
+    {
+        if (item.Remarks != Global.BuiltinRoutingWhitelist
+            || !item.Enabled
+            || item.DomainStrategy.IsNotEmpty()
+            || item.DomainStrategy4Singbox.IsNotEmpty()
+            || item.CustomRulesetPath4Singbox.IsNotEmpty()
+            || item.CustomIcon.IsNotEmpty()
+            || item.Url.IsNotEmpty())
+        {
+            return false;
+        }
+
+        var rules = JsonUtils.Deserialize<List<RulesItem>>(item.RuleSet);
+        var upstream = JsonUtils.Deserialize<List<RulesItem>>(EmbedUtils.GetEmbedText(Global.CustomRoutingFileName + "white"));
+        if (rules is null || upstream is null)
+        {
+            return false;
+        }
+
+        var own = rules.Where(r => !IsPerAppRule(r)).ToList();
+        return own.Count == upstream.Count && own.Zip(upstream).All(p => SameRule(p.First, p.Second));
+
+        static bool SameRule(RulesItem a, RulesItem b) =>
+            SameText(a.Remarks, b.Remarks)
+            && SameText(a.OutboundTag, b.OutboundTag)
+            && SameText(a.Port, b.Port)
+            && SameText(a.Network, b.Network)
+            && SameText(a.Type, b.Type)
+            && a.RuleType == b.RuleType
+            && a.Enabled == b.Enabled
+            && SameList(a.InboundTag, b.InboundTag)
+            && SameList(a.Ip, b.Ip)
+            && SameList(a.Domain, b.Domain)
+            && SameList(a.Protocol, b.Protocol)
+            && SameList(a.Process, b.Process);
+
+        static bool SameText(string? a, string? b) => (a ?? string.Empty) == (b ?? string.Empty);
+
+        static bool SameList(List<string>? a, List<string>? b) => (a ?? []).SequenceEqual(b ?? []);
+    }
+
+    private static bool IsPerAppRule(RulesItem rule) =>
+        rule.Remarks?.StartsWith(Global.PerAppRuleRemarksPrefix, StringComparison.Ordinal) == true;
+
+    /// <summary>
+    /// Переносит правила «Прокси по приложениям» из прежнего набора по умолчанию в новый. Страница
+    /// вписывает их только в активный набор — отбор программ в начало, «остальное напрямую» в конец, —
+    /// и без переноса выбор программ перестал бы действовать до следующего её сохранения. Прежний набор
+    /// остаётся без них, таким, каким его завёл апстрим: правила живут в одном месте, в активном наборе.
+    /// </summary>
+    private static async Task MovePerAppRules(Config config, RoutingItem from, RoutingItem to)
+    {
+        var fromRules = JsonUtils.Deserialize<List<RulesItem>>(from.RuleSet) ?? [];
+        var firstOwn = fromRules.FindIndex(r => !IsPerAppRule(r));
+        var managed = fromRules.Select((rule, index) => (rule, index)).Where(x => IsPerAppRule(x.rule)).ToList();
+        if (managed.Count == 0)
+        {
+            return;
+        }
+
+        var head = managed.Where(x => firstOwn < 0 || x.index < firstOwn).Select(x => x.rule);
+        var tail = managed.Where(x => firstOwn >= 0 && x.index > firstOwn).Select(x => x.rule);
+        var toOwn = (JsonUtils.Deserialize<List<RulesItem>>(to.RuleSet) ?? []).Where(r => !IsPerAppRule(r));
+        List<RulesItem> toRules = [.. head, .. toOwn, .. tail];
+        to.RuleSet = JsonUtils.Serialize(toRules, false);
+        to.RuleNum = toRules.Count;
+        await SaveRoutingItem(config, to);
+
+        var fromOwn = fromRules.Where(r => !IsPerAppRule(r)).ToList();
+        from.RuleSet = JsonUtils.Serialize(fromOwn, false);
+        from.RuleNum = fromOwn.Count;
+        await SaveRoutingItem(config, from);
     }
 
     /// <summary>
