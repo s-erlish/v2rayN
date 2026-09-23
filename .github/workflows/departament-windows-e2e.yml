@@ -1,0 +1,127 @@
+name: departament desktop (Windows e2e)
+
+# Проверка на настоящей Windows того, что в контейнере Linux проверить нельзя. Берёт сборку этого же
+# коммита из «departament desktop (branch build)» (артефакт departament-vpn-win-x64, без повторной
+# сборки) и гоняет её стендом .github/departament-e2e (DpE2E):
+#   1. запуск: когда окно стало видно, когда появился первый кадр с содержимым и когда значок встал
+#      в трей (Shell_NotifyIconGetRect, панели ToolbarWindow32, UI Automation); значок — не раньше окна;
+#   2. подключение через системный прокси к своему серверу VLESS+REALITY на этой же машине; трафик
+#      обычной программы Windows доходит до сервера (его журнал) и дальше в интернет;
+#   3. режим «весь трафик» (TUN): обычный узел (TUN самого Xray + wintun.dll) и узел Custom
+#      (XRAY_JSON, TUN держит sing-box и отдаёт в Xray 127.0.0.1:10808); трафик без настроек прокси
+#      идёт через сервер, домен сервера разрешается мимо туннеля (после сброса кеша DNS);
+#   4. уход в трей и возврат (DP_TRAY_CYCLE): окно возвращается тем же размером и на то же место.
+# Итог по каждой проверке — таблица в сводке прогона и аннотация на каждый отказ; снимки экрана,
+# журналы приложения, ядер и сервера — в артефакте departament-windows-e2e.
+#
+# Запуск — пушем в ветку разработки. workflow_dispatch работает, только когда этот файл есть в
+# ветке по умолчанию; тогда берётся сборка того же коммита или последняя удачная сборка ветки.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/dp-desktop-incy
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: departament-windows-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Тестовый сервер — Xray 25.9.11, как у стенда Linux: ветка 26 глушит во freedom частные и петлевые
+  # адреса. Закреплён версией и суммой, как ядра в сборке приложения. Клиент — ядра из самой сборки.
+  SERVER_XRAY_TAG: v25.9.11
+  SERVER_XRAY_SHA256: d8db96eb39d7bc8cae484b2e59b651ff3c04f21e26d66e310f6a44e256ed1cc4
+  DEV_BRANCH: claude/dp-desktop-incy
+
+jobs:
+  e2e:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      # Нужен только стенд: исходники приложения собирает branch build.
+      - name: Checkout (стенд)
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Сборка стенда
+        shell: pwsh
+        run: dotnet build .github/departament-e2e/DpE2E.csproj -c Release -o "$env:RUNNER_TEMP\e2e-bin"
+
+      - name: Ядро тестового сервера (Xray 25.9.11)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $zip = "$env:RUNNER_TEMP\server-xray.zip"
+          Invoke-WebRequest -Uri "https://github.com/XTLS/Xray-core/releases/download/$env:SERVER_XRAY_TAG/Xray-windows-64.zip" -OutFile $zip
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash
+          if ($hash -ne $env:SERVER_XRAY_SHA256) { throw "Xray-windows-64.zip ($env:SERVER_XRAY_TAG): SHA256 $hash, ожидалось $env:SERVER_XRAY_SHA256" }
+          Expand-Archive $zip -DestinationPath "$env:RUNNER_TEMP\server-xray" -Force
+          & "$env:RUNNER_TEMP\server-xray\xray.exe" version | Select-Object -First 1
+
+      # Сборка этого коммита идёт параллельно (тот же пуш); ждём её конца, а не собираем второй раз.
+      - name: Ждём сборку ветки для этого коммита
+        id: build
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $repo = '${{ github.repository }}'
+          $sha = '${{ github.sha }}'
+          $start = Get-Date
+          $run = $null
+          while ($true) {
+            $runs = (gh api "repos/$repo/actions/workflows/departament-branch-build.yml/runs?head_sha=$sha&per_page=20" | ConvertFrom-Json).workflow_runs |
+              Where-Object { $_.head_branch -eq $env:DEV_BRANCH } | Sort-Object created_at -Descending
+            $run = $runs | Select-Object -First 1
+            if ($run -and $run.status -eq 'completed') { break }
+            if (-not $run -and '${{ github.event_name }}' -eq 'workflow_dispatch' -and (Get-Date) -gt $start.AddMinutes(1)) {
+              # Ручной запуск на коммите без своей сборки — последняя удачная сборка ветки.
+              $run = (gh api "repos/$repo/actions/workflows/departament-branch-build.yml/runs?branch=$env:DEV_BRANCH&status=success&per_page=1" | ConvertFrom-Json).workflow_runs | Select-Object -First 1
+              if (-not $run) { throw 'удачных сборок ветки нет' }
+              break
+            }
+            if ((Get-Date) -gt $start.AddMinutes(40)) { throw "сборка ветки для $sha не закончилась за 40 минут" }
+            Write-Host "сборка: $(if ($run) { "$($run.status) $($run.html_url)" } else { 'ещё не появилась' })"
+            Start-Sleep -Seconds 20
+          }
+          if ($run.conclusion -ne 'success') {
+            Write-Host "::error title=Сборка ветки не удалась::$($run.html_url) — $($run.conclusion); проверять нечего"
+            exit 1
+          }
+          Write-Host "Сборка: $($run.html_url) ($($run.head_sha))"
+          "run_id=$($run.id)" >> $env:GITHUB_OUTPUT
+          "Проверяется сборка [$($run.head_sha.Substring(0, 8))]($($run.html_url))." >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Скачать сборку
+        uses: actions/download-artifact@v4
+        with:
+          name: departament-vpn-win-x64
+          run-id: ${{ steps.build.outputs.run_id }}
+          github-token: ${{ github.token }}
+          path: C:\dp-e2e\app
+
+      - name: Проверки на Windows
+        shell: pwsh
+        run: |
+          & "$env:RUNNER_TEMP\e2e-bin\DpE2E.exe" --app C:\dp-e2e\app --server-xray "$env:RUNNER_TEMP\server-xray\xray.exe" --out "$env:RUNNER_TEMP\e2e-out" --work C:\dp-e2e\work
+          exit $LASTEXITCODE
+
+      - name: Снимки экрана и журналы
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: departament-windows-e2e
+          path: ${{ runner.temp }}/e2e-out
+          if-no-files-found: warn
