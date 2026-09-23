@@ -80,9 +80,17 @@ public class TaskManager
     private async Task UpdateTaskRunSubscription()
     {
         var updateTime = ((DateTimeOffset)DateTime.Now).ToUnixTimeSeconds();
+        //  Своя частота у подписки — если задана; иначе общая из «Настройки → Автообновление подписки»
+        //  (GuiItem.AutoUpdateInterval, минуты). Раньше общая строка настроек сюда не доходила вовсе:
+        //  своей частоты у подписок нет, и подписка сама не обновлялась никогда, что бы там ни стояло.
+        //  Обновление безопасно для подключения: ядро перезапускается, только если подключённый сервер
+        //  правда изменился (MainWindowViewModel.UpdateTaskHandler).
+        var globalInterval = _config.GuiItem.AutoUpdateInterval;
         var lstSubs = (await AppManager.Instance.SubItems())?
-            .Where(t => t.AutoUpdateInterval > 0)
-            .Where(t => updateTime - t.UpdateTime >= t.AutoUpdateInterval * 60)
+            .Where(t => t.Enabled && t.Url.IsNotEmpty())
+            .Select(t => (Item: t, Interval: t.AutoUpdateInterval > 0 ? t.AutoUpdateInterval : globalInterval))
+            .Where(t => t.Interval > 0 && updateTime - t.Item.UpdateTime >= t.Interval * 60)
+            .Select(t => t.Item)
             .ToList();
 
         if (lstSubs is not { Count: > 0 })
