@@ -88,6 +88,11 @@ public class HomeViewModel : MyReactiveObject, IDisposable
 
     private ServerSpeedItem? _lastSpeed;
 
+    //  Когда пришёл _lastSpeed (Environment.TickCount64). Замеры идут раз в секунду, пока окно видно;
+    //  замер старше SpeedSampleMaxAgeMs — уже не скорость «сейчас» (см. SyncState).
+    private long _lastSpeedTick;
+    private const long SpeedSampleMaxAgeMs = 3000;
+
     #region Reactive state
 
     [Reactive] public bool IsConnected { get; set; }
@@ -166,7 +171,11 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         _statsSub = AppEvents.DispatcherStatisticsRequested
             .AsObservable()
             .ObserveOn(RxSchedulers.MainThreadScheduler)
-            .Subscribe(update => _lastSpeed = update);
+            .Subscribe(update =>
+            {
+                _lastSpeed = update;
+                _lastSpeedTick = Environment.TickCount64;
+            });
 
         // Core state is now event-driven (B1/B3): CoreRunningStateChanged fires ONLY on a true/false
         // transition and ON A BACKGROUND THREAD, so we marshal to the UI thread before touching
@@ -402,8 +411,13 @@ public class HomeViewModel : MyReactiveObject, IDisposable
             var s = _lastSpeed;
             if (s != null)
             {
-                UpSpeed = $"{Utils.HumanFy(s.ProxyUp)}/s";
-                DownSpeed = $"{Utils.HumanFy(s.ProxyDown)}/s";
+                //  Старый замер — не скорость. Пока окно в трее, замеры не публикуются, и при возврате
+                //  щит несколько секунд показывал последнюю скорость ДО ухода, потом ноль от
+                //  догоняющего замера и только потом настоящую: «300 → 0 → 300» на ровной загрузке.
+                //  Теперь без свежего замера на щите ноль, пока не придёт настоящий.
+                var fresh = Environment.TickCount64 - _lastSpeedTick <= SpeedSampleMaxAgeMs;
+                UpSpeed = $"{Utils.HumanFy(fresh ? s.ProxyUp : 0)}/s";
+                DownSpeed = $"{Utils.HumanFy(fresh ? s.ProxyDown : 0)}/s";
             }
         }
         else
