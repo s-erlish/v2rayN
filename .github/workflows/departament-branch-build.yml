@@ -338,17 +338,34 @@ jobs:
           sha256sum -c departament-windows-x64.zip.sha256
           flags=(--draft)
           [ "$PRERELEASE" = "true" ] && flags+=(--prerelease)
+          # К описанию — точный коммит сборки: тег может встать не на него (см. ниже).
+          body="$RUNNER_TEMP/notes.md"
+          { cat "$notes"; printf '\n\nСборка из коммита [%s](%s/%s/commit/%s).\n' "${GITHUB_SHA::8}" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_SHA"; } > "$body"
+          assets=(departament-windows-x64.zip departament-windows-x64.zip.sha256 departament-setup.exe)
           if gh release view "$TAG" >/dev/null 2>&1; then
             if [ "$(gh release view "$TAG" --json isDraft -q .isDraft)" != "true" ]; then
               echo "::notice::Release $TAG is already published; its assets are not replaced. Bump the version for a new release."
               exit 0
             fi
             # Черновик ещё не опубликован: кладём в него сборку этого коммита.
-            gh release upload "$TAG" departament-windows-x64.zip departament-windows-x64.zip.sha256 departament-setup.exe --clobber
-            gh release edit "$TAG" --notes-file "$notes" --target "$GITHUB_SHA"
+            gh release upload "$TAG" "${assets[@]}" --clobber
+            gh release edit "$TAG" --notes-file "$body"
           else
-            # --target: если тега ещё нет, GitHub поставит его на этот коммит при публикации черновика.
-            gh release create "$TAG" departament-windows-x64.zip departament-windows-x64.zip.sha256 departament-setup.exe \
-              --target "$GITHUB_SHA" --title "departament для ПК ${VERSION}" --notes-file "$notes" "${flags[@]}"
+            # Тег черновика GitHub ставит при публикации. Токен сборки не может создать релиз с
+            # целью на коммит, где файлы workflow отличаются от основной ветки: HTTP 403 «Resource
+            # not accessible by integration» (cli/cli#9514), а у ветки разработки они отличаются.
+            # Поэтому по очереди: коммит, ветка, основная ветка. Программе для обновления нужны
+            # только номер версии и файлы релиза, они верны в любом случае; точный коммит сборки —
+            # в описании.
+            created=false
+            for target in "$GITHUB_SHA" "$GITHUB_REF_NAME" ""; do
+              if gh release create "$TAG" "${assets[@]}" ${target:+--target "$target"} \
+                  --title "departament для ПК ${VERSION}" --notes-file "$body" "${flags[@]}"; then
+                echo "Created draft $TAG with target '${target:-default branch}'"
+                created=true
+                break
+              fi
+            done
+            [ "$created" = true ] || { echo "::error::Could not create release $TAG"; exit 1; }
           fi
           echo "Draft release: $(gh release view "$TAG" --json url -q .url)" >> "$GITHUB_STEP_SUMMARY"
