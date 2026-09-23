@@ -24,10 +24,12 @@ public sealed partial class L
         Add("Servers_SearchPlaceholder", "Поиск серверов…", "Search servers…");
 
         // ── Пинг в строке сервера (screens.md «Список серверов») ──
-        //  Единица замера отдельным ключом: «133 мс» / «133 ms». Недоступный узел это «n/a»
-        //  (одинаково в обеих локалях, ключ нужен ради единой точки правки).
+        //  Единица замера отдельным ключом: «133 мс» / «133 ms». Узел, который не ответил на проверку,
+        //  показывается дефисом на месте числа, красным, как на Android (MainRecyclerAdapter.PING_FAILED
+        //  и цвет pingBad): вердикт несёт цвет, а знак говорит «числа нет». Прежнее «n/a» было
+        //  английским сокращением посреди русского интерфейса.
         Add("Servers_Ms", "мс", "ms");
-        Add("Servers_PingNa", "n/a", "n/a");
+        Add("Servers_PingFailed", "-", "-");
 
         // ── Subscription meta-bar (SubscriptionMetaView) ──
         Add("Sub_Delete", "Удалить подписку", "Delete subscription");

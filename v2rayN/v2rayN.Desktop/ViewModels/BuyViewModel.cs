@@ -785,26 +785,9 @@ public class BuyViewModel : MyReactiveObject
         _ => currency,
     };
 
-    internal static string FormatBytes(long bytes)
-    {
-        if (bytes <= 0L)
-        {
-            return Common.L.T("Common_ZeroBytes");
-        }
-        // Shared 6-unit ladder (Б,КБ,МБ,ГБ,ТБ,ПБ); Buy caps at the first 5 as in the Android base.
-        var units = Common.L.T("Common_ByteUnits").Split(',').Take(5).ToArray();
-        var value = (double)bytes;
-        var idx = 0;
-        while (value >= 1024.0 && idx < units.Length - 1)
-        {
-            value /= 1024.0;
-            idx++;
-        }
-        var formatted = idx == 0
-            ? ((long)value).ToString(CultureInfo.InvariantCulture)
-            : value.ToString("0.0", CultureInfo.InvariantCulture);
-        return $"{formatted} {units[idx]}";
-    }
+    //  Объём тарифа тем же счётом, что трафик на «Главной» и «Аккаунте» (ByteSize.Bytes): своя копия
+    //  форматтера писала ТОЧКУ посреди русского текста — «100.0 ГБ».
+    internal static string FormatBytes(long bytes) => Common.ByteSize.Bytes(bytes);
 
     private static void RunOnUi(Action action)
     {

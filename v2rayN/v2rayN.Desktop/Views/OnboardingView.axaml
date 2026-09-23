@@ -26,7 +26,9 @@
           Сверху вниз: щит 118 в кольце (внешнее сплошное, внутреннее пунктирное, под ними мягкое
           свечение) → «Приветствуем!» 24/700 → подзаголовок 14/400 → [карточка найденной ссылки]
           → две контурные пилюли 50/скругление 100 → «Другие способы» с кареткой, раскрывающей
-          «Добавить по QR-коду» и «Войти через сайт».
+          «Добавить по QR-коду» и «Войти по почте». Пока видна карточка, вторая пилюля («Добавить
+          из буфера обмена») схлопнута: у карточки своя кнопка на то же действие. Если колонке всё
+          равно не хватает высоты окна, щит ужимается до 3/4.
 
           Карточка найденной ссылки видна ТОЛЬКО когда в буфере обмена реально лежит ссылка на
           подписку (проверка — при показе экрана и при возврате фокуса окну), и раскрывается по
@@ -52,8 +54,8 @@
         <StreamGeometry x:Key="Geo.Start.Caret">M7,10l5,5 5,-5z</StreamGeometry>
         <!--  QR-код (четыре квадрата — как в прототипе, не «рамка сканера»).  -->
         <StreamGeometry x:Key="Geo.Start.Qr">M4,4h6v6H4V4zM14,4h6v6h-6V4zM4,14h6v6H4v-6zM14,14h6v6h-6v-6z</StreamGeometry>
-        <!--  Глобус — вход через сайт.  -->
-        <StreamGeometry x:Key="Geo.Start.Globe">M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2zM11,19.93c-3.95,-0.49 -7,-3.85 -7,-7.93 0,-0.62 0.08,-1.21 0.21,-1.79L9,15v1c0,1.1 0.9,2 2,2v1.93zM17.9,17.39c-0.26,-0.81 -1,-1.39 -1.9,-1.39h-1v-3c0,-0.55 -0.45,-1 -1,-1H8v-2h2c0.55,0 1,-0.45 1,-1V7h2c1.1,0 2,-0.9 2,-2v-0.41c2.93,1.19 5,4.06 5,7.41 0,2.08 -0.8,3.97 -2.1,5.39z</StreamGeometry>
+        <!--  Конверт — вход по почте. Тот же путь, что Geo.Login.Mail на форме «Вход», куда строка и ведёт.  -->
+        <StreamGeometry x:Key="Geo.Start.Mail">M20,4H4c-1.1,0 -1.99,0.9 -1.99,2L2,18c0,1.1 0.9,2 2,2h16c1.1,0 2,-0.9 2,-2V6c0,-1.1 -0.9,-2 -2,-2zM20,8l-8,5 -8,-5V6l8,5 8,-5v2z</StreamGeometry>
     </UserControl.Resources>
 
     <UserControl.Styles>
@@ -270,43 +272,51 @@
                           Внешнее кольцо сплошное, внутреннее (отступ 14) пунктирное, под ними мягкое
                           свечение. Щит КОНТУРНЫЙ и приглушённый (Brush.ShieldOff): доступа ещё нет,
                           залитый щит здесь соврал бы про состояние.  -->
-                    <Panel
-                        x:Name="ShieldRing"
-                        Width="118"
-                        Height="118"
+                    <!--  Обёртка умеет ужать щит до 3/4, когда колонке не хватает высоты окна (см.
+                          UpdateShieldFit): на минимальном окне 420×560 с карточкой найденной ссылки
+                          иначе обрезались «Другие способы». Ужимается именно раскладка (LayoutTransform),
+                          а не рендер: освободившиеся 30 точек должна получить колонка.  -->
+                    <LayoutTransformControl
+                        x:Name="ShieldFit"
                         HorizontalAlignment="Center"
                         RenderTransformOrigin="50%,50%">
-                        <!--  Свечение — ШЁПОТ, а не шар: на эталонном кадре (shots/F_first_dark.png)
-                              внутри кольца фон ПЛОСКИЙ, прибавка синего к фону меньше единицы по
-                              каналу. Brush.ConnectGlow заведён для гало connect-щита 230 и на 118
-                              даёт видимый диск, который вдобавок просвечивает сквозь вырез контурного
-                              щита и делает его «залитым». Гасим до 0.3 — свечение остаётся, шар уходит.  -->
-                        <Ellipse
+                        <Panel
+                            x:Name="ShieldRing"
                             Width="118"
                             Height="118"
-                            Fill="{DynamicResource Brush.ConnectGlow}"
-                            Opacity="0.3" />
-                        <Ellipse
-                            Width="118"
-                            Height="118"
-                            Stroke="{DynamicResource Brush.Ring.Outer}"
-                            StrokeThickness="1.5" />
-                        <Ellipse
-                            Width="90"
-                            Height="90"
-                            HorizontalAlignment="Center"
-                            VerticalAlignment="Center"
-                            Stroke="{DynamicResource Brush.Ring.Outer}"
-                            StrokeDashArray="3,3"
-                            StrokeThickness="1.5" />
-                        <PathIcon
-                            Width="46"
-                            Height="46"
-                            HorizontalAlignment="Center"
-                            VerticalAlignment="Center"
-                            Data="{StaticResource Geo.Start.Shield}"
-                            Foreground="{DynamicResource Brush.ShieldOff}" />
-                    </Panel>
+                            HorizontalAlignment="Center">
+                            <!--  Свечение — ШЁПОТ, а не шар: на эталонном кадре (shots/F_first_dark.png)
+                                  внутри кольца фон ПЛОСКИЙ, прибавка синего к фону меньше единицы по
+                                  каналу. Brush.ConnectGlow заведён для гало connect-щита 230 и на 118
+                                  даёт видимый диск, который вдобавок просвечивает сквозь вырез контурного
+                                  щита и делает его «залитым». Гасим до 0.3 — свечение остаётся, шар уходит.  -->
+                            <Ellipse
+                                Width="118"
+                                Height="118"
+                                Fill="{DynamicResource Brush.ConnectGlow}"
+                                Opacity="0.3" />
+                            <Ellipse
+                                Width="118"
+                                Height="118"
+                                Stroke="{DynamicResource Brush.Ring.Outer}"
+                                StrokeThickness="1.5" />
+                            <Ellipse
+                                Width="90"
+                                Height="90"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Stroke="{DynamicResource Brush.Ring.Outer}"
+                                StrokeDashArray="3,3"
+                                StrokeThickness="1.5" />
+                            <PathIcon
+                                Width="46"
+                                Height="46"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Data="{StaticResource Geo.Start.Shield}"
+                                Foreground="{DynamicResource Brush.ShieldOff}" />
+                        </Panel>
+                    </LayoutTransformControl>
 
                     <!--  ==================== (2) «Приветствуем!» 24/700 ====================
                           Классом Headline (Grotesk Bold 24, трекинг −0.24 ≈ −0.01em) — тот же
@@ -324,7 +334,7 @@
                     <TextBlock
                         x:Name="SubtitleText"
                         MaxWidth="340"
-                        Margin="0,10,0,0"
+                        Margin="0,8,0,0"
                         HorizontalAlignment="Center"
                         Classes="Body"
                         Foreground="{DynamicResource Brush.OnSurfaceVariant}"
@@ -401,9 +411,13 @@
                     </Border>
 
                     <!--  ==================== (5) Блок кнопок ====================
-                          Отступ сверху ведёт code-behind: 26 без карточки, 14 с карточкой (карточка
-                          уже принесла свои 24 сверху — иначе разрыв удвоился бы).  -->
-                    <StackPanel x:Name="ActionsBlock" Spacing="10">
+                          Отступ сверху ведёт code-behind: 24 без карточки, 12 с карточкой (карточка
+                          уже принесла свои 24 сверху — иначе разрыв удвоился бы).
+                          Интервал 8 между кнопками стоит НА САМИХ кнопках и внутри раскрытий, а не
+                          Spacing-ом панели: схлопнутое в ноль раскрытие у StackPanel всё равно
+                          получало бы свой интервал, и под «Другими способами» висела бы пустая
+                          полоса.  -->
+                    <StackPanel x:Name="ActionsBlock">
 
                         <!--  Войти через Telegram — глиф в фирменном цвете Telegram, подпись 14.5/700.  -->
                         <Button x:Name="TelegramButton" Classes="StartPill">
@@ -428,30 +442,45 @@
                         </Button>
 
                         <!--  Добавить из буфера обмена — серый глиф, подпись 14.5/500: второй путь
-                              равен первому по весу пилюли, но не спорит с ним весом подписи.  -->
-                        <Button x:Name="ClipboardButton" Classes="StartPill">
-                            <StackPanel
-                                HorizontalAlignment="Center"
-                                Orientation="Horizontal"
-                                Spacing="10"
-                                VerticalAlignment="Center">
-                                <PathIcon
-                                    Width="19"
-                                    Height="19"
-                                    VerticalAlignment="Center"
-                                    Data="{StaticResource Geo.Start.Copy}"
-                                    Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
-                                <TextBlock
-                                    VerticalAlignment="Center"
-                                    FontSize="14.5"
-                                    FontWeight="Medium"
-                                    Foreground="{DynamicResource Brush.OnSurface}"
-                                    Text="{loc:T Common_AddFromClipboard}" />
-                            </StackPanel>
-                        </Button>
+                              равен первому по весу пилюли, но не спорит с ним весом подписи.
+                              Пока видна карточка найденной ссылки, пилюля СХЛОПЫВАЕТСЯ: кнопка карточки
+                              «Добавить подписку» — то же самое действие, и две двери в одно действие на
+                              одном экране только отнимали высоту (с карточкой колонка не помещалась
+                              в окно 900×600, «Другие способы» уходили под нижний край).  -->
+                        <Border
+                            x:Name="PillRevealHost"
+                            Classes="StartReveal">
+                            <Button
+                                x:Name="ClipboardButton"
+                                Margin="0,8,0,0"
+                                VerticalAlignment="Top"
+                                Classes="StartPill">
+                                <StackPanel
+                                    HorizontalAlignment="Center"
+                                    Orientation="Horizontal"
+                                    Spacing="10"
+                                    VerticalAlignment="Center">
+                                    <PathIcon
+                                        Width="19"
+                                        Height="19"
+                                        VerticalAlignment="Center"
+                                        Data="{StaticResource Geo.Start.Copy}"
+                                        Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
+                                    <TextBlock
+                                        VerticalAlignment="Center"
+                                        FontSize="14.5"
+                                        FontWeight="Medium"
+                                        Foreground="{DynamicResource Brush.OnSurface}"
+                                        Text="{loc:T Common_AddFromClipboard}" />
+                                </StackPanel>
+                            </Button>
+                        </Border>
 
                         <!--  Другие способы — текст + каретка.  -->
-                        <Button x:Name="MoreButton" Classes="StartMore">
+                        <Button
+                            x:Name="MoreButton"
+                            Margin="0,8,0,0"
+                            Classes="StartMore">
                             <StackPanel
                                 HorizontalAlignment="Center"
                                 Orientation="Horizontal"
@@ -489,7 +518,7 @@
                             Height="0"
                             Classes="StartReveal fast"
                             Opacity="0">
-                            <StackPanel VerticalAlignment="Top">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top">
                                 <Border
                                     x:Name="QrRow"
                                     MinHeight="46"
@@ -521,7 +550,7 @@
                                     </Grid>
                                 </Border>
                                 <Border
-                                    x:Name="SiteRow"
+                                    x:Name="EmailRow"
                                     MinHeight="46"
                                     Classes="Row"
                                     Cursor="Arrow"
@@ -532,14 +561,14 @@
                                             Width="18"
                                             Height="18"
                                             VerticalAlignment="Center"
-                                            Data="{StaticResource Geo.Start.Globe}"
+                                            Data="{StaticResource Geo.Start.Mail}"
                                             Foreground="{DynamicResource Brush.OnSurfaceVariant}" />
                                         <TextBlock
                                             Grid.Column="2"
                                             VerticalAlignment="Center"
                                             FontSize="13.5"
                                             Foreground="{DynamicResource Brush.OnSurface}"
-                                            Text="{loc:T Common_SignInWebsite}"
+                                            Text="{loc:T Common_SignInEmail}"
                                             TextAlignment="Left" />
                                         <PathIcon
                                             Grid.Column="3"

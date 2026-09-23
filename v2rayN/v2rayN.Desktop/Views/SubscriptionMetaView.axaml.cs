@@ -469,8 +469,8 @@ public partial class SubscriptionMetaView : UserControl
         var total = sub.TotalTraffic;
         var unlimited = total <= 0;
         TrafficText.Text = unlimited
-            ? $"{FormatBytes(used)} / ∞"
-            : $"{FormatBytes(used)} / {FormatBytes(total)}";
+            ? $"{ByteSize.Bytes(used)} / ∞"
+            : $"{ByteSize.Bytes(used)} / {ByteSize.Bytes(total)}";
         // Доля заливки; безлимит (∞) ⇒ пустой трек, как в референсе. Пиксели считает
         // ApplyTrafficFill по живой ширине трека — линия резиновая.
         _trafficFraction = unlimited ? 0d : Math.Clamp((double)used / total, 0d, 1d);
@@ -606,37 +606,6 @@ public partial class SubscriptionMetaView : UserControl
     private static string FormatInterval(int minutes)
     {
         return minutes % 60 == 0 ? L.F("Common_HoursShort", minutes / 60) : L.F("Common_MinutesShort", minutes);
-    }
-
-    //  Localized byte formatter to match the reference pill («1,7 ТБ / ∞» in RU, «1.7 TB» in EN):
-    //  the unit ladder + zero label come from the L table (Common_ByteUnits / Common_ZeroBytes), and the
-    //  decimal separator follows the current language (comma in RU, dot in EN). Base 1024; 1 decimal from
-    //  KB up, trimmed. Utils.HumanFy is EN-invariant, hence this local formatter.
-    private static string FormatBytes(long bytes)
-    {
-        if (bytes <= 0)
-        {
-            return L.T("Common_ZeroBytes");
-        }
-
-        var units = L.T("Common_ByteUnits").Split(',');
-        double value = bytes;
-        var unit = 0;
-        while (value >= 1024 && unit < units.Length - 1)
-        {
-            value /= 1024;
-            unit++;
-        }
-
-        var culture = CultureInfo.GetCultureInfo(L.Instance.CurrentLang == "en" ? "en-US" : "ru-RU");
-        var digits = unit == 0 ? 0 : 1;
-        var text = value.ToString("N" + digits, culture);
-        var trailingZero = culture.NumberFormat.NumberDecimalSeparator + "0";
-        if (digits == 1 && text.EndsWith(trailingZero, StringComparison.Ordinal))
-        {
-            text = text[..^trailingZero.Length];
-        }
-        return $"{text} {units[unit]}";
     }
 
     // ── Engine access (shared VM reached through the host window) ─────────────

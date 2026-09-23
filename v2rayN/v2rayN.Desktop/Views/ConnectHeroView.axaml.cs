@@ -354,7 +354,6 @@ public partial class ConnectHeroView : UserControl
 
         //  Сонар расходится ОТ активного кольца — значит стартует на нём же.
         SetCircle(SonarPulse, frame - (4 * g));
-        SetCircle(SonarPulseEcho, frame - (4 * g));
 
         //  Ambient: волна стартует от активного кольца, дышащее кольцо — чуть внутри внешнего.
         SetCircle(AmbientSonar, frame - (4 * g));
@@ -582,7 +581,7 @@ public partial class ConnectHeroView : UserControl
                 ServerInfo.IsVisible = true;
                 SetGlow(connecting: false, connected: true);
                 //  Payoff — одноразовый; играется ТОЛЬКО на живом переходе (motion) и на экране: дуга
-                //  растворяется (не моргает), диск «приземляется» bloom-ом, двойной пинг сонара. На
+                //  растворяется (не моргает), диск «приземляется» bloom-ом, одно кольцо сонара. На
                 //  восстановлении/rebind (animate:false) — прыжок в конечный вид без повтора payoff.
                 if (motion && !MotionSuppressed)
                 {
@@ -590,11 +589,17 @@ public partial class ConnectHeroView : UserControl
                     PlaySonar();
                     PlayConnectBloom();
                 }
-                else
+                else if (_visualState != ConnectVisualState.Connected)
                 {
                     SetArc(false);
                     HideSonar();
                 }
+                //  Иначе это ПОВТОРНОЕ применение того же connected, и идущий payoff не трогаем: он
+                //  доигрывает и убирает себя сам. Подключение приходит в презентер двумя изменениями
+                //  подряд (IsConnected, затем IsConnecting=false), и второе раньше снимало сонар и
+                //  обрывало растворение дуги до первого кадра: подтверждения подключения не видел никто.
+                //  Смена языка и темы тоже применяют состояние заново и тоже не должны его обрывать;
+                //  облегчённый режим и скрытое окно снимают сонар сами, до повторного применения.
 
                 break;
 
@@ -617,8 +622,7 @@ public partial class ConnectHeroView : UserControl
                     PlayErrorContract();
                 }
 
-                UpSpeed.Text = "0 KB/s";
-                DownSpeed.Text = "0 KB/s";
+                UpSpeed.Text = DownSpeed.Text = ByteSize.Speed(0);
                 Uptime.Text = "00:00:00";
                 break;
 
@@ -633,8 +637,7 @@ public partial class ConnectHeroView : UserControl
                 SetArc(false);
                 SetGlow(connecting: false, connected: false);
                 HideSonar();
-                UpSpeed.Text = "0 KB/s";
-                DownSpeed.Text = "0 KB/s";
+                UpSpeed.Text = DownSpeed.Text = ByteSize.Speed(0);
                 Uptime.Text = "00:00:00";
                 break;
         }
@@ -722,11 +725,40 @@ public partial class ConnectHeroView : UserControl
     private void ApplyMetaDim(ConnectVisualState state) =>
         HeroMeta.Opacity = state == ConnectVisualState.Connected ? 1 : 0.45;
 
-    /// <summary>Обновляет ↑/↓ (строки Utils.HumanFy, напр. «1.2 MB/s»).</summary>
+    /// <summary>Обновляет ↑/↓ (строки <see cref="ByteSize.Speed"/>, напр. «1,2 МБ/с»).</summary>
     public void SetSpeeds(string up, string down)
     {
         UpSpeed.Text = up;
         DownSpeed.Text = down;
+    }
+
+    /// <summary>
+    /// Резерв ширины под скорости: ячейки ↑ и ↓ держат ширину самой длинной возможной строки на
+    /// текущем языке (стрелка + зазор + «99,9 МБ/с»), поэтому смена значения раз в секунду не
+    /// двигает таймер и не перекладывает колонку героя. Мерим отдельным пробником с тем же шрифтом,
+    /// кеглем, начертанием и tnum, что у живой строки: живую трогать нельзя, а цифры без tnum
+    /// дали бы другую ширину. Зовётся при входе в дерево и на смену языка.
+    /// </summary>
+    private void ReserveSpeedWidth()
+    {
+        var arrow = MeasureLike(UpArrow, UpArrow.Text ?? string.Empty);
+        var widest = ByteSize.SpeedSamples().Max(sample => MeasureLike(UpSpeed, sample));
+        UpCell.MinWidth = DownCell.MinWidth = Math.Ceiling(arrow + UpGroup.Spacing + widest);
+    }
+
+    private static double MeasureLike(TextBlock like, string text)
+    {
+        var probe = new TextBlock
+        {
+            Text = text,
+            FontFamily = like.FontFamily,
+            FontSize = like.FontSize,
+            FontWeight = like.FontWeight,
+            FontStyle = like.FontStyle,
+            FontFeatures = like.FontFeatures,
+        };
+        probe.Measure(Size.Infinity);
+        return probe.DesiredSize.Width;
     }
 
     /// <summary>Обновляет центральный таймер аптайма (hh:mm:ss).</summary>
@@ -765,6 +797,7 @@ public partial class ConnectHeroView : UserControl
         //  {loc:T} binding can't refresh it. Re-apply the current visual state (animate:false = jump
         //  to its end-look, no re-played sonar) whenever the language changes so the caption follows.
         L.Instance.LanguageChanged += OnLanguageChanged;
+        ReserveSpeedWidth();
 
         //  Reactive theme (Bug 1): the idle status foreground / shield / glyph tints are SNAPSHOT
         //  IBrush-и, разрешаемые из тема-токенов (Brush.OnSurface / OnSurfaceVariant / Accent / Red)
@@ -884,8 +917,12 @@ public partial class ConnectHeroView : UserControl
 
     private void OnMotionStateChanged(object? sender, bool lite) => ApplyLiteMode(lite, reapply: true);
 
-    private void OnLanguageChanged(object? sender, EventArgs e) =>
+    private void OnLanguageChanged(object? sender, EventArgs e)
+    {
+        //  Единицы скорости сменили язык («КБ/с» ↔ «KB/s») — и ширина резерва вместе с ними.
+        ReserveSpeedWidth();
         SetConnectState(_visualState, hasServer: _hasServer, animate: false);
+    }
 
     //  Тема сменилась (Dark ↔ Light ↔ mono) → пере-применяем текущее состояние, чтобы snapshot-кисти
     //  подписи/щита/глифа (OnSurfaceBrush / ShieldIdleBrush / AccentBrush / ErrorBrush) разрешились
@@ -1219,15 +1256,17 @@ public partial class ConnectHeroView : UserControl
         }
     }
 
+    //  Сколько живёт пинг: Emphasis (600) плюс запас на оборот диспетчера, которым навешивается класс.
+    private static readonly TimeSpan SonarLifetime = Motion.Dur.Emphasis + TimeSpan.FromMilliseconds(100);
+
     private void PlaySonar()
     {
-        //  Осевший ДВОЙНОЙ пинг (≤2 кольца): ведущее 1.0→1.6 + alpha 1→0 (600мс quint), затем тихое
-        //  эхо (старт α 0.5, 1→1.5) с задержкой ~120мс → «залочено», не радар-петля. Классы снимаем и
-        //  вешаем на следующем цикле диспетчера, чтобы одноразовые анимации чисто перезапускались.
+        //  Подтверждение подключения, единственный 600-мс момент продукта (master plan 5.3.6): ОДНО
+        //  кольцо от активного кольца, 1.0→1.35 и α 0.6→0 за Emphasis, OutQuint, ОДИН раз на
+        //  подключение, без повторов и без второго кольца. Класс снимаем и вешаем на следующем цикле
+        //  диспетчера, чтобы одноразовая анимация чисто перезапускалась.
         SonarPulse.Classes.Remove("pulsing");
-        SonarPulseEcho.Classes.Remove("pulsing-echo");
         SonarPulse.IsVisible = true;
-        SonarPulseEcho.IsVisible = true;
         var run = ++_sonarRun;
         Dispatcher.UIThread.Post(
             () =>
@@ -1239,17 +1278,18 @@ public partial class ConnectHeroView : UserControl
             },
             DispatcherPriority.Background);
 
-        //  Эхо +120мс. Re-guard: если за это время ушли из connected или окно скрылось — не запускаем
-        //  (не тикаем компоновщик за экраном одноразовым эхо).
+        //  Отыгравший пинг убирает себя сам: одноразовому классу незачем висеть на кольце до
+        //  следующего отключения. К концу пинга кольцо уже прозрачно, поэтому снятие класса и
+        //  скрытие на экране ничего не меняют, а часы анимаций после этого пусты.
         DispatcherTimer.RunOnce(
             () =>
             {
-                if (run == _sonarRun && _visualState == ConnectVisualState.Connected && !MotionSuppressed)
+                if (run == _sonarRun)
                 {
-                    SonarPulseEcho.Classes.Add("pulsing-echo");
+                    HideSonar();
                 }
             },
-            TimeSpan.FromMilliseconds(120));
+            SonarLifetime);
     }
 
     //  Номер текущего запуска сонара. HideSonar его сдвигает, и отложенные старты уже снятого запуска
@@ -1265,9 +1305,7 @@ public partial class ConnectHeroView : UserControl
     {
         _sonarRun++;
         SonarPulse.Classes.Remove("pulsing");
-        SonarPulseEcho.Classes.Remove("pulsing-echo");
         SonarPulse.IsVisible = false;
-        SonarPulseEcho.IsVisible = false;
     }
 
     //  Connect-bloom (P1-1): диск «приземляется» — 1.0→1.04 (180мс) → 1.04→1.0 (260мс), ОБЕ ноги

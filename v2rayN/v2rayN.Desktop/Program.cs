@@ -99,6 +99,18 @@ internal class Program
            .LogToTrace()
            .UseReactiveUI(_ => { });
 
+        // Linux без GL рисует окно программно, в кадровый буфер. По умолчанию Avalonia выбрасывает этот
+        // буфер после каждого кадра, и следующий кадр заводит новый (2 МБ на окно 900×600, около 8 МБ
+        // на весь экран), очищает его и копирует туда весь кадр из своего промежуточного слоя. Каждый
+        // такой буфер Avalonia регистрирует как давление на память (GC.AddMemoryPressure), и среда
+        // отвечала полными сборками мусора: на каждую смену вкладки их было две. Сохранённый буфер
+        // перерисовывается на месте и только там, где что-то изменилось. Цена — этот один буфер в
+        // памяти, пока окно открыто. С GL и на других системах настройка ни на что не влияет.
+        if (OperatingSystem.IsLinux())
+        {
+            builder = builder.With(new X11PlatformOptions { UseRetainedFramebuffer = true });
+        }
+
         if (OperatingSystem.IsMacOS())
         {
             var showInDock = Design.IsDesignMode || AppManager.Instance.Config.UiItem.MacOSShowInDock;

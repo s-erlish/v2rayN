@@ -1037,12 +1037,14 @@
                             </StackPanel>
                         </Button>
 
+                        <!--  «Войти по почте», а не «через сайт»: кнопка открывает форму «Вход» внутри
+                              приложения (почта + пароль), браузер здесь не участвует.  -->
                         <Button
                             x:Name="LoginSiteButton"
                             HorizontalAlignment="Stretch"
                             HorizontalContentAlignment="Center"
                             Classes="Tonal"
-                            Content="{loc:T Common_SignInWebsite}" />
+                            Content="{loc:T Common_SignInEmail}" />
                     </StackPanel>
                 </StackPanel>
             </Border>

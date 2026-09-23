@@ -826,9 +826,9 @@ public sealed class DelayTestingConverter : IValueConverter
 
 /// <summary>
 /// Текст пинга (screens.md «Список серверов»): реальный замер печатается как «133 мс», недоступный
-/// узел («-1» / 0 от ядра) — как «n/a», НИКОГДА как сырое «-1». Сюда попадают только числовые
-/// результаты (видимость держит <see cref="DelayResultConverter"/>, идущий тест показывает спиннер),
-/// поэтому converter решает лишь «число или n/a». Локален для ServerListView.
+/// узел («-1» / 0 от ядра) — дефисом, как на Android, и НИКОГДА сырым «-1». Сюда попадают только
+/// числовые результаты (видимость держит <see cref="DelayResultConverter"/>, идущий тест показывает
+/// спиннер), поэтому converter решает лишь «число или дефис». Локален для ServerListView.
 /// </summary>
 public sealed class DelayDisplayConverter : IValueConverter
 {
@@ -837,8 +837,8 @@ public sealed class DelayDisplayConverter : IValueConverter
         var s = value?.ToString();
         if (int.TryParse(s, out var ms) && ms <= 0)
         {
-            //  Недоступен — «n/a» КРАСНЫМ (см. DelayInkConverter), не число и не латентность.
-            return L.T("Servers_PingNa");
+            //  Недоступен — дефис КРАСНЫМ (см. DelayInkConverter): на месте числа знак «числа нет».
+            return L.T("Servers_PingFailed");
         }
         return $"{s} {L.T("Servers_Ms")}";
     }
@@ -847,7 +847,8 @@ public sealed class DelayDisplayConverter : IValueConverter
 }
 
 /// <summary>
-/// Чернила пинга: ЛЮБОЙ измеренный результат — зелёный, «n/a» — красный. Решение владельца, оно
+/// Чернила пинга: ЛЮБОЙ измеренный результат — зелёный, дефис «не ответил» — красный (та же пара
+/// pingGood / pingBad, что на Android). Решение владельца, оно
 /// заменило прежнюю трёхступенчатую шкалу «зелёный до 150 · жёлтый до 350 · дальше красный» из
 /// screens.md: в списке она давала пёструю колонку из трёх цветов, в которой глазу не за что
 /// зацепиться, а разница между 88 и 156 миллисекундами всё равно ничего не решает. Значимо ровно
@@ -863,7 +864,7 @@ public sealed class DelayInkConverter : IValueConverter
 
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
-        //  Недоступен / таймаут → КРАСНЫЙ «n/a»: это не медленный сервер, а молчащий.
+        //  Недоступен / таймаут → КРАСНЫЙ дефис: это не медленный сервер, а молчащий.
         //  Всё остальное — зелёное, независимо от числа.
         return value is int ms && ms > 0
             ? Resolve("Brush.GreenText", _greenFallback)

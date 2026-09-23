@@ -70,6 +70,18 @@ public sealed partial class L
         Add("Settings_UrlSchemes", "Схемы URL-адресов", "URL schemes");
         Add("Settings_UrlSchemesHint", "Быстрые команды depv://", "Quick depv:// commands");
 
+        // ── Пароль sudo (режим «весь трафик» на Linux и macOS, SudoPasswordInputView) ──
+        // Раньше диалог брал строки движка (ResUI): тире посреди русской фразы и кнопка фиксированной
+        // ширины, в которую «Подтвердить» не помещалось. Приписка «если из-за ошибки проверки
+        // приложение начнёт работать некорректно, перезапустите его» убрана: совет без причины
+        // только пугает, а неверный пароль теперь назван прямо под полем.
+        Add("Sudo_Title", "Пароль sudo", "sudo password");
+        Add("Sudo_Hint",
+            "Нужен, чтобы включить режим «весь трафик». Пароль проверяется в терминале и нигде не сохраняется, поэтому после перезапуска приложения его нужно ввести снова.",
+            "Needed to turn on whole-traffic mode. The password is checked in a terminal and never stored, so enter it again after the app restarts.");
+        Add("Sudo_Confirm", "Подтвердить", "Confirm");
+        Add("Sudo_Wrong", "Неверный пароль. Попробуйте ещё раз.", "Wrong password. Try again.");
+
         // ── SettingsViewModel: display-value resolvers (language-aware) ──
         Add("Settings_PerAppExcept", "кроме", "except");
         Add("Settings_PerAppOnly", "только", "only");
@@ -83,7 +95,17 @@ public sealed partial class L
 
         // ── RoutingSubView ──
         Add("Routing_RuleSets", "Наборы правил", "Rule sets");
-        Add("Routing_RulesCount", "{0} правил", "{0} rules");
+        // Число правил склоняется: «1 правило», «4 правила», «8 правил». Раньше шаблон «{0} правил»
+        // писал «4 правил» под встроенным набором «Весь трафик через прокси».
+        AddPlural(
+            "Routing_RulesPlural",
+            new[] { "правило", "правила", "правил" },
+            new[] { "rule", "rules" });
+        // Встроенные наборы движка хранятся под китайскими именами апстрима («V4-绕过大陆(Whitelist)»
+        // и т. п.). Показываем их по-русски, теми же словами, что готовые наборы на Android.
+        Add("Routing_PresetBasic", "Базовый набор", "Basic set");
+        Add("Routing_PresetBlocked", "Прокси для заблокированных сайтов", "Proxy for blocked sites");
+        Add("Routing_PresetGlobal", "Весь трафик через прокси", "All traffic through the proxy");
         Add("Routing_Active", "Активен", "Active");
         Add("Routing_DomainStrategy", "Доменная стратегия", "Domain strategy");
         Add("Routing_DomainResolution", "Разрешение доменов", "Domain resolution");
