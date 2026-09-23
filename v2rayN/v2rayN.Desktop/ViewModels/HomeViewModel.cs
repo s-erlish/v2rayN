@@ -418,8 +418,9 @@ public class HomeViewModel : MyReactiveObject, IDisposable
                 //  догоняющего замера и только потом настоящую: «300 → 0 → 300» на ровной загрузке.
                 //  Теперь без свежего замера на щите ноль, пока не придёт настоящий.
                 var fresh = Environment.TickCount64 - _lastSpeedTick <= SpeedSampleMaxAgeMs;
-                UpSpeed = ByteSize.Speed(fresh ? s.ProxyUp : 0);
-                DownSpeed = ByteSize.Speed(fresh ? s.ProxyDown : 0);
+                //  Замер движка в КиБ/с, а не в байтах: перевод в ByteSize.EngineSpeed.
+                UpSpeed = ByteSize.EngineSpeed(fresh ? s.ProxyUp : 0);
+                DownSpeed = ByteSize.EngineSpeed(fresh ? s.ProxyDown : 0);
             }
         }
         else
