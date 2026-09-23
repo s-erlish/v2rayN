@@ -576,6 +576,7 @@ public partial class App : Application
     // «Подключить»/«Отключить» — тот же путь, что тап по connect-щиту.
     private async void MenuToggleConnect_Click(object? sender, EventArgs e)
     {
+        UpdateReconnect.NoteUserAction();
         try
         {
             if (IsCoreRunning())

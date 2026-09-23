@@ -5,6 +5,7 @@ using System.Runtime.CompilerServices;
 using ServiceLib.Handler.SysProxy;
 using v2rayN.Desktop.Account;
 using v2rayN.Desktop.Common;
+using v2rayN.Desktop.Views;
 
 namespace v2rayN.Desktop.ViewModels;
 
@@ -220,6 +221,8 @@ public class HomeViewModel : MyReactiveObject, IDisposable
     /// <summary>Shield tap: connect if idle, disconnect if running.</summary>
     public void ConnectToggle()
     {
+        //  Решение пользователя главнее подключения, которое вернул бы перезапуск ради обновления.
+        UpdateReconnect.NoteUserAction();
         if (IsConnected)
         {
             _ = Disconnect();
@@ -229,6 +232,12 @@ public class HomeViewModel : MyReactiveObject, IDisposable
             _ = Connect();
         }
     }
+
+    /// <summary>
+    /// Подключение, которое возвращает перезапуск ради обновления (<see cref="UpdateReconnect"/>). Тот же
+    /// путь, что у тапа по щиту, только без отметки «пользователь сам тронул подключение».
+    /// </summary>
+    internal Task ReconnectAfterUpdate() => IsConnected || IsConnecting ? Task.CompletedTask : Connect();
 
     private async Task Connect()
     {
@@ -290,6 +299,7 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         {
             return;
         }
+        UpdateReconnect.NoteUserAction();
 
         //  Переключение ещё не осело — тап не теряется и не бежит наперегонки с ним. Запоминаем
         //  ПОСЛЕДНИЙ выбор (очередь на один элемент) и применяем его в ApplyPendingServer, когда

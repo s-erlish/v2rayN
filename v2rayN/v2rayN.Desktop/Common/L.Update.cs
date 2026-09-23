@@ -97,8 +97,8 @@ public sealed partial class L
 
         // ── Подтверждение перезапуска ──
         Add("Update_ConfirmTitle", "Перезапустить сейчас?", "Restart now?");
-        Add("Update_ConfirmConnected", "Подключение прервётся на несколько секунд. После перезапуска подключитесь снова.",
-            "The connection drops for a few seconds. Connect again after the restart.");
+        Add("Update_ConfirmConnected", "Подключение прервётся на несколько секунд и восстановится само.",
+            "The connection drops for a few seconds and comes back on its own.");
         Add("Update_ConfirmIdle", "Приложение закроется и откроется уже в версии {0}.", "The app closes and opens again in version {0}.");
 
         // ── Строка настроек ──

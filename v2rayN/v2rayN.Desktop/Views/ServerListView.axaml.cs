@@ -709,6 +709,7 @@ public partial class ServerListView : UserControl
     {
         if (_actionTarget is { } item && DataContext is HomeViewModel { Profiles: { } profiles })
         {
+            UpdateReconnect.NoteUserAction();
             _ = profiles.SetDefaultServer(item.IndexId);
         }
     }
