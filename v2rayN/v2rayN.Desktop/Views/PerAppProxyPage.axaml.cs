@@ -356,16 +356,13 @@ public partial class PerAppProxyPage : UserControl, ISubPage
         // две половины одного факта, и разъехаться им нельзя.
         AppPresets.Commit();
 
-        //  НИЧЕГО НЕ ИЗМЕНИЛОСЬ — НИЧЕГО И НЕ ДЕЛАЕМ. Раньше уход со страницы всегда сохранял,
-        //  переписывал правила маршрутизации и публиковал перезагрузку ядра. Перезагрузка — это
-        //  разрыв и повторное поднятие туннеля: владелец заходил посмотреть список программ, выходил
-        //  и видел, что VPN отключился. Заглянуть в настройку не должно стоить соединения.
-        var oldList = _config.UiItem.PerAppProxyList ?? new List<string>();
-        var unchanged = enabled == _config.UiItem.PerAppProxyEnabled
-            && bypass == _config.UiItem.PerAppProxyBypass
-            && oldList.Count == chosen.Count
-            && !oldList.Except(chosen, StringComparer.OrdinalIgnoreCase).Any();
-        if (unchanged)
+        //  НИЧЕГО НЕ ИЗМЕНИЛОСЬ — НИЧЕГО И НЕ ДЕЛАЕМ. Перезагрузка ядра — это разрыв и повторное
+        //  поднятие туннеля: заглянуть в настройку не должно стоить соединения.
+        var oldEnabled = _config.UiItem.PerAppProxyEnabled;
+        var oldBypass = _config.UiItem.PerAppProxyBypass;
+        var oldSet = new HashSet<string>(_config.UiItem.PerAppProxyList ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
+        var sameApps = oldSet.SetEquals(chosen);
+        if (enabled == oldEnabled && bypass == oldBypass && sameApps)
         {
             BackRequested?.Invoke(this, EventArgs.Empty);
             return;
@@ -376,7 +373,20 @@ public partial class PerAppProxyPage : UserControl, ISubPage
         _config.UiItem.PerAppProxyList = chosen;
         await ConfigHandler.SaveConfig(_config);
 
-        await ApplyToRoutingAsync(enabled && chosen.Count > 0, bypass, chosen);
+        //  Маршрут меняется, только если правила «по приложениям» действуют до или после: функция
+        //  включена И хотя бы одна программа выбрана. Включили тумблер, но ничего не выбрали; сменили
+        //  режим или список при выключенной функции — правил нет ни до, ни после, настройка просто
+        //  сохраняется, а VPN не трогается. Раньше любое такое изменение перезапускало подключение.
+        var wasActive = oldEnabled && oldSet.Count > 0;
+        var isActive = enabled && chosen.Count > 0;
+        var routingChanged = wasActive != isActive || (isActive && (bypass != oldBypass || !sameApps));
+        if (!routingChanged)
+        {
+            BackRequested?.Invoke(this, EventArgs.Empty);
+            return;
+        }
+
+        await ApplyToRoutingAsync(isActive, bypass, chosen);
 
         if (IsCoreRunning())
         {
