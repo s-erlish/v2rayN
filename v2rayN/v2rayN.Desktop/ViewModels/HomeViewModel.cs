@@ -742,13 +742,20 @@ public class HomeViewModel : MyReactiveObject, IDisposable
             return;
         }
         _reconcilePending = true;
+        //  Первая сверка — вне фоновой очереди. Пока список не прочитан, окно держит пустой кадр
+        //  (IsResolved), а сверка на фоновом приоритете ждала, пока окно само разложится и нарисуется:
+        //  база отдавала список ещё ДО первого кадра, но на экране сперва стоял голый фон, и
+        //  «Главная» со списком приходила на 300–400 мс позже. Обычный приоритет идёт раньше раскладки
+        //  и отрисовки, поэтому первый же кадр окна несёт список. Склейке Clear+AddRange приоритет не
+        //  мешает: оба вызова синхронны и отрабатывают до любой отложенной задачи. Дальше — фон, как
+        //  было: обновления списка уступают вводу и отрисовке.
         Dispatcher.UIThread.Post(
             () =>
             {
                 _reconcilePending = false;
                 ReconcileGroups();
             },
-            DispatcherPriority.Background);
+            IsResolved ? DispatcherPriority.Background : DispatcherPriority.Normal);
     }
 
     /// <summary>
