@@ -258,11 +258,65 @@ public sealed class DepartamentApiClient : IDepartamentApiClient
 
     #region subscription
 
+    //  ОДИН ОТВЕТ НА ДВОИХ. При запуске и при возвращении окна после простоя импорт подписок аккаунта
+    //  (SubscriptionSyncManager) и загрузка вкладки «Аккаунт» спрашивают эти два адреса подряд, с
+    //  разницей в доли секунды и из РАЗНЫХ экземпляров клиента: каждый раз по два одинаковых запроса к
+    //  панели. Теперь второй, пришедший, пока первый ещё идёт или только что ответил, получает тот же
+    //  ответ. Окно свежести короткое: опросы после оплаты ходят реже и видят новые данные.
+    private static readonly SharedGet<PrimarySubscriptionDto> _primaryShared = new();
+    private static readonly SharedGet<SubscriptionAllDto> _allShared = new();
+
     public Task<PrimarySubscriptionDto> GetPrimarySubscription() =>
-        GetJson<PrimarySubscriptionDto>(Endpoints.Subscription);
+        _primaryShared.Get(() => GetJson<PrimarySubscriptionDto>(Endpoints.Subscription));
 
     public Task<SubscriptionAllDto> GetSubscriptionAll() =>
-        GetJson<SubscriptionAllDto>(Endpoints.SubscriptionAll);
+        _allShared.Get(() => GetJson<SubscriptionAllDto>(Endpoints.SubscriptionAll));
+
+    /// <summary>
+    /// Общий ответ одного GET: запрос в полёте или ответивший не раньше <see cref="Fresh"/> назад
+    /// отдаётся всем, кто спросил. Ключ — токен сессии: ответ одного аккаунта не достаётся другому.
+    /// Ошибка не запоминается: следующий спросивший идёт в сеть заново.
+    /// </summary>
+    private sealed class SharedGet<T>
+    {
+        private static readonly TimeSpan Fresh = TimeSpan.FromSeconds(3);
+        private readonly object _lock = new();
+        private Task<T>? _task;
+        private string? _token;
+        private DateTime _doneAt;
+
+        public Task<T> Get(Func<Task<T>> fetch)
+        {
+            var token = AuthTokenStore.GetToken();
+            lock (_lock)
+            {
+                if (_task is { } task && _token == token)
+                {
+                    if (!task.IsCompleted)
+                    {
+                        return task;
+                    }
+                    if (task.IsCompletedSuccessfully && DateTime.UtcNow - _doneAt < Fresh)
+                    {
+                        return task;
+                    }
+                }
+                _token = token;
+                _task = Run(fetch);
+                return _task;
+            }
+        }
+
+        private async Task<T> Run(Func<Task<T>> fetch)
+        {
+            var result = await fetch();
+            lock (_lock)
+            {
+                _doneAt = DateTime.UtcNow;
+            }
+            return result;
+        }
+    }
 
     public async Task RenameSubscription(string scope, string id, string name)
     {
