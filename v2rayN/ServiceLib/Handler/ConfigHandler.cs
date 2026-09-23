@@ -2021,12 +2021,120 @@ public static class ConfigHandler
             {
                 return -1;
             }
-            return await AddBatchServersInternal(config, strData, subid, isSub);
+            if (gate is null)
+            {
+                return await AddBatchServersInternal(config, strData, subid, isSub);
+            }
+            await BeginGroupReplace();
+            try
+            {
+                return await AddBatchServersInternal(config, strData, subid, isSub);
+            }
+            finally
+            {
+                EndGroupReplace();
+            }
         }
         finally
         {
             gate?.Release();
         }
+    }
+
+    /// <summary>
+    /// Прочитать список серверов так, чтобы ни одна подписка не была посреди замены своих серверов.
+    /// Для экрана список читается ТОЛЬКО так (ProfilesViewModel.RefreshServers).
+    ///
+    /// Обновление подписки — это НЕСКОЛЬКО записей в базу подряд: удалить группу, вставить новое
+    /// поколение, вернуть узнанным серверам прежние id (<see cref="KeepIndexIdsAcrossRefresh"/>).
+    /// Чтение, попавшее между ними, видело группу пустой или с новыми id: читатель, который
+    /// перечитывал группу, пока подписка десять раз обновлялась, заставал её пустой примерно в каждом
+    /// пятом чтении и с чужими id — почти в каждом втором (SubscriptionReadGateTests без ворот). В жизни
+    /// это запуск вошедшего пользователя, когда импорт аккаунта обновляет подписку ровно в момент
+    /// первого чтения списка, и две подписки, из которых одна закончила обновляться и перечитывает весь
+    /// список, пока вторая на середине. Пустое чтение ставило «Главную» пустой (у вошедшего —
+    /// приветственная карточка вместо серверов), чтение с новыми id пересобирало все строки, и через
+    /// долю секунды всё повторялось обратно.
+    ///
+    /// Поэтому это ворота «читатели — писатели»: чтений может быть сколько угодно сразу, но ни одно
+    /// не идёт, пока какая-то подписка заменяет свои серверы, а замена начинается, только когда
+    /// начатые чтения закончились. Замена длится десятки миллисекунд, на медленном диске — сотни;
+    /// подождать её дешевле, чем показать полсписка.
+    /// </summary>
+    public static async Task<T> ReadServersSettledAsync<T>(Func<Task<T>> read)
+    {
+        while (true)
+        {
+            Task replaces;
+            lock (_serversGateLock)
+            {
+                if (_groupReplaces == 0)
+                {
+                    _serverReads++;
+                    break;
+                }
+                replaces = _groupReplacesDone.Task;
+            }
+            await replaces;
+        }
+        try
+        {
+            return await read();
+        }
+        finally
+        {
+            TaskCompletionSource? drained = null;
+            lock (_serversGateLock)
+            {
+                if (--_serverReads == 0)
+                {
+                    drained = _serverReadsDone;
+                    _serverReadsDone = null;
+                }
+            }
+            drained?.TrySetResult();
+        }
+    }
+
+    private static readonly object _serversGateLock = new();
+    private static int _serverReads;
+    private static int _groupReplaces;
+    private static TaskCompletionSource _groupReplacesDone = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private static TaskCompletionSource? _serverReadsDone;
+
+    /// <summary>Замена группы начинается: новые чтения ждут, начатые дочитываются. См. <see cref="ReadServersSettledAsync{T}"/>.</summary>
+    private static async Task BeginGroupReplace()
+    {
+        Task? reads = null;
+        lock (_serversGateLock)
+        {
+            if (_groupReplaces++ == 0)
+            {
+                _groupReplacesDone = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            }
+            if (_serverReads > 0)
+            {
+                _serverReadsDone ??= new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                reads = _serverReadsDone.Task;
+            }
+        }
+        if (reads is not null)
+        {
+            await reads;
+        }
+    }
+
+    private static void EndGroupReplace()
+    {
+        TaskCompletionSource? done = null;
+        lock (_serversGateLock)
+        {
+            if (--_groupReplaces == 0)
+            {
+                done = _groupReplacesDone;
+            }
+        }
+        done?.TrySetResult();
     }
 
     /// <summary>
@@ -2635,8 +2743,18 @@ public static class ConfigHandler
             {
                 return 0;
             }
-            await SQLiteHelper.Instance.DeleteAsync(item);
-            await RemoveServersViaSubid(config, id, false);
+            //  Две записи подряд: между ними серверы уже без подписки и на экране на миг стали бы
+            //  группой «Мои серверы». Экран читает список только до или после них (ReadServersSettledAsync).
+            await BeginGroupReplace();
+            try
+            {
+                await SQLiteHelper.Instance.DeleteAsync(item);
+                await RemoveServersViaSubid(config, id, false);
+            }
+            finally
+            {
+                EndGroupReplace();
+            }
 
             if (item.Id == config.SubIndexId)
             {

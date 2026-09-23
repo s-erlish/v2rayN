@@ -1464,6 +1464,11 @@ public class AccountViewModel : MyReactiveObject
                 if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop
                     && desktop.MainWindow is IViewFor<MainWindowViewModel> { ViewModel: { } main })
                 {
+                    //  Сначала подписки, потом серверы: «Главная» берёт из списка подписок в памяти место
+                    //  группы и её название. Подписку, которую импорт только что создал (первый вход на
+                    //  этой машине), без этого список не знал — её группа вставала в конец и уезжала на
+                    //  своё место только на следующем запуске.
+                    await main.ProfilesViewModel.RefreshSubscriptions();
                     await main.ProfilesViewModel.RefreshServers();
                 }
             }
@@ -1579,8 +1584,14 @@ public class AccountViewModel : MyReactiveObject
     /// Account-imported subscriptions carry AutoUpdateInterval = 0, so TaskManager's per-minute
     /// scheduler never touches them: without this, a machine left running for days kept whatever
     /// server list and expiry it had at launch.
+    ///
+    /// DEV-крючок DP_IDLE_REFRESH_MS=N (как DP_TRAY_CYCLE) подменяет порог: возврат после простоя
+    /// проверяется за секунды, а не за четверть часа ожидания.
     /// </summary>
-    private static readonly TimeSpan IdleRefreshAfter = TimeSpan.FromMinutes(15);
+    private static readonly TimeSpan IdleRefreshAfter =
+        int.TryParse(Environment.GetEnvironmentVariable("DP_IDLE_REFRESH_MS"), out var idleMs) && idleMs > 0
+            ? TimeSpan.FromMilliseconds(idleMs)
+            : TimeSpan.FromMinutes(15);
 
     /// <summary>
     /// Refresh on RETURNING TO THE WINDOW after a long idle, rather than on a timer. A poll would run

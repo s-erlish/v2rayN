@@ -1228,10 +1228,11 @@ public partial class ConnectHeroView : UserControl
         SonarPulseEcho.Classes.Remove("pulsing-echo");
         SonarPulse.IsVisible = true;
         SonarPulseEcho.IsVisible = true;
+        var run = ++_sonarRun;
         Dispatcher.UIThread.Post(
             () =>
             {
-                if (_visualState == ConnectVisualState.Connected)
+                if (run == _sonarRun && _visualState == ConnectVisualState.Connected)
                 {
                     SonarPulse.Classes.Add("pulsing");
                 }
@@ -1243,7 +1244,7 @@ public partial class ConnectHeroView : UserControl
         DispatcherTimer.RunOnce(
             () =>
             {
-                if (_visualState == ConnectVisualState.Connected && !MotionSuppressed)
+                if (run == _sonarRun && _visualState == ConnectVisualState.Connected && !MotionSuppressed)
                 {
                     SonarPulseEcho.Classes.Add("pulsing-echo");
                 }
@@ -1251,8 +1252,18 @@ public partial class ConnectHeroView : UserControl
             TimeSpan.FromMilliseconds(120));
     }
 
+    //  Номер текущего запуска сонара. HideSonar его сдвигает, и отложенные старты уже снятого запуска
+    //  ничего не делают. Без этого на каждом подключении выходило так: презентер получает ДВА
+    //  изменения подряд (IsConnected, затем IsConnecting=false), первое запускает сонар, второе —
+    //  повторное применение того же состояния — сразу прячет его, а отложенные старты срабатывали
+    //  уже на скрытых кольцах. Анимация на невидимом элементе не доигрывает, стоит на паузе и держит
+    //  часы анимаций: окно перерисовывалось 60 раз в секунду всё время, пока VPN подключён, —
+    //  около 7% ядра на пустом месте (замер под Xvfb; в облегчённом режиме, где сонара нет, — 1%).
+    private int _sonarRun;
+
     private void HideSonar()
     {
+        _sonarRun++;
         SonarPulse.Classes.Remove("pulsing");
         SonarPulseEcho.Classes.Remove("pulsing-echo");
         SonarPulse.IsVisible = false;

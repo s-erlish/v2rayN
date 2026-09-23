@@ -724,7 +724,29 @@ public class MainWindowViewModel : MyReactiveObject
         // No bottom toast on subscription add — the engine progress already streams into the message
         // panel via SubscriptionImportLogHandler. (Owner request: adding a subscription must raise no
         // bottom notifications.)
-        await Task.Run(async () => await SubscriptionHandler.UpdateProcess(_config, "", false, SubscriptionImportLogHandler));
+        //
+        //  Качаем только ТЕ подписки, чьи ссылки вставили. Пустой subId значил «все подписки»:
+        //  добавление второй ссылки заново скачивало и подписку аккаунта, и каждую другую, а их группы
+        //  заменялись на глазах. Если ссылку среди подписок не нашли — прежнее поведение, все.
+        var urls = importedData!.Split('\n', '\r')
+            .Select(line => line.Trim())
+            .Where(line => line.StartsWith(Global.HttpsProtocol) || line.StartsWith(Global.HttpProtocol))
+            .ToHashSet();
+        var subIds = (await AppManager.Instance.SubItems() ?? [])
+            .Where(s => s.Url.IsNotEmpty() && urls.Contains(s.Url.Trim()))
+            .Select(s => s.Id)
+            .ToList();
+        if (subIds.Count == 0)
+        {
+            subIds.Add(string.Empty);
+        }
+        await Task.Run(async () =>
+        {
+            foreach (var subId in subIds)
+            {
+                await SubscriptionHandler.UpdateProcess(_config, subId, false, SubscriptionImportLogHandler);
+            }
+        });
 
         await RefreshSubscriptions();
         await RefreshServersDispatcherAsync();

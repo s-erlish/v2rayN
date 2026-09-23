@@ -88,6 +88,11 @@ public class HomeViewModel : MyReactiveObject, IDisposable
 
     private ServerSpeedItem? _lastSpeed;
 
+    //  Когда пришёл _lastSpeed (Environment.TickCount64). Замеры идут раз в секунду, пока окно видно;
+    //  замер старше SpeedSampleMaxAgeMs — уже не скорость «сейчас» (см. SyncState).
+    private long _lastSpeedTick;
+    private const long SpeedSampleMaxAgeMs = 3000;
+
     #region Reactive state
 
     [Reactive] public bool IsConnected { get; set; }
@@ -166,7 +171,11 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         _statsSub = AppEvents.DispatcherStatisticsRequested
             .AsObservable()
             .ObserveOn(RxSchedulers.MainThreadScheduler)
-            .Subscribe(update => _lastSpeed = update);
+            .Subscribe(update =>
+            {
+                _lastSpeed = update;
+                _lastSpeedTick = Environment.TickCount64;
+            });
 
         // Core state is now event-driven (B1/B3): CoreRunningStateChanged fires ONLY on a true/false
         // transition and ON A BACKGROUND THREAD, so we marshal to the UI thread before touching
@@ -402,8 +411,13 @@ public class HomeViewModel : MyReactiveObject, IDisposable
             var s = _lastSpeed;
             if (s != null)
             {
-                UpSpeed = $"{Utils.HumanFy(s.ProxyUp)}/s";
-                DownSpeed = $"{Utils.HumanFy(s.ProxyDown)}/s";
+                //  Старый замер — не скорость. Пока окно в трее, замеры не публикуются, и при возврате
+                //  щит несколько секунд показывал последнюю скорость ДО ухода, потом ноль от
+                //  догоняющего замера и только потом настоящую: «300 → 0 → 300» на ровной загрузке.
+                //  Теперь без свежего замера на щите ноль, пока не придёт настоящий.
+                var fresh = Environment.TickCount64 - _lastSpeedTick <= SpeedSampleMaxAgeMs;
+                UpSpeed = $"{Utils.HumanFy(fresh ? s.ProxyUp : 0)}/s";
+                DownSpeed = $"{Utils.HumanFy(fresh ? s.ProxyDown : 0)}/s";
             }
         }
         else
@@ -742,13 +756,20 @@ public class HomeViewModel : MyReactiveObject, IDisposable
             return;
         }
         _reconcilePending = true;
+        //  Первая сверка — вне фоновой очереди. Пока список не прочитан, окно держит пустой кадр
+        //  (IsResolved), а сверка на фоновом приоритете ждала, пока окно само разложится и нарисуется:
+        //  база отдавала список ещё ДО первого кадра, но на экране сперва стоял голый фон, и
+        //  «Главная» со списком приходила на 300–400 мс позже. Обычный приоритет идёт раньше раскладки
+        //  и отрисовки, поэтому первый же кадр окна несёт список. Склейке Clear+AddRange приоритет не
+        //  мешает: оба вызова синхронны и отрабатывают до любой отложенной задачи. Дальше — фон, как
+        //  было: обновления списка уступают вводу и отрисовке.
         Dispatcher.UIThread.Post(
             () =>
             {
                 _reconcilePending = false;
                 ReconcileGroups();
             },
-            DispatcherPriority.Background);
+            IsResolved ? DispatcherPriority.Background : DispatcherPriority.Normal);
     }
 
     /// <summary>
@@ -963,15 +984,29 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         }
 
         // A9: pinned subscriptions float to the top. SubItem.Pinned is read from the in-memory
-        // sub cache (Profiles.SubItems, keyed by Subid == the group key). OrderByDescending is a
-        // stable sort, so unpinned groups keep their existing order underneath the pinned ones.
+        // sub cache (Profiles.SubItems, keyed by Subid == the group key).
+        //
+        //  Под закреплёнными — порядок САМИХ подписок (SubItem.Sort, в нём и лежит кэш), а не порядок
+        //  строк в базе. Раньше группы шли в порядке первой строки, а обновление подписки удаляет её
+        //  серверы и вставляет заново — в КОНЕЦ таблицы. Каждое обновление уводило свою группу вниз:
+        //  на запуске с двумя подписками первый кадр показывал сверху вторую (первую только что
+        //  обновил импорт аккаунта), а через полсекунды, когда обновлялась вторая, группы менялись
+        //  местами на глазах. Группы без подписки (свои серверы) — после подписок. Сортировка
+        //  устойчивая: равные сохраняют прежний порядок.
+        var subs = Profiles?.SubItems.ToList() ?? [];
         var ordered = grouped
-            .Select(g => new
+            .Select(g =>
             {
-                Group = g,
-                Pinned = Profiles?.SubItems.FirstOrDefault(s => s.Id == g.Key.Key)?.Pinned ?? false,
+                var position = g.Key.Key.IsNullOrEmpty() ? -1 : subs.FindIndex(s => s.Id == g.Key.Key);
+                return new
+                {
+                    Group = g,
+                    Pinned = position >= 0 && subs[position].Pinned,
+                    Position = position >= 0 ? position : int.MaxValue,
+                };
             })
             .OrderByDescending(x => x.Pinned)
+            .ThenBy(x => x.Position)
             .ToList();
 
         foreach (var x in ordered)

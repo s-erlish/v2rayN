@@ -381,7 +381,9 @@ public class ProfilesViewModel : MyReactiveObject
 
     private async Task RefreshServersBiz()
     {
-        var lstModel = await GetProfileItemsEx(_config.SubIndexId, _serverFilter);
+        //  Не читаем группу посреди её замены: пустая или полузаменённая выборка пересобирала весь
+        //  список на глазах (см. ConfigHandler.ReadServersSettledAsync).
+        var lstModel = await ConfigHandler.ReadServersSettledAsync(() => GetProfileItemsEx(_config.SubIndexId, _serverFilter));
         _lstProfile = JsonUtils.Deserialize<List<ProfileItem>>(JsonUtils.Serialize(lstModel)) ?? [];
 
         ProfileItems.Clear();
@@ -808,7 +810,9 @@ public class ProfilesViewModel : MyReactiveObject
             });
             await Task.CompletedTask;
         });
-        _speedtestService?.RunLoop(actionType, lstSelected);
+        //  Ждём сам прогон: вызывающий (команда «пинг всех» на карточке подписки) узнаёт о конце
+        //  замера, когда он правда закончен, а не в момент запуска.
+        await _speedtestService.RunLoop(actionType, lstSelected);
     }
 
     public void ServerSpeedtestStop()
