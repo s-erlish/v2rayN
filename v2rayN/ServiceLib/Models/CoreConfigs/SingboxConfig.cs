@@ -319,7 +319,13 @@ public class Ruleset4Sbox
     public string? path { get; set; }
     public string? url { get; set; }
     public string? download_detour { get; set; }
+    public HttpClient4Sbox? http_client { get; set; }
     public string? update_interval { get; set; }
+}
+
+public class HttpClient4Sbox
+{
+    public string? detour { get; set; }
 }
 
 public abstract class DialFields4Sbox
