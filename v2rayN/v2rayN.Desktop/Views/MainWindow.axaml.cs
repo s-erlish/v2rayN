@@ -258,29 +258,6 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
         bottomNav.TabSelected += (_, tab) => ShowTab(tab);
         _compactHome.AccountRequested += (_, _) => ShowTab(AppTab.Account);
 
-        // Двойной клик по навигации (рейл в широкой / нижний бар в компактной) тумблит окно через
-        // брейкпоинт: компакт⇄широкая. handledEventsToo — ловим даже если кнопка «съела» тап.
-        // Bug4: тумблер размера должен срабатывать ТОЛЬКО по пустой хром-области, а НЕ по любой
-        // нав-кнопке (navHome/navSettings/navAccount, кнопки нижнего бара, btnRailToggle). Раньше
-        // исключался лишь btnRailToggle, поэтому двойной клик по любой другой нав-кнопке «проваливался»
-        // в этот handler и разворачивал/сжимал окно. Поскольку handledEventsToo:true ловит событие даже
-        // помеченным Handled, пометки на кнопке недостаточно — фильтруем по источнику: IsWithinInteractive
-        // возвращает true, если клик попал ВНУТРЬ любого Button раньше, чем в host (railHost/bottomNav).
-        railHost.AddHandler(InputElement.DoubleTappedEvent, (_, e) =>
-        {
-            if (!IsWithinInteractive(e.Source as Visual))
-            {
-                ToggleLayoutSize();
-            }
-        }, RoutingStrategies.Bubble, handledEventsToo: true);
-        bottomNav.AddHandler(InputElement.DoubleTappedEvent, (_, e) =>
-        {
-            if (!IsWithinInteractive(e.Source as Visual))
-            {
-                ToggleLayoutSize();
-            }
-        }, RoutingStrategies.Bubble, handledEventsToo: true);
-
         // Drag-to-edge: тащим компактное окно к краю рабочей области → разворот в широкую.
         PositionChanged += OnPositionChanged;
 
@@ -1625,6 +1602,16 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
 
     private void TitleBar_PointerPressed(object? sender, PointerPressedEventArgs e)
     {
+        //  Двойной щелчок по заголовку — на весь экран и обратно, как у любого окна Windows. Сама система
+        //  этого не делает: заголовок нарисован нами, для Windows это клиентская область, и каждый щелчок
+        //  лишь запускал перетаскивание. Двойной щелчок по левой навигации и нижней панели окно больше не
+        //  трогает: он случайно разворачивал его на весь экран.
+        if (e.ClickCount == 2 && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        {
+            e.Handled = true;
+            WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+            return;
+        }
         if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
         {
             // Арм drag-to-edge только на реальный перенос заголовка. На Windows BeginMoveDrag
@@ -1638,52 +1625,10 @@ public partial class MainWindow : WindowBase<MainWindowViewModel>
             if (_edgeExpandRequested)
             {
                 _edgeExpandRequested = false;
-                // Масштабируем цель на _uiScale (см. ToggleLayoutSize): раскладка живёт в координатах контента.
+                // Масштабируем цель на _uiScale: раскладка живёт в координатах контента (Bounds/_uiScale).
                 ResizeClamped(WideToggleWidth * _uiScale, WideToggleHeight * _uiScale);
             }
         }
-    }
-
-    // ==================== Двойной клик по навигации: тумблер широкая⇄компактная ====================
-    // Не широкая (компактная/узкая) → широкая 1366×768, широкая → компактная 900×860. Смена ширины
-    // проходит через порог и триггерит ApplyLayoutMode из Bounds-вотчера — раскладка следует за размером.
-    private void ToggleLayoutSize()
-    {
-        if (WindowState != WindowState.Normal)
-        {
-            WindowState = WindowState.Normal;
-        }
-        // Цели тумблера — в ФИЗ. размере окна, поэтому масштабируем на _uiScale: тумблер задаёт РАСКЛАДКУ,
-        // а брейкпоинт живёт в координатах контента (Bounds/_uiScale). Без умножения на высоком zoom «широкая»
-        // цель в контенте оказалась бы уже порога и раскладка не переключилась бы. ApplySizeCentered клампит в экран.
-        if (_layout != LayoutMode.Wide)
-        {
-            AnimateWindowSize(WideToggleWidth * _uiScale, WideToggleHeight * _uiScale);
-        }
-        else
-        {
-            AnimateWindowSize(CompactToggleWidth * _uiScale, CompactToggleHeight * _uiScale);
-        }
-    }
-
-    // Bug4: истина, если источник двойного клика лежит ВНУТРИ любого интерактивного контрола (нав-кнопки,
-    // кнопки нижнего бара, кнопки свёртки рейла). Поднимаемся по визуальному дереву от источника: встретив
-    // Button РАНЬШЕ, чем host (railHost/bottomNav), считаем клик «по кнопке» → тумблер размера НЕ срабатывает.
-    // Дойдя до самого host, не встретив кнопки, — это пустая хром-область, тумблер разрешён (false).
-    private bool IsWithinInteractive(Visual? source)
-    {
-        for (var v = source; v is not null; v = v.GetVisualParent())
-        {
-            if (ReferenceEquals(v, railHost) || ReferenceEquals(v, bottomNav))
-            {
-                return false;
-            }
-            if (v is Button)
-            {
-                return true;
-            }
-        }
-        return false;
     }
 
     // ==================== Bug6: плавная анимация размера окна (тумблер компакт⇄широкая) ====================
