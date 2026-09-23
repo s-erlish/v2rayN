@@ -970,15 +970,29 @@ public class HomeViewModel : MyReactiveObject, IDisposable
         }
 
         // A9: pinned subscriptions float to the top. SubItem.Pinned is read from the in-memory
-        // sub cache (Profiles.SubItems, keyed by Subid == the group key). OrderByDescending is a
-        // stable sort, so unpinned groups keep their existing order underneath the pinned ones.
+        // sub cache (Profiles.SubItems, keyed by Subid == the group key).
+        //
+        //  Под закреплёнными — порядок САМИХ подписок (SubItem.Sort, в нём и лежит кэш), а не порядок
+        //  строк в базе. Раньше группы шли в порядке первой строки, а обновление подписки удаляет её
+        //  серверы и вставляет заново — в КОНЕЦ таблицы. Каждое обновление уводило свою группу вниз:
+        //  на запуске с двумя подписками первый кадр показывал сверху вторую (первую только что
+        //  обновил импорт аккаунта), а через полсекунды, когда обновлялась вторая, группы менялись
+        //  местами на глазах. Группы без подписки (свои серверы) — после подписок. Сортировка
+        //  устойчивая: равные сохраняют прежний порядок.
+        var subs = Profiles?.SubItems.ToList() ?? [];
         var ordered = grouped
-            .Select(g => new
+            .Select(g =>
             {
-                Group = g,
-                Pinned = Profiles?.SubItems.FirstOrDefault(s => s.Id == g.Key.Key)?.Pinned ?? false,
+                var position = g.Key.Key.IsNullOrEmpty() ? -1 : subs.FindIndex(s => s.Id == g.Key.Key);
+                return new
+                {
+                    Group = g,
+                    Pinned = position >= 0 && subs[position].Pinned,
+                    Position = position >= 0 ? position : int.MaxValue,
+                };
             })
             .OrderByDescending(x => x.Pinned)
+            .ThenBy(x => x.Position)
             .ToList();
 
         foreach (var x in ordered)

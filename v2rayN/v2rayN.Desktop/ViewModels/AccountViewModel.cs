@@ -1464,6 +1464,11 @@ public class AccountViewModel : MyReactiveObject
                 if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop
                     && desktop.MainWindow is IViewFor<MainWindowViewModel> { ViewModel: { } main })
                 {
+                    //  Сначала подписки, потом серверы: «Главная» берёт из списка подписок в памяти место
+                    //  группы и её название. Подписку, которую импорт только что создал (первый вход на
+                    //  этой машине), без этого список не знал — её группа вставала в конец и уезжала на
+                    //  своё место только на следующем запуске.
+                    await main.ProfilesViewModel.RefreshSubscriptions();
                     await main.ProfilesViewModel.RefreshServers();
                 }
             }
