@@ -40,9 +40,13 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      # ReadyToRun: код приложения и Avalonia заранее скомпилирован в машинный, и на запуске его не
+      # компилирует JIT. Владелец ждал окно с серверами после каждого старта; живой замер — 1,4–1,5 с
+      # до списка вместо 2,1–2,6 с. Цена — размер: exe 105 → 170 МБ, архив сборки примерно +25 МБ.
+      # Только здесь, а не в Directory.Build.props: общие настройки апстрима не трогаем.
       - name: Publish (self-contained win-x64)
         working-directory: ./v2rayN
-        run: dotnet publish ./v2rayN.Desktop/v2rayN.Desktop.csproj -c Release -r win-x64 -p:SelfContained=true -p:EnableWindowsTargeting=true -o "${{ github.workspace }}/dist"
+        run: dotnet publish ./v2rayN.Desktop/v2rayN.Desktop.csproj -c Release -r win-x64 -p:SelfContained=true -p:EnableWindowsTargeting=true -p:PublishReadyToRun=true -o "${{ github.workspace }}/dist"
 
       - name: Strip debug symbols
         shell: pwsh
