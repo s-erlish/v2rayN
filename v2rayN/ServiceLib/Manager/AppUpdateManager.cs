@@ -161,6 +161,18 @@ public sealed class AppUpdateManager
             Logging.SaveLog(_tag, ex);
         }
         DeleteUpdateFiles();
+
+        // Прежний установщик: заменяя сам себя, он отодвигается в AmazTool.exe.tmp (запущенный exe на Windows
+        // нельзя удалить, но можно переименовать), а убрал бы эту копию только при следующем обновлении. К этой
+        // минуте он давно вышел; если файл ещё занят, его уберёт следующий запуск.
+        try
+        {
+            File.Delete(Path.Combine(Utils.GetBaseDirectory(), Utils.GetExeName(AppUpdateChannel.InstallerBaseName) + ".tmp"));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Logging.SaveLog($"{_tag}: the previous installer copy is still busy: {ex.Message}");
+        }
     }
 
     #endregion Schedule
