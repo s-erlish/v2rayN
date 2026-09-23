@@ -85,8 +85,6 @@ public sealed class AppUpdateManager
 
     public bool IsSupported => Channel.IsSupportedPlatform;
 
-    public bool AutoCheck => AppManager.Instance.Config.CheckUpdateItem?.AutoCheck ?? true;
-
     public bool IncludePreRelease => AppManager.Instance.Config.CheckUpdateItem?.CheckPreReleaseUpdate ?? false;
 
     private static string UpdateDir => Utils.GetTempPath("update");
@@ -98,8 +96,9 @@ public sealed class AppUpdateManager
 
     /// <summary>
     /// Запускает автопроверку: первая через <paramref name="firstDelay"/>, дальше каждые <paramref name="period"/>.
-    /// Повторный вызов ничего не делает. Выключенная настройка «Проверять обновления автоматически»
-    /// проверяется на каждом шаге, так что её смена действует без перезапуска.
+    /// Повторный вызов ничего не делает. Выключателя у автопроверки нет: владелец решил, что кнопки
+    /// «Проверить обновления» достаточно, а о новой версии приложение сообщает само. Поле AutoCheck из
+    /// конфигов прежних сборок при чтении пропускается и при следующей записи пропадает.
     /// </summary>
     public void StartSchedule(TimeSpan firstDelay, TimeSpan period)
     {
@@ -115,7 +114,7 @@ public sealed class AppUpdateManager
             {
                 await Task.Delay(delay);
                 delay = period;
-                if (!AutoCheck || !IsSupported)
+                if (!IsSupported)
                 {
                     continue;
                 }

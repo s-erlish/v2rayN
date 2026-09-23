@@ -1,8 +1,8 @@
 namespace v2rayN.Desktop.Common;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Самообновление: экран «Проверить обновление», уведомление в строке окна, подтверждение перезапуска
-// и строка «Проверять обновления автоматически» в настройках. Ключи Update_*.
+// Самообновление: экран «Проверить обновление», уведомление в строке окна и подтверждение
+// перезапуска. Ключи Update_*.
 //
 // Отдельный файл со своим хуком (как L.Start.cs), чтобы работа над обновлением не правила файлы
 // соседних пакетов. Тексты состояний повторяют departament для Android (strings_editors.xml, A-36):
@@ -103,9 +103,5 @@ public sealed partial class L
         Add("Update_ConfirmConnected", "Подключение прервётся на несколько секунд и восстановится само.",
             "The connection drops for a few seconds and comes back on its own.");
         Add("Update_ConfirmIdle", "Приложение закроется и откроется уже в версии {0}.", "The app closes and opens again in version {0}.");
-
-        // ── Строка настроек ──
-        Add("Update_AutoCheck", "Проверять обновления автоматически", "Check for updates automatically");
-        Add("Update_AutoCheckHint", "Раз в 6 часов, пока приложение открыто", "Every 6 hours while the app is open");
     }
 }
