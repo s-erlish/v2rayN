@@ -5,8 +5,9 @@ name: departament desktop (branch build)
 # downloadable artifact. Trigger: push to the dev branch, or run manually.
 #
 # РЕЛИЗЫ. Тег vX.Y.Z (или vX.Y.Z-rc.N — предварительный выпуск) на коммите ветки разработки
-# собирает то же самое с версией из тега, упаковывает в departament-windows-x64.zip и создаёт
-# черновик релиза GitHub вместе с контрольной суммой (публикует его человек, см. работу release).
+# собирает то же самое с версией из тега, упаковывает в departament-windows-x64.zip, собирает
+# установщик departament-setup.exe (installer/departament.iss) и создаёт черновик релиза GitHub
+# с ними и контрольной суммой архива (публикует его человек, см. работу release).
 # По опубликованным релизам программа обновляет себя сама,
 # поэтому форма архива — договор с ней (AmazTool и проверка обновлений), а не вкус:
 #   • все файлы под одной папкой верхнего уровня departament-windows-x64/ — AmazTool срезает
@@ -233,12 +234,39 @@ jobs:
           [System.IO.File]::WriteAllText("$zip.sha256", "$hash  $name.zip`n")
           Write-Host "$name.zip: $($names.Count) entries, $([math]::Round((Get-Item $zip).Length / 1MB, 1)) MB, sha256 $hash"
 
+      # Установщик — для первой установки: тот же набор файлов, что в архиве самообновления, плюс ярлыки,
+      # запись в «Приложениях» и удаление. Дальше программа обновляется сама из выпусков, мимо него.
+      # Inno Setup на образе бывает не всегда — тогда ставим его на время сборки.
+      - name: Build installer (Inno Setup)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) { choco install innosetup --no-progress -y | Out-Host }
+          if (-not (Test-Path $iscc)) { throw "ISCC.exe not found at $iscc" }
+          $ws = "${{ github.workspace }}"
+          $v = '${{ steps.version.outputs.version }}'
+          if (-not $v) { $v = (Get-Item "$ws/dist/departament.exe").VersionInfo.ProductVersion.Split('+')[0] }
+          $num = "$(($v -split '-')[0]).0"
+          & $iscc "/DAppVersion=$v" "/DNumericVersion=$num" "/DSourceDir=$ws\dist" "/DIconFile=$ws\v2rayN\v2rayN.Desktop\Assets\AppIcon.ico" "/O$ws" "$ws\installer\departament.iss"
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit code $LASTEXITCODE" }
+          $setup = Get-Item "$ws/departament-setup.exe"
+          Write-Host "departament-setup.exe $v, $([math]::Round($setup.Length / 1MB, 1)) MB"
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: departament-vpn-win-x64
           path: dist
           if-no-files-found: error
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: departament-setup
+          path: departament-setup.exe
+          if-no-files-found: error
+          compression-level: 0
 
       - name: Upload release assets
         if: github.ref_type == 'tag'
@@ -248,6 +276,7 @@ jobs:
           path: |
             departament-windows-x64.zip
             departament-windows-x64.zip.sha256
+            departament-setup.exe
           if-no-files-found: error
 
   # Публикация — отдельной работой и только она с правом записи: сборка ничего в репозитории
@@ -297,10 +326,10 @@ jobs:
               echo "::error::Release $TAG is already published; its assets are not replaced. Cut a new tag."
               exit 1
             fi
-            gh release upload "$TAG" departament-windows-x64.zip departament-windows-x64.zip.sha256 --clobber
+            gh release upload "$TAG" departament-windows-x64.zip departament-windows-x64.zip.sha256 departament-setup.exe --clobber
             gh release edit "$TAG" --notes-file "$notes"
           else
-            gh release create "$TAG" departament-windows-x64.zip departament-windows-x64.zip.sha256 \
+            gh release create "$TAG" departament-windows-x64.zip departament-windows-x64.zip.sha256 departament-setup.exe \
               --verify-tag --title "departament для ПК ${VERSION}" --notes-file "$notes" "${flags[@]}"
           fi
           echo "Draft release: $(gh release view "$TAG" --json url -q .url)" >> "$GITHUB_STEP_SUMMARY"

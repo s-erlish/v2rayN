@@ -27,11 +27,18 @@ internal class Program
             .StartWithClassicDesktopLifetime(args);
     }
 
+    //  «departament.exe --quit» — просьба к уже запущенной копии штатно выйти: так установщик и
+    //  деинсталлятор закрывают программу перед заменой файлов. Штатно — значит с остановкой ядра и
+    //  снятием системного прокси; убитый процесс оставил бы прокси на мёртвом порту, и интернет лёг
+    //  бы до следующего запуска. Сама по себе эта команда программу НЕ запускает.
+    public const string QuitArg = "--quit";
+
     private static bool OnStartup(string[]? Args)
     {
         var args = Args ?? [];
         // Browser→app SSO return (departamentvpn://auth?code=…): the OS launches us with the URL as an arg.
         var authUrl = ExtractAuthUrl(args);
+        var quit = args.Any(a => string.Equals(a, QuitArg, StringComparison.OrdinalIgnoreCase));
 
         if (Utils.IsWindows())
         {
@@ -40,6 +47,12 @@ internal class Program
             ProgramStarted = new EventWaitHandle(false, EventResetMode.AutoReset, exePathKey, out var bCreatedNew);
             if (!rebootas && !bCreatedNew)
             {
+                if (quit)
+                {
+                    // Окно не поднимаем (ProgramStarted не взводим): просьба только о выходе.
+                    AppHandoffChannel.ForwardToRunningInstance(AppHandoffChannel.QuitMessage);
+                    return false;
+                }
                 // A live instance already holds the single-instance gate. Previously the second instance
                 // simply exited, dropping its args — so a scheme callback could never reach the running
                 // app. Now, if we were launched to deliver an auth URL, forward it over the named pipe
@@ -57,12 +70,23 @@ internal class Program
             _ = new Mutex(true, "v2rayN", out var bOnlyOneInstance);
             if (!bOnlyOneInstance)
             {
+                if (quit)
+                {
+                    AppHandoffChannel.ForwardToRunningInstance(AppHandoffChannel.QuitMessage);
+                    return false;
+                }
                 if (authUrl != null)
                 {
                     AppHandoffChannel.ForwardToRunningInstance(authUrl);
                 }
                 return false;
             }
+        }
+
+        // Выходить некому: программа не запущена, и запускать её ради выхода не нужно.
+        if (quit)
+        {
+            return false;
         }
 
         // This is the primary (surviving) instance. Start the pipe receiver so any later scheme callback
@@ -136,6 +160,13 @@ internal static class AppHandoffChannel
 
     // Kept in sync with AccountViewModel.AppScheme (matches the site allowlist ^departament[a-z0-9]*$).
     private const string AccountVmScheme = "departamentvpn";
+
+    //  Просьба выйти (Program.QuitArg). Намеренно НЕ ссылка departamentvpn://: такую ссылку может
+    //  открыть любая страница в браузере, и она закрывала бы VPN одним щелчком. Пересылка по схеме
+    //  всегда начинается с SchemePrefix, так что этой строки через браузер не получить.
+    public const string QuitMessage = "departament:quit";
+
+    public static bool IsQuit(string? message) => string.Equals(message?.Trim(), QuitMessage, StringComparison.Ordinal);
 
     private static readonly object _gate = new();
     private static string? _pending;

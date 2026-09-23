@@ -80,6 +80,10 @@ public partial class App : Application
                 SetupTray();
                 SetupConnectivityHooks(desktop);
                 SetupAppHandoff();
+                if (OperatingSystem.IsWindows())
+                {
+                    _ = Task.Run(SyncInstalledVersion);
+                }
             }
 
             if (OperatingSystem.IsMacOS())
@@ -174,7 +178,56 @@ public partial class App : Application
     {
         RegisterAuthScheme();
         // The pipe/cold-start URL is delivered on a background thread; marshal to the UI thread to route it.
-        AppHandoffChannel.SetHandler(url => Dispatcher.UIThread.Post(() => OnAuthCallbackUrl(url)));
+        AppHandoffChannel.SetHandler(url => Dispatcher.UIThread.Post(() =>
+        {
+            //  Установщик просит выйти перед заменой файлов (departament.exe --quit): тот же путь, что
+            //  «Выход» в трее, — ядро остановлено, системный прокси снят.
+            if (AppHandoffChannel.IsQuit(url))
+            {
+                MenuExit_Click(this, EventArgs.Empty);
+                return;
+            }
+            OnAuthCallbackUrl(url);
+        }));
+    }
+
+    //  AppId установщика (installer/departament.iss). Менять нельзя: по нему Windows узнаёт установленную
+    //  программу, а новая установка встаёт поверх прежней, а не рядом.
+    private const string InstallerAppId = "{60C53B95-8ECB-4307-A76B-756BEAC48B89}";
+
+    /// <summary>
+    /// Версия в «Параметры → Приложения» — такая же, как у запущенной программы. Её записывает установщик,
+    /// а дальше программа обновляется сама, мимо него (AmazTool), и запись застывала бы на версии первой
+    /// установки. Установщик ставит программу для всех (HKLM, она всё равно запускается с правами
+    /// администратора); HKCU — на случай установки только для себя. Трогаем только запись своей папки:
+    /// копия, распакованная из архива в другое место, версию установленной не переписывает.
+    /// </summary>
+    [SupportedOSPlatform("windows")]
+    private static void SyncInstalledVersion()
+    {
+        var path = $@"Software\Microsoft\Windows\CurrentVersion\Uninstall\{InstallerAppId}_is1";
+        foreach (var hive in new[] { Registry.LocalMachine, Registry.CurrentUser })
+        {
+            try
+            {
+                using var key = hive.OpenSubKey(path, writable: true);
+                if (key?.GetValue("InstallLocation") is not string location
+                    || !string.Equals(Path.GetFullPath(location).TrimEnd('\\'), Path.GetFullPath(Utils.StartupPath()).TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+                var version = Utils.GetVersionInfo();
+                if (!string.Equals(key.GetValue("DisplayVersion") as string, version, StringComparison.Ordinal))
+                {
+                    key.SetValue("DisplayVersion", version);
+                }
+                return;
+            }
+            catch (Exception ex)
+            {
+                Logging.SaveLog("SyncInstalledVersion", ex);
+            }
+        }
     }
 
     private static void RegisterAuthScheme()
