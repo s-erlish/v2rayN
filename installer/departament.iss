@@ -85,9 +85,11 @@ Name: "{autodesktop}\departament VPN"; Filename: "{app}\departament.exe"; Tasks:
 [Run]
 ; Галочка на последней странице включена сразу. runascurrentuser — запуск с правами самого установщика,
 ; то есть от имени администратора. Без флага Inno запускает postinstall-программу от исходного, не
-; повышенного пользователя, а программе с requireAdministrator Windows такой запуск отказывает
-; (ошибка 740): после установки она просто не открылась бы.
-Filename: "{app}\departament.exe"; Description: "{cm:LaunchApp}"; Flags: nowait postinstall skipifsilent runascurrentuser
+; повышенного пользователя, а программе с requireAdministrator Windows такой запуск отказывает:
+; «CreateProcess не выполнен; код 740. Запрошенная операция требует повышения» — ровно это
+; владелец и увидел в конце установки. shellexec — вторая страховка: запуск через оболочку Windows,
+; которая при нехватке прав показывает запрос UAC, а не ошибку с кодом.
+Filename: "{app}\departament.exe"; Description: "{cm:LaunchApp}"; Flags: nowait postinstall skipifsilent runascurrentuser shellexec
 
 [UninstallDelete]
 ; Служебное самообновления и файлы, которые могли прийти с обновлениями после установки (ядра,
