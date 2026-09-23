@@ -94,8 +94,12 @@ public class CoreManager
     // time. Held OUTSIDE _coreOpGate (order: _restartGate → _coreOpGate; never the reverse).
     private readonly SemaphoreSlim _restartGate = new(1, 1);
     private readonly object _restartStatsLock = new();
+    //  Перезапуски ПОДРЯД, ни один из которых не продержался _restartWindow. Раньше счётчик жил в
+    //  окне 60 с от первой попытки: ядро, падающее раз в 15–16 с (sing-box, не дождавшийся набора
+    //  правил), укладывалось в окно по четыре раза, окно обнулялось, и круг «подключено → упало →
+    //  снова» шёл бесконечно — до отказа с причиной дело не доходило никогда. Теперь счётчик
+    //  сбрасывают только устойчивая работа (сторож) и новое подключение пользователя.
     private int _restartAttempts;
-    private DateTime _restartWindowStart;
     private DateTime? _coreUpSince;
 
     // Sticky user-stop intent — set by CoreStop(byUser:true), cleared by a USER connect. While set, no
@@ -793,8 +797,8 @@ public class CoreManager
     /// Re-run the SAME full-restart primitive with the cached current contexts, serialized through
     /// <see cref="_restartGate"/> (single recovery driver) and, for the actual reload,
     /// <see cref="_coreOpGate"/> (single core-op gate — no race with a user reload/disconnect). Backoff
-    /// 1s,2s,4s,8s… capped at ~30s; at most <see cref="_maxRestartAttempts"/> attempts per rolling
-    /// <see cref="_restartWindow"/>, then it gives up (no crash-loop hammering). It bails PERMANENTLY the
+    /// 1s,2s,4s,8s… capped at ~30s; at most <see cref="_maxRestartAttempts"/> restarts in a row that did
+    /// not hold <see cref="_restartWindow"/>, then it gives up (no crash-loop hammering). It bails PERMANENTLY the
     /// moment an external/user stop is observed — the captured stop generation changed,
     /// <see cref="_userStopRequested"/> is set, or the loop token was cancelled — so a user Disconnect
     /// during the backoff window can never be silently undone (C1). The token also makes the backoff wait
@@ -829,12 +833,6 @@ public class CoreManager
                 int attempt;
                 lock (_restartStatsLock)
                 {
-                    var nowTs = DateTime.Now;
-                    if (nowTs - _restartWindowStart > _restartWindow)
-                    {
-                        _restartWindowStart = nowTs;
-                        _restartAttempts = 0;
-                    }
                     if (_restartAttempts >= _maxRestartAttempts)
                     {
                         attempt = -1;
@@ -955,11 +953,14 @@ public class CoreManager
     }
 
     /// <summary>Arm a FRESH restart-loop cancellation source for a new connect session (a user connect
-    /// supersedes any prior loop). Cancels+disposes the old one so any loop still holding it bails.</summary>
+    /// supersedes any prior loop). Cancels+disposes the old one so any loop still holding it bails.
+    /// Заодно — свежий запас перезапусков: подключение пользователя начинает счёт заново, иначе после
+    /// одного отказа первое же падение нового подключения сдавалось бы без единой попытки.</summary>
     private void ResetRestartLoopCts()
     {
         lock (_restartStatsLock)
         {
+            _restartAttempts = 0;
             var old = _restartLoopCts;
             _restartLoopCts = new CancellationTokenSource();
             try
@@ -1121,7 +1122,6 @@ public class CoreManager
                     lock (_restartStatsLock)
                     {
                         _restartAttempts = 0;
-                        _restartWindowStart = DateTime.Now;
                     }
                 }
             }
