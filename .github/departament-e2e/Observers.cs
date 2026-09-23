@@ -12,7 +12,15 @@ internal sealed class StartupRun
     public double? LaunchCallToProcessMs { get; set; }
     public double? FirstWindowMs { get; set; }
     public double? WindowVisibleMs { get; set; }
+
+    /// <summary>Окно закрыло собой рабочий стол — первый кадр на экране (до него окно прозрачно).</summary>
+    public double? WindowDrawnMs { get; set; }
+
+    /// <summary>В кадре есть содержимое: текст и значки, а не ровный фон.</summary>
     public double? WindowPaintedMs { get; set; }
+
+    /// <summary>С чем сравнивать значок: первый кадр на экране, а если его не поймали — видимость окна.</summary>
+    public double? WindowShownMs => WindowDrawnMs ?? WindowVisibleMs;
     public double? TrayShellMs { get; set; }
     public double? TrayToolbarMs { get; set; }
     public string? TrayShellRect { get; set; }
@@ -122,10 +130,20 @@ internal static class Observers
             if (main != 0 && run.WindowPaintedMs is null && ms >= nextPaint)
             {
                 nextPaint = ms + 8;
-                if (Win.ClientRectOnScreen(main) is { } cr && Win.Capture(cr) is { } shot && LooksPainted(shot.Bgra, shot.Width, shot.Height))
+                if (Win.ClientRectOnScreen(main) is { } cr && Win.Capture(cr) is { } shot)
                 {
-                    run.WindowPaintedMs = Rel(sw.Elapsed.TotalMilliseconds);
-                    Png.Save(Path.Combine(shotsDir, $"startup-{name}-2-first-content.png"), shot.Bgra, shot.Width, shot.Height);
+                    var (drawn, content) = Analyze(shot.Bgra, shot.Width, shot.Height);
+                    var at = Rel(sw.Elapsed.TotalMilliseconds);
+                    if (drawn && run.WindowDrawnMs is null)
+                    {
+                        run.WindowDrawnMs = at;
+                        Png.Save(Path.Combine(shotsDir, $"startup-{name}-2-first-frame.png"), shot.Bgra, shot.Width, shot.Height);
+                    }
+                    if (content)
+                    {
+                        run.WindowPaintedMs = at;
+                        Png.Save(Path.Combine(shotsDir, $"startup-{name}-2-first-content.png"), shot.Bgra, shot.Width, shot.Height);
+                    }
                 }
             }
 
@@ -158,8 +176,10 @@ internal static class Observers
                 }
             }
 
-            //  Всё увидели — ещё полторы секунды на случай, если окно перерисуется или значок уйдёт.
-            if (run.WindowVisibleMs.HasValue && run.WindowPaintedMs.HasValue && ms > trayFoundAt + 1500)
+            //  Всё увидели — ещё полторы секунды на случай, если окно перерисуется или значок уйдёт. Содержимое
+            //  ждём не дольше трёх секунд после первого кадра: ровный экран без текста — тоже ответ.
+            var drawnAt = run.WindowDrawnMs is { } d ? d + created : (double?)null;
+            if (drawnAt.HasValue && (run.WindowPaintedMs.HasValue || ms > drawnAt + 3000) && ms > trayFoundAt + 1500)
             {
                 break;
             }
@@ -210,13 +230,16 @@ internal static class Observers
     }
 
     /// <summary>
-    /// Кадр с содержимым, а не пустой фон: в выборке (каждый 3-й пиксель) не меньше 24 разных цветов и
-    /// хотя бы 1% точек не цвета фона. Текст, значки и сглаживание дают это сразу; пустое окно — один цвет.
+    /// Что видно на месте окна (выборка — каждый 3-й пиксель). «Нарисовано» — окно закрыло собой
+    /// рабочий стол: цвета-ключа меньше половины точек (до первого кадра окно прозрачно и место
+    /// пурпурное). «Содержимое» — к тому же не меньше 24 разных цветов и хотя бы 1% точек не цвета фона:
+    /// текст, значки и сглаживание; ровный фон этого не даёт.
     /// </summary>
-    public static bool LooksPainted(byte[] bgra, int w, int h)
+    public static (bool Drawn, bool Content) Analyze(byte[] bgra, int w, int h)
     {
         var counts = new Dictionary<int, int>();
         var total = 0;
+        var key = 0;
         for (var y = 0; y < h; y += 3)
         {
             for (var x = 0; x < w; x += 3)
@@ -225,14 +248,20 @@ internal static class Observers
                 var c = bgra[i] | (bgra[i + 1] << 8) | (bgra[i + 2] << 16);
                 counts[c] = counts.GetValueOrDefault(c) + 1;
                 total++;
+                //  Ключ с допуском: DWM может чуть смешать края.
+                if (bgra[i] > 235 && bgra[i + 1] < 20 && bgra[i + 2] > 235)
+                {
+                    key++;
+                }
             }
         }
         if (total == 0)
         {
-            return false;
+            return (false, false);
         }
+        var drawn = key < total / 2;
         var mode = counts.Values.Max();
-        return counts.Count >= 24 && 1.0 - (double)mode / total >= 0.01;
+        return (drawn, drawn && counts.Count >= 24 && 1.0 - (double)mode / total >= 0.01);
     }
 
     /// <summary>
@@ -347,8 +376,10 @@ internal static class Observers
                 var where = r.TryGetProperty("where", out var wh) ? wh.GetString() : null;
                 var scanned = r.TryGetProperty("scanned", out var sc) ? sc.GetInt32() : 0;
                 var err = r.TryGetProperty("error", out var e) ? e.GetString() : null;
-                return found ? $"найден: {where} (просмотрено элементов: {scanned}, {ms} мс)"
-                    : $"не найден (просмотрено элементов: {scanned}{(string.IsNullOrEmpty(err) ? "" : ", ошибка: " + err)})";
+                var chevron = r.TryGetProperty("chevron", out var ch) && ch.ValueKind == JsonValueKind.String ? ch.GetString() : null;
+                var extra = chevron is null ? "" : $"; переполнение: {chevron}";
+                return found ? $"найден: {where} (просмотрено элементов: {scanned}, {ms} мс{extra})"
+                    : $"не найден (просмотрено элементов: {scanned}{extra}{(string.IsNullOrEmpty(err) ? "" : ", ошибка: " + err)})";
             }
         }
         catch (Exception ex)

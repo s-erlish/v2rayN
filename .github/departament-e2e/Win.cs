@@ -69,6 +69,10 @@ internal static class Win
     [DllImport("user32.dll")] private static extern nint SendMessageTimeout(nint hWnd, uint msg, nint w, nint l, uint flags, uint timeout, out nint result);
     [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "SendMessageTimeoutW")]
     private static extern nint SendMessageTimeoutString(nint hWnd, uint msg, nint w, string l, uint flags, uint timeout, out nint result);
+    [DllImport("user32.dll")] private static extern bool ShowWindowAsync(nint hWnd, int cmd);
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] private static extern nint GetWindowLongPtr(nint hWnd, int index);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern bool SystemParametersInfo(uint action, uint param, string? value, uint winIni);
+    [DllImport("user32.dll")] private static extern bool SetSysColors(int count, int[] elements, int[] colors);
     [DllImport("user32.dll")] private static extern nint GetDC(nint hWnd);
     [DllImport("user32.dll")] private static extern int ReleaseDC(nint hWnd, nint hdc);
 
@@ -230,6 +234,39 @@ internal static class Win
     {
         var tray = FindWindow("Shell_TrayWnd", null);
         return tray != 0 && GetWindowRect(tray, out var r) ? r.ToRect() : null;
+    }
+
+    /// <summary>Цвет-ключ рабочего стола на время замеров (BGRA: FF 00 FF): так видно, закрасило ли окно своё место.</summary>
+    public const int KeyColor = 0xFF00FF;
+
+    /// <summary>
+    /// Чистый фон под окном приложения: остальные окна свёрнуты, обои убраны, рабочий стол одного цвета.
+    /// Окно Avalonia до первого кадра прозрачно (без redirection bitmap), и снимок его места показывал то,
+    /// что лежало под ним, — в первом прогоне это была консоль раннера, и «первый кадр» засчитывался
+    /// раньше, чем окно что-либо нарисовало.
+    /// </summary>
+    public static string PrepareDesktop(int ownPid)
+    {
+        var minimized = new List<string>();
+        var sb = new StringBuilder(256);
+        EnumWindows((h, _) =>
+        {
+            GetWindowThreadProcessId(h, out var pid);
+            var style = (long)GetWindowLongPtr(h, -16 /* GWL_STYLE */);
+            if (pid != ownPid && IsWindowVisible(h) && (style & 0x00020000 /* WS_MINIMIZEBOX */) != 0 && !IsIconic(h))
+            {
+                sb.Clear();
+                GetClassName(h, sb, sb.Capacity);
+                ShowWindowAsync(h, 6 /* SW_MINIMIZE */);
+                minimized.Add(sb.ToString());
+            }
+            return true;
+        }, 0);
+        var wallpaper = SystemParametersInfo(0x0014 /* SPI_SETDESKWALLPAPER */, 0, "", 0x1 | 0x2);
+        //  COLORREF — 0x00BBGGRR; для пурпурного порядок байтов не важен.
+        var color = SetSysColors(1, [1 /* COLOR_DESKTOP */], [0x00FF00FF]);
+        Thread.Sleep(700);
+        return $"свёрнуто окон: {minimized.Count} ({string.Join(", ", minimized.Distinct())}); обои убраны: {wallpaper}; рабочий стол #FF00FF: {color}";
     }
 
     #endregion Окна

@@ -21,6 +21,7 @@ $result = [ordered]@{
     roots    = @()
     chevron  = $null
     elements = @()
+    taskbarButton = $null
     error    = $null
 }
 
@@ -55,6 +56,11 @@ try {
                 }
                 if ($n -and $n -like "*$Name*") {
                     $r = $c.BoundingRectangle
+                    # Кнопка окна на панели задач («departament - 1 running window») — не значок трея.
+                    if ($c.AutomationId -like 'Appid:*' -or $c.ClassName -like 'Taskbar.TaskList*' -or $c.ClassName -eq 'MSTaskListWClass') {
+                        $script:result.taskbarButton = "${label}: «$n» $([int]$r.X),$([int]$r.Y)"
+                        continue
+                    }
                     $script:result.matches += [ordered]@{
                         where        = $label
                         name         = $n
@@ -87,8 +93,9 @@ try {
         if ($tray) {
             foreach ($e in $tray.FindAll($TS::Descendants, $All)) {
                 $c = $e.Current
-                # Имя кнопки зависит от версии и языка оболочки; AutomationId у Windows 11 — SystemTrayIcon.
-                if ($c.AutomationId -eq 'SystemTrayIcon' -or $c.Name -match 'hidden icons|Hidden Icons|скрытые значки|Notification Chevron') {
+                # Имя кнопки зависит от версии и языка оболочки; по AutomationId её не отличить: у Windows 11
+                # SystemTrayIcon носят и часы, и сеть, и звук.
+                if ($c.Name -match 'hidden icons|Hidden Icons|скрытые значки|Notification Chevron') {
                     $chevron = $e
                     break
                 }

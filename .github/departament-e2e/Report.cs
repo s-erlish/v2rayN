@@ -126,12 +126,14 @@ internal sealed class Report
         {
             sb.AppendLine("### Запуск: мс от старта процесса");
             sb.AppendLine();
-            sb.AppendLine("| Запуск | Окно создано | Окно видно | Первый кадр с содержимым | Значок (Shell_NotifyIconGetRect) | Значок (панель трея) | Вехи изнутри |");
-            sb.AppendLine("|---|---|---|---|---|---|---|");
+            sb.AppendLine("| Запуск | Окно создано | Окно видно | Первый кадр | Содержимое | Значок (Shell_NotifyIconGetRect) | Значок (панель трея) | Вехи изнутри |");
+            sb.AppendLine("|---|---|---|---|---|---|---|---|");
             foreach (var r in StartupRuns)
             {
-                sb.AppendLine($"| {r.Name} | {Ms(r.FirstWindowMs)} | {Ms(r.WindowVisibleMs)} | {Ms(r.WindowPaintedMs)} | {Ms(r.TrayShellMs)} | {Ms(r.TrayToolbarMs)} | {Cell(string.Join(", ", r.Timeline.Select(kv => $"{kv.Key} {kv.Value:F0}")))} |");
+                sb.AppendLine($"| {r.Name} | {Ms(r.FirstWindowMs)} | {Ms(r.WindowVisibleMs)} | {Ms(r.WindowDrawnMs)} | {Ms(r.WindowPaintedMs)} | {Ms(r.TrayShellMs)} | {Ms(r.TrayToolbarMs)} | {Cell(string.Join(", ", r.Timeline.Select(kv => $"{kv.Key} {kv.Value:F0}")))} |");
             }
+            sb.AppendLine();
+            sb.AppendLine("Окно видно — WS_VISIBLE; первый кадр — окно закрыло собой рабочий стол (до него оно прозрачно); содержимое — в кадре есть текст и значки. Значок: Shell_NotifyIconGetRect отвечает S_OK, как только Explorer знает значок, в том числе спрятанный в переполнение (тогда прямоугольник — кнопки «^»).");
             sb.AppendLine();
         }
 

@@ -457,6 +457,11 @@ internal sealed class E2E(Options o, Report report)
             report.Notes.Add("guiConfigs уже был до первого запуска — запуск A не «первый в жизни».");
         }
 
+        if (IsWin)
+        {
+            report.Environment.Add("Фон под окном: " + Win.PrepareDesktop(Environment.ProcessId));
+        }
+
         //  A — первый запуск: пустая папка, конфиг и база создаются при нём.
         var runA = LaunchObserved("A-first", 12000, uia: true);
         runs.Add(runA);
@@ -576,26 +581,28 @@ internal sealed class E2E(Options o, Report report)
         string Fmt(double? v) => v is { } x ? $"{x:F0}" : "—";
         var noWindow = runs.Where(r => r.WindowVisibleMs is null).ToList();
         window.Set(noWindow.Count == 0 ? Status.Pass : Status.Fail,
-            string.Join("; ", runs.Select(r => $"{r.Name}: видно на {Fmt(r.WindowVisibleMs)} мс, содержимое на {Fmt(r.WindowPaintedMs)} мс")) +
+            string.Join("; ", runs.Select(r => $"{r.Name}: видно на {Fmt(r.WindowVisibleMs)} мс, первый кадр на {Fmt(r.WindowDrawnMs)} мс, содержимое на {Fmt(r.WindowPaintedMs)} мс")) +
             (noWindow.Count == 0 ? "" : $". Окно не появилось: {string.Join(", ", noWindow.Select(r => r.Name))}"));
         foreach (var r in runs)
         {
             window.Evidence.Add($"{r.Name}: {r.MainWindow}; вехи: {string.Join(", ", r.Timeline.Select(kv => $"{kv.Key} {kv.Value:F0}"))}; {string.Join("; ", r.Notes)}");
         }
 
-        var observed = runs.Where(r => r.TrayObservedMs.HasValue && r.WindowVisibleMs.HasValue).ToList();
-        var early = observed.Where(r => r.TrayObservedMs < r.WindowVisibleMs).ToList();
+        //  Сравнение — с первым кадром окна на экране: до него окно прозрачно, и человек его не видит.
+        var observed = runs.Where(r => r.TrayObservedMs.HasValue && r.WindowShownMs.HasValue).ToList();
+        var early = observed.Where(r => r.TrayObservedMs < r.WindowShownMs).ToList();
         foreach (var r in runs)
         {
             tray.Evidence.Add($"{r.Name}: Shell_NotifyIconGetRect {Fmt(r.TrayShellMs)} мс {r.TrayShellRect}; панели трея: {r.TrayToolbar}; UIA: {r.TrayUia ?? "—"}; изнутри tray.created {(r.Timeline.TryGetValue("tray.created", out var tc) ? $"{tc:F0}" : "—")}, window.frame {(r.Timeline.TryGetValue("window.frame", out var wf) ? $"{wf:F0}" : "—")}");
         }
+        string Ref(StartupRun r) => r.WindowDrawnMs.HasValue ? "первый кадр окна" : "окно видно";
         if (early.Count > 0)
         {
-            tray.Set(Status.Fail, "значок раньше окна: " + string.Join("; ", early.Select(r => $"{r.Name}: значок {Fmt(r.TrayObservedMs)} мс, окно {Fmt(r.WindowVisibleMs)} мс")));
+            tray.Set(Status.Fail, "значок раньше окна: " + string.Join("; ", early.Select(r => $"{r.Name}: значок {Fmt(r.TrayObservedMs)} мс, {Ref(r)} {Fmt(r.WindowShownMs)} мс")));
         }
         else if (observed.Count > 0)
         {
-            tray.Set(Status.Pass, string.Join("; ", observed.Select(r => $"{r.Name}: окно {Fmt(r.WindowVisibleMs)} → значок {Fmt(r.TrayObservedMs)} мс (+{r.TrayObservedMs - r.WindowVisibleMs:F0})")) +
+            tray.Set(Status.Pass, string.Join("; ", observed.Select(r => $"{r.Name}: {Ref(r)} {Fmt(r.WindowShownMs)} → значок {Fmt(r.TrayObservedMs)} мс (+{r.TrayObservedMs - r.WindowShownMs:F0})")) +
                 (observed.Count < runs.Count ? $"; в {runs.Count - observed.Count} запусках значок снаружи не увиден" : ""));
         }
         else
