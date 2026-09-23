@@ -56,10 +56,10 @@ public sealed partial class L
         Add("Flow_ClipNote0", "Ищем ссылку на подписку", "Looking for a subscription link");
         Add("Flow_ClipTitle1", "Нашли подписку", "Subscription found");
         Add("Flow_ClipNote1", "Загружаем список серверов", "Loading the server list");
-        Add("Flow_ClipTitle2", "Проверяем сервера", "Checking the servers");
+        Add("Flow_ClipTitle2", "Проверяем серверы", "Checking the servers");
         Add("Flow_ClipNote2", "Измеряем задержку до каждого", "Measuring the latency to each");
         Add("Flow_ClipTitle3", "Подписка добавлена", "Subscription added");
-        Add("Flow_ClipNote3", "Сервера готовы", "Servers ready");
+        Add("Flow_ClipNote3", "Серверы готовы", "Servers ready");
 
         // Тост шага 3, свой на поток.
         Add("Flow_ToastTg", "Аккаунт привязан", "Account linked");
