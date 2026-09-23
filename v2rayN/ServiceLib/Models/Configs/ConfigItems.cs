@@ -335,4 +335,10 @@ public class SimpleDNSItem
     public bool? ParallelQuery { get; set; }
     public string? Hosts { get; set; }
     public string? DirectExpectedIPs { get; set; }
+
+    /// <summary>
+    /// До какой версии встроенных умолчаний доведён этот блок (ConfigHandler.MigrateSimpleDnsDefaults).
+    /// Null — конфиг старше миграции: его прямой DNS ещё может быть китайским умолчанием апстрима.
+    /// </summary>
+    public int? DefaultsVersion { get; set; }
 }

@@ -500,14 +500,20 @@ public class Global
         ""
     ];
 
+    /// <summary>
+    /// Прямой DNS: им разрешаются домены, которые маршрут ведёт мимо VPN, и хост самого VPN-сервера.
+    /// Первый элемент — умолчание. У апстрима здесь стояли DNSPod и AliDNS, резолверы в Китае: из
+    /// России каждый запрос идёт через полмира, а CDN, которые выбирают адрес по резолверу, отдают
+    /// ближний к Китаю, а не к человеку. У departament — Яндекс, как в пресете «Россия» самого
+    /// апстрима (runetfreedom, simple_dns.json: DirectDNS 77.88.8.8). Конфиги со старыми
+    /// умолчаниями переводит ConfigHandler.MigrateSimpleDnsDefaults.
+    /// </summary>
     public static readonly List<string> DomainDirectDNSAddress =
     [
-        "119.29.29.29",
-        "223.5.5.5",
-        "119.29.29.29,223.5.5.5,https://doh.pub/dns-query",
-        "https://doh.pub/dns-query",
-        "https://dns.alidns.com/dns-query",
-        "https://doh.pub/dns-query,https://dns.alidns.com/dns-query",
+        "77.88.8.8",
+        "77.88.8.1",
+        "77.88.8.8,77.88.8.1",
+        "https://common.dot.dns.yandex.net/dns-query",
         "localhost"
     ];
 
@@ -527,10 +533,15 @@ public class Global
         "77.88.8.8"
     ];
 
+    /// <summary>
+    /// Резолвер без имени, только IP: bootstrap для имён DoH-серверов и защита хоста VPN-сервера,
+    /// когда включён свой DNS. Первый элемент — умолчание; Яндекс по той же причине, что у
+    /// <see cref="DomainDirectDNSAddress"/>.
+    /// </summary>
     public static readonly List<string> DomainPureIPDNSAddress =
     [
-        "119.29.29.29",
-        "223.5.5.5",
+        "77.88.8.8",
+        "77.88.8.1",
         "localhost"
     ];
 
@@ -760,6 +771,10 @@ public class Global
         { "doh.pub", ["1.12.12.12", "120.53.53.53"] },
         { "dns.quad9.net", ["9.9.9.9", "149.112.112.112", "2620:fe::fe", "2620:fe::9"] },
         { "dns.yandex.net", ["77.88.8.8", "77.88.8.1", "2a02:6b8::feed:0ff", "2a02:6b8:0:1::feed:0ff"] },
+        //  Имя DoH и DoT Яндекса (https://common.dot.dns.yandex.net/dns-query). У dns.yandex.net
+        //  записей A и AAAA нет вовсе, так что без этой строки DoH Яндекса разрешал бы своё имя
+        //  через bootstrap. Адреса — ответ самого имени (A 77.88.8.8/77.88.8.1, AAAA ::feed:ff).
+        { "common.dot.dns.yandex.net", ["77.88.8.8", "77.88.8.1", "2a02:6b8::feed:0ff", "2a02:6b8:0:1::feed:0ff"] },
         { "dns.sb", ["45.11.45.11", "185.222.222.222", "2a09::", "2a11::"] },
         { "dns.umbrella.com", ["208.67.220.220", "208.67.222.222", "2620:119:35::35", "2620:119:53::53"] },
         { "dns.sse.cisco.com", ["208.67.220.220", "208.67.222.222", "2620:119:35::35", "2620:119:53::53"] },

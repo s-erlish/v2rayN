@@ -21,8 +21,8 @@ dns:
   enable: true
   enhanced-mode: fake-ip
   nameserver:
-    - 114.114.114.114
-    - 223.5.5.5
+    - 77.88.8.8
+    - 77.88.8.1
     - 8.8.8.8
   fallback: []
   fake-ip-filter:

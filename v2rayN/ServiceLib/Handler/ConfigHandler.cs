@@ -198,6 +198,7 @@ public static class ConfigHandler
         config.SimpleDNSItem.BootstrapDNS ??= Global.DomainPureIPDNSAddress.FirstOrDefault();
         config.SimpleDNSItem.ServeStale ??= false;
         config.SimpleDNSItem.ParallelQuery ??= false;
+        MigrateSimpleDnsDefaults(config.SimpleDNSItem);
 
         config.SpeedTestItem ??= new();
         if (config.SpeedTestItem.SpeedTestTimeout < 10)
@@ -3289,7 +3290,55 @@ public static class ConfigHandler
             DirectDNS = Global.DomainDirectDNSAddress.FirstOrDefault(),
             RemoteDNS = Global.DomainRemoteDNSAddress.FirstOrDefault(),
             BootstrapDNS = Global.DomainPureIPDNSAddress.FirstOrDefault(),
+            DefaultsVersion = SimpleDnsDefaultsVersion,
         };
+    }
+
+    /// <summary>Версия встроенных умолчаний DNS. 1 — прямой и bootstrap-DNS на Яндексе.</summary>
+    private const int SimpleDnsDefaultsVersion = 1;
+
+    //  Умолчания апстрима, которые InitBuiltinSimpleDNS писал в конфиг сам, без человека: v2rayN 7.21+
+    //  (с него начат departament) — DNSPod 119.29.29.29; 7.14–7.20 — DoH AliDNS для прямого DNS и
+    //  223.5.5.5 для bootstrap (поле появилось в 7.17). Старые версии — на случай конфига, принесённого
+    //  из папки апстрима. Сравнение точное: значение, набранное руками, хоть на пробел иное, — выбор.
+    private static readonly string[] UpstreamDirectDnsDefaults = ["119.29.29.29", "https://dns.alidns.com/dns-query"];
+
+    private static readonly string[] UpstreamBootstrapDnsDefaults = ["119.29.29.29", "223.5.5.5"];
+
+    /// <summary>
+    /// Один раз переводит китайские умолчания апстрима на умолчания departament (Яндекс).
+    ///
+    /// Прямой DNS и bootstrap в departament для ПК не показаны ни на одном экране, поэтому у всех,
+    /// кто ставил приложение до этой версии, в конфиге так и лежит то, что записал апстрим. Меняется
+    /// только поле, которое ТОЧНО равно одному из тех умолчаний; своё значение не трогаем.
+    ///
+    /// Прямой DNS не трогаем и тогда, когда заданы ожидаемые IP (у апстрима они пусты, значит, их
+    /// ставил человек). Они проверяют ответы именно прямого DNS: ответ вне списка Xray молча
+    /// отбрасывает и спрашивает удалённый DNS. Такую пару подбирали под свой резолвер, и подменить
+    /// резолвер под ней значило бы поменять смысл чужой настройки.
+    ///
+    /// Один раз — по <see cref="SimpleDNSItem.DefaultsVersion"/>: если потом кто-то вернёт себе
+    /// 119.29.29.29 руками, это его выбор, и следующий запуск его не отменит.
+    /// </summary>
+    /// <returns>true, если блок доведён до текущей версии сейчас; false, если уже был доведён.</returns>
+    public static bool MigrateSimpleDnsDefaults(SimpleDNSItem item)
+    {
+        if (item.DefaultsVersion >= SimpleDnsDefaultsVersion)
+        {
+            return false;
+        }
+
+        if (UpstreamDirectDnsDefaults.Contains(item.DirectDNS) && item.DirectExpectedIPs.IsNullOrEmpty())
+        {
+            item.DirectDNS = Global.DomainDirectDNSAddress.First();
+        }
+        if (UpstreamBootstrapDnsDefaults.Contains(item.BootstrapDNS))
+        {
+            item.BootstrapDNS = Global.DomainPureIPDNSAddress.First();
+        }
+
+        item.DefaultsVersion = SimpleDnsDefaultsVersion;
+        return true;
     }
 
     public static async Task<SimpleDNSItem> GetExternalSimpleDNSItem(string url)
