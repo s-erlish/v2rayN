@@ -131,6 +131,127 @@ public class XrayJsonTemplateFmt : BaseFmt
     /// <summary>True when the protocol names a real proxy outbound (vless/vmess/trojan/ss/socks/http).</summary>
     public static bool IsProxyProtocol(string? protocol) => protocol.IsNotEmpty() && _proxyProtocols.Contains(protocol!);
 
+    //  Ключи — без учёта регистра, как читает конфиг само ядро (encoding/json в Go); комментарии и
+    //  висячие запятые не должны стоить узлу защиты его серверов.
+    private static readonly JsonNodeOptions _hostsNodeOptions = new() { PropertyNameCaseInsensitive = true };
+
+    private static readonly JsonDocumentOptions _hostsDocumentOptions = new()
+    {
+        CommentHandling = JsonCommentHandling.Skip,
+        AllowTrailingCommas = true,
+    };
+
+    /// <summary>
+    /// Домены серверов, до которых ядро узла CUSTOM дозванивается само, — из его сохранённого файла.
+    ///
+    /// У CUSTOM в <see cref="ProfileItem.Address"/> лежит имя файла, а не сервер, поэтому защита
+    /// адреса узла в сборщике контекста до настоящего хоста не доходила. В режиме «весь трафик»
+    /// это петля: DNS-запрос за адресом VPN-сервера уходит в туннель, sing-box отдаёт его
+    /// удалённому DNS через proxy, то есть через тот же Xray, а Xray ждёт этот самый адрес, чтобы
+    /// дозвониться. Сразу после подключения спасает кеш DNS системы, когда он истекает — трафик
+    /// встаёт. Хост из этого списка sing-box разрешает прямым DNS, мимо туннеля.
+    ///
+    /// Битый или чужой файл даёт пустой список, исключений наружу нет: подключение не должно
+    /// падать из-за того, что защиту не удалось собрать.
+    /// </summary>
+    public static List<string> GetServerHosts(ProfileItem? node)
+    {
+        if (node?.ConfigType != EConfigType.Custom)
+        {
+            return [];
+        }
+
+        var path = ResolveAddressPath(node.Address);
+        if (path == null)
+        {
+            return [];
+        }
+
+        try
+        {
+            return GetServerHostsFromJson(File.ReadAllText(path));
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog("XrayJsonTemplateFmt", ex);
+            return [];
+        }
+    }
+
+    /// <summary>
+    /// Домены серверов из сырого конфига: у Xray — <c>settings.vnext[].address</c>,
+    /// <c>settings.servers[].address</c>, плоский <c>settings.address</c> новых VLESS/VMess и
+    /// <c>downloadSettings.address</c> у xhttp (прямо в настройках или внутри <c>extra</c>); у
+    /// sing-box — <c>outbounds[].server</c>. Обходятся ВСЕ исходящие, а не первый прокси: цепочки и
+    /// балансировщики дозваниваются до каждого. IP-адреса в DNS не ходят и в список не попадают.
+    /// </summary>
+    public static List<string> GetServerHostsFromJson(string? raw)
+    {
+        var hosts = new List<string>();
+        if (raw.IsNullOrEmpty())
+        {
+            return hosts;
+        }
+
+        try
+        {
+            if (JsonNode.Parse(raw, _hostsNodeOptions, _hostsDocumentOptions) is not JsonObject root
+                || root["outbounds"] is not JsonArray outbounds)
+            {
+                return hosts;
+            }
+
+            foreach (var outbound in outbounds.OfType<JsonObject>())
+            {
+                AddServerHost(hosts, outbound["server"]);
+
+                if (outbound["settings"] is JsonObject settings)
+                {
+                    foreach (var item in ObjectsOf(settings["vnext"]).Concat(ObjectsOf(settings["servers"])))
+                    {
+                        AddServerHost(hosts, item["address"]);
+                    }
+                    //  Только строка: у WireGuard здесь МАССИВ адресов своего интерфейса, не сервер.
+                    AddServerHost(hosts, settings["address"]);
+                }
+
+                if (outbound["streamSettings"] is JsonObject stream)
+                {
+                    foreach (var xhttp in new[] { stream["xhttpSettings"], stream["splithttpSettings"] }.OfType<JsonObject>())
+                    {
+                        AddServerHost(hosts, (xhttp["downloadSettings"] as JsonObject)?["address"]);
+                        AddServerHost(hosts, ((xhttp["extra"] as JsonObject)?["downloadSettings"] as JsonObject)?["address"]);
+                    }
+                }
+            }
+        }
+        catch
+        {
+            //  Недочитанный файл (например, повтор ключа) — отдаём то, что успели собрать.
+        }
+
+        return hosts;
+    }
+
+    private static IEnumerable<JsonObject> ObjectsOf(JsonNode? node) =>
+        node is JsonArray array ? array.OfType<JsonObject>() : [];
+
+    private static void AddServerHost(List<string> hosts, JsonNode? node)
+    {
+        if (node is not JsonValue value || !value.TryGetValue(out string? host))
+        {
+            return;
+        }
+
+        //  Нижний регистр: имена в DNS к регистру безразличны, а правило домена в sing-box
+        //  сравнивает строки, и «Vpn.Example.com» из шаблона не совпал бы с запросом.
+        host = host.Trim().ToLowerInvariant();
+        if (Utils.IsDomain(host) && !hosts.Contains(host))
+        {
+            hosts.Add(host);
+        }
+    }
+
     private static (string? address, int port) GetOutboundServer(Outbounds4Ray outbound)
     {
         var settings = outbound.settings;

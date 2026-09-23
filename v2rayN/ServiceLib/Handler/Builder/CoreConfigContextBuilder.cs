@@ -372,6 +372,17 @@ public class CoreConfigContextBuilder
             context.ProtectDomainList.Add(address);
         }
 
+        //  У CUSTOM в Address — имя файла конфига, настоящие серверы внутри него. Без этого хост
+        //  VPN-сервера не попадал в защиту, и в режиме «весь трафик» его разрешение шло через
+        //  туннель, то есть через сам этот сервер (подробно — у GetServerHosts).
+        if (node.ConfigType == EConfigType.Custom)
+        {
+            foreach (var host in XrayJsonTemplateFmt.GetServerHosts(node))
+            {
+                context.ProtectDomainList.Add(host);
+            }
+        }
+
         // ech query server name protect
         if (!node.EchConfigList.IsNullOrEmpty())
         {
