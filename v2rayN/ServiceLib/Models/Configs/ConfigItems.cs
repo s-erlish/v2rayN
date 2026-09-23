@@ -226,6 +226,12 @@ public class RoutingBasicItem
     public string DomainStrategy { get; set; }
     public string DomainStrategy4Singbox { get; set; }
     public string RoutingIndexId { get; set; }
+
+    /// <summary>
+    /// До какой версии встроенных наборов маршрутов доведена установка (ConfigHandler.MigrateBuiltinRoutingDefaults).
+    /// Null — установка старше перехода: её набор по умолчанию ещё может быть китайским «Whitelist» апстрима.
+    /// </summary>
+    public int? DefaultsVersion { get; set; }
 }
 
 [Serializable]
