@@ -106,7 +106,7 @@ internal sealed partial class E2E
         else
         {
             //  На ветке архив в артефакт не выкладывается. Собираем его ровно как шаг «Package release zip»
-            //  в departament-branch-build.yml: копия dist под departament-windows-x64 и
+            //  в departament-build.yml: копия dist под departament-windows-x64 и
             //  ZipFile.CreateFromDirectory(Optimal, includeBaseDirectory: true), сумма в формате sha256sum.
             var stage = Path.Combine(UpdRoot, "pkg");
             DeleteDir(stage);
@@ -119,7 +119,7 @@ internal sealed partial class E2E
             DeleteDir(stage);
             sha = zip + ".sha256";
             File.WriteAllText(sha, $"{Binary.Sha256(zip)}  {PackageTop}.zip\n");
-            source = "собран из артефакта сборки так же, как в departament-branch-build.yml";
+            source = "собран из артефакта сборки так же, как в departament-build.yml";
         }
         if (!File.Exists(zip))
         {
@@ -570,14 +570,15 @@ internal sealed partial class E2E
         return StageUpdateFiles(dir, pkg, pendingTag);
     }
 
-    private static string StageUpdateFiles(string dir, NewPackage pkg, string pendingTag)
+    /// <param name="pending">Метка передачи целиком (AppUpdatePendingInstall); null — метка старого вида, только тег.</param>
+    private static string StageUpdateFiles(string dir, NewPackage pkg, string pendingTag, object? pending = null)
     {
         var upd = Path.Combine(dir, "guiTemps", "update");
         Directory.CreateDirectory(upd);
         var zip = Path.Combine(upd, PackageTop + ".zip");
         File.Copy(pkg.Zip, zip, overwrite: true);
         File.WriteAllText(zip + ".sha256", $"{pkg.ZipHash}  {PackageTop}.zip\n");
-        File.WriteAllText(Path.Combine(upd, "pending.json"), JsonSerializer.Serialize(new { Tag = pendingTag, PreRelease = false }));
+        File.WriteAllText(Path.Combine(upd, "pending.json"), JsonSerializer.Serialize(pending ?? new { Tag = pendingTag, PreRelease = false }));
         return zip;
     }
 
@@ -774,7 +775,7 @@ internal sealed partial class E2E
     }
 
     /// <summary>Установщик поднял программу из того же каталога, это нужный exe, и она сверила итог.</summary>
-    private void JudgeRestart(CheckResult c, string dir, AmazRun run, string exeHash, string reconcileLine, string name)
+    private void JudgeRestart(CheckResult c, string dir, AmazRun run, string exeHash, string reconcileLine, string name, Action<Process>? whileRunning = null)
     {
         var exePath = Path.Combine(dir, Exe("departament"));
         var problems = new List<string>();
@@ -826,6 +827,10 @@ internal sealed partial class E2E
         if (!tmpGone.HasValue)
         {
             problems.Add("AmazTool.exe.tmp не убран");
+        }
+        if (app is not null && whileRunning is not null)
+        {
+            whileRunning(app);
         }
         if (IsWin)
         {

@@ -27,11 +27,12 @@ internal sealed partial class E2E
         var quit = report.Add("installer.quit", "departament.exe --quit: запущенная программа и ядро выходят за секунды, прокси снят");
         var selfUpdate = report.Add("installer.selfupdate", "Самообновление установленной программы: выход по --quit, замена в Program Files");
         var selfRestart = report.Add("installer.selfupdate-restart", "После самообновления в Program Files запущена новая версия, версия в «Приложениях» верна");
+        var reconnect = report.Add("installer.selfupdate-reconnect", "После самообновления подключение возвращается само: системный прокси снова включён, трафик идёт через сервер");
         var uninstall = report.Add("installer.uninstall", "Удаление: программа закрыта, файлы убраны, настройки на месте; автозапуск, ссылки departamentvpn:// и запись убраны");
         var leftovers = report.Add("installer.leftovers", "После удаления в папке программы не остаётся её файлов");
         var postinstall = report.Add("installer.postinstall", "Запуск программы в конце установки: установщик запущен без прав администратора, как двойным щелчком, — программа открылась, ошибки 740 нет");
         var baseline = report.Add("installer.postinstall-baseline", "Контроль: без «runascurrentuser shellexec» тот же запуск падает с кодом 740 — проверка его ловит", diagnostic: true);
-        var all = new[] { install, launch, upgrade, quit, selfUpdate, selfRestart, uninstall, leftovers, postinstall, baseline };
+        var all = new[] { install, launch, upgrade, quit, selfUpdate, selfRestart, reconnect, uninstall, leftovers, postinstall, baseline };
         if (!IsWin)
         {
             foreach (var c in all)
@@ -67,7 +68,7 @@ internal sealed partial class E2E
             InstallerLaunch(launch, inst);
             InstallerUpgrade(upgrade, inst, logs);
             InstallerQuit(quit, inst);
-            InstallerSelfUpdate(selfUpdate, selfRestart, inst);
+            InstallerSelfUpdate(selfUpdate, selfRestart, reconnect, inst);
             InstallerUninstall(uninstall, leftovers, inst, logs);
             InstallerPostinstall(postinstall, baseline, inst, logs);
         }
@@ -328,12 +329,13 @@ internal sealed partial class E2E
     }
 
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
-    private void InstallerSelfUpdate(CheckResult c, CheckResult restart, AppDriver inst)
+    private void InstallerSelfUpdate(CheckResult c, CheckResult restart, CheckResult reconnect, AppDriver inst)
     {
         if (_newPackage is not { } pkg)
         {
             c.Set(Status.Skip, "нет пакета «новой версии» (фаза самообновления до него не дошла)");
             restart.Set(Status.Skip, "нет пакета");
+            reconnect.Set(Status.Skip, "нет пакета");
             return;
         }
         var expected = o.ExpectedVersion ?? "1.0.0";
@@ -341,14 +343,26 @@ internal sealed partial class E2E
         var userFile = Path.Combine(dir, "guiConfigs", "e2e-user.txt");
         File.WriteAllText(userFile, $"user data {Guid.NewGuid()}");
         var userHash = Binary.Sha256(userFile);
-        var package = StageUpdateFiles(dir, pkg, "v" + expected);
         var p = inst.Launch(new Dictionary<string, string> { ["DP_CONNECT_AFTER_MS"] = "500" });
         var connected = WaitConnected(c, inst, "перед обновлением");
+        //  Метка передачи — как её пишет подключённая программа в «Перезапустить» (AppUpdatePendingInstall):
+        //  с сервером и режимом, чтобы новая версия вернула подключение сама.
+        var package = StageUpdateFiles(dir, pkg, "v" + expected, connected
+            ? new { Tag = "v" + expected, PreRelease = false, From = expected, HandedOffUtc = DateTime.UtcNow, Reconnect = new { ServerId = _vless!.IndexId, Tun = false } }
+            : null);
 
         //  Программа отдаёт пакет установщику и выходит тем же путём, что «Выход» в трее (InstallAsync →
         //  AppExitAsync). Здесь выход — «--quit»: тот же MenuExit_Click.
         long quitMs = 0;
-        var run = RunAmazTool(dir, package, p.Id, () => quitMs = RunPlain(inst.ExePath, ["--quit"], TimeSpan.FromSeconds(30)).Ms, "installer-selfupdate");
+        DateTime? oldGone = null;
+        var run = RunAmazTool(dir, package, p.Id, () =>
+        {
+            quitMs = RunPlain(inst.ExePath, ["--quit"], TimeSpan.FromSeconds(30)).Ms;
+            if (p.WaitForExit(15_000))
+            {
+                oldGone = DateTime.UtcNow;
+            }
+        }, "installer-selfupdate");
         var proxy = Win.ReadSystemProxy();
         var problems = new List<string>();
         c.Evidence.Add($"AmazTool из {dir} ждал pid {p.Id}: {(run.WaitingMs is { } w ? $"записал через {w:F0} мс" : "НЕТ строки «waiting for pid»")}; «--quit» {quitMs} мс; от выхода до конца AmazTool {run.AfterReleaseMs} мс, код {run.ExitCode?.ToString() ?? "—"}; {SwapTiming(run.Log)}");
@@ -391,7 +405,8 @@ internal sealed partial class E2E
             ? $"подключённая программа в Program Files вышла по «--quit», AmazTool заменил все {pkg.Files.Count} файлов за {run.AfterReleaseMs} мс после её выхода, guiConfigs не тронут, прокси снят, код 0"
             : string.Join("; ", problems));
 
-        JudgeRestart(restart, dir, run, pkg.ExeHash, $"updated to {expected}", "installer-selfupdate-restart");
+        JudgeRestart(restart, dir, run, pkg.ExeHash, $"updated to {expected}", "installer-selfupdate-restart",
+            _ => CheckReconnect(reconnect, inst, connected, oldGone));
         var dv = UninstallKey()?.GetValue("DisplayVersion") as string;
         restart.Evidence.Add($"DisplayVersion после самообновления: «{dv}»");
         if (dv != expected && restart.Status == Status.Pass)
@@ -403,6 +418,39 @@ internal sealed partial class E2E
             inst.KillEverything();
         }
         p.Dispose();
+    }
+
+    /// <summary>
+    /// Подключение после перезапуска ради обновления (AppUpdateReconnect): новая версия читает метку и
+    /// подключается сама. Считается разрыв: от выхода прежней версии до снова включённого прокси.
+    /// </summary>
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    private void CheckReconnect(CheckResult c, AppDriver inst, bool wasConnected, DateTime? oldGone)
+    {
+        if (!wasConnected || _access is null)
+        {
+            c.Set(Status.Skip, "перед обновлением подключения не было — возвращать нечего");
+            return;
+        }
+        var expected = $"127.0.0.1:{o.LocalPort}";
+        var back = Net.WaitUntil(() => Net.IsListening(o.LocalPort) && Win.ReadSystemProxy() is { Enabled: true } s && s.Server!.Contains(expected), TimeSpan.FromSeconds(40), 100);
+        var gap = back.HasValue && oldGone is { } g ? (DateTime.UtcNow - g).TotalMilliseconds : (double?)null;
+        var lines = AppLogText(inst.Dir).Replace("\r", "").Split('\n').Where(l => l.Contains("reconnect", StringComparison.OrdinalIgnoreCase)).TakeLast(3).ToList();
+        c.Evidence.AddRange(lines.Select(l => "журнал программы: " + l.Trim()));
+        c.Evidence.Add($"прокси: {Win.ReadSystemProxy()}; ядра: {string.Join(", ", inst.RunningCores())}");
+        if (!back.HasValue)
+        {
+            c.Set(Status.Fail, $"за 40 с после перезапуска подключение не вернулось: прокси {Win.ReadSystemProxy()}, {expected} {(Net.IsListening(o.LocalPort) ? "слушается" : "не слушается")}");
+            return;
+        }
+        var mark = _access.Mark();
+        var fetch = Net.SystemProxyFetch(o.Target1);
+        var hits = _access.WaitFor(mark, [HostPort(o.Target1)], TimeSpan.FromSeconds(5));
+        c.Evidence.Add("Windows PowerShell через системный прокси: " + fetch.Output.Replace("\r", "").Replace("\n", "; "));
+        c.Evidence.AddRange(hits.Take(2));
+        c.Set(fetch.Ok && hits.Count > 0 ? Status.Pass : Status.Fail, fetch.Ok && hits.Count > 0
+            ? $"без VPN {(gap is { } x ? $"{x / 1000:F1} с" : "—")} (от выхода прежней версии до прокси новой); {HostPort(o.Target1)}: HTTP {fetch.Code}, сервер записал соединение"
+            : $"прокси вернулся, но запрос не дошёл до сервера: HTTP {fetch.Code} {fetch.Error}");
     }
 
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
