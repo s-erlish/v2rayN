@@ -297,7 +297,16 @@ public class WebDavItem
 [Serializable]
 public class CheckUpdateItem
 {
+    /// <summary>«Искать предварительный выпуск»: выпуски vX.Y.Z-rc.N тоже предлагаются.</summary>
     public bool CheckPreReleaseUpdate { get; set; }
+
+    /// <summary>
+    /// «Проверять обновления автоматически». По умолчанию включено: departament распространяется вне
+    /// магазина, и без автопроверки пользователь узнал бы о новой версии, только сам заглянув в настройки.
+    /// Конфиг без этого поля (прежние версии) читается как «включено» — значение по умолчанию здесь.
+    /// </summary>
+    public bool AutoCheck { get; set; } = true;
+
     public List<string>? SelectedCoreTypes { get; set; }
 }
 
