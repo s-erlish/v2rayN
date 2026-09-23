@@ -1,41 +1,54 @@
+using System.Text.Json.Serialization.Metadata;
+
 namespace ServiceLib.Common;
 
 public class JsonUtils
 {
     private static readonly string _tag = "JsonUtils";
 
+    //  Config — по метаданным, собранным при компиляции (ConfigJsonContext: холодный разбор конфига
+    //  на старте ~110 мс отражением против единиц мс), всё остальное — отражением, как и было.
+    //  Объявлено ДО наборов настроек ниже: статические поля инициализируются по порядку текста.
+    private static readonly IJsonTypeInfoResolver _resolver =
+        JsonTypeInfoResolver.Combine(ConfigJsonContext.Default, new DefaultJsonTypeInfoResolver());
+
     private static readonly JsonSerializerOptions _defaultDeserializeOptions = new()
     {
         PropertyNameCaseInsensitive = true,
-        ReadCommentHandling = JsonCommentHandling.Skip
+        ReadCommentHandling = JsonCommentHandling.Skip,
+        TypeInfoResolver = _resolver
     };
 
     private static readonly JsonSerializerOptions _defaultSerializeOptions = new()
     {
         WriteIndented = true,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        TypeInfoResolver = _resolver
     };
 
     private static readonly JsonSerializerOptions _defaultSerializeNoIndentedOptions = new()
     {
         WriteIndented = false,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        TypeInfoResolver = _resolver
     };
 
     private static readonly JsonSerializerOptions _nullValueSerializeOptions = new()
     {
         WriteIndented = true,
         DefaultIgnoreCondition = JsonIgnoreCondition.Never,
-        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        TypeInfoResolver = _resolver
     };
 
     private static readonly JsonSerializerOptions _nullValueSerializeNoIndentedOptions = new()
     {
         WriteIndented = false,
         DefaultIgnoreCondition = JsonIgnoreCondition.Never,
-        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        TypeInfoResolver = _resolver
     };
 
     private static readonly JsonDocumentOptions _defaultDocumentOptions = new()
