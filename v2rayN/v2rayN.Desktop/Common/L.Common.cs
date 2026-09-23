@@ -30,6 +30,11 @@ public sealed partial class L
         // ── Auth / commerce ──
         Add("Common_SignInTelegram", "Войти через Telegram", "Sign in with Telegram");
         Add("Common_SignInWebsite", "Войти через сайт", "Sign in via website");
+        // Вход по почте ведёт на форму «Вход» ВНУТРИ приложения (почта + пароль, там же регистрация),
+        // а не в браузер. «Войти через сайт» остаётся ровно там, где действительно открывается сайт:
+        // ссылка на форме «Вход» и схема departamentvpn://auth в «Схемах URL». Та же строка, что на Android
+        // (onb_login_site).
+        Add("Common_SignInEmail", "Войти по почте", "Sign in with email");
         Add("Common_BuySubscription", "Купить подписку", "Buy subscription");
         Add("Common_PaymentHistory", "История платежей", "Payment history");
 

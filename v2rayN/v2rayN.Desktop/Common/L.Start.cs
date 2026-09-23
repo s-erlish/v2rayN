@@ -12,7 +12,7 @@ namespace v2rayN.Desktop.Common;
 // Строки чужих областей, которые эти два экрана ПЕРЕИСПОЛЬЗУЮТ (здесь НЕ определяются):
 //   • Home_Welcome («Приветствуем!») в L.Home.cs;
 //   • Common_AddSubscription / Common_AddFromClipboard / Common_AddViaQr /
-//     Common_SignInTelegram / Common_SignInWebsite в L.Common.cs. Все пять уже несут ровно тот
+//     Common_SignInTelegram / Common_SignInEmail в L.Common.cs. Все пять уже несут ровно тот
 //     текст, что стоит в screens.md, поэтому дублировать их своими ключами было бы вторым
 //     источником правды.
 // ─────────────────────────────────────────────────────────────────────────────

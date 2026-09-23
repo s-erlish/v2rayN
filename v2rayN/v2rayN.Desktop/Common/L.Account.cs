@@ -35,9 +35,11 @@ public sealed partial class L
         // На «вы», как весь остальной интерфейс. Эти две строки были единственными на «ты» во всём
         // приложении, и от них гейт входа в «Аккаунте» читался как экран из прошлой версии.
         Add("Account_SignInTitle", "Войдите в departament", "Sign in to departament");
+        // Вторая кнопка гейта называется «Войти по почте» и ведёт на форму внутри приложения,
+        // поэтому подсказка больше не отправляет на сайт.
         Add("Account_SignInHint",
-            "Через Telegram быстро и без пароля. Или войдите по почте на сайте.",
-            "With Telegram it is fast and passwordless. Or sign in by email on the website.");
+            "Через Telegram быстро и без пароля. По почте можно войти или создать аккаунт.",
+            "Telegram is fast and passwordless. With email you can sign in or create an account.");
 
         // ── Account view-model (imperative / computed) ──
         Add("Account_AmountGtZero", "Введите сумму больше 0", "Enter an amount greater than 0");

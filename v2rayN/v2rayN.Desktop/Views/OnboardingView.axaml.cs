@@ -109,7 +109,7 @@ public partial class OnboardingView : UserControl
         // По самой карточке обработчика НЕТ: она вывеска. Нажимается только её CTA.
         ClipCardButton.Click += OnClipboard;
         QrRow.PointerReleased += (_, _) => OnQr();
-        SiteRow.PointerReleased += (_, _) => OnSite();
+        EmailRow.PointerReleased += (_, _) => OnEmail();
 
         ClipRevealHost.SizeChanged += OnRevealHostSizeChanged;
         MoreRevealHost.SizeChanged += OnRevealHostSizeChanged;
@@ -579,12 +579,15 @@ public partial class OnboardingView : UserControl
         }
     }
 
-    // «Войти через сайт» — браузер-хэндофф; дальше тот же терминальный путь, что у Telegram
-    // (и та же причина не поднимать слой самим — страница входа занимает хост подэкранов).
-    private void OnSite()
+    // «Войти по почте» — форма «Вход» ВНУТРИ приложения (почта + пароль, там же регистрация), без
+    // браузера. Раньше строка называлась «Войти через сайт» и сразу открывала браузер-хэндофф — вход
+    // по почте на Android давно живёт в приложении, и владелец просил тот же путь здесь. Дальше —
+    // тот же терминальный путь, что у Telegram (и та же причина не поднимать слой самим — страница
+    // входа занимает хост подэкранов).
+    private void OnEmail()
     {
         FlowRequested?.Invoke(this, new StartFlowRequest(StartFlow.Telegram, null));
-        (TopLevel.GetTopLevel(this) as MainWindow)?.OpenLoginSite();
+        (TopLevel.GetTopLevel(this) as MainWindow)?.OpenLogin();
     }
 
     /// <summary>reduced-motion: дизайн-режим, превью-хук (PREVIEW_VIEW) ИЛИ живой «Облегчённый режим».</summary>
