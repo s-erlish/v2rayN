@@ -350,8 +350,43 @@ public partial class SubscriptionMetaView : UserControl
         PinButton.IsVisible = false;
         DeleteButton.IsVisible = false;
 
+        //  ПЕРВЫЙ КАДР КАРТОЧКИ — СРАЗУ ПОЛНЫЙ. Запись подписки раньше приезжала только из базы, а
+        //  ответ базы возвращается на UI-поток уже после первой раскладки списка: «Главная» вставала
+        //  с одной строкой заголовка, а через кадр карточка вырастала на трафик, срок и кнопки и
+        //  сталкивала все серверы вниз почти на 50 px. Так было на каждом холодном старте и при
+        //  каждой смене раскладки. Подписка уже есть в памяти — берём её синхронно, а чтение базы
+        //  ниже только освежает цифры: раскладка при этом не меняется.
+        var subid = SubIdOfGroup();
+        if (subid.IsNotEmpty() && KnownSub(subid!) is { } known)
+        {
+            BindSub(known);
+        }
+
         // Resolve the real subscription (with userinfo) behind this group, if any.
         _ = ResolveAndBindSub();
+    }
+
+    private string? SubIdOfGroup() =>
+        _group?.Servers.FirstOrDefault(s => s is not null && s.Subid.IsNotEmpty())?.Subid;
+
+    //  Последняя запись, которую карточка показывала для каждой подписки. Свежее снимка движка:
+    //  сюда попадает и то, что привезло обновление подписки (OnSubscriptionMetaChanged).
+    private static readonly Dictionary<string, SubItem> _lastBound = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Запись подписки без обращения к базе: последняя показанная, иначе список подписок, который
+    /// движок держит в памяти с самого запуска (ProfilesViewModel.SubItems). Null — не знаем, и
+    /// тогда карточку заполнит чтение базы.
+    /// </summary>
+    private static SubItem? KnownSub(string subid)
+    {
+        if (_lastBound.TryGetValue(subid, out var last))
+        {
+            return last;
+        }
+        return (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow?.DataContext is MainWindowViewModel main
+            ? main.ProfilesViewModel?.SubItems.FirstOrDefault(s => s.Id == subid)
+            : null;
     }
 
     private void OnGroupPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -373,7 +408,7 @@ public partial class SubscriptionMetaView : UserControl
     // The group's Subid → real SubItem. Data-driven: null when the group has no real subscription.
     private async Task ResolveAndBindSub()
     {
-        var subid = _group?.Servers.FirstOrDefault(s => s is not null && s.Subid.IsNotEmpty())?.Subid;
+        var subid = SubIdOfGroup();
         if (subid.IsNullOrEmpty())
         {
             return;
@@ -390,7 +425,7 @@ public partial class SubscriptionMetaView : UserControl
         }
 
         // The group may have been recycled onto another subscription while we awaited.
-        if (_group is null || subid != _group.Servers.FirstOrDefault(s => s is not null && s.Subid.IsNotEmpty())?.Subid)
+        if (_group is null || subid != SubIdOfGroup())
         {
             return;
         }
@@ -409,6 +444,7 @@ public partial class SubscriptionMetaView : UserControl
         }
         _currentSubId = sub.Id;
         _boundSub = sub;
+        _lastBound[sub.Id] = sub;
 
         // Title: profile-title -> remarks -> group name (never fabricated). Заглушка («import sub»
         // и родня) на экран не проходит: она не называет подписку, а выглядит как её название —
